@@ -35,6 +35,7 @@ static void initialize_sntp(void);
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_CUSTOM
 void sntp_sync_time(struct timeval *tv)
 {
+    tv->tv_sec += 100;
    settimeofday(tv, NULL);
    ESP_LOGI(TAG, "Time is synchronized from custom code");
    sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
@@ -80,6 +81,10 @@ void app_main(void)
         obtain_time();
         // update 'now' variable with current time
         time(&now);
+    }
+#else
+    else {
+        obtain_time();
     }
 #endif
 
