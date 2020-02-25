@@ -1,0 +1,6 @@
+{
+    "taskExplorer.enableMake": false,
+    "search.exclude": {
+      "**/build": true
+    }
+  }
