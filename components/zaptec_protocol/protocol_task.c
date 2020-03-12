@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 
 #include "protocol_task.h"
+#include "zaptec_protocol_serialisation.h"
 
 #define TAG __FILE__
 
@@ -35,21 +36,57 @@ void uartCommsTask(void *pvParameters){
     while (true)
     {
         // tx test
-        char* test_str = "test\n";
-        uart_write_bytes(uart_num, (const char*)test_str, strlen(test_str));
+        ESP_LOGI(TAG, "creating zap message");
+        ZapMessage txMsg;
+        
+        // ZEncodeMessageHeader* does not check the length of the buffer!
+        // This should not be a problem for most usages, but make sure strings are within a range that fits!
+        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+        
+        txMsg.type = MsgWrite;
+        txMsg.identifier = ParamRunTest;
 
-        // rx test
-        uint8_t data[128];
-        int length = 0;
-        //ESP_ERROR_CHECK(uart_get_buffered_data_len(uart_num, (size_t*)&length));
+        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+            &txMsg, 34, txBuf, encodedTxBuf
+        );
 
-        length = uart_read_bytes(uart_num, data, 128, 10);
-        ESP_LOGI(TAG, "passing %d bytes from system drivers's uart buffer", length);
-        for(int i=0; i<length; i++){
-            onCharRx((char) data[i]);
+        for(int i = 0; i<encoded_length; i++){
+            ESP_LOGI(TAG, "sending zap message, byte: %d", encodedTxBuf[i]);
+        }
+        ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
+
+
+        uart_write_bytes(uart_num, (char *)encodedTxBuf, encoded_length);
+
+        ZapMessage rxMsg;
+
+        while(true)
+        {
+            uint8_t uart_data[1];
+            int length = uart_read_bytes(uart_num, uart_data, 1, 100);
+            
+            if(length == 0){
+                ESP_LOGW(TAG, "no reply from dsPIC");
+                break;
+            }
+
+            uint8_t rxByte = uart_data[0];
+
+            if(ZParseFrame(rxByte, &rxMsg))
+            {    
+                printf("handling frame\n\r");
+                printf("frame type: %d \n\r", rxMsg.type);
+                printf("frame identifier: %d \n\r", rxMsg.identifier);
+                printf("frame timeId: %d \n\r", rxMsg.timeId);
+
+                uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+                printf("frame error code: %d\n\r", error_code);
+                break;
+            }
         }
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
     
 }
