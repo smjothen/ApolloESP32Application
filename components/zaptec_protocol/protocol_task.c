@@ -38,7 +38,7 @@ void uartCommsTask(void *pvParameters){
         // tx test
         ESP_LOGI(TAG, "creating zap message");
         ZapMessage txMsg;
-        
+
         // ZEncodeMessageHeader* does not check the length of the buffer!
         // This should not be a problem for most usages, but make sure strings are within a range that fits!
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
@@ -51,39 +51,54 @@ void uartCommsTask(void *pvParameters){
             &txMsg, 34, txBuf, encodedTxBuf
         );
 
-        for(int i = 0; i<encoded_length; i++){
-            ESP_LOGI(TAG, "sending zap message, byte: %d", encodedTxBuf[i]);
-        }
         ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
 
-
+        uart_flush(uart_num);
         uart_write_bytes(uart_num, (char *)encodedTxBuf, encoded_length);
 
         ZapMessage rxMsg;
-
-        while(true)
+        bool reply_pending = true;
+        uint32_t empty_uart_count = 0;
+        while(reply_pending)
         {
-            uint8_t uart_data[1];
-            int length = uart_read_bytes(uart_num, uart_data, 1, 100);
-            
+            if(empty_uart_count>15){
+                ESP_LOGW(TAG, "missed reply from dsPIC");
+                break;
+            }
+
+            uint8_t uart_data[128];
+            int length = uart_read_bytes(uart_num, uart_data, 128, 0);
+
             if(length == 0){
-                ESP_LOGW(TAG, "no reply from dsPIC");
-                break;
+                ESP_LOGI(TAG, "got no reply bytes");
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                empty_uart_count++;
+                continue;
+            }else{
+                empty_uart_count = 0;
             }
 
-            uint8_t rxByte = uart_data[0];
+            ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
 
-            if(ZParseFrame(rxByte, &rxMsg))
-            {    
-                printf("handling frame\n\r");
-                printf("frame type: %d \n\r", rxMsg.type);
-                printf("frame identifier: %d \n\r", rxMsg.identifier);
-                printf("frame timeId: %d \n\r", rxMsg.timeId);
+            for(int i = 0; i<length; i++){
+                uint8_t rxByte = uart_data[i];
+                // ESP_LOGI(TAG, "eating byte: %d", rxByte);
 
-                uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-                printf("frame error code: %d\n\r", error_code);
-                break;
+                if(ZParseFrame(rxByte, &rxMsg))
+                {   
+                    uart_flush(uart_num);
+                    reply_pending = false;
+                    printf("handling frame\n\r");
+                    printf("frame type: %d \n\r", rxMsg.type);
+                    printf("frame identifier: %d \n\r", rxMsg.identifier);
+                    printf("frame timeId: %d \n\r", rxMsg.timeId);
+
+                    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+                    printf("frame error code: %d\n\r", error_code);
+                }
+            
             }
+            
         }
 
         vTaskDelay(5000 / portTICK_PERIOD_MS);

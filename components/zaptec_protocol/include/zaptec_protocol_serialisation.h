@@ -1,3 +1,4 @@
+// this file is based on https://github.com/ZaptecCharger/ZapChargerProMCU/blob/a202f6e862b1c9914f0e06d1aae4960ef60af998/smart/smart/src/zapProtocol.h
 #ifndef ZAPTEC_PROTOCOL_SERIALISATION_H
 #define ZAPTEC_PROTOCOL_SERIALISATION_H
 
