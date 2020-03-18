@@ -52,12 +52,13 @@ void init_mcu(){
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
         ESP_LOGI(TAG, "MCU initialised");
+        freeZapMessageReply();
 
 }
 
 void app_main(void)
 {
-    //obtain_time();
+    obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     zaptecProtocolStart();
     init_mcu();
@@ -94,7 +95,7 @@ static void obtain_time(void)
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 
-    ESP_ERROR_CHECK( example_disconnect() );
+    // ESP_ERROR_CHECK( example_disconnect() );
 
     time(&now);
     localtime_r(&now, &timeinfo);
