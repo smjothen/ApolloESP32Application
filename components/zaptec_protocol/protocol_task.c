@@ -9,6 +9,7 @@
 
 #include "protocol_task.h"
 #include "zaptec_protocol_serialisation.h"
+#include "mcu_communication.h"
 
 #define TAG __FILE__
 

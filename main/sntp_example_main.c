@@ -22,6 +22,8 @@
 #include "esp_sntp.h"
 
 #include "protocol_task.h"
+#include "mcu_communication.h"
+#include "zaptec_protocol_serialisation.h"
 
 static const char *TAG = "example";
 
@@ -33,11 +35,32 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
+void init_mcu(){
+    ZapMessage txMsg;
+
+        // ZEncodeMessageHeader* does not check the length of the buffer!
+        // This should not be a problem for most usages, but make sure strings are within a range that fits!
+        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+        
+        txMsg.type = MsgWrite;
+        txMsg.identifier = ParamRunTest;
+
+        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+            &txMsg, 34, txBuf, encodedTxBuf
+        );
+        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+        ESP_LOGI(TAG, "MCU initialised");
+
+}
+
 void app_main(void)
 {
     //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     zaptecProtocolStart();
+    init_mcu();
 
     while (true)
     {
