@@ -20,10 +20,13 @@
 #include "nvs_flash.h"
 #include "protocol_examples_common.h"
 #include "esp_sntp.h"
+#include "esp_websocket_client.h"
 
 #include "protocol_task.h"
 #include "mcu_communication.h"
 #include "zaptec_protocol_serialisation.h"
+
+#include "ocpp_task.h"
 
 static const char *TAG = "example";
 
@@ -60,9 +63,11 @@ void app_main(void)
 {
     obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    zaptecProtocolStart();
-    init_mcu();
+    //zaptecProtocolStart();
+    // init_mcu();
 
+    ocpp_task_start();
+    
     while (true)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
