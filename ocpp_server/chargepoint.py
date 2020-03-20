@@ -1,8 +1,8 @@
 import asyncio
 import websockets
 
-from ocpp.v20 import call
-from ocpp.v20 import ChargePoint as cp
+from ocpp.v16 import call
+from ocpp.v16 import ChargePoint as cp
 
 
 class ChargePoint(cp):

@@ -3,16 +3,25 @@ import websockets
 from datetime import datetime
 
 from ocpp.routing import on
-from ocpp.v20 import ChargePoint as cp
-from ocpp.v20 import call_result
+from ocpp.v16 import ChargePoint as cp
+from ocpp.v16 import call_result
 
 class ChargePoint(cp):
     @on('BootNotification')
-    def on_boot_notitication(self, charging_station, reason, **kwargs):
+    def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
+        print("replying to on boot msg")
         return call_result.BootNotificationPayload(
             current_time=datetime.utcnow().isoformat(),
             interval=10,
             status='Accepted'
+        )
+        
+
+    @on('Authorize')
+    def on_authorize_request(self, id_tag):
+        print(f'authorizing {id_tag}')
+        return call_result.AuthorizePayload(
+            dict(expiry_date='2021-01-01', status='Accepted')
         )
 
 async def on_connect(websocket, path):
@@ -23,6 +32,8 @@ async def on_connect(websocket, path):
     charge_point_id = path.strip('/')
     cp = ChargePoint(charge_point_id, websocket)
 
+    print("starting ocpp handler")
+
     await cp.start()
 
 
@@ -31,7 +42,7 @@ async def main():
         on_connect,
         '0.0.0.0',
         9000,
-        subprotocols=['ocpp2.0']
+        subprotocols=['ocpp1.6']
     )
 
     await server.wait_closed()
