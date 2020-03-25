@@ -70,6 +70,37 @@ void freeOcppReply(){
     xSemaphoreGive(ocpp_request_pending) ;
 }
 
+void replyToCall(cJSON *message){
+    char *unique_id = cJSON_GetArrayItem(message, 1)->valuestring;
+    char *action = cJSON_GetArrayItem(message, 2)->valuestring;
+    cJSON *payload = cJSON_GetArrayItem(message, 3);
+
+    cJSON *reply_payload = cJSON_CreateObject();
+
+    ESP_LOGI(TAG, "Handleing call %s", action);
+
+    if(strcmp(action, "ChangeAvailability") == 0){
+        ESP_LOGI(
+            TAG, "Changing avaiability to %s for connector %d",
+            cJSON_GetObjectItem(payload, "type")->valuestring,
+            cJSON_GetObjectItem(payload, "connectorId")->valueint
+        );
+
+        cJSON_AddStringToObject(reply_payload, "status", "Accepted");
+    }
+
+    cJSON *callReply = cJSON_CreateArray();
+    cJSON_AddItemToArray(callReply, cJSON_CreateNumber(3)); //[<MessageTypeId>, is callresult
+    cJSON_AddItemToArray(callReply, cJSON_CreateString(unique_id));
+    cJSON_AddItemToArray(callReply, reply_payload);
+   
+    char *reply_string = cJSON_Print(callReply);
+    configASSERT(strlen(reply_string)<OCPP_MESSAGE_MAX_LENGTH);
+    cJSON_Delete(callReply);
+    esp_websocket_client_send(client, reply_string, strlen(reply_string), portMAX_DELAY);
+    ESP_LOGI(TAG, "sent callreply");
+}
+
 void ocpp_web_ws_event_handler(esp_websocket_event_data_t *data){
     // cJSON requires a nullterminated string
         char message_string[OCPP_MESSAGE_MAX_LENGTH] = {0};
@@ -87,8 +118,8 @@ void ocpp_web_ws_event_handler(esp_websocket_event_data_t *data){
         {
         case 2:
             // central system sent call
-            ESP_LOGI(TAG, "central system sent call");
-            // TODO: handle call
+            ESP_LOGI(TAG, "central system sent call:%s", message_string);
+            replyToCall(message);
             cJSON_Delete(message);
             break;
         case 3:
@@ -123,7 +154,6 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
         ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
         ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
         ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n", data->payload_len, data->data_len, data->payload_offset);
-
 
         switch (data->op_code){
         case 1:

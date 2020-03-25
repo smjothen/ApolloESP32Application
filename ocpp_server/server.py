@@ -4,7 +4,18 @@ from datetime import datetime
 
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
-from ocpp.v16 import call_result
+from ocpp.v16 import call_result, call
+
+async def call_runner(cp):
+    await asyncio.sleep(2)
+    print('calling ChangeAvailability')
+    result = await cp.call(
+        call.ChangeAvailabilityPayload(
+            connector_id=3, 
+            type='Operative')
+    )
+
+    print(result)
 
 class ChargePoint(cp):
     @on('BootNotification')
@@ -33,9 +44,10 @@ async def on_connect(websocket, path):
     cp = ChargePoint(charge_point_id, websocket)
 
     print("starting ocpp handler")
+    
+    caller = asyncio.create_task(call_runner(cp))
 
     await cp.start()
-
 
 async def main():
     server = await websockets.serve(

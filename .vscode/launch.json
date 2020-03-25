@@ -1,28 +1,36 @@
 // ======================== launch.json ========================
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-      {
-      
-        "type": "gdb",
-        "request": "launch",
-        "name": "flash, and debug ESP32",
-        "target": "build/sntp.elf",
-        "cwd": "${workspaceFolder}",
-        "gdbpath": "${env:HOME}/.espressif/tools/xtensa-esp32-elf/esp-2019r2-8.2.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gdb", // Path of the toolchain
-        "autorun": [
-          "target remote :3333", // Connect to OpenOCD
-          "mon reset halt", // Reset the chip and keep the CPUs halted
-          "mon program_esp32 ${workspaceFolder}/build/sntp.bin 0x10000",
-          "set remote hardware-watchpoint-limit 2", // Restrict GDB to using two hardware watchpoints supported by ESP32
-          "flushregs", // Force GDB to get new state from the target
-          "thb app_main", // Insert a temporary hardware breakpoint at the main function
-          "c" // Resume the program. It will then stop at breakpoint inserted at app_main
-        ],
-        "preLaunchTask": "Build"
-      }
-    ]
-  }
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: OCPP server",
+      "type": "python",
+      "request": "launch",
+      "program": "ocpp_server/server.py",
+      "console": "integratedTerminal",
+      "pythonPath": "${config:python.pythonPath}",
+      "justMyCode": false,
+    },
+    {
+      "type": "gdb",
+      "request": "launch",
+      "name": "flash, and debug ESP32",
+      "target": "build/sntp.elf",
+      "cwd": "${workspaceFolder}",
+      "gdbpath": "${env:HOME}/.espressif/tools/xtensa-esp32-elf/esp-2019r2-8.2.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gdb", // Path of the toolchain
+      "autorun": [
+        "target remote :3333", // Connect to OpenOCD
+        "mon reset halt", // Reset the chip and keep the CPUs halted
+        "mon program_esp32 ${workspaceFolder}/build/sntp.bin 0x10000",
+        "set remote hardware-watchpoint-limit 2", // Restrict GDB to using two hardware watchpoints supported by ESP32
+        "flushregs", // Force GDB to get new state from the target
+        "thb app_main", // Insert a temporary hardware breakpoint at the main function
+        "c" // Resume the program. It will then stop at breakpoint inserted at app_main
+      ],
+      "preLaunchTask": "Build"
+    }
+  ]
+}
