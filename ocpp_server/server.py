@@ -5,17 +5,19 @@ from datetime import datetime
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call_result, call
+import random
 
 async def call_runner(cp):
-    await asyncio.sleep(2)
-    print('calling ChangeAvailability')
-    result = await cp.call(
-        call.ChangeAvailabilityPayload(
-            connector_id=3, 
-            type='Operative')
-    )
+    while True:
+        await asyncio.sleep(2)
+        print('calling ChangeAvailability')
+        result = await cp.call(
+            call.ChangeAvailabilityPayload(
+                connector_id=random.randint(0,999), 
+                type='Operative')
+        )
 
-    print(result)
+        print(result)
 
 class ChargePoint(cp):
     @on('BootNotification')
