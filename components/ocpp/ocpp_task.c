@@ -15,6 +15,9 @@
 #include "esp_websocket_client.h"
 #include "esp_event.h"
 
+#include "ocpp_task.h"
+#include "ocpp_call.h"
+
 #define NO_DATA_TIMEOUT_SEC 10
 
 static const char *TAG = "WEBSOCKET";
