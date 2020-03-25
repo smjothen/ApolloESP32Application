@@ -9,6 +9,7 @@
 #include "freertos/event_groups.h"
 
 #include "cJSON.h"
+#include "iot_button.h"
 
 #include "esp_log.h"
 #include "esp_websocket_client.h"
@@ -98,7 +99,6 @@ void ocpp_web_ws_event_handler(esp_websocket_event_data_t *data){
             configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY))
             ESP_LOGE(TAG, "central system sent callerror");
 
-        
             break;
         default:
             ESP_LOGE(TAG, "unknown message type id from occp cs: %d", message_type_id);
@@ -121,11 +121,22 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
         ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
         ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n", data->payload_len, data->data_len, data->payload_offset);
 
-        if(data->op_code == 9 || data->op_code == 10){
+
+        switch (data->op_code){
+        case 1:
+            //ws text frame
+            ocpp_web_ws_event_handler(data); 
+            break;
+        case 9:
+        case 10:
             // ws layer ping pong
-        } else{
-            ocpp_web_ws_event_handler(data);    
+            break;
+        default:
+            ESP_LOGE(TAG, "unhandled websocket op code");
+            configASSERT(false);
+            break;
         }
+
         break;
         
         
@@ -133,6 +144,13 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
         ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
         break;
     }
+}
+
+void on_btn(void* arg){
+    cJSON *auth_call_payload = cJSON_CreateObject();
+    cJSON_AddStringToObject(auth_call_payload, "idTag", "12345678901234567888");
+    cJSON *authorize_response = runCall("Authorize", auth_call_payload);
+    freeOcppReply(authorize_response);
 }
 
 static void ocpp_task(void *pvParameters)
@@ -175,12 +193,6 @@ static void ocpp_task(void *pvParameters)
     freeOcppReply(on_boot_response);
     vTaskDelay(1000 / portTICK_RATE_MS);
 
-    cJSON *auth_call_payload = cJSON_CreateObject();
-    cJSON_AddStringToObject(auth_call_payload, "idTag", "12345678901234567888");
-    cJSON *authorize_response = runCall("Authorize", auth_call_payload);
-    freeOcppReply(authorize_response);
-    vTaskDelay(1000 / portTICK_RATE_MS);
-
     while (true)
     {
         vTaskDelay(1000 / portTICK_RATE_MS);
@@ -190,10 +202,15 @@ static void ocpp_task(void *pvParameters)
 
 void ocpp_task_start(void)
 {
-    // esp_log_level_set("WEBSOCKET_CLIENT", ESP_LOG_DEBUG);
-    // esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);
-
     ESP_LOGI(TAG, "staring ocpp ws client soon");
+
+    #define BUTTON_IO_NUM           0
+    #define BUTTON_ACTIVE_LEVEL     0
+    button_handle_t btn_handle = iot_button_create(BUTTON_IO_NUM, BUTTON_ACTIVE_LEVEL);
+    if (btn_handle) {
+        iot_button_set_evt_cb(btn_handle, BUTTON_CB_RELEASE, on_btn, "RELEASE");
+    }
+
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t taskHandle = NULL;
     int stack_size = 4096 + (2*OCPP_MESSAGE_MAX_LENGTH);

@@ -6,5 +6,6 @@
     "files.associations": {
       "functional": "c"
     },
-    "python.pythonPath": "/home/arnt/.local/share/virtualenvs/ocpp_server-1v0wFJTf/bin/python"
+    "python.pythonPath": "/home/arnt/.local/share/virtualenvs/ocpp_server-1v0wFJTf/bin/python",
+    "cmake.configureOnOpen": false
   }
