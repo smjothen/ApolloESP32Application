@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "esp_websocket_client.h"
 #include "esp_event.h"
+#include "esp_system.h"
 
 #include "ocpp_task.h"
 #include "ocpp_call.h"
@@ -27,21 +28,31 @@ esp_websocket_client_handle_t client;
 
 SemaphoreHandle_t ocpp_request_pending;
 cJSON *request_reply;
-uint32_t pending_request_unique_id;
+char pending_request_unique_id[25];
 
 QueueHandle_t ocpp_response_recv_queue;
 QueueHandle_t ocpp_send_queue;
+
+void updateRequestUniqueId(void){
+    int result = sprintf(
+        pending_request_unique_id,
+        "apollo-%08x-%08x",
+        esp_random(), esp_random()
+    );
+    configASSERT(result==24);
+    ESP_LOGI(TAG, "pending_request_unique_id: %s", pending_request_unique_id);
+}
 
 cJSON *runCall(const char* action, cJSON *payload){
 
     if( xSemaphoreTake( ocpp_request_pending, portMAX_DELAY ) == pdTRUE )
     {
         xQueueReset(ocpp_response_recv_queue);
-        pending_request_unique_id++;
+        updateRequestUniqueId();
 
         cJSON *call = cJSON_CreateArray();
         cJSON_AddItemToArray(call, cJSON_CreateNumber(2)); //[<MessageTypeId>, is call
-        cJSON_AddItemToArray(call, cJSON_CreateNumber(pending_request_unique_id));
+        cJSON_AddItemToArray(call, cJSON_CreateString(pending_request_unique_id));
         cJSON_AddItemToArray(call, cJSON_CreateString(action));
         cJSON_AddItemToArray(call, payload);
         char *request_string = cJSON_Print(call);
@@ -189,7 +200,6 @@ void on_btn(void* arg){
 static void ocpp_task(void *pvParameters)
 {
     ocpp_request_pending = xSemaphoreCreateMutex();
-    pending_request_unique_id = 0;
 
     ocpp_response_recv_queue = xQueueCreate( 1, sizeof(cJSON *) );
     ocpp_send_queue = xQueueCreate( 1, sizeof(char)*OCPP_MESSAGE_MAX_LENGTH );
