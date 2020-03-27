@@ -197,6 +197,21 @@ void on_btn(void* arg){
     freeOcppReply(authorize_response);
 }
 
+void send_heartbeat(TimerHandle_t xTimer){
+    ESP_LOGI(TAG, "sending ocpp heartbeat ");
+    cJSON *auth_call_payload = cJSON_CreateObject();
+    cJSON *authorize_response = runCall("Heartbeat", auth_call_payload);
+
+    char *central_system_time = cJSON_GetObjectItem(
+        cJSON_GetArrayItem(authorize_response, 2),
+        "currentTime"
+    )->valuestring;
+    ESP_LOGI(TAG, "got ocpp hb reply<------------[servertime:%s]",
+    central_system_time);
+
+    freeOcppReply(authorize_response);
+}
+
 static void ocpp_task(void *pvParameters)
 {
     ocpp_request_pending = xSemaphoreCreateMutex();
@@ -233,7 +248,28 @@ static void ocpp_task(void *pvParameters)
     cJSON_AddStringToObject(on_boot_payload, "chargePointVendor", "VendorX");
     cJSON_AddStringToObject(on_boot_payload, "chargePointModel", "SingleSocketCharger");
     cJSON *on_boot_response = runCall("BootNotification", on_boot_payload);
+    int heartbeat_interval = cJSON_GetObjectItem(
+        cJSON_GetArrayItem( on_boot_response, 2),
+         "interval"
+    )->valueint;
     freeOcppReply(on_boot_response);
+
+    if(heartbeat_interval<=0){
+        heartbeat_interval = 10;
+    }
+
+    ESP_LOGI(TAG, "staring heartbeat timer at %d sec period", heartbeat_interval);
+    TimerHandle_t timer = xTimerCreate( 
+            "Ocpp-HB-timer",
+            ( 1000 * heartbeat_interval ) / portTICK_RATE_MS,
+            pdTRUE,
+            NULL,
+            send_heartbeat
+    );
+    xTimerStart(timer, 0);
+
+    ESP_LOGI(TAG, "_/^\\_/^\\_/^\\_/^\\_/^\\");
+    
     vTaskDelay(1000 / portTICK_RATE_MS);
 
     while (true)

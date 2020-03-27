@@ -1,6 +1,6 @@
 import asyncio
 import websockets
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
@@ -29,6 +29,15 @@ class ChargePoint(cp):
             status='Accepted'
         )
         
+    @on('Heartbeat')
+    def on_heartbeat(self, **kwargs):
+        print("replying to heartbeat")
+
+        time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+
+        return call_result.HeartbeatPayload(
+            current_time=time
+        )
 
     @on('Authorize')
     def on_authorize_request(self, id_tag):
