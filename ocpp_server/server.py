@@ -34,6 +34,7 @@ class ChargePoint(cp):
         print("replying to heartbeat")
 
         time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+        time = datetime.utcnow().isoformat() + 'Z'
 
         return call_result.HeartbeatPayload(
             current_time=time

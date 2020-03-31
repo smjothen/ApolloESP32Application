@@ -15,6 +15,7 @@
 #include "esp_websocket_client.h"
 #include "esp_event.h"
 #include "esp_system.h"
+#include "time.h"
 
 #include "ocpp_task.h"
 #include "ocpp_call.h"
@@ -43,6 +44,36 @@ void updateRequestUniqueId(void){
     ESP_LOGI(TAG, "pending_request_unique_id: %s", pending_request_unique_id);
 }
 
+struct tm parseTime(const char * string){
+    // the date time in a json schema is compliant with RFC 5.6 https://json-schema.org/understanding-json-schema/reference/string.html
+    // e.g. "1985-04-12T23:20:50.52Z", "1990-12-31T15:59:60-08:00"
+    // parseing based on https://stackoverflow.com/questions/26895428/how-do-i-parse-an-iso-8601-date-with-optional-milliseconds-to-a-struct-tm-in-c
+
+    int y,M,d,h,m;
+    float s;
+    int tzh = 0, tzm = 0;
+
+    int paresed_arguments = sscanf(string, "%d-%d-%dT%d:%d:%f%d:%dZ", &y, &M, &d, &h, &m, &s, &tzh, &tzm);
+
+    if (6 < paresed_arguments) {
+        if (tzh < 0) {
+        tzm = -tzm;    // Fix the sign on minutes.
+        }
+    }
+
+    struct tm time;
+    time.tm_year = y - 1900; // Year since 1900
+    time.tm_mon = M - 1;     // 0-11
+    time.tm_mday = d;        // 1-31
+    time.tm_hour = h;        // 0-23
+    time.tm_min = m;         // 0-59
+    time.tm_sec = (int)s;    // 0-61 (0-60 in C++11)
+
+    //TODO: return tz and maybe handle sub-sec resolution
+
+    return time;
+}
+
 cJSON *runCall(const char* action, cJSON *payload){
 
     if( xSemaphoreTake( ocpp_request_pending, portMAX_DELAY ) == pdTRUE )
@@ -56,10 +87,17 @@ cJSON *runCall(const char* action, cJSON *payload){
         cJSON_AddItemToArray(call, cJSON_CreateString(action));
         cJSON_AddItemToArray(call, payload);
         char *request_string = cJSON_Print(call);
+        if (request_string == NULL)
+        {
+            ESP_LOGE(TAG, "cJSON_Print failed for ocpp hb");
+            configASSERT(false);
+        }
+
         configASSERT(strlen(request_string)<OCPP_MESSAGE_MAX_LENGTH);
         cJSON_Delete(call); // Free BOTH the newly created and the payload passed to the routine
 
         esp_websocket_client_send(client, request_string, strlen(request_string), portMAX_DELAY);
+        free(request_string);
 
         xQueueReceive( 
             ocpp_response_recv_queue,
@@ -109,6 +147,7 @@ void replyToCall(cJSON *message){
     configASSERT(strlen(reply_string)<OCPP_MESSAGE_MAX_LENGTH);
     cJSON_Delete(callReply);
     esp_websocket_client_send(client, reply_string, strlen(reply_string), portMAX_DELAY);
+    free(reply_string);
     ESP_LOGI(TAG, "sent callreply");
 }
 
@@ -208,6 +247,10 @@ void send_heartbeat(TimerHandle_t xTimer){
     )->valuestring;
     ESP_LOGI(TAG, "got ocpp hb reply<------------[servertime:%s]",
     central_system_time);
+
+    struct tm calendar_time = parseTime(central_system_time);
+    time_t posix_time = mktime(&calendar_time);
+    ESP_LOGI(TAG, "parsed time: %s", ctime(&posix_time));
 
     freeOcppReply(authorize_response);
 }
