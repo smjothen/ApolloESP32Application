@@ -1,6 +1,8 @@
-idf_component_register(SRCS "sntp_example_main.c"
-                    INCLUDE_DIRS ".")
+# Edit following two lines to set component requirements (see docs)
+set(COMPONENT_REQUIRES )
+set(COMPONENT_PRIV_REQUIRES )
 
-#set(COMPONENT_ADD_INCLUDEDIRS ".")
+set(COMPONENT_SRCS "main.c")
+set(COMPONENT_ADD_INCLUDEDIRS "")
 
-#register_component()
+register_component()

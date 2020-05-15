@@ -3,9 +3,10 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := sntp
+PROJECT_NAME := Apollo
 
-EXTRA_COMPONENT_DIRS = $(IDF_PATH)/examples/common_components/protocol_examples_common
+#EXTRA_COMPONENT_DIRS = $(IDF_PATH)/examples/common_components/protocol_examples_common
+#EXTRA_COMPONENT_DIRS = $(IDF_PATH)/components/wifi
 COMPONENT_ADD_INCLUDEDIRS := components/include
 
 include $(IDF_PATH)/make/project.mk

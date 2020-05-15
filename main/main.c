@@ -28,10 +28,11 @@
 
 #include "ocpp_task.h"
 
-static const char *TAG = "example";
-
 static void obtain_time(void);
 static void initialize_sntp(void);
+
+char softwareVersion[] = "ZAP 0.0.0.1 0";
+static const char *TAG = "MAIN     ";
 
 void time_sync_notification_cb(struct timeval *tv)
 {
@@ -41,21 +42,21 @@ void time_sync_notification_cb(struct timeval *tv)
 void init_mcu(){
     ZapMessage txMsg;
 
-        // ZEncodeMessageHeader* does not check the length of the buffer!
-        // This should not be a problem for most usages, but make sure strings are within a range that fits!
-        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
-        
-        txMsg.type = MsgWrite;
-        txMsg.identifier = ParamRunTest;
+	// ZEncodeMessageHeader* does not check the length of the buffer!
+	// This should not be a problem for most usages, but make sure strings are within a range that fits!
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 
-        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-            &txMsg, 34, txBuf, encodedTxBuf
-        );
-        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	txMsg.type = MsgWrite;
+	txMsg.identifier = ParamRunTest;
 
-        ESP_LOGI(TAG, "MCU initialised");
-        freeZapMessageReply();
+	uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+		&txMsg, 34, txBuf, encodedTxBuf
+	);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+	ESP_LOGI(TAG, "MCU initialised");
+	freeZapMessageReply();
 
 }
 
@@ -66,11 +67,12 @@ void app_main(void)
     //zaptecProtocolStart();
     // init_mcu();
 
-    ocpp_task_start();
+    //ocpp_task_start();
     
     while (true)
     {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
     }
     
 }
