@@ -27,6 +27,16 @@
 #include "zaptec_protocol_serialisation.h"
 
 #include "ocpp_task.h"
+#include "CLRC661.h"
+#include "uart1.h"
+//#include "driver/ledc.h"
+
+//#define LEDC_HS_TIMER          LEDC_TIMER_0
+//#define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
+//
+//#define LEDC_TEST_CH_NUM       (4)
+//#define LEDC_TEST_DUTY         (4000)
+//#define LEDC_TEST_FADE_TIME    (3000)
 
 static void obtain_time(void);
 static void initialize_sntp(void);
@@ -60,19 +70,172 @@ void init_mcu(){
 
 }
 
+//LED
+#define GPIO_OUTPUT_DEBUG_LED    0
+#define GPIO_OUTPUT_PWRKEY		21
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY)
+
+//AUDIO
+#define LEDC_TEST_CH_NUM_E 0
+#define GPIO_OUTPUT_AUDIO   2
+
 void app_main(void)
 {
-    obtain_time();
+    //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    //mbus_init();
+    register_i2ctools();
+
     //zaptecProtocolStart();
     // init_mcu();
 
     //ocpp_task_start();
     
+
+    gpio_config_t io_conf;
+	//disable interrupt
+	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	//set as output mode
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	//bit mask of the pins that you want to set,e.g.GPIO18/19
+	io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+	//disable pull-down mode
+	io_conf.pull_down_en = 0;
+	//disable pull-up mode
+	io_conf.pull_up_en = 0;
+	//configure GPIO with the given settings
+	gpio_config(&io_conf);
+
+	uint32_t ledState = 0;
+	uint32_t loopCount = 0;
+
+
+
+
+	 int ch = 0;
+
+	    /*
+	     * Prepare and set configuration of timers
+	     * that will be used by LED Controller
+	     */
+//	    ledc_timer_config_t ledc_timer = {
+//	        .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+//	        .freq_hz = 3100,                      // frequency of PWM signal
+//	        .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
+//	        .timer_num = LEDC_TIMER_0,            // timer index
+//	        .clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
+//	    };
+//	    // Set configuration of timer0 for high speed channels
+//	    ledc_timer_config(&ledc_timer);
+//	#ifdef CONFIG_IDF_TARGET_ESP32
+//	    // Prepare and set configuration of timer1 for low speed channels
+//	    ledc_timer.speed_mode = LEDC_HS_MODE;
+//	    ledc_timer.timer_num = LEDC_HS_TIMER;
+//	    ledc_timer_config(&ledc_timer);
+//	#endif
+	    /*
+	     * Prepare individual configuration
+	     * for each channel of LED Controller
+	     * by selecting:
+	     * - controller's channel number
+	     * - output duty cycle, set initially to 0
+	     * - GPIO number where LED is connected to
+	     * - speed mode, either high or low
+	     * - timer servicing selected channel
+	     *   Note: if different channels use one timer,
+	     *         then frequency and bit_num of these channels
+	     *         will be the same
+	     */
+//	    ledc_channel_config_t ledc_channel[LEDC_TEST_CH_NUM_E] = {
+//	        {
+//	            .channel    = LEDC_CHANNEL_0,
+//	            .duty       = 1500,
+//	            .gpio_num   = GPIO_OUTPUT_AUDIO,
+//	            .speed_mode = LEDC_LOW_SPEED_MODE,
+//	            .hpoint     = 0,
+//	            .timer_sel  = LEDC_TIMER_0
+//	        },
+//
+//	    };
+//
+//	    // Set LED Controller with previously prepared configuration
+//	    //for (ch = 0; ch < LEDC_TEST_CH_NUM_E; ch++) {
+//	        ledc_channel_config(&ledc_channel[ch]);
+//	    //}
+//
+//	    // Initialize fade service.
+//	    //ledc_fade_func_install(0);
+//
+//	    bool swap = false;
+//
+//	    while (1) {
+//	        printf("1. LEDC fade up to duty = %d\n", 500);
+//
+//	        if(swap == true)
+//	        {
+//	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 500);
+//	        	swap = false;
+//	        }
+//	        else
+//	        {
+//	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 800);
+//	        	swap = true;
+//	        }
+
+//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
+//	            ledc_set_fade_with_time(ledc_channel[ch].speed_mode,
+//	                    ledc_channel[ch].channel, LEDC_TEST_DUTY, LEDC_TEST_FADE_TIME);
+//	            ledc_fade_start(ledc_channel[ch].speed_mode,
+//	                    ledc_channel[ch].channel, LEDC_FADE_NO_WAIT);
+//	        }
+	        //vTaskDelay(LEDC_TEST_FADE_TIME / portTICK_PERIOD_MS);
+
+//	        printf("2. LEDC fade down to duty = 0\n");
+//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
+//	            ledc_set_fade_with_time(ledc_channel[ch].speed_mode,
+//	                    ledc_channel[ch].channel, 0, LEDC_TEST_FADE_TIME);
+//	            ledc_fade_start(ledc_channel[ch].speed_mode,
+//	                    ledc_channel[ch].channel, LEDC_FADE_NO_WAIT);
+//	        }
+//	        vTaskDelay(LEDC_TEST_FADE_TIME / portTICK_PERIOD_MS);
+//
+//	        printf("3. LEDC set duty = %d without fade\n", LEDC_TEST_DUTY);
+//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
+//	            ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, LEDC_TEST_DUTY);
+//	            ledc_update_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel);
+//	        }
+//	        vTaskDelay(1000 / portTICK_PERIOD_MS);
+//
+//	        printf("4. LEDC set duty = 0 without fade\n");
+//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
+//	            ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 0);
+//	            ledc_update_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel);
+//	        }
+//	        vTaskDelay(1000 / portTICK_PERIOD_MS);
+//	    }
+
+	 gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+
     while (true)
     {
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
-        ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
+    	if(ledState == 0)
+    		ledState = 1;
+    	else
+    		ledState = 0;
+
+    	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
+
+    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+        gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+        loopCount++;
+		if(loopCount == 5)
+		{
+			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
+			loopCount = 0;
+		}
     }
     
 }
