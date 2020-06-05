@@ -75,11 +75,14 @@ void init_mcu(){
 #define GPIO_OUTPUT_PWRKEY		21
 #define GPIO_OUTPUT_RESET		33
 
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
-
 //AUDIO
 #define LEDC_TEST_CH_NUM_E 0
-#define GPIO_OUTPUT_AUDIO   2
+#define GPIO_OUTPUT_AUDIO   (2)
+
+//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET | 1ULL<<GPIO_OUTPUT_AUDIO)
+
+
 
 
 void Start4G()
@@ -124,10 +127,101 @@ void Start4G()
 }
 
 
+void PlaySound()
+{
+	/*
+	 * Prepare and set configuration of timers
+	 * that will be used by LED Controller
+	 */
+	ledc_timer_config_t ledc_timer = {
+		.duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+		.freq_hz = 1000,                      // frequency of PWM signal
+		.speed_mode = LEDC_HIGH_SPEED_MODE,           // timer mode
+		.timer_num = LEDC_TIMER_0,            // timer index
+		.clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
+	};
+	// Set configuration of timer0 for high speed channels
+	ledc_timer_config(&ledc_timer);
+
+
+	/*
+	 * Prepare individual configuration
+	 * for each channel of LED Controller
+	 * by selecting:
+	 * - controller's channel number
+	 * - output duty cycle, set initially to 0
+	 * - GPIO number where LED is connected to
+	 * - speed mode, either high or low
+	 * - timer servicing selected channel
+	 *   Note: if different channels use one timer,
+	 *         then frequency and bit_num of these channels
+	 *         will be the same
+	 */
+//	ledc_channel_config_t ledc_channel = {
+//		{
+//			.channel    = LEDC_CHANNEL_0,
+//			.duty       = 0,
+//			.gpio_num   = 2,
+//			.speed_mode = LEDC_HIGH_SPEED_MODE,
+//			.hpoint     = 0,
+//			.timer_sel  = LEDC_TIMER_0
+//		},
+//
+//	};
+
+	ledc_channel_config_t ledc_channel = {
+
+		.gpio_num   = 2,
+		.speed_mode = LEDC_HIGH_SPEED_MODE,
+		.channel    = LEDC_CHANNEL_0,
+		.duty       = 0,
+		.hpoint     = 0,
+		.timer_sel  = LEDC_TIMER_0
+
+	};
+
+
+
+	ledc_channel_config(&ledc_channel);
+
+	bool swap = false;
+	uint32_t duty = 0;
+
+	duty = 4000;
+	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+
+	while (1) {
+
+		duty = 4000;
+		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+		ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+		ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 500);
+		vTaskDelay(150 / portTICK_PERIOD_MS);
+
+		ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 1000);
+		vTaskDelay(100 / portTICK_PERIOD_MS);
+
+		ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 1500);
+		vTaskDelay(200 / portTICK_PERIOD_MS);
+
+		duty = 8191;
+		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+		ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}
+}
+
+
 void app_main(void)
 {
     //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    //PlaySound();
 
     //Start4G();
 
@@ -145,109 +239,23 @@ void app_main(void)
 
 
 
-	 int ch = 0;
 
-	    /*
-	     * Prepare and set configuration of timers
-	     * that will be used by LED Controller
-	     */
-	    ledc_timer_config_t ledc_timer = {
-	        .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
-	        .freq_hz = 3100,                      // frequency of PWM signal
-	        .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
-	        .timer_num = LEDC_TIMER_0,            // timer index
-	        .clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
-	    };
-	    // Set configuration of timer0 for high speed channels
-	    ledc_timer_config(&ledc_timer);
-	#ifdef CONFIG_IDF_TARGET_ESP32
-	    // Prepare and set configuration of timer1 for low speed channels
-	    ledc_timer.speed_mode = LEDC_HS_MODE;
-	    ledc_timer.timer_num = LEDC_HS_TIMER;
-	    ledc_timer_config(&ledc_timer);
-	#endif
-	    /*
-	     * Prepare individual configuration
-	     * for each channel of LED Controller
-	     * by selecting:
-	     * - controller's channel number
-	     * - output duty cycle, set initially to 0
-	     * - GPIO number where LED is connected to
-	     * - speed mode, either high or low
-	     * - timer servicing selected channel
-	     *   Note: if different channels use one timer,
-	     *         then frequency and bit_num of these channels
-	     *         will be the same
-	     */
-	    ledc_channel_config_t ledc_channel[LEDC_TEST_CH_NUM_E] = {
-	        {
-	            .channel    = LEDC_CHANNEL_0,
-	            .duty       = 1500,
-	            .gpio_num   = GPIO_OUTPUT_AUDIO,
-	            .speed_mode = LEDC_LOW_SPEED_MODE,
-	            .hpoint     = 0,
-	            .timer_sel  = LEDC_TIMER_0
-	        },
-
-	    };
-
-	    // Set LED Controller with previously prepared configuration
-	    //for (ch = 0; ch < LEDC_TEST_CH_NUM_E; ch++) {
-	        ledc_channel_config(&ledc_channel[ch]);
-	    //}
-
-	    // Initialize fade service.
-	    ledc_fade_func_install(0);
-
-	    bool swap = false;
-
-	    while (1) {
-	        printf("1. LEDC fade up to duty = %d\n", 3100);
-
-	        if(swap == true)
-	        {
-	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 3100);
-	        	swap = false;
-	        }
-	        else
-	        {
-	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 3100);
-	        	swap = true;
-	        }
-
-//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
-//	            ledc_set_fade_with_time(ledc_channel[ch].speed_mode,
-//	                    ledc_channel[ch].channel, LEDC_TEST_DUTY, LEDC_TEST_FADE_TIME);
-//	            ledc_fade_start(ledc_channel[ch].speed_mode,
-//	                    ledc_channel[ch].channel, LEDC_FADE_NO_WAIT);
-//	        }
-	        //vTaskDelay(LEDC_TEST_FADE_TIME / portTICK_PERIOD_MS);
-
-//	        printf("2. LEDC fade down to duty = 0\n");
-//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
-//	            ledc_set_fade_with_time(ledc_channel[ch].speed_mode,
-//	                    ledc_channel[ch].channel, 0, LEDC_TEST_FADE_TIME);
-//	            ledc_fade_start(ledc_channel[ch].speed_mode,
-//	                    ledc_channel[ch].channel, LEDC_FADE_NO_WAIT);
-//	        }
-//	        vTaskDelay(LEDC_TEST_FADE_TIME / portTICK_PERIOD_MS);
-//
-//	        printf("3. LEDC set duty = %d without fade\n", LEDC_TEST_DUTY);
-//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
-//	            ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, LEDC_TEST_DUTY);
-//	            ledc_update_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel);
-//	        }
-//	        vTaskDelay(1000 / portTICK_PERIOD_MS);
-//
-//	        printf("4. LEDC set duty = 0 without fade\n");
-//	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
-//	            ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 0);
-//	            ledc_update_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel);
-//	        }
-	        vTaskDelay(1000 / portTICK_PERIOD_MS);
-	    }
 
 	 //gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+
+//	while(true)
+//	{
+//		if(ledState == 0)
+//			ledState = 1;
+//		else
+//			ledState = 0;
+//
+//		gpio_set_level(GPIO_OUTPUT_AUDIO, ledState);
+//
+//		//vTaskDelay(2 / portTICK_PERIOD_MS);
+//		vTaskDelay(10);
+//	}
+
 
     while (true)
     {
