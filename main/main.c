@@ -29,12 +29,12 @@
 #include "ocpp_task.h"
 #include "CLRC661.h"
 #include "uart1.h"
-//#include "driver/ledc.h"
+#include "driver/ledc.h"
 
-//#define LEDC_HS_TIMER          LEDC_TIMER_0
-//#define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
-//
-//#define LEDC_TEST_CH_NUM       (4)
+#define LEDC_HS_TIMER          LEDC_TIMER_0
+#define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
+
+#define LEDC_TEST_CH_NUM       (1)
 //#define LEDC_TEST_DUTY         (4000)
 //#define LEDC_TEST_FADE_TIME    (3000)
 
@@ -73,27 +73,18 @@ void init_mcu(){
 //LED
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_PWRKEY		21
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY)
+#define GPIO_OUTPUT_RESET		33
+
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
 
 //AUDIO
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   2
 
-void app_main(void)
+
+void Start4G()
 {
-    //obtain_time();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-    //mbus_init();
-    register_i2ctools();
-
-    //zaptecProtocolStart();
-    // init_mcu();
-
-    //ocpp_task_start();
-    
-
-    gpio_config_t io_conf;
+	gpio_config_t io_conf;
 	//disable interrupt
 	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
 	//set as output mode
@@ -111,6 +102,47 @@ void app_main(void)
 	uint32_t loopCount = 0;
 
 
+	gpio_set_level(GPIO_OUTPUT_RESET, 1);
+	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+	vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+
+	gpio_set_level(GPIO_OUTPUT_RESET, 0);
+	vTaskDelay(10 / portTICK_PERIOD_MS);
+
+	   gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+	vTaskDelay(200 / portTICK_PERIOD_MS);
+
+	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+	gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
+
+
+void app_main(void)
+{
+    //obtain_time();
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    //Start4G();
+
+    //mbus_init();
+    //register_i2ctools();
+
+    //zaptecProtocolStart();
+    // init_mcu();
+
+    //ocpp_task_start();
+
+	uint32_t ledState = 0;
+	uint32_t loopCount = 0;
+
+
 
 
 	 int ch = 0;
@@ -119,21 +151,21 @@ void app_main(void)
 	     * Prepare and set configuration of timers
 	     * that will be used by LED Controller
 	     */
-//	    ledc_timer_config_t ledc_timer = {
-//	        .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
-//	        .freq_hz = 3100,                      // frequency of PWM signal
-//	        .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
-//	        .timer_num = LEDC_TIMER_0,            // timer index
-//	        .clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
-//	    };
-//	    // Set configuration of timer0 for high speed channels
-//	    ledc_timer_config(&ledc_timer);
-//	#ifdef CONFIG_IDF_TARGET_ESP32
-//	    // Prepare and set configuration of timer1 for low speed channels
-//	    ledc_timer.speed_mode = LEDC_HS_MODE;
-//	    ledc_timer.timer_num = LEDC_HS_TIMER;
-//	    ledc_timer_config(&ledc_timer);
-//	#endif
+	    ledc_timer_config_t ledc_timer = {
+	        .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+	        .freq_hz = 3100,                      // frequency of PWM signal
+	        .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
+	        .timer_num = LEDC_TIMER_0,            // timer index
+	        .clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
+	    };
+	    // Set configuration of timer0 for high speed channels
+	    ledc_timer_config(&ledc_timer);
+	#ifdef CONFIG_IDF_TARGET_ESP32
+	    // Prepare and set configuration of timer1 for low speed channels
+	    ledc_timer.speed_mode = LEDC_HS_MODE;
+	    ledc_timer.timer_num = LEDC_HS_TIMER;
+	    ledc_timer_config(&ledc_timer);
+	#endif
 	    /*
 	     * Prepare individual configuration
 	     * for each channel of LED Controller
@@ -147,41 +179,41 @@ void app_main(void)
 	     *         then frequency and bit_num of these channels
 	     *         will be the same
 	     */
-//	    ledc_channel_config_t ledc_channel[LEDC_TEST_CH_NUM_E] = {
-//	        {
-//	            .channel    = LEDC_CHANNEL_0,
-//	            .duty       = 1500,
-//	            .gpio_num   = GPIO_OUTPUT_AUDIO,
-//	            .speed_mode = LEDC_LOW_SPEED_MODE,
-//	            .hpoint     = 0,
-//	            .timer_sel  = LEDC_TIMER_0
-//	        },
-//
-//	    };
-//
-//	    // Set LED Controller with previously prepared configuration
-//	    //for (ch = 0; ch < LEDC_TEST_CH_NUM_E; ch++) {
-//	        ledc_channel_config(&ledc_channel[ch]);
-//	    //}
-//
-//	    // Initialize fade service.
-//	    //ledc_fade_func_install(0);
-//
-//	    bool swap = false;
-//
-//	    while (1) {
-//	        printf("1. LEDC fade up to duty = %d\n", 500);
-//
-//	        if(swap == true)
-//	        {
-//	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 500);
-//	        	swap = false;
-//	        }
-//	        else
-//	        {
-//	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 800);
-//	        	swap = true;
-//	        }
+	    ledc_channel_config_t ledc_channel[LEDC_TEST_CH_NUM_E] = {
+	        {
+	            .channel    = LEDC_CHANNEL_0,
+	            .duty       = 1500,
+	            .gpio_num   = GPIO_OUTPUT_AUDIO,
+	            .speed_mode = LEDC_LOW_SPEED_MODE,
+	            .hpoint     = 0,
+	            .timer_sel  = LEDC_TIMER_0
+	        },
+
+	    };
+
+	    // Set LED Controller with previously prepared configuration
+	    //for (ch = 0; ch < LEDC_TEST_CH_NUM_E; ch++) {
+	        ledc_channel_config(&ledc_channel[ch]);
+	    //}
+
+	    // Initialize fade service.
+	    ledc_fade_func_install(0);
+
+	    bool swap = false;
+
+	    while (1) {
+	        printf("1. LEDC fade up to duty = %d\n", 3100);
+
+	        if(swap == true)
+	        {
+	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 3100);
+	        	swap = false;
+	        }
+	        else
+	        {
+	        	ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 3100);
+	        	swap = true;
+	        }
 
 //	        for (ch = 0; ch < LEDC_TEST_CH_NUM; ch++) {
 //	            ledc_set_fade_with_time(ledc_channel[ch].speed_mode,
@@ -212,10 +244,10 @@ void app_main(void)
 //	            ledc_set_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel, 0);
 //	            ledc_update_duty(ledc_channel[ch].speed_mode, ledc_channel[ch].channel);
 //	        }
-//	        vTaskDelay(1000 / portTICK_PERIOD_MS);
-//	    }
+	        vTaskDelay(1000 / portTICK_PERIOD_MS);
+	    }
 
-	 gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+	 //gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 
     while (true)
     {
@@ -228,7 +260,7 @@ void app_main(void)
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-        gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+        //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
 
         loopCount++;
 		if(loopCount == 5)
