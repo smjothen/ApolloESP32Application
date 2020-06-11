@@ -81,7 +81,7 @@ void init_mcu(){
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   2
 
-#define BRIDGE_CELLULAR_MODEM 1
+// #define BRIDGE_CELLULAR_MODEM 1
 
 void app_main(void)
 {
