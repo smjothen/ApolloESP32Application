@@ -75,6 +75,7 @@ void init_mcu(){
 #define GPIO_OUTPUT_PWRKEY		21
 #define GPIO_OUTPUT_RESET		33
 
+// #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_RESET)
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
 
 //AUDIO
@@ -83,6 +84,7 @@ void init_mcu(){
 
 void app_main(void)
 {
+	ESP_LOGE(TAG, "start of app_main3");
     //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
@@ -133,6 +135,8 @@ void app_main(void)
 
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 
+    printf("BG reset done\n");
+
     mbus_init();
 
 
@@ -148,9 +152,9 @@ void app_main(void)
     	vTaskDelay(500 / portTICK_PERIOD_MS);
 
         loopCount++;
-		if(loopCount == 5)
+		if(loopCount == 30)
 		{
-			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
+			// ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
 		}
     }

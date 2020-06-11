@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/main/**",
                 "${workspaceFolder}/build/include/",
-                "${env.HOME}/.local/esp2/esp-idf/components/**"
+                "${env.HOME}/.local/esp_v4_2/esp-idf/components/**"
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
