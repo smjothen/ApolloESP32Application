@@ -25,10 +25,12 @@
 #include "protocol_task.h"
 #include "mcu_communication.h"
 #include "zaptec_protocol_serialisation.h"
+#include "ppp_task.h"
 
 #include "ocpp_task.h"
 #include "CLRC661.h"
 #include "uart1.h"
+
 //#include "driver/ledc.h"
 
 //#define LEDC_HS_TIMER          LEDC_TIMER_0
@@ -72,22 +74,20 @@ void init_mcu(){
 
 //LED
 #define GPIO_OUTPUT_DEBUG_LED    0
-#define GPIO_OUTPUT_PWRKEY		21
-#define GPIO_OUTPUT_RESET		33
 
-// #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_RESET)
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+
 
 //AUDIO
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   2
 
+#define BRIDGE_CELLULAR_MODEM 1
+
 void app_main(void)
 {
-	ESP_LOGE(TAG, "start of app_main3");
+	ESP_LOGE(TAG, "start of app_main4");
     //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-
 
     //register_i2ctools();
 
@@ -95,50 +95,24 @@ void app_main(void)
     // init_mcu();
 
     //ocpp_task_start();
-    
 
-    gpio_config_t io_conf;
-	//disable interrupt
+    gpio_config_t io_conf; 
 	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-	//set as output mode
 	io_conf.mode = GPIO_MODE_OUTPUT;
-	//bit mask of the pins that you want to set,e.g.GPIO18/19
-	io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
-	//disable pull-down mode
+	io_conf.pin_bit_mask = (1ULL<<GPIO_OUTPUT_DEBUG_LED);
 	io_conf.pull_down_en = 0;
-	//disable pull-up mode
 	io_conf.pull_up_en = 0;
-	//configure GPIO with the given settings
 	gpio_config(&io_conf);
 
+    #ifdef BRIDGE_CELLULAR_MODEM
+    hard_reset_cellular();
+    mbus_init();
+    #else
+    ppp_task_start();
+    #endif
+    
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
-
-
-	gpio_set_level(GPIO_OUTPUT_RESET, 1);
-	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
-	vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-
-	gpio_set_level(GPIO_OUTPUT_RESET, 0);
-	vTaskDelay(10 / portTICK_PERIOD_MS);
-
-    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-
-	vTaskDelay(200 / portTICK_PERIOD_MS);
-
-	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
-
-	vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-	gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-
-	vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-    printf("BG reset done\n");
-
-    mbus_init();
-
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
@@ -149,12 +123,13 @@ void app_main(void)
     	else
     		ledState = 0;
 
+        gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
     	vTaskDelay(500 / portTICK_PERIOD_MS);
 
         loopCount++;
 		if(loopCount == 30)
 		{
-			// ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
+			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
 		}
     }

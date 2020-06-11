@@ -11,7 +11,7 @@
       "request": "launch",
       "program": "ocpp_server/server.py",
       "console": "integratedTerminal",
-      "pythonPath": "${config:python.pythonPath}",
+      "pythonPath": "${config:python.interpreterPath}",
       "justMyCode": false,
     },
     {
