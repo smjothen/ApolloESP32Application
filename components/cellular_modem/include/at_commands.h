@@ -2,5 +2,9 @@
 #define AT_COMMANDS_H
 
 int at_command_at(void);
+int at_command_echo_set(bool on);
+int at_command_get_model_name(char *name, int buff_len);
+int at_command_get_imei(char *imei, int buff_len);
+int at_command_get_imsi(char *imsi, int buff_len);
 
 #endif /* AT_COMMANDS_H */

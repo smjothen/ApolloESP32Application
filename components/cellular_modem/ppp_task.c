@@ -29,7 +29,7 @@ static const char *TAG = "PPP_TASK";
 
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
-static char line_buffer[LINE_BUFFER_SIZE+1];
+static char line_buffer[LINE_BUFFER_SIZE];
 static uint32_t line_buffer_end;
 
 void hard_reset_cellular(void){
@@ -58,7 +58,6 @@ void hard_reset_cellular(void){
 }
 
 BaseType_t await_line(char *pvBuffer, TickType_t xTicksToWait){
-    configASSERT(strlen(pvBuffer)<LINE_BUFFER_SIZE);
     return xQueueReceive(line_queue, pvBuffer, xTicksToWait);
 }
 
@@ -72,8 +71,9 @@ int send_line(char * line){
 
 static void configure_uart(void){
 
+    ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
     line_queue = xQueueCreate( 1, sizeof( line_buffer ) );
-    if( line_queue != 0){
+    if( line_queue == 0){
         ESP_LOGE(TAG, "failed to create line queue");
     }
 
@@ -98,7 +98,7 @@ static void on_uart_data(uint8_t* event_data,size_t size){
     event_data[size] = 0;
     ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
-    if(size+line_buffer_end > LINE_BUFFER_SIZE){
+    if(size+line_buffer_end+1> LINE_BUFFER_SIZE){
         ESP_LOGE(TAG, "no space in line buffer! dropping data");
         line_buffer_end = 0;
         return;
@@ -203,12 +203,25 @@ int configure_modem_for_ppp(void){
                 break;
             }
         }else{
-            ESP_LOGE(TAG, "failed to get line");
+            ESP_LOGW(TAG, "failed to get line");
         }
     }
 
     configASSERT(startup_confirmed == true);
     at_command_at();
+    at_command_echo_set(false);
+
+    char name[20];
+    at_command_get_model_name(name, 20);
+    ESP_LOGI(TAG, "got name %s", name);
+
+    char imei[20];
+    at_command_get_imei(imei, 20);
+    ESP_LOGI(TAG, "got imei %s", imei);
+
+    char imsi[20];
+    at_command_get_imsi(imsi, 20);
+    ESP_LOGI(TAG, "got imsi %s", imsi);
 
     return 0;
 }
