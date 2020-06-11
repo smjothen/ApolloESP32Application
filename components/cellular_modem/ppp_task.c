@@ -26,7 +26,10 @@ static const char *TAG = "PPP_TASK";
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
 
+#define LINE_BUFFER_SIZE 256
 static QueueHandle_t uart_queue;
+static char line_buffer[LINE_BUFFER_SIZE+1];
+static uint32_t line_buffer_end;
 
 void hard_reset_cellular(void){
     gpio_config_t io_conf; 
@@ -67,12 +70,35 @@ static void configure_uart(void){
         UART_NUM_1, CELLULAR_RX_SIZE, CELLULAR_TX_SIZE,
         CELLULAR_QUEUE_SIZE, &uart_queue, 0
     );
+    line_buffer_end = 0;
 
 }
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     event_data[size] = 0;
     ESP_LOGI(TAG, "got uart data[%s]", event_data);
+
+    for(int i=0; i<size; i++){
+        char c = event_data[i];
+        if((c=='\n')|| (c=='\r')){
+            if(line_buffer_end == 0){
+                // ESP_LOGD(TAG, "empty line");
+            }else{
+                // ESP_LOGD(TAG, "line finished");
+                //todo push line somewhere
+                line_buffer_end = 0;
+                ESP_LOGI(TAG, "Got line {%s}", line_buffer);
+            }
+            
+        }else{
+            line_buffer[line_buffer_end] = c;
+            line_buffer_end++;
+            line_buffer[line_buffer_end] = 0;
+        }
+    }
+
+    ESP_LOGD(TAG, "current line buffer [%s]", line_buffer);
+
 }
 
 static void uart_event_task(void *pvParameters)
