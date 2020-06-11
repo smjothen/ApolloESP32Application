@@ -223,6 +223,10 @@ int configure_modem_for_ppp(void){
     at_command_get_imsi(imsi, 20);
     ESP_LOGI(TAG, "got imsi %s", imsi);
 
+    char op[40];
+    at_command_get_operator(op, 40);
+    ESP_LOGI(TAG, "got operator %s", op);
+
     return 0;
 }
 
@@ -234,4 +238,9 @@ void ppp_task_start(void){
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
 
     configure_modem_for_ppp();
+
+    ESP_LOGI(TAG, "Running at_command_pdp_define");
+    at_command_pdp_define();
+    ESP_LOGI(TAG, "dialing");
+    at_command_dial();
 }
