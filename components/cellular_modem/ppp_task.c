@@ -28,6 +28,7 @@ static const char *TAG = "PPP_TASK";
 
 #define LINE_BUFFER_SIZE 256
 static QueueHandle_t uart_queue;
+static QueueHandle_t line_queue;
 static char line_buffer[LINE_BUFFER_SIZE+1];
 static uint32_t line_buffer_end;
 
@@ -57,6 +58,12 @@ void hard_reset_cellular(void){
 }
 
 static void configure_uart(void){
+
+    line_queue = xQueueCreate( 1, sizeof( line_buffer ) );
+    if( line_queue != 0){
+        ESP_LOGE(TAG, "failed to create line queue");
+    }
+
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -78,6 +85,12 @@ static void on_uart_data(uint8_t* event_data,size_t size){
     event_data[size] = 0;
     ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
+    if(size+line_buffer_end > LINE_BUFFER_SIZE){
+        ESP_LOGE(TAG, "no space in line buffer! dropping data");
+        line_buffer_end = 0;
+        return;
+    }
+
     for(int i=0; i<size; i++){
         char c = event_data[i];
         if((c=='\n')|| (c=='\r')){
@@ -85,7 +98,7 @@ static void on_uart_data(uint8_t* event_data,size_t size){
                 // ESP_LOGD(TAG, "empty line");
             }else{
                 // ESP_LOGD(TAG, "line finished");
-                //todo push line somewhere
+                xQueueSend( line_queue, line_buffer, portMAX_DELAY);
                 line_buffer_end = 0;
                 ESP_LOGI(TAG, "Got line {%s}", line_buffer);
             }
@@ -169,4 +182,19 @@ void ppp_task_start(void){
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+
+    char at_buffer[LINE_BUFFER_SIZE];
+
+    while(true){
+        if(xQueueReceive(line_queue, at_buffer, portMAX_DELAY) ){
+            ESP_LOGI(TAG, "checking line %s", at_buffer);
+            if(strstr(at_buffer, "APP RDY")){
+                ESP_LOGI(TAG, "BG startup confirmed");
+                return;
+            }
+        }else{
+            ESP_LOGE(TAG, "failed to get line");
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
