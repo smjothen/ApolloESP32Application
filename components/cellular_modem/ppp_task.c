@@ -8,6 +8,7 @@
 #include "driver/uart.h"
 
 #include "ppp_task.h"
+#include "at_commands.h"
 
 static const char *TAG = "PPP_TASK";
 
@@ -26,7 +27,6 @@ static const char *TAG = "PPP_TASK";
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
 
-#define LINE_BUFFER_SIZE 256
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
 static char line_buffer[LINE_BUFFER_SIZE+1];
@@ -55,6 +55,19 @@ void hard_reset_cellular(void){
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     ESP_LOGI(TAG, "BG reset done");
+}
+
+BaseType_t await_line(char *pvBuffer, TickType_t xTicksToWait){
+    configASSERT(strlen(pvBuffer)<LINE_BUFFER_SIZE);
+    return xQueueReceive(line_queue, pvBuffer, xTicksToWait);
+}
+
+int send_line(char * line){
+    uint32_t len = strlen(line);
+    configASSERT(len<1024);
+    uart_write_bytes(UART_NUM_1, line, len);
+    uart_write_bytes(UART_NUM_1, "\r", 1);
+    return 0;
 }
 
 static void configure_uart(void){
@@ -176,6 +189,30 @@ static void uart_event_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+int configure_modem_for_ppp(void){
+
+    bool startup_confirmed = false;
+    char at_buffer[LINE_BUFFER_SIZE];
+    
+    for(int i = 0; i<10; i++){
+        if( await_line(at_buffer, pdMS_TO_TICKS(1000))) {
+            ESP_LOGI(TAG, "checking line %s", at_buffer);
+            if(strstr(at_buffer, "APP RDY")){
+                ESP_LOGI(TAG, "BG startup confirmed");
+                startup_confirmed = true;
+                break;
+            }
+        }else{
+            ESP_LOGE(TAG, "failed to get line");
+        }
+    }
+
+    configASSERT(startup_confirmed == true);
+    at_command_at();
+
+    return 0;
+}
+
 void ppp_task_start(void){
     ESP_LOGI(TAG, "Configuring BG9x");
     hard_reset_cellular();
@@ -183,18 +220,5 @@ void ppp_task_start(void){
     ESP_LOGI(TAG, "uart configured");
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
 
-    char at_buffer[LINE_BUFFER_SIZE];
-
-    while(true){
-        if(xQueueReceive(line_queue, at_buffer, portMAX_DELAY) ){
-            ESP_LOGI(TAG, "checking line %s", at_buffer);
-            if(strstr(at_buffer, "APP RDY")){
-                ESP_LOGI(TAG, "BG startup confirmed");
-                return;
-            }
-        }else{
-            ESP_LOGE(TAG, "failed to get line");
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    configure_modem_for_ppp();
 }
