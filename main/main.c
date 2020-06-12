@@ -29,6 +29,7 @@
 #include "ocpp_task.h"
 #include "CLRC661.h"
 #include "uart1.h"
+#include "adc_control.h"
 #include "driver/ledc.h"
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
@@ -113,7 +114,7 @@ void Start4G()
 	gpio_set_level(GPIO_OUTPUT_RESET, 0);
 	vTaskDelay(10 / portTICK_PERIOD_MS);
 
-	   gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+	gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
 
 	vTaskDelay(200 / portTICK_PERIOD_MS);
 
@@ -216,10 +217,26 @@ void PlaySound()
 }
 
 
+#define GPIO_INPUT_BUTTON    4
+#define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_BUTTON)
+
 void app_main(void)
 {
-    //obtain_time();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+	gpio_config_t io_conf;
+	//disable interrupt
+	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	 //bit mask of the pins, use GPIO4/5 here
+	io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+	//set as input mode
+	io_conf.mode = GPIO_MODE_INPUT;
+	//enable pull-up mode
+	io_conf.pull_up_en = 0;
+	gpio_config(&io_conf);
+
+	adc_init();
+	//obtain_time();
+    //vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     //PlaySound();
 
@@ -237,6 +254,15 @@ void app_main(void)
 	uint32_t loopCount = 0;
 
 
+
+	int currentState = 0;
+
+	while(true)
+	{
+		currentState = gpio_get_level(GPIO_INPUT_BUTTON);
+		//ESP_LOGE(TAG, "3 INIT Button state: %d", currentState);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}
 
 
 
