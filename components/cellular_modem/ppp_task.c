@@ -308,7 +308,11 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
 
 static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
     ESP_LOGI(TAG, "sending ppp data to modem");
-    return uart_write_bytes(UART_NUM_1, buffer, len);
+    int sent_bytes = uart_write_bytes(UART_NUM_1, buffer, len);
+    if(sent_bytes == len){
+        return ESP_OK;
+    }
+    return ESP_FAIL;
 }
 
 static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
