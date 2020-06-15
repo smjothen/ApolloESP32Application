@@ -86,6 +86,12 @@ static void mbus_task()
     readData[1] = 'o';
     uart_write_bytes(UART_NUM_0, (char*)readData, 2);
 
+    // send a at comd, so that we know the modem is alive
+    writeData[0] = 'A';
+    writeData[1] = 'T';
+    writeData[2] = '\r';
+    uart_write_bytes(UART_NUM_1, writeData, 3);
+
  	while (1) {
  		count++;
  		//*writeData = count;
@@ -117,6 +123,7 @@ static void mbus_task()
 
     while (1) {
 		count++;
+        printf("sending 'at'\r\n");
 
 		uart_write_bytes(UART_NUM_1, writeData, 3);
 		vTaskDelay(1000/portTICK_PERIOD_MS);
@@ -124,8 +131,11 @@ static void mbus_task()
 
 		len = uart_read_bytes(UART_NUM_1, readData, BUF_SIZE, 20 / portTICK_RATE_MS);
 
-		if(len > 0)
+		if(len > 0){
 			printf("\nLength: %d: \n", len);
+        }else{
+            printf("no reply :(\n");
+        }
 
 		for (int i = 0; i < len;i++)
 			printf("%c", readData[i]);

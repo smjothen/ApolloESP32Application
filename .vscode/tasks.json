@@ -5,20 +5,20 @@
     "tasks": [{
         "label": "IDF Shell",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && bash'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && bash'",
         "presentation": {"focus": true}
       },
       {
         "label": "menuconfig",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py menuconfig'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py menuconfig'",
         "presentation": {"focus": true}
       },
       {
         "label": "Build",
         "group": "build",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py build'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py build'",
         "windows": {
           "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py build"
         },
@@ -39,7 +39,7 @@
         "label": "Get size",
         "group": "build",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py size'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py size'",
         "windows": {
           "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py size"
         },
@@ -60,21 +60,21 @@
         "label": "Clean",
         "group": "build",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py clean'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py clean'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py clean" }
       },
       {
         "label": "Clean (full)",
         "group": "build",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py fullclean'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py fullclean'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py fullclean" }
       },
       {
         "label": "Flash",
         "group": "test",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py flash -p /dev/ttyUSB0'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py flash -p /dev/ttyUSB2'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py flash" },
         "problemMatcher": {
           "owner": "cpp",
@@ -93,14 +93,14 @@
         "label": "Erase flash",
         "group": "build",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py erase_flash -p /dev/ttyUSB0'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py erase_flash -p /dev/ttyUSB2'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py erase_flash" }
       },
       {
         "label": "Monitor",
         "group": "test",
         "type": "shell",
-        "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && idf.py monitor -p /dev/ttyUSB0'",
+        "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && idf.py monitor -p /dev/ttyUSB0'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && idf.py monitor" },
         "isBackground": true,
         //"dependsOn": ["Flash"]
@@ -108,7 +108,7 @@
       {
         "label": "OpenOCD",
         "type": "shell",
-      "command": "bash -c '. $HOME/.local/esp2/esp-idf/export.sh && openocd -f interface/ftdi/esp32_devkitj_v1.cfg -f board/esp-wroom-32.cfg'",
+      "command": "bash -c '. $HOME/.local/esp_v4_2/esp-idf/export.sh && openocd -f interface/ftdi/esp32_devkitj_v1.cfg -f board/esp-wroom-32.cfg'",
         "windows": { "command": "%userprofile%\\esp\\esp-idf\\export.bat && openocd -f interface/ftdi/esp32_devkitj_v1.cfg -f board/esp32-wrover.cfg" },
         "isBackground": true,
         "problemMatcher": {
