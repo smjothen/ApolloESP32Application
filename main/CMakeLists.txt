@@ -3,7 +3,9 @@ set(COMPONENT_REQUIRES )
 set(COMPONENT_PRIV_REQUIRES )
 
 set(COMPONENT_SRCS "main.c"
-				   "uart1.c")
+				   "uart1.c"
+				   "mqtt_demo.c"
+				   )
 #set(COMPONENT_SRCS "uart.c")
 set(COMPONENT_ADD_INCLUDEDIRS "")
 
