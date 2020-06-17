@@ -27,6 +27,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "ppp_task.h"
 #include "mqtt_demo.h"
+#include "zaptec_cloud_listener.h"
 
 #include "ocpp_task.h"
 #include "CLRC661.h"
@@ -224,7 +225,8 @@ void app_main(void)
     ppp_task_start();
     #endif
 
-    start_mqtt_demo();
+    // start_mqtt_demo();
+    start_cloud_listener_task();
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;

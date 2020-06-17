@@ -1,12 +1,15 @@
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "cJSON.h"
 
 #include "mqtt_demo.h"
 
 #define BROKER_URL "mqtt://mqtt.eclipse.org"
 static const char *TAG = "mqtt_demo";
 int mqtt_count = 0;
+
+char *payloadstring;
 
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
@@ -36,8 +39,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
         printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
         printf("DATA=%.*s\r\n", event->data_len, event->data);
+        ESP_LOGD(TAG, "publishing %s", payloadstring);
         if(mqtt_count<3){
-            msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", "[esp test Norway2]", 0, 0, 0);
+            msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
             mqtt_count += 1;
         }else
             // xEventGroupSetBits(event_group, GOT_DATA_BIT);
@@ -54,6 +58,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 void start_mqtt_demo(void){
     vTaskDelay(pdMS_TO_TICKS(2500));
+    cJSON *json_payload = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json_payload, "test_val", 42.0);
+    payloadstring = cJSON_PrintUnformatted(json_payload);
+
     esp_mqtt_client_config_t mqtt_config = {
         .uri = BROKER_URL,
         .event_handle = mqtt_event_handler,
