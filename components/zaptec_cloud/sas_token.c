@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include <stdio.h>
 #include <ctype.h>
+#include <time.h>
 
 // do we need all these?
 // #include "crypto/sha256.h"
@@ -40,19 +41,20 @@ int create_sas_token(int ttl_s, char * token_out){
     char signed_key[] = "ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=";
     memcpy(key, signed_key, sizeof(key));
 
-    int UnixTimeStamp = 1592397520;
-    char *uniqueId = "ZAP000001";//"ZAP456789";    
+    time_t UnixTimeStamp = 1592397520;
+    time(&UnixTimeStamp);
+    char *uniqueId = "ZAP000001";  
 
-	ESP_LOGI(TAG, "psk is: %s(l)", key);
+	ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
 	size_t key_len = sizeof(key)-1; //Key length -1 end of line char
 	size_t base64_key_len;
 	unsigned char *base64_key = base64_decode((char *)key, key_len, &base64_key_len);
 
 	//Data for creating signature
-	char unixTime[11];
-	int tokenValidTime = 10000; // 2h 46 min 40 sec
-	sprintf(unixTime, "%i", UnixTimeStamp+tokenValidTime);
-	ESP_LOGI(TAG, "Unixtime is: %i", UnixTimeStamp);
+	char unixTime[12];
+	int tokenValidTime = ttl_s;
+	sprintf(unixTime, "%ld", UnixTimeStamp+tokenValidTime);
+	ESP_LOGI(TAG, "Unixtime is: %ld", UnixTimeStamp);
 	ESP_LOGI(TAG, "Unixtime is: %i", tokenValidTime);
 	ESP_LOGI(TAG, "Unixtime is: %s", unixTime);
 	unsigned char *data = malloc(56);
