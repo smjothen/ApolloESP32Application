@@ -43,9 +43,27 @@ const char cert[] =
 "-----END CERTIFICATE-----\r\n"
 ;
 
+esp_mqtt_client_handle_t mqtt_client = {0};
+
+int publish_iothub_event(char *payload){
+    if(mqtt_client == NULL){
+        return -1;
+    }
+
+    int message_id = esp_mqtt_client_publish(
+            mqtt_client, event_topic,
+            payload, 0, 1, 0
+    );
+
+    if(message_id>0){
+        return 0;
+    }
+    return -2;
+}
+
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
-    esp_mqtt_client_handle_t client = event->client;
+    mqtt_client = event->client;
     int msg_id;
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
@@ -61,17 +79,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
 
         char demo_payload [256];
-        sprintf(demo_payload, "{\"Type\":1,\"ObservationId\":507,\"ObservedAt\":\"%s\",\"Value\":\"mqtt connected\"}", strftime_buf);
+        sprintf(demo_payload, "{\"Type\":1,\"ObservationId\":808,\"ObservedAt\":\"%s\",\"Value\":\"mqtt connected\"}", strftime_buf);
         ESP_LOGI(TAG, "sending \"%s\" on topic [%s] with timestamp %s",
             demo_payload, event_topic, strftime_buf
         );
 
         //[msg_id = esp_mqtt_client_subscribe(client, "/topic/esp-pppos", 0);
         //ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-        esp_mqtt_client_publish(
-            client, event_topic,
-            demo_payload, 0, 1, 0
-        );
+        publish_iothub_event(demo_payload);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -98,6 +113,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         // }else
         //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
         break;
+    case MQTT_EVENT_BEFORE_CONNECT:
+        ESP_LOGI(TAG, "About to connect, could we refresh the token here?");
+        break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
         break;
@@ -115,7 +133,7 @@ void start_cloud_listener_task(void){
     ESP_LOGI(TAG, "Connecting to IotHub");
 
     char token[256];  // token was seen to be at least 136 char long
-    create_sas_token(600, &token);
+    create_sas_token(60*60, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
 
     char broker_url[128] = {0};

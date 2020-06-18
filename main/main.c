@@ -28,6 +28,7 @@
 #include "ppp_task.h"
 #include "mqtt_demo.h"
 #include "zaptec_cloud_listener.h"
+#include "zaptec_cloud_observations.h"
 
 #include "ocpp_task.h"
 #include "CLRC661.h"
@@ -226,9 +227,13 @@ void app_main(void)
     #endif
 
     // start_mqtt_demo();
-     esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
+    esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
     obtain_time();
     start_cloud_listener_task();
+
+	//wait for mqtt connect, then publish
+	vTaskDelay(pdMS_TO_TICKS(5000));
+	publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
