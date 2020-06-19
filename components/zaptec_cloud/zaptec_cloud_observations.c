@@ -8,6 +8,21 @@
 
 #define TAG "OBSERVATIONS POSTER"
 
+int publish_json(cJSON *payload){
+    char *message = cJSON_PrintUnformatted(payload);
+    ESP_LOGI(TAG, "sending %s", message);
+
+    int publish_err = publish_iothub_event(message);
+
+    cJSON_free(payload);
+    free(message);
+
+    if(publish_err){
+        return -1;
+    }
+    return 0;
+}
+
 cJSON *create_observation(int observation_id, char *value){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
@@ -75,20 +90,17 @@ int publish_debug_telemetry_observation(
     add_observation_to_collection(observations, create_double_observation(201, temperature_5));
     add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
 
-    char *message = cJSON_PrintUnformatted(observations);
-    ESP_LOGI(TAG, "sending %s", message);
-
-    int publish_err = publish_iothub_event(message);
-
-    cJSON_free(observations);
-    free(message);
-
-    if(publish_err){
-        return -1;
-    }
-    return 0;
+    return publish_json(observations);
 }
 
-int publish_debug_message_event(char *message){
-    return 0;
+int publish_debug_message_event(char *message, cloud_event_level level){
+
+    cJSON *event = cJSON_CreateObject();
+    if(event == NULL){return NULL;}
+
+    cJSON_AddNumberToObject(event, "EventType", level);
+    cJSON_AddStringToObject(event, "Message", message);
+    cJSON_AddNumberToObject(event, "Type", (float) 5.0);
+
+    return publish_json(event);
 }

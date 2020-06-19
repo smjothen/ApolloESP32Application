@@ -5,6 +5,7 @@
 
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
+#include "zaptec_cloud_observations.h"
 
 #define TAG "Cloud Listener"
 
@@ -69,24 +70,21 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
-        time_t now = 0;
-        struct tm timeinfo = { 0 };
-        char strftime_buf[64];
-        time(&now);
-        setenv("TZ", "UTC-0", 1);
-        tzset();
-        localtime_r(&now, &timeinfo);
-        strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
+        char devicebound_topic[128];
+        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", DEVICE_ID);
 
-        char demo_payload [256];
-        sprintf(demo_payload, "{\"Type\":1,\"ObservationId\":808,\"ObservedAt\":\"%s\",\"Value\":\"mqtt connected\"}", strftime_buf);
-        ESP_LOGI(TAG, "sending \"%s\" on topic [%s] with timestamp %s",
-            demo_payload, event_topic, strftime_buf
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
+        esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 1);
+
+        publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
+        // request twin data
+        esp_mqtt_client_publish(
+            mqtt_client, "$iothub/twin/GET/?$rid=1",
+            NULL, 0, 1, 0
         );
 
-        //[msg_id = esp_mqtt_client_subscribe(client, "/topic/esp-pppos", 0);
-        //ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-        publish_iothub_event(demo_payload);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
