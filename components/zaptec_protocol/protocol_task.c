@@ -13,6 +13,8 @@
 
 #define TAG __FILE__
 
+#define RX_TIMEOUT  (3000 / (portTICK_PERIOD_MS))
+
 void uartCommsTask(void *pvParameters);
 void uartRecvTask(void *pvParameters);
 void configureUart();
@@ -42,7 +44,7 @@ void zaptecProtocolStart(){
 
 ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 
-    if( xSemaphoreTake( uart_write_lock, portMAX_DELAY ) == pdTRUE )
+    if( xSemaphoreTake( uart_write_lock, RX_TIMEOUT ) == pdTRUE )
     {
     
         uart_flush(uart_num);
@@ -85,17 +87,18 @@ void uartRecvTask(void *pvParameters){
 
     while(true)
         {
-            configASSERT(xQueueReceive(uart0_events_queue, (void * )&event, (portTickType)portMAX_DELAY))
+            //configASSERT(xQueueReceive(uart0_events_queue, (void * )&event, (portTickType)RX_TIMEOUT))
 
-            if(event.type != UART_DATA){continue;}
+            //if(event.type != UART_DATA){continue;}
 
-            if(uxSemaphoreGetCount(uart_write_lock)==1){
-                ESP_LOGE(TAG, "got uart data without outstanding request");
-                continue;
-            }
+//            if(uxSemaphoreGetCount(uart_write_lock)==1){
+//                ESP_LOGE(TAG, "got uart data without outstanding request");
+//                continue;
+//            }
 
-            configASSERT(event.size <= uart_data_size);
-            int length = uart_read_bytes(uart_num, uart_data, event.size, portMAX_DELAY);
+            //configASSERT(event.size <= uart_data_size);
+            //int length = uart_read_bytes(uart_num, uart_data, event.size, RX_TIMEOUT);
+    	int length = uart_read_bytes(uart_num, uart_data, 1, RX_TIMEOUT);
 
             ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
 
@@ -154,8 +157,8 @@ void uartCommsTask(void *pvParameters){
 }
 
 void configureUart(){
-    int tx_pin = GPIO_NUM_17;
-    int rx_pin = GPIO_NUM_16;
+    int tx_pin = GPIO_NUM_26;
+    int rx_pin = GPIO_NUM_25;
 
     uart_config_t uart_config = {
         .baud_rate = 115200,

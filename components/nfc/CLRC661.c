@@ -111,9 +111,10 @@ static struct {
 //    ESP_ERROR_CHECK(esp_console_cmd_register(&i2cconfig_cmd));
 //}
 
-//#define ESP_SLAVE_ADDR 0x2A
-#define ESP_SLAVE_ADDR 0x2B
-//#define ESP_SLAVE_ADDR 0x44
+//#define ESP_SLAVE_ADDR 0x2A	//NFC-A
+//#define ESP_SLAVE_ADDR 0x2B	//NFC-B
+//#define ESP_SLAVE_ADDR 0x44	//SHT-30
+#define ESP_SLAVE_ADDR 0x51		//RTC
 
 static esp_err_t i2c_master_write_slave(i2c_port_t i2c_num, uint8_t *data_wr, size_t size)
 {
@@ -144,6 +145,35 @@ static esp_err_t i2c_master_read_slave(i2c_port_t i2c_num, uint8_t *data_rd, siz
     i2c_cmd_link_delete(cmd);
     return ret;
 }
+
+
+
+static esp_err_t i2c_master_read_slave_rtc(i2c_port_t i2c_num, uint8_t rd_reg, uint8_t *data_rd, size_t size)
+{
+    if (size == 0) {
+        return ESP_OK;
+    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ESP_SLAVE_ADDR << 1) | WRITE_BIT, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, rd_reg | READ_BIT, ACK_CHECK_EN);
+    i2c_master_stop(cmd);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ESP_SLAVE_ADDR << 1) | READ_BIT, ACK_CHECK_EN);
+
+    if (size > 1) {
+        i2c_master_read(cmd, data_rd, size - 1, ACK_VAL);
+    }
+
+    i2c_master_read_byte(cmd, data_rd + size - 1, NACK_VAL);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+
+
 
 //static int do_i2cdetect_cmd(int argc, char **argv)
 static int do_i2cdetect_cmd()
@@ -203,6 +233,55 @@ static int do_i2cdetect_cmd()
     //uint responseDelay = 100;
     uint responseDelay = 10;
 
+    message[0] = 0x08; //IRQ0En
+	message[1] = 0x84;//0x84;//0x8C;//08;	//8=TxIRQEn
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	message[0] = 0x09; //IRQ1En
+	message[1] = 0x60;//OpenDrain  alt: 0xE0;///PushPull also works
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	uint8_t regNr = 0x08;
+//	i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//	i2c_master_read_slave(I2C_NUM_0, message, 1);
+//	printf("reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+//
+//	regNr = 0x09;
+//	i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//	i2c_master_read_slave(I2C_NUM_0, message, 1);
+//	printf("reg 0x%02X: 0x%02X\n\n",  regNr, message[0]);
+
+	//1
+	message[0] = 0x0;
+	message[1] = 0x0;
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	//2
+	message[0] = 0x02;
+	message[1] = 0xB0;
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	//3
+	message[0] = 0x05;
+	message[1] = 0x00;
+	message[2] = 0x00;
+	i2c_master_write_slave(I2C_NUM_0, message, 3);
+
+	//4
+	message[0] = 0x00;
+	message[1] = 0x0D;
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	//5
+	message[0] = 0x02;
+	message[1] = 0xB0;
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
+	//6
+	message[0] = 0x28;
+	message[1] = 0x8E;
+	i2c_master_write_slave(I2C_NUM_0, message, 2);
+
     unsigned int readCount = 0;
     while(true)
 	{
@@ -213,41 +292,53 @@ static int do_i2cdetect_cmd()
     		printf("%d Ready...\n\n", readCount);
     	}
 
-		//1
-		message[0] = 0x0;
-		message[1] = 0x0;
+
+
+//		regNr = 0x06;
+//		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("Bef reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+//
+//		regNr = 0x07;
+//		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("Bef reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+
+
+
+		//7 **
+		message[0] = 0x06;  //IRQ0
+		message[1] = 0x7F;//0x7F;  //Clears all bits
 		i2c_master_write_slave(I2C_NUM_0, message, 2);
 
-		//2
-		message[0] = 0x02;
-		message[1] = 0xB0;
+		message[0] = 0x07; //IRQ1
+		message[1] = 0x7F;//0xE0; //OK
 		i2c_master_write_slave(I2C_NUM_0, message, 2);
 
-		//3
-		message[0] = 0x05;
-		message[1] = 0x00;
-		message[2] = 0x00;
-		i2c_master_write_slave(I2C_NUM_0, message, 3);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-		//4
-		message[0] = 0x00;
-		message[1] = 0x0D;
-		i2c_master_write_slave(I2C_NUM_0, message, 2);
 
-		//5
-		message[0] = 0x02;
-		message[1] = 0xB0;
-		i2c_master_write_slave(I2C_NUM_0, message, 2);
 
-		//6
-		message[0] = 0x28;
-		message[1] = 0x8E;
-		i2c_master_write_slave(I2C_NUM_0, message, 2);
+//		message[0] = 0x08; //IRQ
+//		message[1] = 0x7F;//08;	//8=TxIRQEn
+//		i2c_master_write_slave(I2C_NUM_0, message, 2);
+//
+//		message[0] = 0x09;
+//		message[1] = 0x60;///PushPull
+//		i2c_master_write_slave(I2C_NUM_0, message, 2);
 
-		//7
-		message[0] = 0x06;
-		message[1] = 0x7F;
-		i2c_master_write_slave(I2C_NUM_0, message, 2);
+		//
+//		regNr = 0x06;
+//		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("Aft reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+//
+//		regNr = 0x07;
+//		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("Aft reg 0x%02X: 0x%02X\n\n",  regNr, message[0]);
+
+
 
 		//8
 		message[0] = 0x2C;
@@ -277,11 +368,36 @@ static int do_i2cdetect_cmd()
 		//Wait
 		vTaskDelay(responseDelay / portTICK_PERIOD_MS);
 
+//		regNr = 0x06;
+//		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("1 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+
+
+		bool cardDetected = false;
+
+		regNr = 0x06;
+		i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+		i2c_master_read_slave(I2C_NUM_0, message, 1);
+		//printf("1 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+
+		//Check if RxIRQ bit is set in IRQ0 register
+		if(message[0] & (1<<2))
+			cardDetected = true;
+		else
+			continue;
+
+		printf("Card detected!\n");
+
+
+
+
 		//13
 	    uint8_t reg = 0x05;
 	    i2c_master_write_slave(I2C_NUM_0, &reg, 1);
 
 	    i2c_master_read_slave(I2C_NUM_0, message, 2);
+
 
 
 	    if(message[0] == 0x04)
@@ -303,11 +419,21 @@ static int do_i2cdetect_cmd()
 	    	continue;
 	    }
 
+//	    regNr = 0x06;
+//	    i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("2 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
 
 	    uint8_t lenReg = 0x04;
 		i2c_master_write_slave(I2C_NUM_0, &lenReg, 1);
 		i2c_master_read_slave(I2C_NUM_0, message, 1);
 		//printf("Len1: %02X\n",  message[0]);
+
+//		regNr = 0x06;
+//	    i2c_master_write_slave(I2C_NUM_0, &regNr, 1);
+//		i2c_master_read_slave(I2C_NUM_0, message, 1);
+//		printf("3 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
+
 
 		//UID 1
 
@@ -624,7 +750,98 @@ static int SHT30ReadTemperature()
 
 
 
+// SHT30 sensor ID
+#define SHT30_TH_SLAVE_ADDRESS 0x88
 
+/* SHT30 internal registers  */
+#define SHT30_SAMPLING_FREQUENCY        0x2236//0x2126
+#define SHT30_PERIODIC_MEASUREMENT_2HZ  0xE000
+#define SHT30_READ_STATUS_REGISTER      0xF32D
+
+static int WriteRTC()
+{
+
+	 i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+	    i2c_master_driver_initialize();
+	    uint8_t address;
+	    printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+	    for (int i = 0; i < 128; i += 16) {
+	        printf("%02x: ", i);
+	        for (int j = 0; j < 16; j++) {
+	            fflush(stdout);
+	            address = i + j;
+	            i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+	            i2c_master_start(cmd);
+	            i2c_master_write_byte(cmd, (address << 1) | WRITE_BIT, ACK_CHECK_EN);
+	            i2c_master_stop(cmd);
+	            esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 50 / portTICK_RATE_MS);
+	            i2c_cmd_link_delete(cmd);
+	            if (ret == ESP_OK) {
+	                printf("%02x ", address);
+	            } else if (ret == ESP_ERR_TIMEOUT) {
+	                printf("UU ");
+	            } else {
+	                printf("-- ");
+	            }
+	        }
+	        printf("\r\n");
+	    }
+	    printf("I2C active\n");
+
+
+
+	    uint8_t readBytes[7] = {0};
+
+	    uint8_t writeBytes[2] = {0};
+	    writeBytes[0] = 0x08;
+	    writeBytes[1] = 0x06;
+	    i2c_master_write_slave(I2C_NUM_0, &writeBytes, 2);
+
+	    //rawMeasurement = ReadWordDirect(SHT30_SAMPLING_FREQUENCY, SHT30_TH_SLAVE_ADDRESS, 0);
+
+	    //uint responseDelay = 100;
+	    uint responseDelay = 10;
+	    float internalTemperature = 0.0;
+	    float internalHumidity = 0.0;
+	    unsigned int rawTemperature = 0;
+	    unsigned int rawHumidity = 0;
+
+	    unsigned int readCount = 0;
+	    while(true)
+		{
+	    	readBytes[0]=0x00;
+	    	readBytes[1]=0x00;
+	    	uint8_t readreg = 0;
+	    	//i2c_master_read_slave_rtc(I2C_NUM_0, readreg, readBytes, 7);
+	    	i2c_master_read_slave(I2C_NUM_0, readBytes, 2);
+	    	printf("Reg: 0x%02X\n", readBytes[0]);
+
+	    	//for (int i = 0; i < 7; i++)
+	    	//	printf("0x%02X ", readBytes[i]);
+
+	    	//printf("\n");
+	    	//printf("Reg: 0x%02X\n", readBytes[0]);
+	    	//rawMeasurement = ReadWordDirect(SHT30_PERIODIC_MEASUREMENT_2HZ, SHT30_TH_SLAVE_ADDRESS, 1);
+	    	//rawTemperature = (readBytes[0] << 8) + readBytes[1];
+	    	//internalTemperature = -45 + (175 * (rawTemperature/65535.0));
+
+	    	    //if(initialized == 0)
+	    	    //    internalTemperature = -100.0;
+
+	    	//rawHumidity = (readBytes[3] << 8) + readBytes[4];
+	    	//internalHumidity = 100 * rawHumidity / 65535.0;
+
+	    	//printf("Temperature: %f, Humidity %f\n", internalTemperature, internalHumidity);
+
+	    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+		}
+
+	    //Never stop i2c
+		//i2c_driver_delete(i2c_port);
+
+	    return 0;
+}
 
 
 
@@ -1042,8 +1259,10 @@ static struct {
 void register_i2ctools(void)
 {
     //register_i2cconfig();
-	do_i2cdetect_cmd();
+	//do_i2cdetect_cmd();
 	//SHT30ReadTemperature();
+	WriteRTC();
+	//ReadRTC();
     //register_i2cdectect();
     //register_i2cget();
     //register_i2cset();

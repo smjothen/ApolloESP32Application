@@ -216,16 +216,36 @@ void PlaySound()
 	}
 }
 
+#define GPIO_INPUT_nHALL_FX    4
+#define GPIO_INPUT_nNFC_IRQ    36
+#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_nHALL_FX) | (1ULL<<GPIO_INPUT_nNFC_IRQ))
+#define ESP_INTR_FLAG_DEFAULT 0
 
-#define GPIO_INPUT_BUTTON    4
-#define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_BUTTON)
+static xQueueHandle gpio_evt_queue = NULL;
+
+static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+
+static void gpio_task_example(void* arg)
+{
+    uint32_t io_num;
+    for(;;) {
+        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
+        }
+    }
+}
 
 void app_main(void)
 {
 
 	gpio_config_t io_conf;
 	//disable interrupt
-	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	io_conf.intr_type = GPIO_PIN_INTR_ANYEDGE;//GPIO_PIN_INTR_DISABLE;
 	 //bit mask of the pins, use GPIO4/5 here
 	io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
 	//set as input mode
@@ -234,7 +254,33 @@ void app_main(void)
 	io_conf.pull_up_en = 0;
 	gpio_config(&io_conf);
 
-	adc_init();
+
+
+	//gpio_set_intr_type(GPIO_INPUT_IO_0, GPIO_INTR_ANYEDGE);
+
+	//create a queue to handle gpio event from isr
+	gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+	//start gpio task
+	xTaskCreate(gpio_task_example, "gpio_task_example", 2048, NULL, 10, NULL);
+
+	//install gpio isr service
+	gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+	//hook isr handler for specific gpio pin
+	gpio_isr_handler_add(GPIO_INPUT_nHALL_FX, gpio_isr_handler, (void*) GPIO_INPUT_nHALL_FX);
+	//hook isr handler for specific gpio pin
+	gpio_isr_handler_add(GPIO_INPUT_nNFC_IRQ, gpio_isr_handler, (void*) GPIO_INPUT_nNFC_IRQ);
+
+	//remove isr handler for gpio number.
+	//gpio_isr_handler_remove(GPIO_INPUT_IO_0);
+	//hook isr handler for specific gpio pin again
+	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
+
+
+
+
+
+
+	//adc_init();
 	//obtain_time();
     //vTaskDelay(1000 / portTICK_PERIOD_MS);
 
@@ -243,7 +289,7 @@ void app_main(void)
     //Start4G();
 
     //mbus_init();
-    //register_i2ctools();
+    register_i2ctools();
 
     //zaptecProtocolStart();
     // init_mcu();
@@ -259,7 +305,7 @@ void app_main(void)
 
 	while(true)
 	{
-		currentState = gpio_get_level(GPIO_INPUT_BUTTON);
+		currentState = gpio_get_level(GPIO_INPUT_nHALL_FX);
 		//ESP_LOGE(TAG, "3 INIT Button state: %d", currentState);
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	}
