@@ -45,6 +45,15 @@ const char cert[] =
 ;
 
 esp_mqtt_client_handle_t mqtt_client = {0};
+esp_mqtt_client_config_t mqtt_config = {0};
+char token[256];  // token was seen to be at least 136 char long
+
+int refresh_token(esp_mqtt_client_config_t *mqtt_config){
+    create_sas_token(1*60, &token);
+    ESP_LOGE(TAG, "connection token is %s", token);
+    mqtt_config->password = token;
+    return 0;
+}
 
 int publish_iothub_event(char *payload){
     if(mqtt_client == NULL){
@@ -112,7 +121,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
-        ESP_LOGI(TAG, "About to connect, could we refresh the token here?");
+        ESP_LOGI(TAG, "About to connect, refreshing the token");
+        refresh_token(&mqtt_config);
+        esp_mqtt_set_config(mqtt_client, &mqtt_config);
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -125,19 +136,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 }
 
 
-
-
 void start_cloud_listener_task(void){
     ESP_LOGI(TAG, "Connecting to IotHub");
 
-    char token[256];  // token was seen to be at least 136 char long
-    create_sas_token(60*60, &token);
-    ESP_LOGE(TAG, "connection token is %s", token);
-
-    char broker_url[128] = {0};
+    static char broker_url[128] = {0};
     sprintf(broker_url, "mqtts://%s", MQTT_HOST);
 
-    char username[128];
+    static char username[128];
     sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, DEVICE_ID);
 
     sprintf(
@@ -151,23 +156,24 @@ void start_cloud_listener_task(void){
         " > port: %d\r\n"
         " > username: %s\r\n"
         " > client id: %s\r\n"
-        " > token: %s\r\n"
-        " > token len: %d\r\n"
         " > cert_pem len: %d\r\n"
         " > cert_pem: %s\r\n",
         broker_url, MQTT_PORT, username, DEVICE_ID,
-        token, strlen(token), strlen(cert), cert
+        strlen(cert), cert
     );
 
-    esp_mqtt_client_config_t mqtt_config = {
-        .uri = broker_url,
-        .event_handle = mqtt_event_handler,
-        .port = MQTT_PORT,
-        .username = username,
-        .client_id = DEVICE_ID,
-        .password = token,
-        .cert_pem = cert
-    };
+    mqtt_config.uri = broker_url;
+    mqtt_config.event_handle = mqtt_event_handler;
+    mqtt_config.port = MQTT_PORT;
+    mqtt_config.username = username;
+    mqtt_config.client_id = DEVICE_ID;
+    mqtt_config.cert_pem = cert;
+
+    mqtt_config.lwt_qos = 1;
+    mqtt_config.lwt_topic = event_topic;
+    static char *lwt = "{\"EventType\":30,\"Message\":\"mqtt connection broke[lwt]\",\"Type\":5}";
+    mqtt_config.lwt_msg = lwt;
+
     esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
     esp_mqtt_client_start(mqtt_client);
