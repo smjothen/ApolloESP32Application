@@ -62,13 +62,21 @@ void log_cellular_quality(void){
 	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
 
 	char signal_string[256];
-	snprintf(signal_string, 256, "[signal data] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
-	ESP_LOGI(TAG, "sending diagnostics observation: \"%s\"", signal_string);
+	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
+	publish_diagnostics_observation(signal_string);
+
+	int rssi2; int ber;
+	char quality_string[256];
+	at_command_signal_quality(&rssi2, &ber);
+	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssi2, ber);
+	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
+	publish_diagnostics_observation(quality_string);
 
 	int enter_data_mode_result = enter_data_mode();
 	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
 
-	publish_diagnostics_observation(signal_string);
+	
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 }
 

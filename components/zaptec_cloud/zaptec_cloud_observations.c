@@ -1,6 +1,7 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include "time.h"
+#include <sys/time.h>
 #include "stdio.h"
 
 #include "zaptec_cloud_listener.h"
@@ -28,14 +29,19 @@ cJSON *create_observation(int observation_id, char *value){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
 
-    time_t now = 0;
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+
+    time_t now = tv_now.tv_sec;
     struct tm timeinfo = { 0 };
-    char strftime_buf[64];
+    char strftime_buf_head[64];
+    char strftime_buf[128];
     time(&now);
     setenv("TZ", "UTC-0", 1);
     tzset();
     localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
+    strftime(strftime_buf_head, sizeof(strftime_buf_head), "%Y-%m-%dT%H:%M:%S.", &timeinfo);
+    snprintf(strftime_buf, sizeof(strftime_buf), "%s%03dZ", strftime_buf_head, (int)(tv_now.tv_usec/1000));
     
     cJSON_AddStringToObject(result, "ObservedAt", strftime_buf);
     cJSON_AddStringToObject(result, "Value", value);

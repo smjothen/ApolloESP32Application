@@ -130,3 +130,24 @@ int at_command_signal_strength(char *sysmode, int *rssi, int *rsrp, int *sinr, i
     return -1;
 
 }
+
+int at_command_signal_quality(int *rssi, int *ber){
+    char buffer[LINE_BUFFER_SIZE];
+    int comms_result = at_command_two_line_response("AT+CSQ", buffer, LINE_BUFFER_SIZE, 300, 300);
+    if(comms_result ==0){
+        ESP_LOGI(TAG, "Parsing signal quality: \"%s\"", buffer);
+        // result example: +CSQ: 28,99
+
+        int matches = sscanf(buffer, "+CSQ: %d,%d", rssi, ber);
+            if(matches==2){
+                ESP_LOGI(TAG, "matches %d. values: %d, %d ", matches, *rssi, *ber);
+                return 0;
+            }
+            ESP_LOGW(TAG, "Parsing failed");
+            return -3;
+        
+    }
+    ESP_LOGE(TAG, "failed signal strength command");
+    return -1;
+
+}
