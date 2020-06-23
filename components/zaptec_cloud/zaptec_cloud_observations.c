@@ -10,7 +10,7 @@
 
 int publish_json(cJSON *payload){
     char *message = cJSON_PrintUnformatted(payload);
-    ESP_LOGI(TAG, "sending %s", message);
+    ESP_LOGI(TAG, "<<<sending>>> %s", message);
 
     int publish_err = publish_iothub_event(message);
 
@@ -18,6 +18,7 @@ int publish_json(cJSON *payload){
     free(message);
 
     if(publish_err){
+        ESP_LOGW(TAG, "publish to iothub failed");
         return -1;
     }
     return 0;
@@ -39,7 +40,7 @@ cJSON *create_observation(int observation_id, char *value){
     cJSON_AddStringToObject(result, "ObservedAt", strftime_buf);
     cJSON_AddStringToObject(result, "Value", value);
     cJSON_AddNumberToObject(result, "ObservationId", (float) observation_id);
-    cJSON_AddNumberToObject(result, "Type", (float) 2.0);
+    cJSON_AddNumberToObject(result, "Type", (float) 1.0);
 
     return result;
 }
@@ -93,10 +94,14 @@ int publish_debug_telemetry_observation(
     return publish_json(observations);
 }
 
+int publish_diagnostics_observation(char *message){
+    return publish_json(create_observation(808, message));
+}
+
 int publish_debug_message_event(char *message, cloud_event_level level){
 
     cJSON *event = cJSON_CreateObject();
-    if(event == NULL){return NULL;}
+    if(event == NULL){return -10;}
 
     cJSON_AddNumberToObject(event, "EventType", level);
     cJSON_AddStringToObject(event, "Message", message);

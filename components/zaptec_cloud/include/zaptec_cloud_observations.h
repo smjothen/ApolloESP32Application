@@ -7,6 +7,8 @@ int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter
 );
 
+int publish_diagnostics_observation(char *message);
+
 typedef enum {
     cloud_event_level_error = 10,
     cloud_event_level_information = 30,

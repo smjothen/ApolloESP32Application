@@ -55,6 +55,23 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
+void log_cellular_quality(void){
+	int enter_command_mode_result = enter_command_mode();
+
+	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
+	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
+
+	char signal_string[256];
+	snprintf(signal_string, 256, "[signal data] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+	ESP_LOGI(TAG, "sending diagnostics observation: \"%s\"", signal_string);
+
+	int enter_data_mode_result = enter_data_mode();
+	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+
+	publish_diagnostics_observation(signal_string);
+	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+}
+
 void init_mcu(){
     ZapMessage txMsg;
 
@@ -179,8 +196,7 @@ void PlaySound()
 #define GPIO_INPUT_BUTTON    4
 #define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_BUTTON)
 
-void app_main(void)
-{
+void app_main(void){
 
     ESP_LOGE(TAG, "start of app_main6");
 
@@ -240,14 +256,7 @@ void app_main(void)
 	vTaskDelay(pdMS_TO_TICKS(8000));
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 
-	int enter_command_mode_result = enter_command_mode();
-
-	char sysmode[256]; int rssi; int rsrp; int sinr; int rsrq;
-	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
-	ESP_LOGI(TAG, "signal data: mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
-
-	int enter_data_mode_result = enter_data_mode();
-	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+	log_cellular_quality();
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
@@ -288,14 +297,7 @@ void app_main(void)
 			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
 
-			int enter_command_mode_result = enter_command_mode();
-
-            char sysmode[256]; int rssi; int rsrp; int sinr; int rsrq;
-			at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
-			ESP_LOGI(TAG, "signal data: mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
-
-			int enter_data_mode_result = enter_data_mode();
-			ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+			log_cellular_quality();
 
 		}
     }

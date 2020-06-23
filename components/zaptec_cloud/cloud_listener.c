@@ -68,6 +68,7 @@ int publish_iothub_event(char *payload){
     if(message_id>0){
         return 0;
     }
+    ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
 }
 
