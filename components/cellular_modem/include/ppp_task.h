@@ -10,4 +10,7 @@ BaseType_t await_line(char *pvBuffer, TickType_t xTicksToWait);
 int send_line(char *);
 void clear_lines(void);
 
+int enter_command_mode(void);
+int enter_data_mode(void);
+
 #endif /* PPP_TASK_H */

@@ -26,6 +26,7 @@
 #include "mcu_communication.h"
 #include "zaptec_protocol_serialisation.h"
 #include "ppp_task.h"
+#include "at_commands.h"
 #include "mqtt_demo.h"
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
@@ -227,13 +228,26 @@ void app_main(void)
     #endif
 
     // start_mqtt_demo();
-    esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
-    obtain_time();
+    // esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
     start_cloud_listener_task();
 
+	//simulate time not available on boot
+	vTaskDelay(pdMS_TO_TICKS(7000));
+    obtain_time();
+
+
 	//wait for mqtt connect, then publish
-	vTaskDelay(pdMS_TO_TICKS(5000));
-	publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+	vTaskDelay(pdMS_TO_TICKS(8000));
+	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+
+	int enter_command_mode_result = enter_command_mode();
+
+	char sysmode[256]; int rssi; int rsrp; int sinr; int rsrq;
+	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
+	ESP_LOGI(TAG, "signal data: mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+
+	int enter_data_mode_result = enter_data_mode();
+	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
@@ -273,6 +287,16 @@ void app_main(void)
 		{
 			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
+
+			int enter_command_mode_result = enter_command_mode();
+
+            char sysmode[256]; int rssi; int rsrp; int sinr; int rsrq;
+			at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
+			ESP_LOGI(TAG, "signal data: mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+
+			int enter_data_mode_result = enter_data_mode();
+			ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+
 		}
     }
     

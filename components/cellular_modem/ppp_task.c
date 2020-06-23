@@ -20,9 +20,9 @@ static const char *TAG = "PPP_TASK";
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-#define CELLULAR_RX_SIZE 256
-#define CELLULAR_TX_SIZE 256
-#define CELLULAR_QUEUE_SIZE 30
+#define CELLULAR_RX_SIZE 1024
+#define CELLULAR_TX_SIZE 1024
+#define CELLULAR_QUEUE_SIZE 50
 #define ECHO_TEST_TXD1  (GPIO_NUM_17)
 #define ECHO_TEST_RXD1  (GPIO_NUM_16)
 #define ECHO_TEST_RTS1  (UART_PIN_NO_CHANGE)
@@ -35,6 +35,13 @@ static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
 static char line_buffer[LINE_BUFFER_SIZE];
 static uint32_t line_buffer_end;
+
+/* For AT commands this worked fine with 1. When entering command mode from 
+data mode there is sometimes ppp data received in the line queue. With 30 
+elements in the queue, this problem seems to be gone. A better solution with an 
+additional flag indicating that the received data should be discarded should be
+considered */
+#define LINE_QUEUE_LENGTH 30 
 
 static EventGroupHandle_t event_group;
 static const int CONNECT_BIT = BIT0;
@@ -90,7 +97,7 @@ int send_line(char * line){
 static void configure_uart(void){
 
     ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
-    line_queue = xQueueCreate( 1, sizeof( line_buffer ) );
+    line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );
     if( line_queue == 0){
         ESP_LOGE(TAG, "failed to create line queue");
     }
@@ -145,6 +152,11 @@ static void update_line_buffer(uint8_t* event_data,size_t size){
 
 }
 
+void clear_lines(void){
+    line_buffer_end = 0;
+    line_buffer[0] = 0;
+    xQueueReset(line_queue);
+}
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     if(xEventGroupGetBits(event_group) & UART_TO_PPP){
@@ -302,11 +314,16 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
     if (event_id == NETIF_PPP_ERRORUSER) {
         /* User interrupted event from esp-netif */
         esp_netif_t *netif = event_data;
-        ESP_LOGI(TAG, "User interrupted event from netif:%p", netif);
+        ESP_LOGW(TAG, "User interrupted event from netif:%p", netif);
     }
 }
 
 static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
+    if(!(xEventGroupGetBits(event_group) & UART_TO_PPP)){
+        ESP_LOGW(TAG, "got bytes from ppp driver while in command mode, discarding");
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "sending ppp data to modem");
     int sent_bytes = uart_write_bytes(UART_NUM_1, buffer, len);
     if(sent_bytes == len){
@@ -329,13 +346,55 @@ static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
     return ESP_OK;
 }
 
+int enter_command_mode(void){
+    ESP_LOGI(TAG, "Clearing out ppp");
+    xEventGroupClearBits(event_group, UART_TO_PPP);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "sending command to exit ppp mode");
+    uart_write_bytes(UART_NUM_1, "+++", 3);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    //we may get junk from the modem, wait the required time and test with at
+    clear_lines();// clear any extra ppp data from the modem
+    int at_result = at_command_at();
+    if(at_result < 0){
+        ESP_LOGE(TAG, "bad response from modem: %d", at_result);
+        return -1;
+    }
+    return 0;
+
+    // char at_buffer[LINE_BUFFER_SIZE];
+    // ESP_LOGI(TAG,"waiting for +++ confirm");
+    // int result = await_line(at_buffer, pdMS_TO_TICKS(1000));
+    // ESP_LOGI(TAG, "command mode line %d: %s", result, at_buffer);
+    // if(result == pdPASS){
+    //     if(strstr(at_buffer, "OK")){
+    //         return 0;
+    //     }
+    //     return -1;
+    // }
+    // return -2;
+}
+
+int enter_data_mode(void){
+    ESP_LOGI(TAG, "going back to data mode");
+    int mode_change_result = at_command_data_mode();
+
+    if(mode_change_result == 0){
+        ESP_LOGI(TAG, "Routing uart data to ppp driver");
+        xEventGroupSetBits(event_group, UART_TO_PPP);
+        return 0;
+    }
+    return -1;
+}
+
 void ppp_task_start(void){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
     hard_reset_cellular();
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 5, NULL);
 
     configure_modem_for_ppp(); // TODO rename
 
