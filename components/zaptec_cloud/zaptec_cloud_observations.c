@@ -14,13 +14,14 @@ int publish_json(cJSON *payload){
 
     if(message == NULL){
         ESP_LOGE(TAG, "failed to print json");
+        cJSON_Delete(payload);
         return -2;
     }
     ESP_LOGI(TAG, "<<<sending>>> %s", message);
 
     int publish_err = publish_iothub_event(message);
 
-    cJSON_free(payload);
+    cJSON_Delete(payload);
     free(message);
 
     if(publish_err){
