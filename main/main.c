@@ -80,6 +80,29 @@ void log_cellular_quality(void){
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 }
 
+void log_task_info(void){
+	char task_info[40*15];
+
+	// https://www.freertos.org/a00021.html#vTaskList
+	vTaskList(task_info);
+	ESP_LOGD(TAG, "[vTaskList:]\n\r"
+	"name\t\tstate\tpri\tstack\tnum\tcoreid"
+	"\n\r%s\n"
+	, task_info);
+
+	vTaskGetRunTimeStats(task_info);
+	ESP_LOGD(TAG, "[vTaskGetRunTimeStats:]\n\r"
+	"\rname\t\tabsT\t\trelT\trelT"
+	"\n\r%s\n"
+	, task_info);
+	
+	// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
+	ESP_LOGD(TAG, "[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d)", xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize());
+	// heap_caps_print_heap_info(MALLOC_CAP_EXEC|MALLOC_CAP_32BIT|MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DEFAULT|MALLOC_CAP_IRAM_8BIT);
+	heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+	ESP_LOGD(TAG, "log_task_info done");
+}
+
 void init_mcu(){
     ZapMessage txMsg;
 
@@ -206,7 +229,7 @@ void PlaySound()
 
 void app_main(void){
 
-    ESP_LOGE(TAG, "start of app_main6");
+    ESP_LOGE(TAG, "start of app_main7");
 
 	gpio_config_t io_conf;
 	//disable interrupt
@@ -264,6 +287,7 @@ void app_main(void){
 	vTaskDelay(pdMS_TO_TICKS(8000));
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 
+	log_task_info();
 	log_cellular_quality();
     
 	uint32_t ledState = 0;
@@ -306,6 +330,7 @@ void app_main(void){
 			loopCount = 0;
 
 			log_cellular_quality();
+			log_task_info();
 
 		}
     }

@@ -19,7 +19,7 @@ static int at_command_with_ack_and_lines(char * command, char * success_key, uin
                 return 0;
             }
         }else{
-            ESP_LOGI(TAG, "command [%s] timeout", command);
+            ESP_LOGW(TAG, "command [%s] timeout", command);
             return -2;
         }
     }
@@ -34,7 +34,7 @@ static int at_command_with_ok_ack(char * command, uint32_t timeout_ms){
 
 int at_command_at(void){
     ESP_LOGI(TAG, "running AT");
-    return at_command_with_ok_ack("AT", 400);
+    return at_command_with_ok_ack("AT", 600);
 }
 
 int at_command_echo_set(bool on){

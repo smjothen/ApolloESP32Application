@@ -248,9 +248,11 @@ int configure_modem_for_ppp(void){
     }
 
     configASSERT(startup_confirmed == true);
+    vTaskDelay(pdMS_TO_TICKS(100));
     int at_result = at_command_at();
     if(at_result < 0){
-        ESP_LOGE(TAG, "bad response from modem: %d", at_result);
+        ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
+        at_command_at();
         vTaskDelay(pdMS_TO_TICKS(20000));
     }
     at_command_echo_set(false);
