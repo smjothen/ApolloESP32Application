@@ -95,11 +95,22 @@ void log_task_info(void){
 	"\rname\t\tabsT\t\trelT\trelT"
 	"\n\r%s\n"
 	, task_info);
+
+	// memory info as extracted in the HAN adapter project:
+	size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 	
 	// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
-	ESP_LOGD(TAG, "[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d)", xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize());
+	char formated_memory_use[256];
+	snprintf(formated_memory_use, 256,
+		"[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d, heap_caps_get_free_size: %d)",
+		xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size
+	);
+	ESP_LOGD(TAG, "%s", formated_memory_use);
+
 	// heap_caps_print_heap_info(MALLOC_CAP_EXEC|MALLOC_CAP_32BIT|MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DEFAULT|MALLOC_CAP_IRAM_8BIT);
 	heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+
+	publish_diagnostics_observation(formated_memory_use);
 	ESP_LOGD(TAG, "log_task_info done");
 }
 

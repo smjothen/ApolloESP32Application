@@ -88,6 +88,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 1);
 
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
+        publish_diagnostics_observation("[mqtt connected]");
+
+        static bool is_first_connection = true;
+        if(is_first_connection){
+            is_first_connection = false;
+            char boot_message[256];
+            snprintf(boot_message, 256, "[booted] first connect after boot, uptime_ms: %d", esp_log_timestamp());
+            publish_diagnostics_observation(boot_message);
+        }
 
         // request twin data
         esp_mqtt_client_publish(
