@@ -49,6 +49,7 @@ static int at_command_two_line_response(char* command, char * result_buff, int b
                                        int first_timeout_ms, int second_timeout_ms){
     char at_buffer[LINE_BUFFER_SIZE];
 
+    ESP_LOGD(TAG, "Sending {%s}2", command);
     send_line(command);
 
     int name_result = await_line(at_buffer, pdMS_TO_TICKS(first_timeout_ms));

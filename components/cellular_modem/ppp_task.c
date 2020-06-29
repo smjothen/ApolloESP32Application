@@ -396,7 +396,7 @@ void ppp_task_start(void){
     hard_reset_cellular();
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 5, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 5, NULL);
 
     configure_modem_for_ppp(); // TODO rename
 
