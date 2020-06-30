@@ -240,7 +240,7 @@ void PlaySound()
 
 void app_main(void){
 
-    ESP_LOGE(TAG, "start of app_main10");
+    ESP_LOGE(TAG, "start of app_main11");
 
 	gpio_config_t io_conf;
 	//disable interrupt

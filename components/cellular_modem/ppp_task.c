@@ -36,16 +36,12 @@ static QueueHandle_t line_queue;
 static char line_buffer[LINE_BUFFER_SIZE];
 static uint32_t line_buffer_end;
 
-/* For AT commands this worked fine with 1. When entering command mode from 
-data mode there is sometimes ppp data received in the line queue. With 30 
-elements in the queue, this problem seems to be gone. A better solution with an 
-additional flag indicating that the received data should be discarded should be
-considered */
-#define LINE_QUEUE_LENGTH 30 
+#define LINE_QUEUE_LENGTH 3
 
 static EventGroupHandle_t event_group;
 static const int CONNECT_BIT = BIT0;
 static const int UART_TO_PPP = BIT7;
+static const int UART_TO_LINES = BIT6;
 
 esp_netif_t *ppp_netif = NULL;
 // esp_event_loop_handle_t ppp_netif_management_event_loop;
@@ -160,10 +156,14 @@ void clear_lines(void){
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     if(xEventGroupGetBits(event_group) & UART_TO_PPP){
-        ESP_LOGI(TAG, "paasssing uart data to ppp driver");
+        ESP_LOGI(TAG, "passing uart data to ppp driver");
         esp_netif_receive(ppp_netif, event_data, size, NULL);
-    }else{
+    }else if(xEventGroupGetBits(event_group) & UART_TO_LINES){
         update_line_buffer(event_data, size);
+    }else{
+        // we are transitioning between data and command mode
+        // it should be safe to ignore data here, but lets log the event for now
+        ESP_LOGD(TAG, "got uart data not passed to PPP or lines, len: %d", size);
     }
 }
 
@@ -358,6 +358,9 @@ int enter_command_mode(void){
 
     //we may get junk from the modem, wait the required time and test with at
     clear_lines();// clear any extra ppp data from the modem
+    xEventGroupSetBits(event_group, UART_TO_LINES);
+
+    ESP_LOGD(TAG, "checking if ppp exit succeeded");
     int at_result = at_command_at();
     if(at_result < 0){
         ESP_LOGE(TAG, "bad response from modem: %d", at_result);
@@ -384,6 +387,7 @@ int enter_data_mode(void){
 
     if(mode_change_result == 0){
         ESP_LOGI(TAG, "Routing uart data to ppp driver");
+        xEventGroupClearBits(event_group, UART_TO_LINES);
         xEventGroupSetBits(event_group, UART_TO_PPP);
         return 0;
     }
@@ -393,6 +397,7 @@ int enter_data_mode(void){
 void ppp_task_start(void){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
+    xEventGroupSetBits(event_group, UART_TO_LINES);
     hard_reset_cellular();
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
@@ -422,6 +427,7 @@ void ppp_task_start(void){
     //esp_modem_set_event_handler(dte, modem_event_handler, ESP_EVENT_ANY_ID, NULL);
 
     // toggle uart rx to go to modem_netif_receive_cb
+    xEventGroupClearBits(event_group, UART_TO_LINES);
     xEventGroupSetBits(event_group, UART_TO_PPP);
 
     esp_event_handler_instance_t start_reg;
