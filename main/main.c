@@ -37,6 +37,9 @@
 #include "adc_control.h"
 #include "driver/ledc.h"
 
+// #define BRIDGE_CELLULAR_MODEM 1
+#define USE_CELLULAR_CONNECTION 1
+
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
 
@@ -55,7 +58,22 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
+void configure_wifi(void){
+	ESP_ERROR_CHECK( nvs_flash_init() );
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
+}
+
 void log_cellular_quality(void){
+	#ifndef USE_CELLULAR_CONNECTION
+	return;
+	#endif
 	int enter_command_mode_result = enter_command_mode();
 
 	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
@@ -144,7 +162,6 @@ void init_mcu(){
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_AUDIO)
 
-// #define BRIDGE_CELLULAR_MODEM 1
 
 void PlaySound()
 {
@@ -282,16 +299,19 @@ void app_main(void){
     hard_reset_cellular();
     mbus_init();
     #else
+	#ifdef USE_CELLULAR_CONNECTION
     ppp_task_start();
+	#endif
     #endif
 
-    // start_mqtt_demo();
-    // esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
+	
+	#ifndef USE_CELLULAR_CONNECTION
+	configure_wifi();
+	#endif
+
+	obtain_time();
     start_cloud_listener_task();
 
-	//simulate time not available on boot
-	vTaskDelay(pdMS_TO_TICKS(7000));
-    obtain_time();
 
 
 	//wait for mqtt connect, then publish
@@ -350,16 +370,6 @@ void app_main(void){
 
 static void obtain_time(void)
 {
-    // ESP_ERROR_CHECK( nvs_flash_init() );
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK( esp_event_loop_create_default() );
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    // ESP_ERROR_CHECK(example_connect());
-
     initialize_sntp();
 
     // wait for time to be set

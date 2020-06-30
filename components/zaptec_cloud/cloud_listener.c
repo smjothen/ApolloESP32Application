@@ -81,7 +81,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
         char devicebound_topic[128];
-        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", DEVICE_ID);
+        sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", DEVICE_ID);
 
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
         esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
