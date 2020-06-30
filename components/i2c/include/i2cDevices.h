@@ -13,7 +13,10 @@
 extern "C" {
 #endif
 
-void register_i2ctools(void);
+//void register_i2ctools(void);
+void I2CDevicesInit();
+//esp_err_t i2c_master_write_slave(uint8_t slave_addr, uint8_t *data_wr, size_t size);
+//esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t size);
 
 #ifdef __cplusplus
 }

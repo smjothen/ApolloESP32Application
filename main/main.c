@@ -25,12 +25,18 @@
 #include "protocol_task.h"
 #include "mcu_communication.h"
 #include "zaptec_protocol_serialisation.h"
+#include "ppp_task.h"
+#include "mqtt_demo.h"
+#include "zaptec_cloud_listener.h"
+#include "zaptec_cloud_observations.h"
 
 #include "ocpp_task.h"
 #include "CLRC661.h"
 #include "uart1.h"
 #include "adc_control.h"
 #include "driver/ledc.h"
+#include "connect.h"
+#include "i2cDevices.h"
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -127,6 +133,7 @@ void Start4G()
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
 
+// #define BRIDGE_CELLULAR_MODEM 1
 
 void PlaySound()
 {
@@ -240,8 +247,13 @@ static void gpio_task_example(void* arg)
     }
 }
 
+
+
+
 void app_main(void)
 {
+
+    ESP_LOGE(TAG, "start of app_main6");
 
 	gpio_config_t io_conf;
 	//disable interrupt
@@ -253,7 +265,6 @@ void app_main(void)
 	//enable pull-up mode
 	io_conf.pull_up_en = 0;
 	gpio_config(&io_conf);
-
 
 
 	//gpio_set_intr_type(GPIO_INPUT_IO_0, GPIO_INTR_ANYEDGE);
@@ -268,55 +279,84 @@ void app_main(void)
 	//hook isr handler for specific gpio pin
 	gpio_isr_handler_add(GPIO_INPUT_nHALL_FX, gpio_isr_handler, (void*) GPIO_INPUT_nHALL_FX);
 	//hook isr handler for specific gpio pin
-	gpio_isr_handler_add(GPIO_INPUT_nNFC_IRQ, gpio_isr_handler, (void*) GPIO_INPUT_nNFC_IRQ);
+	//gpio_isr_handler_add(GPIO_INPUT_nNFC_IRQ, gpio_isr_handler, (void*) GPIO_INPUT_nNFC_IRQ);
 
 	//remove isr handler for gpio number.
 	//gpio_isr_handler_remove(GPIO_INPUT_IO_0);
 	//hook isr handler for specific gpio pin again
 	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 
+	I2CDevicesInit();
 
 
-	//ESP_ERROR_CHECK( nvs_flash_init() );
-	//ESP_ERROR_CHECK(esp_netif_init());
-	//ESP_ERROR_CHECK( esp_event_loop_create_default() );
+	///ESP_ERROR_CHECK( nvs_flash_init() );
+	///ESP_ERROR_CHECK(esp_netif_init());
+	///ESP_ERROR_CHECK( esp_event_loop_create_default() );
 
 	/* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
 	 * Read "Establishing Wi-Fi or Ethernet Connection" section in
 	 * examples/protocols/README.md for more information about this function.
 	 */
-	//ESP_ERROR_CHECK(example_connect());
+	///ESP_ERROR_CHECK(example_connect());
 
+	//SetupWifi();
 
 	//adc_init();
+
+    gpio_config_t output_conf; 
+	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	output_conf.mode = GPIO_MODE_OUTPUT;
+	output_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+	output_conf.pull_down_en = 0;
+	output_conf.pull_up_en = 0;
+	gpio_config(&output_conf);
+    
+	// adc_init();
 	//obtain_time();
     //vTaskDelay(1000 / portTICK_PERIOD_MS);
+    
+    //obtain_time();
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    //PlaySound();
-
-    //Start4G();
+    // PlaySound();
 
     //mbus_init();
-    register_i2ctools();
+    //register_i2ctools();
 
     //zaptecProtocolStart();
     // init_mcu();
 
     //ocpp_task_start();
+    
+    #ifdef BRIDGE_CELLULAR_MODEM
+    hard_reset_cellular();
+    mbus_init();
+    #else
+    //ppp_task_start();
+    #endif
 
+    // start_mqtt_demo();
+    //esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
+    //obtain_time();
+    //start_cloud_listener_task();
+
+	//wait for mqtt connect, then publish
+	//vTaskDelay(pdMS_TO_TICKS(5000));
+	//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+    
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
 
 
 
-	int currentState = 0;
-
-	while(true)
-	{
-		currentState = gpio_get_level(GPIO_INPUT_nHALL_FX);
-		//ESP_LOGE(TAG, "3 INIT Button state: %d", currentState);
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
-	}
+//	int currentState = 0;
+//
+//	while(true)
+//	{
+//		currentState = gpio_get_level(GPIO_INPUT_nHALL_FX);
+//		//ESP_LOGE(TAG, "3 INIT Button state: %d", currentState);
+//		vTaskDelay(1000 / portTICK_PERIOD_MS);
+//	}
 
 
 
@@ -336,6 +376,7 @@ void app_main(void)
 //		vTaskDelay(10);
 //	}
 
+    gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     while (true)
     {
@@ -351,7 +392,7 @@ void app_main(void)
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
 
         loopCount++;
-		if(loopCount == 5)
+		if(loopCount == 05)
 		{
 			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
@@ -362,14 +403,16 @@ void app_main(void)
 
 static void obtain_time(void)
 {
-    /*ESP_ERROR_CHECK( nvs_flash_init() );
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK( esp_event_loop_create_default() );
-*/
+    //ESP_ERROR_CHECK( nvs_flash_init() );
+	//ESP_ERROR_CHECK(esp_netif_init());
+    //ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
      */
+
     //ESP_ERROR_CHECK(example_connect());
 
     initialize_sntp();

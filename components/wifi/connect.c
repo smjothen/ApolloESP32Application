@@ -314,3 +314,8 @@ esp_netif_t *get_example_netif(void)
 {
     return s_example_esp_netif;
 }
+
+void SetupWifi()
+{
+	start();
+}

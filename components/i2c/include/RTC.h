@@ -1,0 +1,17 @@
+
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <time.h>
+#include "esp_err.h"
+
+esp_err_t RTCWriteTime(struct tm newTime);
+struct tm RTCReadTime();
+
+
+#ifdef __cplusplus
+}
+#endif
