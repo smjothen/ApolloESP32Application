@@ -6,6 +6,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
+#include "device_twin.h"
 
 #define TAG "Cloud Listener"
 
@@ -122,13 +123,16 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
         printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
-        // ESP_LOGD(TAG, "publishing %s", payloadstring);
-        // if(mqtt_count<3){
-        //     msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
-        //     mqtt_count += 1;
-        // }else
-        //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
+        printf("DATA=%.*s(strlen%d, dlen%d)\r\n", event->data_len, event->data, event->data_len, strlen(event->data));
+
+        //does this overflow??
+        event->data[event->data_len] = 0;
+
+        const char * twin_topic_head = "$iothub/twin/res/";
+
+        if(strncmp(twin_topic_head, event->topic, strlen(twin_topic_head))==0){
+            on_device_twin_message(event->data);
+        }
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");

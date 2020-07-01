@@ -360,6 +360,7 @@ void app_main(void){
 			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
 			loopCount = 0;
 
+			publish_cloud_pulse();
 			log_cellular_quality();
 			log_task_info();
 

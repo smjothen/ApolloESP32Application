@@ -121,3 +121,13 @@ int publish_debug_message_event(char *message, cloud_event_level level){
 
     return publish_json(event);
 }
+
+int publish_cloud_pulse(void){
+    cJSON *pulse = cJSON_CreateObject();
+    if(pulse == NULL){return -10;}
+
+    cJSON_AddNumberToObject(pulse, "Type", (float) 2.0);
+
+    ESP_LOGD(TAG, "sending pulse to cloud");
+    return publish_json(pulse);
+}
