@@ -149,9 +149,21 @@ static void update_line_buffer(uint8_t* event_data,size_t size){
 }
 
 void clear_lines(void){
+    ESP_LOGD(TAG, "clearing lines");
+    int i = 0;
+    while (uxQueueMessagesWaiting(line_queue) > 0){
+        i++;
+        xQueueReset(line_queue);
+        // task blocked on queue submit may will be unblocked by xQueueReset
+        // we keep resetting until the queue is empty
+    }
+
     line_buffer_end = 0;
     line_buffer[0] = 0;
-    xQueueReset(line_queue);
+
+    if(i>1){
+        ESP_LOGD(TAG, "Reseting the line queue used %d attempts", i);
+    }
 }
 
 static void on_uart_data(uint8_t* event_data,size_t size){
