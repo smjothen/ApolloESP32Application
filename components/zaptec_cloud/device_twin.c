@@ -6,7 +6,7 @@
 
 #define TAG "device_twin"
 
-int on_device_twin_message(char * payload){
+int on_device_twin_message(const char * payload){
     ESP_LOGI(TAG, "updating device settings with %s", payload);
     cJSON* twin_data = cJSON_Parse(payload);
 

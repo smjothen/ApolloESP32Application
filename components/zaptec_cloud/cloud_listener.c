@@ -7,6 +7,7 @@
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
 #include "device_twin.h"
+#include "device_methods.h"
 
 #define TAG "Cloud Listener"
 
@@ -56,13 +57,13 @@ int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     return 0;
 }
 
-int publish_iothub_event(char *payload){
+int publish_to_iothub(const char* payload, const char* topic){
     if(mqtt_client == NULL){
         return -1;
     }
 
     int message_id = esp_mqtt_client_publish(
-            mqtt_client, event_topic,
+            mqtt_client, topic,
             payload, 0, 1, 0
     );
 
@@ -71,6 +72,10 @@ int publish_iothub_event(char *payload){
     }
     ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
+}
+
+int publish_iothub_event(const char *payload){
+    return publish_to_iothub(payload, event_topic);
 }
 
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
@@ -122,17 +127,28 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s(strlen%d, dlen%d)\r\n", event->data_len, event->data, event->data_len, strlen(event->data));
 
-        //does this overflow??
-        event->data[event->data_len] = 0;
+        char* topic = malloc(event->topic_len+1);
+        char* data = malloc(event->data_len+1);
 
-        const char * twin_topic_head = "$iothub/twin/res/";
+        strncpy(topic, event->topic, event->topic_len);
+        strncpy(data, event->data, event->data_len);
+        topic[event->topic_len] = 0;
+        data[event->data_len] = 0;
 
-        if(strncmp(twin_topic_head, event->topic, strlen(twin_topic_head))==0){
-            on_device_twin_message(event->data);
+        ESP_LOGI(TAG, "got mqtt event:\r\n\tTOPIC=%s\r\n\tDATA=%s", topic, data);
+
+        const char* twin_topic_head = "$iothub/twin/res/";
+        const char* method_topic_head = "$iothub/methods/POST/";
+
+        if(strncmp(twin_topic_head, topic, strlen(twin_topic_head))==0){
+            on_device_twin_message(data);
+        } else if (strncmp(method_topic_head, topic, strlen(twin_topic_head))==0){
+            on_method_call(topic, data);
         }
+
+        free(topic);
+        free(data);
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
