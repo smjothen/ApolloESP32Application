@@ -40,6 +40,17 @@ int on_method_call(char* topic, char* payload){
 
     ESP_LOGI(TAG, "method topic parse results %s and %s", method_name, result_key);
 
+    if(strlen(payload)>0){
+        cJSON * parsed_payload = cJSON_Parse(payload);
+        if (parsed_payload == NULL){
+            ESP_LOGW(TAG, "Failed to parse method payload");
+        }else{
+            ESP_LOGI(TAG, "Payload type is %d", parsed_payload->type);
+        }
+    }else{
+        ESP_LOGW(TAG, "no payload for method call");
+    }
+
     snprintf(reply_topic, 256, "$iothub/methods/res/200/%s", result_key); 
     ESP_LOGI(TAG, "replying on %s", reply_topic);
     publish_to_iothub(NULL, reply_topic);
