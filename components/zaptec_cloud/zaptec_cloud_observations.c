@@ -76,8 +76,8 @@ int publish_debug_telemetry_observation(
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
+    add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
     add_observation_to_collection(observations, create_observation(808, "debugstring1"));
-    add_observation_to_collection(observations, create_observation(808, "debugstring2"));
 
     add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
     add_observation_to_collection(observations, create_double_observation(502, voltage_l2));

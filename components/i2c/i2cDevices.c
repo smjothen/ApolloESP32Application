@@ -37,7 +37,7 @@ static void i2cDevice_task(void *pvParameters)
 
 	NFCInit();
 
-	RTCWriteTime(writeTime);
+	//RTCWriteTime(writeTime);
 	EEPROM_Read();
 
 

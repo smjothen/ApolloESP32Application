@@ -133,9 +133,14 @@ void uartCommsTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-        txMsg.type = MsgWrite;
-        txMsg.identifier = ParamRunTest;
+        /*txMsg.type = MsgRead;//MsgWrite;
+        txMsg.identifier = ParamInternalTemperature;//ParamRunTest;
+        uint encoded_length = ZEncodeMessageHeader(
+        		&txMsg, txBuf
+		);*/
 
+        txMsg.identifier = ParamRunTest;
+        txMsg.type = MsgWrite;
         uint encoded_length = ZEncodeMessageHeaderAndOneByte(
             &txMsg, 34, txBuf, encodedTxBuf
         );

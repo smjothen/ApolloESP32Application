@@ -37,6 +37,7 @@
 #include "driver/ledc.h"
 #include "connect.h"
 #include "i2cDevices.h"
+#include "esp_wifi.h"
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -248,6 +249,15 @@ static void gpio_task_example(void* arg)
 }
 
 
+float network_WifiSignalStrength()
+{
+	wifi_ap_record_t wifidata;
+	float wifiRSSI = 0.0;
+	if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+		wifiRSSI= (float)wifidata.rssi;
+
+	return wifiRSSI;
+}
 
 
 void app_main(void)
@@ -289,15 +299,15 @@ void app_main(void)
 	I2CDevicesInit();
 
 
-	///ESP_ERROR_CHECK( nvs_flash_init() );
-	///ESP_ERROR_CHECK(esp_netif_init());
-	///ESP_ERROR_CHECK( esp_event_loop_create_default() );
+	ESP_ERROR_CHECK( nvs_flash_init() );
+	ESP_ERROR_CHECK(esp_netif_init());
+	ESP_ERROR_CHECK( esp_event_loop_create_default() );
 
 	/* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
 	 * Read "Establishing Wi-Fi or Ethernet Connection" section in
 	 * examples/protocols/README.md for more information about this function.
 	 */
-	///ESP_ERROR_CHECK(example_connect());
+	ESP_ERROR_CHECK(example_connect());
 
 	//SetupWifi();
 
@@ -312,7 +322,7 @@ void app_main(void)
 	gpio_config(&output_conf);
     
 	// adc_init();
-	//obtain_time();
+	obtain_time();
     //vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     //obtain_time();
@@ -335,14 +345,15 @@ void app_main(void)
     //ppp_task_start();
     #endif
 
-    // start_mqtt_demo();
+    ///start_mqtt_demo();
     //esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
-    //obtain_time();
-    //start_cloud_listener_task();
+    ///obtain_time();
+    ///start_cloud_listener_task();
 
 	//wait for mqtt connect, then publish
-	//vTaskDelay(pdMS_TO_TICKS(5000));
+	vTaskDelay(pdMS_TO_TICKS(5000));
 	//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+	///publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
@@ -376,8 +387,11 @@ void app_main(void)
 //		vTaskDelay(10);
 //	}
 
+
+
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
+    uint32_t counter = 0;
     while (true)
     {
     	if(ledState == 0)
@@ -390,11 +404,11 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
 
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-
+    	counter++;
         loopCount++;
-		if(loopCount == 05)
+		if(loopCount == 5)
 		{
-			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
+			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %f dBm", counter, softwareVersion, esp_reset_reason(), network_WifiSignalStrength());
 			loopCount = 0;
 		}
     }

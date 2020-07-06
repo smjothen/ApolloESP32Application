@@ -10,14 +10,22 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-#define DEVICE_ID "ZAP000001"
-#define ROUTING_ID "myri"
-#define INSTALLATION_ID "myii"
+//#define DEVICE_ID "ZAP000001"
+#define DEVICE_ID "ZAP000002"
+#define ROUTING_ID "default"
+#define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
-//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
-#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+/*#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+(existing != null ? existing + "&" : "")
+				+ "$.ct=application%2Fjson&$.ce=utf-8"
+				+ (addRouting ?
+				   (routingId != null && routingId.Length > 0 ? "&ri=" + Uri.EscapeDataString(routingId) : "")
+					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
+				   : "");*/
 const char event_topic[128];
 
 const char cert[] =
