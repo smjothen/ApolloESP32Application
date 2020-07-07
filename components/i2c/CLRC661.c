@@ -16,7 +16,8 @@
 static const char *TAG = "cmd_i2ctools";
 
 //static uint8_t slaveAddressNFC = 0x2A;
-static uint8_t slaveAddressNFC = 0x2B;
+//static uint8_t slaveAddressNFC = 0x2B;
+static uint8_t slaveAddressNFC = 0x28;
 
 uint responseDelay = 10;
 

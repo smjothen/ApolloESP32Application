@@ -82,37 +82,37 @@ static void mbus_task()
     int len = 0;
     char count = 66;
 
-    readData[0] = 'G';
-    readData[1] = 'o';
-    uart_write_bytes(UART_NUM_0, (char*)readData, 2);
-
-    // send a at comd, so that we know the modem is alive
-    writeData[0] = 'A';
-    writeData[1] = 'T';
-    writeData[2] = '\r';
-    uart_write_bytes(UART_NUM_1, writeData, 3);
-
- 	while (1) {
- 		count++;
- 		//*writeData = count;
-
-   		len = uart_read_bytes(UART_NUM_0, (uint8_t*)writeData, BUF_SIZE, 20 / portTICK_RATE_MS);
-   		if(len > 0)
-   			uart_write_bytes(UART_NUM_1, writeData, len);
-
-   		vTaskDelay(50/portTICK_PERIOD_MS);
-
-   		len = uart_read_bytes(UART_NUM_1, readData, BUF_SIZE, 20 / portTICK_RATE_MS);
-   		if(len > 0)
-   		   	uart_write_bytes(UART_NUM_0, (char*)readData, len);
-
-   		//uart_write_bytes(UART_NUM_0, writeData, 1);
-
-		//if(len > 0)
-			//ESP_LOGE(TAG, "Len %d, data %X", len, readData[0]);
-
-		vTaskDelay(50/portTICK_PERIOD_MS);
-	}
+//    readData[0] = 'G';
+//    readData[1] = 'o';
+//    uart_write_bytes(UART_NUM_0, (char*)readData, 2);
+//
+//    // send a at comd, so that we know the modem is alive
+//    writeData[0] = 'A';
+//    writeData[1] = 'T';
+//    writeData[2] = '\r';
+//    uart_write_bytes(UART_NUM_1, writeData, 3);
+//
+// 	while (1) {
+// 		count++;
+// 		//*writeData = count;
+//
+//   		len = uart_read_bytes(UART_NUM_0, (uint8_t*)writeData, BUF_SIZE, 20 / portTICK_RATE_MS);
+//   		if(len > 0)
+//   			uart_write_bytes(UART_NUM_1, writeData, len);
+//
+//   		vTaskDelay(50/portTICK_PERIOD_MS);
+//
+//   		len = uart_read_bytes(UART_NUM_1, readData, BUF_SIZE, 20 / portTICK_RATE_MS);
+//   		if(len > 0)
+//   		   	uart_write_bytes(UART_NUM_0, (char*)readData, len);
+//
+//   		//uart_write_bytes(UART_NUM_0, writeData, 1);
+//
+//		//if(len > 0)
+//			//ESP_LOGE(TAG, "Len %d, data %X", len, readData[0]);
+//
+//		vTaskDelay(50/portTICK_PERIOD_MS);
+//	}
 
     writeData[0] = 'A';
     writeData[1] = 'T';

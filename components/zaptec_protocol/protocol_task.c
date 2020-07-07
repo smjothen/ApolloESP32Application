@@ -52,11 +52,11 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 
         uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 
-        ZapMessage rxMsg;
+        ZapMessage rxMsg = {0};
         xQueueReceive( 
             uart_recv_message_queue,
             &( rxMsg ),
-            portMAX_DELAY
+			RX_TIMEOUT//portMAX_DELAY
         );
 
         // dont release uart_write_lock, let caller use freeZapMessageReply()
@@ -88,17 +88,18 @@ void uartRecvTask(void *pvParameters){
     while(true)
         {
             //configASSERT(xQueueReceive(uart0_events_queue, (void * )&event, (portTickType)RX_TIMEOUT))
+			xQueueReceive(uart0_events_queue, (void * )&event, (portTickType)RX_TIMEOUT);
 
-            //if(event.type != UART_DATA){continue;}
+            if(event.type != UART_DATA){continue;}
 
-//            if(uxSemaphoreGetCount(uart_write_lock)==1){
-//                ESP_LOGE(TAG, "got uart data without outstanding request");
-//                continue;
-//            }
+            if(uxSemaphoreGetCount(uart_write_lock)==1){
+                ESP_LOGE(TAG, "got uart data without outstanding request");
+                continue;
+            }
 
-            //configASSERT(event.size <= uart_data_size);
-            //int length = uart_read_bytes(uart_num, uart_data, event.size, RX_TIMEOUT);
-    	int length = uart_read_bytes(uart_num, uart_data, 1, RX_TIMEOUT);
+            configASSERT(event.size <= uart_data_size);
+            int length = uart_read_bytes(uart_num, uart_data, event.size, RX_TIMEOUT);
+    	//int length = uart_read_bytes(uart_num, uart_data, 1, RX_TIMEOUT);
 
             ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
 
@@ -133,17 +134,20 @@ void uartCommsTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-        /*txMsg.type = MsgRead;//MsgWrite;
         txMsg.identifier = ParamInternalTemperature;//ParamRunTest;
-        uint encoded_length = ZEncodeMessageHeader(
-        		&txMsg, txBuf
+        txMsg.type = MsgRead;//MsgWrite;
+        /*uint encoded_length = ZEncodeMessageHeader(
+        		&txMsg, encodedTxBuf
 		);*/
+        uint encoded_length = ZEncodeMessageHeaderOnly(
+                    &txMsg, txBuf, encodedTxBuf
+                );
 
-        txMsg.identifier = ParamRunTest;
+        /*txMsg.identifier = ParamRunTest;
         txMsg.type = MsgWrite;
         uint encoded_length = ZEncodeMessageHeaderAndOneByte(
             &txMsg, 34, txBuf, encodedTxBuf
-        );
+        );*/
 
         ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         
@@ -152,8 +156,23 @@ void uartCommsTask(void *pvParameters){
         printf("frame identifier: %d \n\r", rxMsg.identifier);
         printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-        uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-        printf("frame error code: %d\n\r", error_code);
+        volatile float temp = 0.0;
+        uint8_t swap[4] = {0};
+        if(rxMsg.identifier == 201)
+        {
+        	swap[0] = rxMsg.data[3];
+        	swap[1] = rxMsg.data[2];
+        	swap[2] = rxMsg.data[1];
+        	swap[3] = rxMsg.data[0];
+        	memcpy(&temp, &swap[0], 4);
+        	printf("Temperature: %f C\n\r", temp);
+        }
+
+        else if(rxMsg.type != 0)
+        {
+        	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+        	printf("frame error code: %d\n\r", error_code);
+        }
         freeZapMessageReply();
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);

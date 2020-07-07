@@ -192,6 +192,7 @@
     bool ZParseFrame(uint8_t nextRxByte, ZapMessage* outMsg);
     uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin);
     uint16_t ZAppendChecksumAndStuffBytes(uint8_t* startOfMsg, uint16_t lengthOfMsg, uint8_t* outByteStuffedMsg);
+    uint16_t ZEncodeMessageHeaderOnly(ZapMessage* msg, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneFloat(ZapMessage* msg, float val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneByte(ZapMessage* msg, uint8_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneUInt16(ZapMessage* msg, uint16_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);

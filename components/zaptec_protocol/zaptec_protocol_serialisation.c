@@ -294,6 +294,17 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
     }
 }
 
+uint16_t ZEncodeMessageHeaderOnly(ZapMessage* msg, uint8_t* txBuf, uint8_t* encodedTxBuf)
+{
+    uint8_t* ptr = txBuf;
+
+    msg->length = 4;
+    ptr += ZEncodeMessageHeader(msg, txBuf);
+    //ptr += ZEncodeFloat(val, ptr);
+    return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
+}
+
+
 uint16_t ZEncodeMessageHeaderAndOneFloat(ZapMessage* msg, float val, uint8_t* txBuf, uint8_t* encodedTxBuf)
 {
     uint8_t* ptr = txBuf;

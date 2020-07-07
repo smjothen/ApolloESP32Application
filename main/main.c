@@ -296,7 +296,7 @@ void app_main(void)
 	//hook isr handler for specific gpio pin again
 	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 
-	I2CDevicesInit();
+	//I2CDevicesInit();
 
 
 	ESP_ERROR_CHECK( nvs_flash_init() );
@@ -328,12 +328,13 @@ void app_main(void)
     //obtain_time();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
+    //Start4G();
     // PlaySound();
 
     //mbus_init();
     //register_i2ctools();
 
-    //zaptecProtocolStart();
+    zaptecProtocolStart();
     // init_mcu();
 
     //ocpp_task_start();
@@ -351,7 +352,7 @@ void app_main(void)
     ///start_cloud_listener_task();
 
 	//wait for mqtt connect, then publish
-	vTaskDelay(pdMS_TO_TICKS(5000));
+	///vTaskDelay(pdMS_TO_TICKS(5000));
 	//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 	///publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
     
@@ -388,6 +389,8 @@ void app_main(void)
 //	}
 
 
+	wifi_ap_record_t wifidata;
+	int8_t rssi = 0;
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
@@ -408,7 +411,13 @@ void app_main(void)
         loopCount++;
 		if(loopCount == 5)
 		{
-			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %f dBm", counter, softwareVersion, esp_reset_reason(), network_WifiSignalStrength());
+			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
+				rssi = wifidata.rssi;
+			}
+			else
+				rssi = 0;
+
+			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm", counter, softwareVersion, esp_reset_reason(), rssi);
 			loopCount = 0;
 		}
     }
