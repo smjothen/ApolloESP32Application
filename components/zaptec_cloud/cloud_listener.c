@@ -12,7 +12,8 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-#define DEVICE_ID "ZAP000001"
+const char device_id[] = "ZAP000001";
+#define DEVICE_ID device_id
 #define ROUTING_ID "myri"
 #define INSTALLATION_ID "myii"
 #define MQTT_PORT 8883
