@@ -18,4 +18,6 @@ typedef enum {
 int publish_debug_message_event(char *message, cloud_event_level level);
 int publish_cloud_pulse(void);
 
+int publish_noise(void);
+
 #endif /* ZAPTEC_CLOUD_OBSERVATIONS_H */

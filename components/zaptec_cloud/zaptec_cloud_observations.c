@@ -131,3 +131,30 @@ int publish_cloud_pulse(void){
     ESP_LOGD(TAG, "sending pulse to cloud");
     return publish_json(pulse);
 }
+
+int publish_noise(void){
+    int events_to_send = 10;
+
+    cJSON *event = cJSON_CreateObject();
+    if(event == NULL){return -10;}
+
+    cJSON_AddNumberToObject(event, "EventType", cloud_event_level_information);
+    cJSON_AddStringToObject(event, "Message", "Noisy message to stress test the system.");
+    cJSON_AddNumberToObject(event, "Type", (float) 5.0);
+
+    char *message = cJSON_PrintUnformatted(event);
+    
+    ESP_LOGI(TAG, "sending %d stress test events", events_to_send);
+    for(int i = 0; i<events_to_send; i++){
+        int publish_err = publish_iothub_event(message);
+        if(publish_err<0){
+            ESP_LOGE(TAG, "Publish error in stress test message %d", i);
+        }
+    }
+
+    ESP_LOGI(TAG, "sent stress test events.");
+        
+    cJSON_Delete(event);
+    free(message);
+    return 0;
+}
