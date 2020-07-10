@@ -10,8 +10,10 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-//#define DEVICE_ID "ZAP000001"
-#define DEVICE_ID "ZAP000002"
+//#define DEVICE_ID "ZAP000002"
+const char device_id[] = "ZAP000002";
+#define DEVICE_ID device_id
+//#define DEVICE_ID "ZAP000002"
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
@@ -57,7 +59,8 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60, &token);
+    //create_sas_token(1*60, &token);
+	create_sas_token(1*3600, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
     return 0;

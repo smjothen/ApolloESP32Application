@@ -346,10 +346,10 @@ void app_main(void)
     //ppp_task_start();
     #endif
 
-    ///start_mqtt_demo();
+    start_mqtt_demo();
     //esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
     ///obtain_time();
-    ///start_cloud_listener_task();
+    start_cloud_listener_task();
 
 	//wait for mqtt connect, then publish
 	///vTaskDelay(pdMS_TO_TICKS(5000));
@@ -394,7 +394,11 @@ void app_main(void)
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
+    float temperature = 0.0;
+
     uint32_t counter = 0;
+    uint32_t pulseCounter = 0;
+
     while (true)
     {
     	if(ledState == 0)
@@ -409,7 +413,7 @@ void app_main(void)
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
     	counter++;
         loopCount++;
-		if(loopCount == 5)
+		if(loopCount == 10)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
@@ -418,8 +422,41 @@ void app_main(void)
 				rssi = 0;
 
 			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm", counter, softwareVersion, esp_reset_reason(), rssi);
+
+			//mqtt_reconnect();
+
+			temperature = MCU_GetTemperature();
+			if(WifiIsConnected() == true)
+			{
+				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
+				publish_debug_telemetry_observation(temperature, 0.0, rssi);
+				publish_debug_telemetry_observation_power(MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+			}
+			else
+				ESP_LOGE(TAG, "WIFI DISCONNECTED");
+
+			//mqtt_disconnect();
+
 			loopCount = 0;
+
 		}
+//		if(loopCount == 10)
+//		{
+//			if(WifiIsConnected() == true)
+//				publish_cloud_pulse();
+//			else
+//				ESP_LOGE(TAG, "WIFI DISCONNECTED");
+//
+//			loopCount = 0;
+//		}
+
+		pulseCounter++;
+		if(pulseCounter == 60)
+		{
+			publish_cloud_pulse();
+			pulseCounter = 0;
+		}
+
     }
     
 }
@@ -445,7 +482,7 @@ static void obtain_time(void)
     struct tm timeinfo = { 0 };
 
     int retry = 0;
-    const int retry_count = 10;
+    const int retry_count = 20;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
         vTaskDelay(2000 / portTICK_PERIOD_MS);

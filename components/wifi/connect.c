@@ -31,7 +31,7 @@
 
 #define GOT_IPV4_BIT BIT(0)
 #define GOT_IPV6_BIT BIT(1)
-
+#undef CONFIG_EXAMPLE_CONNECT_IPV6
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
 #define CONNECTED_BITS (GOT_IPV4_BIT | GOT_IPV6_BIT)
 #else
@@ -49,6 +49,13 @@ static esp_ip6_addr_t s_ipv6_addr;
 
 static const char *TAG = "example_connect";
 
+bool isConnected = false;
+
+bool WifiIsConnected()
+{
+	return isConnected;
+}
+
 /* set up connection, Wi-Fi or Ethernet */
 static void start(void);
 
@@ -58,6 +65,7 @@ static void stop(void);
 static void on_got_ip(void *arg, esp_event_base_t event_base,
                       int32_t event_id, void *event_data)
 {
+	isConnected = true;
     ESP_LOGI(TAG, "Got IP event!");
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     memcpy(&s_ip_addr, &event->ip_info.ip, sizeof(s_ip_addr));
@@ -118,6 +126,7 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     ESP_LOGI(TAG, "Wi-Fi disconnected, trying to reconnect...");
+    isConnected = false;
     esp_err_t err = esp_wifi_connect();
     if (err == ESP_ERR_WIFI_NOT_STARTED) {
         return;

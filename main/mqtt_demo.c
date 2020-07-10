@@ -56,6 +56,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     return ESP_OK;
 }
 
+esp_mqtt_client_handle_t mqtt_client;
+
 void start_mqtt_demo(void){
     vTaskDelay(pdMS_TO_TICKS(2500));
     cJSON *json_payload = cJSON_CreateObject();
@@ -66,7 +68,20 @@ void start_mqtt_demo(void){
         .uri = BROKER_URL,
         .event_handle = mqtt_event_handler,
     };
-    esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
+    //esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
+    mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
     esp_mqtt_client_start(mqtt_client);
+}
+
+void mqtt_disconnect()
+{
+	esp_mqtt_client_disconnect(mqtt_client);
+    ESP_LOGI(TAG, "mqtt disconnecting");
+}
+
+void mqtt_reconnect()
+{
+	esp_mqtt_client_reconnect(mqtt_client);
+    ESP_LOGI(TAG, "mqtt reconnecting");
 }

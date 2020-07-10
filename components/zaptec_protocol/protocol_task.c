@@ -47,7 +47,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
     if( xSemaphoreTake( uart_write_lock, RX_TIMEOUT ) == pdTRUE )
     {
     
-        uart_flush(uart_num);
+    	uart_flush(uart_num);
         xQueueReset(uart_recv_message_queue);
 
         uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
@@ -120,11 +120,32 @@ void uartRecvTask(void *pvParameters){
         }
 }
 
+volatile static float temperature5 = 0.0;
+volatile static float voltages[3] = {0.0};
+volatile static float currents[3] = {0.0};
+
+float GetFloat(uint8_t * input)
+{
+	float tmp = 0.0;
+
+	uint8_t swap[4] = {0};
+	swap[0] = input[3];
+	swap[1] = input[2];
+	swap[2] = input[1];
+	swap[3] = input[0];
+	memcpy(&tmp, &swap[0], 4);
+	return tmp;
+}
+
+
 void uartCommsTask(void *pvParameters){
     ESP_LOGI(TAG, "configuring uart");
 
+    int count = 0;
     while (true)
     {
+    	count++;
+
         // tx test
         ESP_LOGI(TAG, "creating zap message");
         ZapMessage txMsg;
@@ -134,50 +155,110 @@ void uartCommsTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-        txMsg.identifier = ParamInternalTemperature;//ParamRunTest;
+
+        switch (count)
+        {
+        	case 1:
+        		txMsg.identifier = ParamInternalTemperature;
+        		break;
+        	case 2:
+				txMsg.identifier = ParamVoltagePhase1;
+				break;
+        	case 3:
+				txMsg.identifier = ParamVoltagePhase2;
+				break;
+        	case 4:
+				txMsg.identifier = ParamVoltagePhase3;
+				break;
+        	case 5:
+				txMsg.identifier = ParamCurrentPhase1;
+				break;
+        	case 6:
+				txMsg.identifier = ParamCurrentPhase2;
+				break;
+        	case 7:
+				txMsg.identifier = ParamCurrentPhase3;
+				break;
+        	default:
+        		vTaskDelay(1000 / portTICK_PERIOD_MS);
+        		continue;
+        		break;
+        }
+
+        if(count >= 8)
+        {
+        	vTaskDelay(5000 / portTICK_PERIOD_MS);
+        	count = 0;
+        	continue;
+        }
+
         txMsg.type = MsgRead;//MsgWrite;
-        /*uint encoded_length = ZEncodeMessageHeader(
-        		&txMsg, encodedTxBuf
-		);*/
+
         uint encoded_length = ZEncodeMessageHeaderOnly(
                     &txMsg, txBuf, encodedTxBuf
                 );
 
-        /*txMsg.identifier = ParamRunTest;
-        txMsg.type = MsgWrite;
-        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-            &txMsg, 34, txBuf, encodedTxBuf
-        );*/
 
         ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
         printf("frame type: %d \n\r", rxMsg.type);
         printf("frame identifier: %d \n\r", rxMsg.identifier);
-        printf("frame timeId: %d \n\r", rxMsg.timeId);
+//        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-        volatile float temp = 0.0;
-        uint8_t swap[4] = {0};
+
+        /*uint8_t swap[4] = {0};
         if(rxMsg.identifier == 201)
         {
         	swap[0] = rxMsg.data[3];
         	swap[1] = rxMsg.data[2];
         	swap[2] = rxMsg.data[1];
         	swap[3] = rxMsg.data[0];
-        	memcpy(&temp, &swap[0], 4);
-        	printf("Temperature: %f C\n\r", temp);
-        }
+        	memcpy(&temperature5, &swap[0], 4);
+        	printf("Temperature: %f C\n\r", temperature5);
+        }*/
 
-        else if(rxMsg.type != 0)
+        if(rxMsg.identifier == ParamInternalTemperature)
+        	temperature5 = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamVoltagePhase1)
+            voltages[0] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamVoltagePhase2)
+        	voltages[1] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamVoltagePhase3)
+        	voltages[2] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamCurrentPhase1)
+        	currents[0] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamCurrentPhase2)
+        	currents[1] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamCurrentPhase3)
+        	currents[1] = GetFloat(rxMsg.data);
+
+        /*else if(rxMsg.type != 0)
         {
         	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
         	printf("frame error code: %d\n\r", error_code);
-        }
+        }*/
         freeZapMessageReply();
+
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     
+}
+
+float MCU_GetTemperature()
+{
+	return temperature5;
+}
+
+float MCU_GetVoltages(uint8_t phase)
+{
+	return voltages[phase];
+}
+
+float MCU_GetCurrents(uint8_t phase)
+{
+	return currents[phase];
 }
 
 void configureUart(){

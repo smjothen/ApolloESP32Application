@@ -69,15 +69,36 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
 }
 
 int publish_debug_telemetry_observation(
-    double voltage_l1, double voltage_l2, double voltage_l3,
-    double current_l1, double current_l2, double current_l3,
-    double temperature_5, double temperature_emeter
+    double temperature_5, double temperature_emeter, double rssi
 ){
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
     add_observation_to_collection(observations, create_observation(808, "debugstring1"));
+
+    /*add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
+    add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
+    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));
+
+    add_observation_to_collection(observations, create_double_observation(507, current_l1));
+    add_observation_to_collection(observations, create_double_observation(508, current_l2));
+    add_observation_to_collection(observations, create_double_observation(509, current_l2));*/
+
+    add_observation_to_collection(observations, create_double_observation(201, temperature_5));
+    add_observation_to_collection(observations, create_double_observation(809, rssi));
+    //add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
+
+    return publish_json(observations);
+}
+
+int publish_debug_telemetry_observation_power(
+    double voltage_l1, double voltage_l2, double voltage_l3,
+    double current_l1, double current_l2, double current_l3
+){
+    ESP_LOGD(TAG, "sending charging telemetry");
+
+    cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
     add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
@@ -87,11 +108,10 @@ int publish_debug_telemetry_observation(
     add_observation_to_collection(observations, create_double_observation(508, current_l2));
     add_observation_to_collection(observations, create_double_observation(509, current_l2));
 
-    add_observation_to_collection(observations, create_double_observation(201, temperature_5));
-    add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
-
     return publish_json(observations);
 }
+
+
 
 int publish_debug_message_event(char *message, cloud_event_level level){
 
@@ -103,4 +123,14 @@ int publish_debug_message_event(char *message, cloud_event_level level){
     cJSON_AddNumberToObject(event, "Type", (float) 5.0);
 
     return publish_json(event);
+}
+
+int publish_cloud_pulse(void){
+    cJSON *pulse = cJSON_CreateObject();
+    if(pulse == NULL){return -10;}
+
+    cJSON_AddNumberToObject(pulse, "Type", (float) 2.0);
+
+    ESP_LOGD(TAG, "sending pulse to cloud");
+    return publish_json(pulse);
 }
