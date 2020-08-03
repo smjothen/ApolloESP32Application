@@ -341,6 +341,8 @@ void app_main(void){
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
+	uint32_t total_loop_count = 0;
+
     while (true)
     {
     	if(ledState == 0)
@@ -355,6 +357,7 @@ void app_main(void){
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
 
         loopCount++;
+		
 		if(loopCount == 20)
 		{
 			ESP_LOGE(TAG, "%s , rst: %d", softwareVersion, esp_reset_reason());
@@ -363,6 +366,12 @@ void app_main(void){
 			publish_cloud_pulse();
 			log_cellular_quality();
 			log_task_info();
+
+			total_loop_count++;
+			char message_buf[256];
+			snprintf(message_buf, 256, "[loop] completed loop no %d (uptime_ms: %d)", total_loop_count, esp_log_timestamp());
+			publish_diagnostics_observation(message_buf);
+			
 			//publish_noise();
 
 		}
