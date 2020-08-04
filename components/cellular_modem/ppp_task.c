@@ -363,34 +363,39 @@ static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
 int enter_command_mode(void){
     ESP_LOGI(TAG, "Clearing out ppp");
     xEventGroupClearBits(event_group, UART_TO_PPP);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    ESP_LOGI(TAG, "sending command to exit ppp mode");
-    uart_write_bytes(UART_NUM_1, "+++", 3);
-    vTaskDelay(pdMS_TO_TICKS(1000));
 
-    //we may get junk from the modem, wait the required time and test with at
-    clear_lines();// clear any extra ppp data from the modem
-    xEventGroupSetBits(event_group, UART_TO_LINES);
+    int at_result = -10;
+    int retries = 5;
 
-    ESP_LOGD(TAG, "checking if ppp exit succeeded");
-    int at_result = at_command_at();
-    if(at_result < 0){
-        ESP_LOGE(TAG, "bad response from modem: %d", at_result);
-        return -1;
+    for(int retry = 0; retry < retries; retry++){
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGI(TAG, "sending command to exit ppp mode");
+        uart_write_bytes(UART_NUM_1, "+++", 3);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        //we may get junk from the modem, wait the required time and test with at
+        clear_lines();// clear any extra ppp data from the modem
+        xEventGroupSetBits(event_group, UART_TO_LINES);
+
+        ESP_LOGD(TAG, "checking if ppp exit succeeded");
+        at_result = at_command_at();
+
+        if(at_result < 0){
+            ESP_LOGW(
+                TAG, "bad response from modem: %d, retry count %d",
+                at_result, retry
+            );
+        }else{
+            ESP_LOGI(TAG, "PPP mode confirmed");
+            return 0;
+        }
+
     }
-    return 0;
 
-    // char at_buffer[LINE_BUFFER_SIZE];
-    // ESP_LOGI(TAG,"waiting for +++ confirm");
-    // int result = await_line(at_buffer, pdMS_TO_TICKS(1000));
-    // ESP_LOGI(TAG, "command mode line %d: %s", result, at_buffer);
-    // if(result == pdPASS){
-    //     if(strstr(at_buffer, "OK")){
-    //         return 0;
-    //     }
-    //     return -1;
-    // }
-    // return -2;
+    ESP_LOGE(TAG, "Failed to enter command mode! Restoring PPP");
+    xEventGroupClearBits(event_group, UART_TO_LINES);
+    xEventGroupSetBits(event_group, UART_TO_PPP);
+    return -1;
 }
 
 int enter_data_mode(void){

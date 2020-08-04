@@ -76,6 +76,12 @@ void log_cellular_quality(void){
 	#endif
 	int enter_command_mode_result = enter_command_mode();
 
+	if(enter_command_mode_result<0){
+		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
+		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
+		return;
+	}
+
 	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
 	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
 
