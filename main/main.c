@@ -323,10 +323,10 @@ void app_main(void)
     
 	// adc_init();
 	obtain_time();
-    //vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     //obtain_time();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     //Start4G();
     // PlaySound();
@@ -348,7 +348,7 @@ void app_main(void)
 
     start_mqtt_demo();
     //esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
-    ///obtain_time();
+    //obtain_time();
     start_cloud_listener_task();
 
 	//wait for mqtt connect, then publish
@@ -429,8 +429,9 @@ void app_main(void)
 			if(WifiIsConnected() == true)
 			{
 				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
-				publish_debug_telemetry_observation(temperature, 0.0, rssi);
-				publish_debug_telemetry_observation_power(MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+				//publish_debug_telemetry_observation(temperature, 0.0, rssi);
+				//publish_debug_telemetry_observation_power(MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
 			}
 			else
 				ESP_LOGE(TAG, "WIFI DISCONNECTED");

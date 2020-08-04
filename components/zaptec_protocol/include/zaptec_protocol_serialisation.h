@@ -32,6 +32,11 @@
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,
+		ParamInternalTemperatureEmeter2 = 203,
+		ParamInternalTemperatureEmeter3 = 204,
+		ParamInternalTemperatureT = 205,
+		ParamInternalTemperatureT2 = 206,
+
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
                 

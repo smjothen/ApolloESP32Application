@@ -23,6 +23,7 @@ void onCharRx(char c);
 SemaphoreHandle_t uart_write_lock;
 QueueHandle_t uart_recv_message_queue;
 QueueHandle_t uart0_events_queue;
+uint32_t mcuCommunicationError = 0;
 
 const int uart_num = UART_NUM_2;
 
@@ -31,8 +32,8 @@ void zaptecProtocolStart(){
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t uartRecvTaskHandle = NULL;
     TaskHandle_t taskHandle = NULL;
-    int stack_size = 4096;
-    xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 5, &uartRecvTaskHandle );
+    int stack_size = 8192;//4096;
+    xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
     xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
     configASSERT(uartRecvTaskHandle);
     configASSERT( taskHandle );
@@ -97,9 +98,18 @@ void uartRecvTask(void *pvParameters){
                 continue;
             }
 
+
+
             configASSERT(event.size <= uart_data_size);
             int length = uart_read_bytes(uart_num, uart_data, event.size, RX_TIMEOUT);
     	//int length = uart_read_bytes(uart_num, uart_data, 1, RX_TIMEOUT);
+
+            if((event.timeout_flag == true) && (length == 0))
+       		{
+            	mcuCommunicationError++;
+            	continue;
+       		}
+
 
             ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
 
@@ -120,7 +130,8 @@ void uartRecvTask(void *pvParameters){
         }
 }
 
-volatile static float temperature5 = 0.0;
+volatile static float temperaturePowerBoardT[2]  = {0.0};
+volatile static float temperatureEmeter[3] = {0.0};
 volatile static float voltages[3] = {0.0};
 volatile static float currents[3] = {0.0};
 
@@ -159,50 +170,67 @@ void uartCommsTask(void *pvParameters){
         switch (count)
         {
         	case 1:
-        		txMsg.identifier = ParamInternalTemperature;
-        		break;
+				txMsg.identifier = ParamInternalTemperatureEmeter;
+				break;
         	case 2:
-				txMsg.identifier = ParamVoltagePhase1;
+				txMsg.identifier = ParamInternalTemperatureEmeter2;
 				break;
         	case 3:
-				txMsg.identifier = ParamVoltagePhase2;
-				break;
+                txMsg.identifier = ParamInternalTemperatureEmeter3;
+                break;
+
         	case 4:
-				txMsg.identifier = ParamVoltagePhase3;
-				break;
+        		txMsg.identifier = ParamInternalTemperatureT;
+        		break;
         	case 5:
-				txMsg.identifier = ParamCurrentPhase1;
+				txMsg.identifier = ParamInternalTemperatureT2;
 				break;
+
+
+
         	case 6:
-				txMsg.identifier = ParamCurrentPhase2;
+				txMsg.identifier = ParamVoltagePhase1;
 				break;
         	case 7:
+				txMsg.identifier = ParamVoltagePhase2;
+				break;
+        	case 8:
+				txMsg.identifier = ParamVoltagePhase3;
+				break;
+        	case 9:
+				txMsg.identifier = ParamCurrentPhase1;
+				break;
+        	case 10:
+				txMsg.identifier = ParamCurrentPhase2;
+				break;
+        	case 11:
 				txMsg.identifier = ParamCurrentPhase3;
 				break;
-        	default:
+        	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
         		continue;
-        		break;
+        		break;*/
         }
 
-        if(count >= 8)
+        if(count >= 12)
         {
-        	vTaskDelay(5000 / portTICK_PERIOD_MS);
+        	ESP_LOGI(TAG, "count == 12");
+        	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
         }
 
         txMsg.type = MsgRead;//MsgWrite;
 
+        ESP_LOGI(TAG, "before encoding");
         uint encoded_length = ZEncodeMessageHeaderOnly(
                     &txMsg, txBuf, encodedTxBuf
                 );
 
-
         ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-        printf("frame type: %d \n\r", rxMsg.type);
+        //printf("frame type: %d \n\r", rxMsg.type);
         printf("frame identifier: %d \n\r", rxMsg.identifier);
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
@@ -218,8 +246,17 @@ void uartCommsTask(void *pvParameters){
         	printf("Temperature: %f C\n\r", temperature5);
         }*/
 
-        if(rxMsg.identifier == ParamInternalTemperature)
-        	temperature5 = GetFloat(rxMsg.data);
+        if(rxMsg.identifier == ParamInternalTemperatureEmeter)
+			temperatureEmeter[0] = GetFloat(rxMsg.data);
+		else if(rxMsg.identifier == ParamInternalTemperatureEmeter2)
+			temperatureEmeter[1] = GetFloat(rxMsg.data);
+		else if(rxMsg.identifier == ParamInternalTemperatureEmeter3)
+			temperatureEmeter[2] = GetFloat(rxMsg.data);
+		else if(rxMsg.identifier == ParamInternalTemperatureT)
+        	temperaturePowerBoardT[0] = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamInternalTemperatureT2)
+            temperaturePowerBoardT[1] = GetFloat(rxMsg.data);
+
         else if(rxMsg.identifier == ParamVoltagePhase1)
             voltages[0] = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamVoltagePhase2)
@@ -231,7 +268,10 @@ void uartCommsTask(void *pvParameters){
         else if(rxMsg.identifier == ParamCurrentPhase2)
         	currents[1] = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamCurrentPhase3)
-        	currents[1] = GetFloat(rxMsg.data);
+        {
+        	currents[2] = GetFloat(rxMsg.data);
+        	ESP_LOGW(TAG, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  Timeouts: %i", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], mcuCommunicationError);
+        }
 
         /*else if(rxMsg.type != 0)
         {
@@ -241,14 +281,24 @@ void uartCommsTask(void *pvParameters){
         freeZapMessageReply();
 
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
 }
 
+float MCU_GetEmeterTemperature(uint8_t phase)
+{
+	return temperatureEmeter[phase];
+}
+
+float MCU_GetTemperaturePowerBoard(uint8_t sensor)
+{
+	return temperaturePowerBoardT[sensor];
+}
+
 float MCU_GetTemperature()
 {
-	return temperature5;
+	return 0.0;//temperaturePowerBoardT;
 }
 
 float MCU_GetVoltages(uint8_t phase)

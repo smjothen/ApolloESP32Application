@@ -112,6 +112,39 @@ int publish_debug_telemetry_observation_power(
 }
 
 
+int publish_debug_telemetry_observation_all(
+	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
+	double temperature_TM, double temperature_TM2,
+    double voltage_l1, double voltage_l2, double voltage_l3,
+    double current_l1, double current_l2, double current_l3,
+	double rssi
+){
+    ESP_LOGD(TAG, "sending charging telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
+    //add_observation_to_collection(observations, create_observation(808, "debugstring1"));
+
+    add_observation_to_collection(observations, create_double_observation(202, temperature_emeter1));
+    add_observation_to_collection(observations, create_double_observation(203, temperature_emeter2));
+    add_observation_to_collection(observations, create_double_observation(204, temperature_emeter3));
+    add_observation_to_collection(observations, create_double_observation(205, temperature_TM));
+    add_observation_to_collection(observations, create_double_observation(205, temperature_TM2));
+
+    add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
+    add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
+    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));
+
+    add_observation_to_collection(observations, create_double_observation(507, current_l1));
+    add_observation_to_collection(observations, create_double_observation(508, current_l2));
+    add_observation_to_collection(observations, create_double_observation(509, current_l3));
+
+	add_observation_to_collection(observations, create_double_observation(809, rssi));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_message_event(char *message, cloud_event_level level){
 
