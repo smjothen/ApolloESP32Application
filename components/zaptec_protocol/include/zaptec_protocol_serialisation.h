@@ -32,10 +32,10 @@
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,
-		ParamInternalTemperatureEmeter2 = 203,
-		ParamInternalTemperatureEmeter3 = 204,
-		ParamInternalTemperatureT = 205,
-		ParamInternalTemperatureT2 = 206,
+		ParamInternalTemperatureEmeter2 = 204,
+		ParamInternalTemperatureEmeter3 = 205,
+		ParamInternalTemperatureT = 206,
+		ParamInternalTemperatureT2 = 207,
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
@@ -115,6 +115,7 @@
         ParamFlags = 807,
         //..
         ParamDiagnosticsString = 808,
+		CommunicationSignalStrength = 809,
         //..
         ParamResetSource = 811,
         ParamRxErrors = 812,

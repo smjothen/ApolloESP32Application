@@ -5,6 +5,8 @@
 
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
+//#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -111,6 +113,7 @@ int publish_debug_telemetry_observation_power(
     return publish_json(observations);
 }
 
+static uint32_t txCnt = 0;
 
 int publish_debug_telemetry_observation_all(
 	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
@@ -124,23 +127,29 @@ int publish_debug_telemetry_observation_all(
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
-    //add_observation_to_collection(observations, create_observation(808, "debugstring1"));
 
-    add_observation_to_collection(observations, create_double_observation(202, temperature_emeter1));
-    add_observation_to_collection(observations, create_double_observation(203, temperature_emeter2));
-    add_observation_to_collection(observations, create_double_observation(204, temperature_emeter3));
-    add_observation_to_collection(observations, create_double_observation(205, temperature_TM));
-    add_observation_to_collection(observations, create_double_observation(205, temperature_TM2));
 
-    add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
-    add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
-    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, temperature_emeter1));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, temperature_emeter2));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, temperature_emeter3));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, temperature_TM));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, temperature_TM2));
 
-    add_observation_to_collection(observations, create_double_observation(507, current_l1));
-    add_observation_to_collection(observations, create_double_observation(508, current_l2));
-    add_observation_to_collection(observations, create_double_observation(509, current_l3));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, voltage_l1));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, voltage_l2));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, voltage_l3));
 
-	add_observation_to_collection(observations, create_double_observation(809, rssi));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, current_l1));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
+
+	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
+
+	txCnt++;
+	char buf[256];
+	sprintf(buf, "#%d T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f", txCnt, temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
+	add_observation_to_collection(observations, create_observation(808, buf));
+
 	int ret = publish_json(observations);
 
 	cJSON_Delete(observations);

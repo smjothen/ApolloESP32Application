@@ -111,7 +111,7 @@ void uartRecvTask(void *pvParameters){
        		}
 
 
-            ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
+            //ESP_LOGI(TAG, "feeding %d bytes to ZParseFrame:", length);
 
             for(int i = 0; i<length; i++){
                 uint8_t rxByte = uart_data[i];
@@ -124,7 +124,7 @@ void uartRecvTask(void *pvParameters){
                         ( void * ) &rxMsg,
                         portMAX_DELAY
                     ))
-                    printf("handling frame\n\r");
+                    //printf("handling frame\n\r");
                 }
             }
         }
@@ -152,13 +152,16 @@ float GetFloat(uint8_t * input)
 void uartCommsTask(void *pvParameters){
     ESP_LOGI(TAG, "configuring uart");
 
+    //Provide application time to initialize before sending to MCU
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
     int count = 0;
     while (true)
     {
     	count++;
 
         // tx test
-        ESP_LOGI(TAG, "creating zap message");
+        //ESP_LOGI(TAG, "creating zap message");
         ZapMessage txMsg;
 
         // ZEncodeMessageHeader* does not check the length of the buffer!
@@ -214,7 +217,7 @@ void uartCommsTask(void *pvParameters){
 
         if(count >= 12)
         {
-        	ESP_LOGI(TAG, "count == 12");
+        	//ESP_LOGI(TAG, "count == 12");
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -222,16 +225,16 @@ void uartCommsTask(void *pvParameters){
 
         txMsg.type = MsgRead;//MsgWrite;
 
-        ESP_LOGI(TAG, "before encoding");
+        //ESP_LOGI(TAG, "before encoding");
         uint encoded_length = ZEncodeMessageHeaderOnly(
                     &txMsg, txBuf, encodedTxBuf
                 );
 
-        ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
+        //ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
         //printf("frame type: %d \n\r", rxMsg.type);
-        printf("frame identifier: %d \n\r", rxMsg.identifier);
+        //printf("frame identifier: %d \n\r", rxMsg.identifier);
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
 
