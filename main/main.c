@@ -399,6 +399,8 @@ void app_main(void)
     uint32_t counter = 0;
     uint32_t pulseCounter = 0;
 
+    size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
     while (true)
     {
     	if(ledState == 0)
@@ -409,6 +411,7 @@ void app_main(void)
     	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
 
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
     	counter++;
@@ -421,7 +424,9 @@ void app_main(void)
 			else
 				rssi = 0;
 
-			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm", counter, softwareVersion, esp_reset_reason(), rssi);
+			size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
+			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm  Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), rssi, free_heap_size_start, (free_heap_size_start-free_heap_size));
 
 			//mqtt_reconnect();
 
