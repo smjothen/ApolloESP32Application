@@ -30,6 +30,7 @@
 #include "mqtt_demo.h"
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
+#include "apollo_ota.h"
 
 #include "ocpp_task.h"
 #include "CLRC661.h"
@@ -38,7 +39,7 @@
 #include "driver/ledc.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
-#define USE_CELLULAR_CONNECTION 1
+// #define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -263,7 +264,7 @@ void PlaySound()
 
 void app_main(void){
 
-    ESP_LOGE(TAG, "start of app_main11");
+    ESP_LOGE(TAG, "start of app_main12 OTA9");
 
 	gpio_config_t io_conf;
 	//disable interrupt
@@ -317,7 +318,7 @@ void app_main(void){
 
 	obtain_time();
     start_cloud_listener_task();
-
+	start_ota_task();
 
 
 	//wait for mqtt connect, then publish

@@ -4,3 +4,5 @@ sdkconfig.old
 .vscode
 .ipynb_checkpoints
 
+**/certs/*.pem
+

@@ -26,8 +26,8 @@
 #include "lwip/sys.h"
 
 
-#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
-#define CONFIG_EXAMPLE_WIFI_PASSWORD "Ilovezaptec"
+#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
+#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
 
 #define GOT_IPV4_BIT BIT(0)
 #define GOT_IPV6_BIT BIT(1)
