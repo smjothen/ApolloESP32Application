@@ -397,7 +397,7 @@ void app_main(void)
     float temperature = 0.0;
 
     uint32_t counter = 0;
-    uint32_t pulseCounter = 0;
+    uint32_t pulseCounter = 59;
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
@@ -416,7 +416,7 @@ void app_main(void)
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
     	counter++;
         loopCount++;
-		if(loopCount == 10)
+		if(loopCount == 5)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
@@ -457,7 +457,7 @@ void app_main(void)
 //		}
 
 		pulseCounter++;
-		if(pulseCounter == 60)
+		if(pulseCounter >= 10)
 		{
 			publish_cloud_pulse();
 			pulseCounter = 0;

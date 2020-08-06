@@ -16,7 +16,7 @@ int publish_json(cJSON *payload){
 
     int publish_err = publish_iothub_event(message);
 
-    //cJSON_free(payload);
+    cJSON_Delete(payload);
     free(message);
 
     if(publish_err){
@@ -152,7 +152,7 @@ int publish_debug_telemetry_observation_all(
 
 	int ret = publish_json(observations);
 
-	cJSON_Delete(observations);
+	//cJSON_Delete(observations);
 
     return ret;//publish_json(observations);
 }
