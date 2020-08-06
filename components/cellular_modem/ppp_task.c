@@ -416,6 +416,7 @@ void ppp_task_start(void){
     ESP_LOGI(TAG, "Configuring BG9x");
     xEventGroupSetBits(event_group, UART_TO_LINES);
     hard_reset_cellular();
+//return;
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
     xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 5, NULL);

@@ -38,12 +38,12 @@ int create_sas_token(int ttl_s, char * token_out){
 
     //temp dummy values
     unsigned char key[] = {97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,0};
-    char signed_key[] = "ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=";
+    char signed_key[] = "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=";//"ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=";
     memcpy(key, signed_key, sizeof(key));
 
     time_t UnixTimeStamp = 1592397520;
     time(&UnixTimeStamp);
-    char *uniqueId = "ZAP000001";  
+    char *uniqueId = "ZAP000002";
 
 	ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
 	size_t key_len = sizeof(key)-1; //Key length -1 end of line char

@@ -311,17 +311,32 @@ void app_main(void){
     #endif
 
 	
+//    while (true)
+//	{
+//    	//wait for mqtt connect, then publish
+//    	vTaskDelay(pdMS_TO_TICKS(8000));
+//	}
+
 	#ifndef USE_CELLULAR_CONNECTION
 	configure_wifi();
 	#endif
 
+	vTaskDelay(pdMS_TO_TICKS(3000));
+
 	obtain_time();
-    start_cloud_listener_task();
 
 
 
 	//wait for mqtt connect, then publish
-	vTaskDelay(pdMS_TO_TICKS(8000));
+	//vTaskDelay(pdMS_TO_TICKS(8000));
+//	while (true)
+//	{
+//		//wait for mqtt connect, then publish
+//		vTaskDelay(pdMS_TO_TICKS(8000));
+//	}
+
+	start_cloud_listener_task();
+
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 
 	log_task_info();
@@ -394,14 +409,15 @@ static void obtain_time(void)
     struct tm timeinfo = { 0 };
 
     int retry = 0;
-    const int retry_count = 10;
+    const int retry_count = 20;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
-        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d), status: %d", retry, retry_count, sntp_get_sync_status());
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 
     // ESP_ERROR_CHECK( example_disconnect() );
 
+    //now = 1596673284;
     time(&now);
     localtime_r(&now, &timeinfo);
 
@@ -417,7 +433,9 @@ static void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    //sntp_set_sync_interval(20000);
     sntp_setservername(0, "pool.ntp.org");
+    //sntp_setserver(1,"216.239.35.12");//0xD8EF230C);// 216.239.35.12)
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);

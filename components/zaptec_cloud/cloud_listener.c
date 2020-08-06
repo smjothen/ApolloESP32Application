@@ -12,7 +12,7 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-const char device_id[] = "ZAP000001";
+const char device_id[] = "ZAP000002";
 #define DEVICE_ID device_id
 #define ROUTING_ID "myri"
 #define INSTALLATION_ID "myii"
@@ -20,6 +20,7 @@ const char device_id[] = "ZAP000001";
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
 //#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
+//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
 const char event_topic[128];
 
@@ -50,6 +51,11 @@ const char cert[] =
 esp_mqtt_client_handle_t mqtt_client = {0};
 esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
+
+//int isMqttConnected()
+//{
+//	return mqtt_client->
+//}
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     create_sas_token(1*60, &token);
