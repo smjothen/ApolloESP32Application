@@ -2,5 +2,6 @@ build
 sdkconfig.old
 
 .vscode
+.ipynb_checkpoints
 
 nfc

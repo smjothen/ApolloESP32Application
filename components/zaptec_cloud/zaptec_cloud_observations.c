@@ -1,6 +1,7 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include "time.h"
+#include <sys/time.h>
 #include "stdio.h"
 
 #include "zaptec_cloud_listener.h"
@@ -12,7 +13,13 @@
 
 int publish_json(cJSON *payload){
     char *message = cJSON_PrintUnformatted(payload);
-    ESP_LOGI(TAG, "sending %s", message);
+
+    if(message == NULL){
+        ESP_LOGE(TAG, "failed to print json");
+        cJSON_Delete(payload);
+        return -2;
+    }
+    ESP_LOGI(TAG, "<<<sending>>> %s", message);
 
     int publish_err = publish_iothub_event(message);
 
@@ -20,6 +27,7 @@ int publish_json(cJSON *payload){
     free(message);
 
     if(publish_err){
+        ESP_LOGW(TAG, "publish to iothub failed");
         return -1;
     }
     return 0;
@@ -29,19 +37,24 @@ cJSON *create_observation(int observation_id, char *value){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
 
-    time_t now = 0;
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+
+    time_t now = tv_now.tv_sec;
     struct tm timeinfo = { 0 };
-    char strftime_buf[64];
+    char strftime_buf_head[64];
+    char strftime_buf[128];
     time(&now);
     setenv("TZ", "UTC-0", 1);
     tzset();
     localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
+    strftime(strftime_buf_head, sizeof(strftime_buf_head), "%Y-%m-%dT%H:%M:%S.", &timeinfo);
+    snprintf(strftime_buf, sizeof(strftime_buf), "%s%03dZ", strftime_buf_head, (int)(tv_now.tv_usec/1000));
     
     cJSON_AddStringToObject(result, "ObservedAt", strftime_buf);
     cJSON_AddStringToObject(result, "Value", value);
     cJSON_AddNumberToObject(result, "ObservationId", (float) observation_id);
-    cJSON_AddNumberToObject(result, "Type", (float) 2.0);
+    cJSON_AddNumberToObject(result, "Type", (float) 1.0);
 
     return result;
 }
@@ -171,10 +184,14 @@ int publish_debug_telemetry_observation_all(
 }
 
 
+int publish_diagnostics_observation(char *message){
+    return publish_json(create_observation(808, message));
+}
+
 int publish_debug_message_event(char *message, cloud_event_level level){
 
     cJSON *event = cJSON_CreateObject();
-    if(event == NULL){return NULL;}
+    if(event == NULL){return -10;}
 
     cJSON_AddNumberToObject(event, "EventType", level);
     cJSON_AddStringToObject(event, "Message", message);
@@ -191,4 +208,31 @@ int publish_cloud_pulse(void){
 
     ESP_LOGD(TAG, "sending pulse to cloud");
     return publish_json(pulse);
+}
+
+int publish_noise(void){
+    int events_to_send = 10;
+
+    cJSON *event = cJSON_CreateObject();
+    if(event == NULL){return -10;}
+
+    cJSON_AddNumberToObject(event, "EventType", cloud_event_level_information);
+    cJSON_AddStringToObject(event, "Message", "Noisy message to stress test the system.");
+    cJSON_AddNumberToObject(event, "Type", (float) 5.0);
+
+    char *message = cJSON_PrintUnformatted(event);
+    
+    ESP_LOGI(TAG, "sending %d stress test events", events_to_send);
+    for(int i = 0; i<events_to_send; i++){
+        int publish_err = publish_iothub_event(message);
+        if(publish_err<0){
+            ESP_LOGE(TAG, "Publish error in stress test message %d", i);
+        }
+    }
+
+    ESP_LOGI(TAG, "sent stress test events.");
+        
+    cJSON_Delete(event);
+    free(message);
+    return 0;
 }

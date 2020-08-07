@@ -3,6 +3,8 @@ idf_component_register(SRCS
                       "cloud_listener.c"
                       "sas_token.c"
                       "zaptec_cloud_observations.c"
+                      "device_twin.c"
+                      "device_methods.c"
                       "wpa_supplicant/base64.c"
                       "wpa_supplicant/sha256.c"
                       "wpa_supplicant/common.c"

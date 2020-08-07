@@ -26,6 +26,7 @@
 #include "mcu_communication.h"
 #include "zaptec_protocol_serialisation.h"
 #include "ppp_task.h"
+#include "at_commands.h"
 #include "mqtt_demo.h"
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
@@ -38,6 +39,9 @@
 #include "connect.h"
 #include "i2cDevices.h"
 #include "esp_wifi.h"
+
+// #define BRIDGE_CELLULAR_MODEM 1
+#define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -55,6 +59,86 @@ static const char *TAG = "MAIN     ";
 void time_sync_notification_cb(struct timeval *tv)
 {
     ESP_LOGI(TAG, "Notification of a time synchronization event");
+}
+
+void configure_wifi(void){
+	ESP_ERROR_CHECK( nvs_flash_init() );
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
+}
+
+void log_cellular_quality(void){
+	#ifndef USE_CELLULAR_CONNECTION
+	return;
+	#endif
+	int enter_command_mode_result = enter_command_mode();
+
+	if(enter_command_mode_result<0){
+		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
+		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
+		return;
+	}
+
+	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
+	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
+
+	char signal_string[256];
+	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
+	publish_diagnostics_observation(signal_string);
+
+	int rssi2; int ber;
+	char quality_string[256];
+	at_command_signal_quality(&rssi2, &ber);
+	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssi2, ber);
+	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
+	publish_diagnostics_observation(quality_string);
+
+	int enter_data_mode_result = enter_data_mode();
+	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+
+	
+	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+}
+
+void log_task_info(void){
+	char task_info[40*15];
+
+	// https://www.freertos.org/a00021.html#vTaskList
+	vTaskList(task_info);
+	ESP_LOGD(TAG, "[vTaskList:]\n\r"
+	"name\t\tstate\tpri\tstack\tnum\tcoreid"
+	"\n\r%s\n"
+	, task_info);
+
+	vTaskGetRunTimeStats(task_info);
+	ESP_LOGD(TAG, "[vTaskGetRunTimeStats:]\n\r"
+	"\rname\t\tabsT\t\trelT\trelT"
+	"\n\r%s\n"
+	, task_info);
+
+	// memory info as extracted in the HAN adapter project:
+	size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	
+	// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
+	char formated_memory_use[256];
+	snprintf(formated_memory_use, 256,
+		"[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d, heap_caps_get_free_size: %d)",
+		xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size
+	);
+	ESP_LOGD(TAG, "%s", formated_memory_use);
+
+	// heap_caps_print_heap_info(MALLOC_CAP_EXEC|MALLOC_CAP_32BIT|MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DEFAULT|MALLOC_CAP_IRAM_8BIT);
+	heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+
+	publish_diagnostics_observation(formated_memory_use);
+	ESP_LOGD(TAG, "log_task_info done");
 }
 
 void init_mcu(){
@@ -296,18 +380,18 @@ void app_main(void)
 	//hook isr handler for specific gpio pin again
 	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 
-	I2CDevicesInit();
+	//I2CDevicesInit();
 
 
-	ESP_ERROR_CHECK( nvs_flash_init() );
-	ESP_ERROR_CHECK(esp_netif_init());
-	ESP_ERROR_CHECK( esp_event_loop_create_default() );
+	//ESP_ERROR_CHECK( nvs_flash_init() );
+	//ESP_ERROR_CHECK(esp_netif_init());
+	//ESP_ERROR_CHECK( esp_event_loop_create_default() );
 
 	/* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
 	 * Read "Establishing Wi-Fi or Ethernet Connection" section in
 	 * examples/protocols/README.md for more information about this function.
 	 */
-	ESP_ERROR_CHECK(example_connect());
+	//ESP_ERROR_CHECK(example_connect());
 
 	//SetupWifi();
 
@@ -322,8 +406,8 @@ void app_main(void)
 	gpio_config(&output_conf);
     
 	// adc_init();
-	obtain_time();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+	//obtain_time();
+    //vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     //obtain_time();
     //vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -343,35 +427,45 @@ void app_main(void)
     hard_reset_cellular();
     mbus_init();
     #else
-    //ppp_task_start();
+	#ifdef USE_CELLULAR_CONNECTION
+    ppp_task_start();
+	#endif
     #endif
 
-    start_mqtt_demo();
-    //esp_log_level_set("PPP_TASK", ESP_LOG_WARN);
-    //obtain_time();
-    start_cloud_listener_task();
+	
+//    while (true)
+//	{
+//    	//wait for mqtt connect, then publish
+//    	vTaskDelay(pdMS_TO_TICKS(8000));
+//	}
+
+	#ifndef USE_CELLULAR_CONNECTION
+	configure_wifi();
+	#endif
+
+	vTaskDelay(pdMS_TO_TICKS(3000));
+
+	obtain_time();
+
+
 
 	//wait for mqtt connect, then publish
-	///vTaskDelay(pdMS_TO_TICKS(5000));
-	//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
-	///publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+	//vTaskDelay(pdMS_TO_TICKS(8000));
+//	while (true)
+//	{
+//		//wait for mqtt connect, then publish
+//		vTaskDelay(pdMS_TO_TICKS(8000));
+//	}
+
+	start_cloud_listener_task();
+
+	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+
+	log_task_info();
+	log_cellular_quality();
     
 	uint32_t ledState = 0;
 	uint32_t loopCount = 0;
-
-
-
-//	int currentState = 0;
-//
-//	while(true)
-//	{
-//		currentState = gpio_get_level(GPIO_INPUT_nHALL_FX);
-//		//ESP_LOGE(TAG, "3 INIT Button state: %d", currentState);
-//		vTaskDelay(1000 / portTICK_PERIOD_MS);
-//	}
-
-
-
 
 	 //gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 
@@ -432,7 +526,7 @@ void app_main(void)
 //        	NFCClearTag();
 //        }
 
-		if(loopCount == 60)
+		if(loopCount == 15)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
@@ -447,7 +541,7 @@ void app_main(void)
 			//mqtt_reconnect();
 
 			temperature = MCU_GetTemperature();
-			if(WifiIsConnected() == true)
+			if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			{
 				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
 				//publish_debug_telemetry_observation(temperature, 0.0, rssi);
@@ -455,7 +549,9 @@ void app_main(void)
 				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
 			}
 			else
-				ESP_LOGE(TAG, "WIFI DISCONNECTED");
+			{
+				ESP_LOGE(TAG, "No network DISCONNECTED");
+			}
 
 			//mqtt_disconnect();
 
@@ -506,12 +602,13 @@ static void obtain_time(void)
     int retry = 0;
     const int retry_count = 20;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
-        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d), status: %d", retry, retry_count, sntp_get_sync_status());
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 
     // ESP_ERROR_CHECK( example_disconnect() );
 
+    //now = 1596673284;
     time(&now);
     localtime_r(&now, &timeinfo);
 
@@ -527,7 +624,9 @@ static void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    //sntp_set_sync_interval(20000);
     sntp_setservername(0, "pool.ntp.org");
+    //sntp_setserver(1,"216.239.35.12");//0xD8EF230C);// 216.239.35.12)
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);

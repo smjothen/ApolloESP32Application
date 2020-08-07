@@ -66,7 +66,7 @@ int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     return 0;
 }
 
-int publish_iothub_event(char *payload){
+int publish_iothub_event(const char *payload){
     if(mqtt_client == NULL){
         return -1;
     }

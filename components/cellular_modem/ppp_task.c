@@ -20,9 +20,9 @@ static const char *TAG = "PPP_TASK";
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-#define CELLULAR_RX_SIZE 256
-#define CELLULAR_TX_SIZE 256
-#define CELLULAR_QUEUE_SIZE 30
+#define CELLULAR_RX_SIZE 1024
+#define CELLULAR_TX_SIZE 1024
+#define CELLULAR_QUEUE_SIZE 50
 #define ECHO_TEST_TXD1  (GPIO_NUM_17)
 #define ECHO_TEST_RXD1  (GPIO_NUM_16)
 #define ECHO_TEST_RTS1  (UART_PIN_NO_CHANGE)
@@ -36,12 +36,17 @@ static QueueHandle_t line_queue;
 static char line_buffer[LINE_BUFFER_SIZE];
 static uint32_t line_buffer_end;
 
+#define LINE_QUEUE_LENGTH 3
+
 static EventGroupHandle_t event_group;
 static const int CONNECT_BIT = BIT0;
 static const int UART_TO_PPP = BIT7;
+static const int UART_TO_LINES = BIT6;
 
 esp_netif_t *ppp_netif = NULL;
 // esp_event_loop_handle_t ppp_netif_management_event_loop;
+
+static bool hasLTEConnection = false;
 
 ESP_EVENT_DEFINE_BASE(ESP_MODEM_EVENT);
 typedef enum {
@@ -90,7 +95,7 @@ int send_line(char * line){
 static void configure_uart(void){
 
     ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
-    line_queue = xQueueCreate( 1, sizeof( line_buffer ) );
+    line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );
     if( line_queue == 0){
         ESP_LOGE(TAG, "failed to create line queue");
     }
@@ -145,13 +150,34 @@ static void update_line_buffer(uint8_t* event_data,size_t size){
 
 }
 
+void clear_lines(void){
+    ESP_LOGD(TAG, "clearing lines");
+    int i = 0;
+    while (uxQueueMessagesWaiting(line_queue) > 0){
+        i++;
+        xQueueReset(line_queue);
+        // task blocked on queue submit may will be unblocked by xQueueReset
+        // we keep resetting until the queue is empty
+    }
+
+    line_buffer_end = 0;
+    line_buffer[0] = 0;
+
+    if(i>1){
+        ESP_LOGD(TAG, "Reseting the line queue used %d attempts", i);
+    }
+}
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     if(xEventGroupGetBits(event_group) & UART_TO_PPP){
-        ESP_LOGI(TAG, "paasssing uart data to ppp driver");
+        ESP_LOGI(TAG, "passing uart data to ppp driver");
         esp_netif_receive(ppp_netif, event_data, size, NULL);
-    }else{
+    }else if(xEventGroupGetBits(event_group) & UART_TO_LINES){
         update_line_buffer(event_data, size);
+    }else{
+        // we are transitioning between data and command mode
+        // it should be safe to ignore data here, but lets log the event for now
+        ESP_LOGD(TAG, "got uart data not passed to PPP or lines, len: %d", size);
     }
 }
 
@@ -187,7 +213,7 @@ static void uart_event_task(void *pvParameters)
                     break;
                 //Event of UART ring buffer full
                 case UART_BUFFER_FULL:
-                    ESP_LOGI(TAG, "ring buffer full");
+                    ESP_LOGW(TAG, "ring buffer full");
                     // If buffer full happened, you should consider encreasing your buffer size
                     // As an example, we directly flush the rx buffer here in order to read more data.
                     uart_flush_input(UART_NUM_1);
@@ -236,9 +262,11 @@ int configure_modem_for_ppp(void){
     }
 
     configASSERT(startup_confirmed == true);
+    vTaskDelay(pdMS_TO_TICKS(100));
     int at_result = at_command_at();
     if(at_result < 0){
-        ESP_LOGE(TAG, "bad response from modem: %d", at_result);
+        ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
+        at_command_at();
         vTaskDelay(pdMS_TO_TICKS(20000));
     }
     at_command_echo_set(false);
@@ -285,14 +313,22 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
         xEventGroupSetBits(event_group, CONNECT_BIT);
 
         ESP_LOGI(TAG, "GOT ip event!!!");
+        hasLTEConnection = true;
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
+        hasLTEConnection = false;
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
         ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
         ESP_LOGI(TAG, "Got IPv6 address " IPV6STR, IPV62STR(event->ip6_info.ip));
+        hasLTEConnection = true;
     }
+}
+
+bool LteIsConnected()
+{
+	return hasLTEConnection;
 }
 
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
@@ -302,11 +338,16 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
     if (event_id == NETIF_PPP_ERRORUSER) {
         /* User interrupted event from esp-netif */
         esp_netif_t *netif = event_data;
-        ESP_LOGI(TAG, "User interrupted event from netif:%p", netif);
+        ESP_LOGW(TAG, "User interrupted event from netif:%p", netif);
     }
 }
 
 static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
+    if(!(xEventGroupGetBits(event_group) & UART_TO_PPP)){
+        ESP_LOGW(TAG, "got bytes from ppp driver while in command mode, discarding");
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "sending ppp data to modem");
     int sent_bytes = uart_write_bytes(UART_NUM_1, buffer, len);
     if(sent_bytes == len){
@@ -329,13 +370,66 @@ static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
     return ESP_OK;
 }
 
+int enter_command_mode(void){
+    ESP_LOGI(TAG, "Clearing out ppp");
+    xEventGroupClearBits(event_group, UART_TO_PPP);
+
+    int at_result = -10;
+    int retries = 5;
+
+    for(int retry = 0; retry < retries; retry++){
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGI(TAG, "sending command to exit ppp mode");
+        uart_write_bytes(UART_NUM_1, "+++", 3);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        //we may get junk from the modem, wait the required time and test with at
+        clear_lines();// clear any extra ppp data from the modem
+        xEventGroupSetBits(event_group, UART_TO_LINES);
+
+        ESP_LOGD(TAG, "checking if ppp exit succeeded");
+        at_result = at_command_at();
+
+        if(at_result < 0){
+            ESP_LOGW(
+                TAG, "bad response from modem: %d, retry count %d",
+                at_result, retry
+            );
+        }else{
+            ESP_LOGI(TAG, "PPP mode confirmed");
+            return 0;
+        }
+
+    }
+
+    ESP_LOGE(TAG, "Failed to enter command mode! Restoring PPP");
+    xEventGroupClearBits(event_group, UART_TO_LINES);
+    xEventGroupSetBits(event_group, UART_TO_PPP);
+    return -1;
+}
+
+int enter_data_mode(void){
+    ESP_LOGI(TAG, "going back to data mode");
+    int mode_change_result = at_command_data_mode();
+
+    if(mode_change_result == 0){
+        ESP_LOGI(TAG, "Routing uart data to ppp driver");
+        xEventGroupClearBits(event_group, UART_TO_LINES);
+        xEventGroupSetBits(event_group, UART_TO_PPP);
+        return 0;
+    }
+    return -1;
+}
+
 void ppp_task_start(void){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
+    xEventGroupSetBits(event_group, UART_TO_LINES);
     hard_reset_cellular();
+//return;
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 5, NULL);
 
     configure_modem_for_ppp(); // TODO rename
 
@@ -361,14 +455,15 @@ void ppp_task_start(void){
     //esp_modem_set_event_handler(dte, modem_event_handler, ESP_EVENT_ANY_ID, NULL);
 
     // toggle uart rx to go to modem_netif_receive_cb
+    xEventGroupClearBits(event_group, UART_TO_LINES);
     xEventGroupSetBits(event_group, UART_TO_PPP);
 //TODO: VV commented out for branch release/4.1
-//    esp_event_handler_instance_t start_reg;
-//    esp_event_handler_instance_register(
-//         ESP_MODEM_EVENT, ESP_MODEM_EVENT_PPP_START,
-//         esp_netif_action_start, ppp_netif,
-//         &start_reg
-//    );
+    esp_event_handler_instance_t start_reg;
+    esp_event_handler_instance_register(
+         ESP_MODEM_EVENT, ESP_MODEM_EVENT_PPP_START,
+         esp_netif_action_start, ppp_netif,
+         &start_reg
+    );
 
     esp_netif_attach(ppp_netif, (void *)base_driver);
 

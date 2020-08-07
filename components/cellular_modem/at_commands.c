@@ -19,7 +19,7 @@ static int at_command_with_ack_and_lines(char * command, char * success_key, uin
                 return 0;
             }
         }else{
-            ESP_LOGI(TAG, "command [%s] timeout", command);
+            ESP_LOGW(TAG, "command [%s] timeout", command);
             return -2;
         }
     }
@@ -34,7 +34,7 @@ static int at_command_with_ok_ack(char * command, uint32_t timeout_ms){
 
 int at_command_at(void){
     ESP_LOGI(TAG, "running AT");
-    return at_command_with_ok_ack("AT", 400);
+    return at_command_with_ok_ack("AT", 600);
 }
 
 int at_command_echo_set(bool on){
@@ -49,6 +49,7 @@ static int at_command_two_line_response(char* command, char * result_buff, int b
                                        int first_timeout_ms, int second_timeout_ms){
     char at_buffer[LINE_BUFFER_SIZE];
 
+    ESP_LOGD(TAG, "Sending {%s}2", command);
     send_line(command);
 
     int name_result = await_line(at_buffer, pdMS_TO_TICKS(first_timeout_ms));
@@ -93,4 +94,61 @@ int at_command_pdp_define(void){
 
 int at_command_dial(void){
     return at_command_with_ack_and_lines("ATD*99***1#", "CONNECT", 300, 1);
+}
+
+int at_command_data_mode(void){
+    return at_command_with_ack_and_lines("ATO", "CONNECT 150000000", 300, 1);
+}
+
+int at_command_signal_strength(char *sysmode, int *rssi, int *rsrp, int *sinr, int *rsrq){
+    char buffer[LINE_BUFFER_SIZE];
+    int comms_result = at_command_two_line_response("AT+QCSQ", buffer, LINE_BUFFER_SIZE, 300, 300);
+    if(comms_result ==0){
+        ESP_LOGI(TAG, "Parsing signal strength: \"%s\"", buffer);
+        // result example: +QCSQ: "eMTC",-65,-85,168,-5
+
+        char *result_head = strtok(buffer, "\"");
+        char *sysmode_start = strtok(NULL, "\"");
+        if((result_head!=NULL) &&(sysmode_start!=NULL)){
+            strncpy(sysmode, sysmode_start, 10);
+            char *numbers_string = strtok(NULL, "\"");
+            ESP_LOGI(TAG, "splitting numbers [%s]", numbers_string);
+
+            int matches = sscanf(numbers_string, ",%d,%d,%d,%d", rssi, rsrp, sinr, rsrq);
+            if(matches==4){
+                ESP_LOGI(TAG, "matches %d. values: %d, %d, %d, %d", matches, *rssi, *rsrp, *sinr, *rsrq);
+                return 0;
+            }
+            ESP_LOGE(TAG, "Failed to match all values for signal strength [%d fund]", matches);
+            return -3;
+
+        }else{
+            ESP_LOGE(TAG, "failed parsing of signal strength response %p and %p", result_head, sysmode_start);
+            return -2;
+        }
+    }
+    ESP_LOGE(TAG, "failed signal strength command");
+    return -1;
+
+}
+
+int at_command_signal_quality(int *rssi, int *ber){
+    char buffer[LINE_BUFFER_SIZE];
+    int comms_result = at_command_two_line_response("AT+CSQ", buffer, LINE_BUFFER_SIZE, 300, 300);
+    if(comms_result ==0){
+        ESP_LOGI(TAG, "Parsing signal quality: \"%s\"", buffer);
+        // result example: +CSQ: 28,99
+
+        int matches = sscanf(buffer, "+CSQ: %d,%d", rssi, ber);
+            if(matches==2){
+                ESP_LOGI(TAG, "matches %d. values: %d, %d ", matches, *rssi, *ber);
+                return 0;
+            }
+            ESP_LOGW(TAG, "Parsing failed");
+            return -3;
+        
+    }
+    ESP_LOGE(TAG, "failed signal strength command");
+    return -1;
+
 }
