@@ -88,7 +88,7 @@ int at_command_get_operator(char *operator, int buff_len){
 }
 
 int at_command_pdp_define(void){
-    return at_command_with_ok_ack("AT+CGDCONT=1,\"IP\",\"MDATKS\"", 400);
+    return at_command_with_ok_ack("AT+CGDCONT=1,\"IP\",\"mdatks\"", 400);
 }
 
 
