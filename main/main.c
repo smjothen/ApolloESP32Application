@@ -296,7 +296,7 @@ void app_main(void)
 	//hook isr handler for specific gpio pin again
 	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 
-	//I2CDevicesInit();
+	I2CDevicesInit();
 
 
 	ESP_ERROR_CHECK( nvs_flash_init() );
@@ -416,7 +416,23 @@ void app_main(void)
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
     	counter++;
         loopCount++;
-		if(loopCount == 5)
+
+
+
+//        if(NFCGetTagInfo().tagIsValid == true)
+//        {
+//        	char NFCHexString[11];
+//        	int i = 0;
+//        	for (i = 0; i <= NFCGetTagInfo().idLength; i++)
+//        		sprintf(NFCHexString+i,"%X ", NFCGetTagInfo().id[i] );
+//
+//
+//        	publish_debug_telemetry_observation_NFC_tag_id(NFCHexString);
+//
+//        	NFCClearTag();
+//        }
+
+		if(loopCount == 60)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;

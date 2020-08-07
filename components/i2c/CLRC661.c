@@ -12,6 +12,7 @@
 #include "esp_console.h"
 #include "esp_log.h"
 #include "i2cInterface.h"
+#include "CLRC661.h"
 
 static const char *TAG = "cmd_i2ctools";
 
@@ -20,6 +21,9 @@ static const char *TAG = "cmd_i2ctools";
 static uint8_t slaveAddressNFC = 0x28;
 
 uint responseDelay = 10;
+bool validId = false;
+
+struct TagInfo tagInfo;
 
 int NFCInit()
 {
@@ -90,6 +94,17 @@ int NFCInit()
 }
 
 static unsigned int readCount = 0;
+
+struct TagInfo NFCGetTagInfo()
+{
+	return tagInfo;
+}
+
+
+void NFCClearTag()
+{
+	//memset(tagInfo, sizeof(struct TagInfo));
+}
 
 int NFCReadTag()
 {
@@ -315,6 +330,10 @@ int NFCReadTag()
 		uid[2] = message[2];
 		uid[3] = message[3];
 		printf("SINGLE UID: %02X %02X %02X %02X\n", uid[0], uid[1], uid[2], uid[3] );
+
+		//tagInfo.tagIsValid = true;
+		//tagInfo.idLength = 4;
+		//memcpy(tagInfo.id, uid, 4);
 	}
 	else if (uidLength == 7)
 	{
@@ -469,6 +488,8 @@ int NFCReadTag()
 		printf("%02X ", uid[i]);
 
 	printf("\n\n");
+
+	validId = true;
 
 	//vTaskDelay(3000 / portTICK_PERIOD_MS);
 

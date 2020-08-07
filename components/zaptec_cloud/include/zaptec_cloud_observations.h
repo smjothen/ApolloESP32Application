@@ -10,6 +10,8 @@ int publish_debug_telemetry_observation_power(
     double current_l1, double current_l2, double current_l3
 );
 
+int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
+
 int publish_debug_telemetry_observation_all(
 	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
 	double temperature_TM, double temperature_TM2,

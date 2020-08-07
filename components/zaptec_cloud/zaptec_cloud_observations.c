@@ -113,6 +113,19 @@ int publish_debug_telemetry_observation_power(
     return publish_json(observations);
 }
 
+
+int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
+{
+    ESP_LOGD(TAG, "sending charging telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(722, NFCHexString));
+
+    return publish_json(observations);
+}
+
+
 static uint32_t txCnt = 0;
 
 int publish_debug_telemetry_observation_all(
