@@ -11,6 +11,46 @@
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
+extern const uint8_t dspic_bin_start[] asm("_binary_dspic_bin_start");
+extern const uint8_t dspic_bin_end[] asm("_binary_dspic_bin_end");
+
+//from https://rosettacode.org/wiki/CRC-32#C
+uint32_t
+rc_crc32(uint32_t crc, const char *buf, size_t len)
+{
+	static uint32_t table[256];
+	static int have_table = 0;
+	uint32_t rem;
+	uint8_t octet;
+	int i, j;
+	const char *p, *q;
+ 
+	/* This check is not thread safe; there is no mutex. */
+	if (have_table == 0) {
+		/* Calculate CRC table. */
+		for (i = 0; i < 256; i++) {
+			rem = i;  /* remainder from polynomial division */
+			for (j = 0; j < 8; j++) {
+				if (rem & 1) {
+					rem >>= 1;
+					rem ^= 0xedb88320;
+				} else
+					rem >>= 1;
+			}
+			table[i] = rem;
+		}
+		have_table = 1;
+	}
+ 
+	crc = ~crc;
+	q = buf + len;
+	for (p = buf; p < q; p++) {
+		octet = *p;  /* Cast to unsigned octet. */
+		crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
+	}
+	return ~crc;
+}
+
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id) {
@@ -100,4 +140,8 @@ void start_ota_task(void){
         &ucParameterToPass, 5, &taskHandle
     );
     ESP_LOGD(TAG, "...");
+
+    int32_t dspic_len = dspic_bin_end - dspic_bin_start;
+    ESP_LOGD(TAG, "dsPIC binary is %d bytes", dspic_len);
+    ESP_LOGD(TAG, ">>>>dsPIC image crc32 is %d", rc_crc32(0,(const char *) dspic_bin_start, dspic_len));
 }

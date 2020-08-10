@@ -1,0 +1,2 @@
+bin files to be included in the build of images for the ESP32
+

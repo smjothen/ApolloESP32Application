@@ -39,7 +39,7 @@
 #include "driver/ledc.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
-// #define USE_CELLULAR_CONNECTION 1
+#define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -264,7 +264,7 @@ void PlaySound()
 
 void app_main(void){
 
-    ESP_LOGE(TAG, "start of app_main12 OTA9");
+    ESP_LOGE(TAG, "start of app_main14 OTA12");
 
 	gpio_config_t io_conf;
 	//disable interrupt
