@@ -8,4 +8,10 @@ float MCU_GetTemperature();
 float MCU_GetVoltages(uint8_t phase);
 float MCU_GetCurrents(uint8_t phase);
 
+float MCU_GetPower();
+float MCU_GetEnergy();
+
+uint8_t MCU_GetchargeMode();
+uint8_t MCU_GetChargeOperatingMode();
+
 #endif /* PROTOCOL_TASK_H */

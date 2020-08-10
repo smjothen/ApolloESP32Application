@@ -73,6 +73,8 @@ void configure_wifi(void){
     ESP_ERROR_CHECK(example_connect());
 }
 
+static int rssi2 = 0;
+
 void log_cellular_quality(void){
 	#ifndef USE_CELLULAR_CONNECTION
 	return;
@@ -93,7 +95,8 @@ void log_cellular_quality(void){
 	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
 	publish_diagnostics_observation(signal_string);
 
-	int rssi2; int ber;
+	//int rssi2;
+	int ber;
 	char quality_string[256];
 	at_command_signal_quality(&rssi2, &ber);
 	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssi2, ber);
@@ -465,7 +468,6 @@ void app_main(void)
 	log_cellular_quality();
     
 	uint32_t ledState = 0;
-	uint32_t loopCount = 0;
 
 	 //gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 
@@ -491,7 +493,12 @@ void app_main(void)
     float temperature = 0.0;
 
     uint32_t counter = 0;
-    uint32_t pulseCounter = 59;
+    uint32_t pulseCounter = 75;
+    uint32_t dataCounter = 0;
+    uint32_t dataInterval = 15;
+
+    uint32_t signalCounter = 0;
+    uint32_t signalInterval = 15;
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
@@ -509,8 +516,17 @@ void app_main(void)
 
         //gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
     	counter++;
-        loopCount++;
+    	dataCounter++;
 
+        if (counter > 600)
+        {
+        	if (MCU_GetCurrents(0) > 3.0)
+        		dataInterval = 60;
+        	else
+        		dataInterval = 600;
+
+        	signalInterval = 300;
+        }
 
 
 //        if(NFCGetTagInfo().tagIsValid == true)
@@ -526,13 +542,15 @@ void app_main(void)
 //        	NFCClearTag();
 //        }
 
-		if(loopCount == 15)
+		if(dataCounter == dataInterval)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
 			}
 			else
 				rssi = 0;
+
+			rssi = rssi2;
 
 			size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
@@ -555,7 +573,7 @@ void app_main(void)
 
 			//mqtt_disconnect();
 
-			loopCount = 0;
+			dataCounter = 0;
 
 		}
 //		if(loopCount == 10)
@@ -568,10 +586,26 @@ void app_main(void)
 //			loopCount = 0;
 //		}
 
-		pulseCounter++;
-		if(pulseCounter >= 10)
+		signalCounter++;
+		if(signalCounter >= signalInterval)
 		{
+			if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			{
+				log_task_info();
+				log_cellular_quality();
+			}
+
+			signalCounter = 0;
+		}
+
+		pulseCounter++;
+		if(pulseCounter >= 90)
+		{
+			if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			{
 			publish_cloud_pulse();
+			}
+
 			pulseCounter = 0;
 		}
 

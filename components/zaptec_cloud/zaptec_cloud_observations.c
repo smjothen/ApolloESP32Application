@@ -9,6 +9,8 @@
 //#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 
+#include "../zaptec_protocol/include/protocol_task.h"
+
 #define TAG "OBSERVATIONS POSTER"
 
 int publish_json(cJSON *payload){
@@ -62,6 +64,12 @@ cJSON *create_observation(int observation_id, char *value){
 cJSON *create_double_observation(int observation_id, double value){
     char value_string[32];
     sprintf(value_string, "%f", value);
+    return create_observation(observation_id, value_string);
+}
+
+cJSON *create_uint32_t_observation(int observation_id, uint32_t value){
+    char value_string[32];
+    sprintf(value_string, "%d", value);
     return create_observation(observation_id, value_string);
 }
 
@@ -168,6 +176,11 @@ int publish_debug_telemetry_observation_all(
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, current_l1));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
+
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
 

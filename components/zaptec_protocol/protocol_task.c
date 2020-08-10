@@ -135,6 +135,13 @@ volatile static float temperatureEmeter[3] = {0.0};
 volatile static float voltages[3] = {0.0};
 volatile static float currents[3] = {0.0};
 
+volatile static float totalChargePower = 0.0;
+volatile static float totalChargePowerSession = 0.0;
+
+volatile static uint8_t chargeMode = 0;
+volatile static uint8_t chargeOperationMode = 0;
+
+
 float GetFloat(uint8_t * input)
 {
 	float tmp = 0.0;
@@ -209,13 +216,28 @@ void uartCommsTask(void *pvParameters){
         	case 11:
 				txMsg.identifier = ParamCurrentPhase3;
 				break;
+
+        	case 12:
+				txMsg.identifier = ParamTotalChargePower;
+				break;
+        	case 13:
+				txMsg.identifier = ParamTotalChargePowerSession;
+				break;
+
+        	case 14:
+				txMsg.identifier = ParamChargeMode;
+				break;
+			case 15:
+				txMsg.identifier = ParamChargeOperationMode;
+				break;
+
         	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
         		continue;
         		break;*/
         }
 
-        if(count >= 12)
+        if(count >= 16)
         {
         	//ESP_LOGI(TAG, "count == 12");
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -271,9 +293,18 @@ void uartCommsTask(void *pvParameters){
         else if(rxMsg.identifier == ParamCurrentPhase2)
         	currents[1] = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamCurrentPhase3)
-        {
         	currents[2] = GetFloat(rxMsg.data);
-        	ESP_LOGW(TAG, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  Timeouts: %i", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], mcuCommunicationError);
+
+        else if(rxMsg.identifier == ParamTotalChargePower)
+        	totalChargePower = GetFloat(rxMsg.data);
+        else if(rxMsg.identifier == ParamTotalChargePowerSession)
+        	totalChargePowerSession = GetFloat(rxMsg.data);
+	    else if(rxMsg.identifier == ParamChargeMode)
+	    	chargeMode = rxMsg.data[0];
+	    else if(rxMsg.identifier == ParamChargeOperationMode)
+        {
+	    	chargeOperationMode = rxMsg.data[0];
+	    	ESP_LOGW(TAG, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError);
         }
 
         /*else if(rxMsg.type != 0)
@@ -313,6 +344,28 @@ float MCU_GetCurrents(uint8_t phase)
 {
 	return currents[phase];
 }
+
+
+float MCU_GetPower()
+{
+	return totalChargePower;
+}
+
+float MCU_GetEnergy()
+{
+	return totalChargePowerSession;
+}
+
+uint8_t MCU_GetchargeMode()
+{
+	return chargeMode;
+}
+
+uint8_t MCU_GetChargeOperatingMode()
+{
+	return chargeOperationMode;
+}
+
 
 void configureUart(){
     int tx_pin = GPIO_NUM_26;
