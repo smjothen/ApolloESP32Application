@@ -10,10 +10,9 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-//#define DEVICE_ID "ZAP000002"
-const char device_id[] = "ZAP000002";
+const char device_id[] = "ZAP000005";
+//const char device_id[] = "ZAP000008";
 #define DEVICE_ID device_id
-//#define DEVICE_ID "ZAP000002"
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
@@ -28,6 +27,8 @@ const char device_id[] = "ZAP000002";
 				   (routingId != null && routingId.Length > 0 ? "&ri=" + Uri.EscapeDataString(routingId) : "")
 					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
 				   : "");*/
+int resetCounter = 0;
+
 const char event_topic[128];
 
 const char cert[] =
@@ -105,6 +106,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             NULL, 0, 1, 0
         );
 
+        resetCounter = 0;
+
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -137,7 +140,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         break;
     case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+    	resetCounter++;
+
+    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
+
+        if(resetCounter == 10)
+        {
+        	esp_restart();
+        }
+
         break;
     default:
         ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);

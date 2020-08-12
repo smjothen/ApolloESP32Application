@@ -39,14 +39,18 @@ int create_sas_token(int ttl_s, char * token_out){
     //temp dummy values
     unsigned char key[] = {97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,0};
     //char signed_key[] = "ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=";
-    char signed_key[] = "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=";
+    //char signed_key[] = "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=";//2
+    char signed_key[] = "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=";//5
+    //char signed_key[] = "Tg/RQZ5DIf2tDqMe0XUkLFiRtwLaPpn4P7O5d179pLg=";//7
+    //char signed_key[] = "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=";//8
 
     memcpy(key, signed_key, sizeof(key));
 
     time_t UnixTimeStamp = 1592397520;
     time(&UnixTimeStamp);
     //char *uniqueId = "ZAP000001";
-    char *uniqueId = "ZAP000002";
+    char *uniqueId = "ZAP000005";
+    //char *uniqueId = "ZAP000008";
 
 	ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
 	size_t key_len = sizeof(key)-1; //Key length -1 end of line char

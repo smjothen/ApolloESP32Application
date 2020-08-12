@@ -41,7 +41,7 @@
 #include "esp_wifi.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
-#define USE_CELLULAR_CONNECTION 1
+//#define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -53,7 +53,7 @@
 static void obtain_time(void);
 static void initialize_sntp(void);
 
-char softwareVersion[] = "ZAP 0.0.0.1 0";
+char softwareVersion[] = "ZAP 0.0.0.1 EMC-4G";
 static const char *TAG = "MAIN     ";
 
 void time_sync_notification_cb(struct timeval *tv)
@@ -253,17 +253,7 @@ void PlaySound()
 	 *         then frequency and bit_num of these channels
 	 *         will be the same
 	 */
-//	ledc_channel_config_t ledc_channel = {
-//		{
-//			.channel    = LEDC_CHANNEL_0,
-//			.duty       = 0,
-//			.gpio_num   = 2,
-//			.speed_mode = LEDC_HIGH_SPEED_MODE,
-//			.hpoint     = 0,
-//			.timer_sel  = LEDC_TIMER_0
-//		},
-//
-//	};
+
 
 	ledc_channel_config_t ledc_channel = {
 
@@ -276,11 +266,8 @@ void PlaySound()
 
 	};
 
-
-
 	ledc_channel_config(&ledc_channel);
 
-	bool swap = false;
 	uint32_t duty = 0;
 
 	duty = 4000;
@@ -288,7 +275,7 @@ void PlaySound()
 	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
 
 
-	while (1) {
+	//while (1) {
 
 		duty = 4000;
 		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
@@ -303,12 +290,82 @@ void PlaySound()
 		ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 1500);
 		vTaskDelay(200 / portTICK_PERIOD_MS);
 
-		duty = 8191;
+		duty = 0;
 		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
 		ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
 
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
-	}
+		//vTaskDelay(1000 / portTICK_PERIOD_MS);
+	//}
+}
+
+
+void PlaySoundShort()
+{
+	/*
+	 * Prepare and set configuration of timers
+	 * that will be used by LED Controller
+	 */
+	ledc_timer_config_t ledc_timer = {
+		.duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+		.freq_hz = 1000,                      // frequency of PWM signal
+		.speed_mode = LEDC_HIGH_SPEED_MODE,           // timer mode
+		.timer_num = LEDC_TIMER_0,            // timer index
+		.clk_cfg = LEDC_AUTO_CLK,              // Auto select the source clock
+	};
+	// Set configuration of timer0 for high speed channels
+	ledc_timer_config(&ledc_timer);
+
+
+	/*
+	 * Prepare individual configuration
+	 * for each channel of LED Controller
+	 * by selecting:
+	 * - controller's channel number
+	 * - output duty cycle, set initially to 0
+	 * - GPIO number where LED is connected to
+	 * - speed mode, either high or low
+	 * - timer servicing selected channel
+	 *   Note: if different channels use one timer,
+	 *         then frequency and bit_num of these channels
+	 *         will be the same
+	 */
+
+
+	ledc_channel_config_t ledc_channel = {
+
+		.gpio_num   = 2,
+		.speed_mode = LEDC_HIGH_SPEED_MODE,
+		.channel    = LEDC_CHANNEL_0,
+		.duty       = 0,
+		.hpoint     = 0,
+		.timer_sel  = LEDC_TIMER_0
+
+	};
+
+	ledc_channel_config(&ledc_channel);
+
+	uint32_t duty = 0;
+
+	duty = 4000;
+	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+
+	//while (1) {
+
+		duty = 4000;
+		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+		ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+		ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 10000);//500
+		vTaskDelay(50 / portTICK_PERIOD_MS);
+
+		duty = 0;
+		ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+		ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+		//vTaskDelay(5000 / portTICK_PERIOD_MS);
+	//}
 }
 
 #define GPIO_INPUT_nHALL_FX    4
@@ -416,11 +473,12 @@ void app_main(void)
     //vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     //Start4G();
-    // PlaySound();
+    //PlaySound();
+    //PlaySoundShort();
 
     //mbus_init();
     //register_i2ctools();
-
+	I2CDevicesInit();
     zaptecProtocolStart();
     // init_mcu();
 
@@ -493,9 +551,13 @@ void app_main(void)
     float temperature = 0.0;
 
     uint32_t counter = 0;
-    uint32_t pulseCounter = 75;
-    uint32_t dataCounter = 0;
-    uint32_t dataInterval = 15;
+    uint32_t pulseCounter = 30;
+
+    uint32_t dataCounter = 50;
+    uint32_t dataInterval = 60;
+
+    uint32_t statusCounter = 0;
+    uint32_t statusInterval = 10;
 
     uint32_t signalCounter = 0;
     uint32_t signalInterval = 15;
@@ -518,15 +580,15 @@ void app_main(void)
     	counter++;
     	dataCounter++;
 
-        if (counter > 600)
-        {
-        	if (MCU_GetCurrents(0) > 3.0)
-        		dataInterval = 60;
-        	else
-        		dataInterval = 600;
-
-        	signalInterval = 300;
-        }
+//        if (counter > 600)
+//        {
+//        	if (MCU_GetchargeMode() != 12)
+//        		dataInterval = 60;
+//        	else
+//        		dataInterval = 600;
+//
+//        	signalInterval = 300;
+//        }
 
 
 //        if(NFCGetTagInfo().tagIsValid == true)
@@ -542,7 +604,7 @@ void app_main(void)
 //        	NFCClearTag();
 //        }
 
-		if(dataCounter == dataInterval)
+		if(dataCounter >= dataInterval)
 		{
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
@@ -550,11 +612,12 @@ void app_main(void)
 			else
 				rssi = 0;
 
+		#ifdef USE_CELLULAR_CONNECTION
 			rssi = rssi2;
-
+		#endif
 			size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm  Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), rssi, free_heap_size_start, (free_heap_size_start-free_heap_size));
+			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm  Heaps: %i %i DataInterval: %d", counter, softwareVersion, esp_reset_reason(), rssi, free_heap_size_start, (free_heap_size_start-free_heap_size), dataInterval);
 
 			//mqtt_reconnect();
 
@@ -586,6 +649,7 @@ void app_main(void)
 //			loopCount = 0;
 //		}
 
+	#ifdef USE_CELLULAR_CONNECTION
 		signalCounter++;
 		if(signalCounter >= signalInterval)
 		{
@@ -597,16 +661,37 @@ void app_main(void)
 
 			signalCounter = 0;
 		}
+	#endif
 
 		pulseCounter++;
-		if(pulseCounter >= 90)
+		if(pulseCounter >= 60)
 		{
 			if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			{
-			publish_cloud_pulse();
+				publish_cloud_pulse();
 			}
 
 			pulseCounter = 0;
+		}
+
+
+		statusCounter++;
+		if(statusCounter >= statusInterval)
+		{
+
+			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
+				rssi = wifidata.rssi;
+			}
+			else
+				rssi = 0;
+
+			//rssi = rssi2;
+
+			size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
+			ESP_LOGE(TAG, "# %d:  %s , rst: %d, %d dBm  Heaps: %i %i DataInterval: %d", counter, softwareVersion, esp_reset_reason(), rssi, free_heap_size_start, (free_heap_size_start-free_heap_size), dataInterval);
+
+			statusCounter = 0;
 		}
 
     }
@@ -634,7 +719,7 @@ static void obtain_time(void)
     struct tm timeinfo = { 0 };
 
     int retry = 0;
-    const int retry_count = 20;
+    const int retry_count = 60;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d), status: %d", retry, retry_count, sntp_get_sync_status());
         vTaskDelay(2000 / portTICK_PERIOD_MS);

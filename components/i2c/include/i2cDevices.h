@@ -15,6 +15,8 @@ extern "C" {
 
 //void register_i2ctools(void);
 void I2CDevicesInit();
+float I2CGetSHT30Temperature();
+float I2CGetSHT30Humidity();
 //esp_err_t i2c_master_write_slave(uint8_t slave_addr, uint8_t *data_wr, size_t size);
 //esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t size);
 

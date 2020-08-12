@@ -23,6 +23,18 @@
 
 static const char *TAG = "I2C-DEVICES";
 
+static float temperature = 0.0;
+static float humidity = 0.0;
+
+float I2CGetSHT30Temperature()
+{
+	return temperature;
+}
+
+float I2CGetSHT30Humidity()
+{
+	return humidity;
+}
 
 static void i2cDevice_task(void *pvParameters)
 {
@@ -41,8 +53,6 @@ static void i2cDevice_task(void *pvParameters)
 	EEPROM_Read();
 
 
-	float temperature = 0.0;
-	float humidity = 0.0;
 	int i2cCount = 0;
 
 	while (true)

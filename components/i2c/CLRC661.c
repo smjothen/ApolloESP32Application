@@ -1,13 +1,5 @@
-/* cmd_i2ctools.c
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
-//#include "argtable3/argtable3.h"
 #include "driver/i2c.h"
 #include "esp_console.h"
 #include "esp_log.h"
@@ -103,7 +95,7 @@ struct TagInfo NFCGetTagInfo()
 
 void NFCClearTag()
 {
-	//memset(tagInfo, sizeof(struct TagInfo));
+	//memset(tagInfo, sizeof(struct TagInfo), 0);
 }
 
 int NFCReadTag()
@@ -331,8 +323,8 @@ int NFCReadTag()
 		uid[3] = message[3];
 		printf("SINGLE UID: %02X %02X %02X %02X\n", uid[0], uid[1], uid[2], uid[3] );
 
-		//tagInfo.tagIsValid = true;
-		//tagInfo.idLength = 4;
+		tagInfo.tagIsValid = true;
+		tagInfo.idLength = 4;
 		//memcpy(tagInfo.id, uid, 4);
 	}
 	else if (uidLength == 7)
