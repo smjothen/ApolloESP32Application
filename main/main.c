@@ -264,7 +264,7 @@ void PlaySound()
 
 void app_main(void){
 
-    ESP_LOGE(TAG, "start of app_main14 OTA12");
+    ESP_LOGE(TAG, "start of app_main17d");
 
 	gpio_config_t io_conf;
 	//disable interrupt

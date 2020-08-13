@@ -15,4 +15,6 @@ int at_command_data_mode(void);
 int at_command_signal_strength(char *sysmode, int *rssi, int *rsrp, int *sinr, int *rsrq);
 int at_command_signal_quality(int *rssi, int *ber);
 
+int at_command_flow_ctrl_enable(void);
+
 #endif /* AT_COMMANDS_H */

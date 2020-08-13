@@ -152,3 +152,7 @@ int at_command_signal_quality(int *rssi, int *ber){
     return -1;
 
 }
+
+int at_command_flow_ctrl_enable(void){
+    return at_command_with_ok_ack("AT+IFC=2,2", 600);
+}

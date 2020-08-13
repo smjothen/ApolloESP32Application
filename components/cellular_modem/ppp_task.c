@@ -20,13 +20,14 @@ static const char *TAG = "PPP_TASK";
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-#define CELLULAR_RX_SIZE 1024
+#define CELLULAR_RX_SIZE 256 * 4 * 3
+#define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
 #define CELLULAR_TX_SIZE 1024
-#define CELLULAR_QUEUE_SIZE 50
+#define CELLULAR_QUEUE_SIZE 40
 #define ECHO_TEST_TXD1  (GPIO_NUM_17)
 #define ECHO_TEST_RXD1  (GPIO_NUM_16)
-#define ECHO_TEST_RTS1  (UART_PIN_NO_CHANGE)
-#define ECHO_TEST_CTS1  (UART_PIN_NO_CHANGE)
+#define ECHO_TEST_RTS1  (GPIO_NUM_32)
+#define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
@@ -103,7 +104,9 @@ static void configure_uart(void){
         .data_bits = UART_DATA_8_BITS,
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+        // .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+        .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
+        .rx_flow_ctrl_thresh = 120,
     };
     uart_param_config(UART_NUM_1, &uart_config);
     uart_set_pin(UART_NUM_1, ECHO_TEST_TXD1, ECHO_TEST_RXD1, ECHO_TEST_RTS1, ECHO_TEST_CTS1);
@@ -168,7 +171,7 @@ void clear_lines(void){
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     if(xEventGroupGetBits(event_group) & UART_TO_PPP){
-        ESP_LOGI(TAG, "passing uart data to ppp driver");
+        // ESP_LOGI(TAG, "passing uart data to ppp driver");
         esp_netif_receive(ppp_netif, event_data, size, NULL);
     }else if(xEventGroupGetBits(event_group) & UART_TO_LINES){
         update_line_buffer(event_data, size);
@@ -202,7 +205,7 @@ static void uart_event_task(void *pvParameters)
                     break;
                 //Event of HW FIFO overflow detected
                 case UART_FIFO_OVF:
-                    ESP_LOGI(TAG, "hw fifo overflow");
+                    ESP_LOGE(TAG, "hw fifo overflow");
                     // If fifo overflow happened, you should consider adding flow control for your application.
                     // The ISR has already reset the rx FIFO,
                     // As an example, we directly flush the rx buffer here in order to read more data.
@@ -211,7 +214,7 @@ static void uart_event_task(void *pvParameters)
                     break;
                 //Event of UART ring buffer full
                 case UART_BUFFER_FULL:
-                    ESP_LOGW(TAG, "ring buffer full");
+                    ESP_LOGE(TAG, "ring buffer full");
                     // If buffer full happened, you should consider encreasing your buffer size
                     // As an example, we directly flush the rx buffer here in order to read more data.
                     uart_flush_input(UART_NUM_1);
@@ -219,11 +222,11 @@ static void uart_event_task(void *pvParameters)
                     break;
                 //Event of UART RX break detected
                 case UART_BREAK:
-                    ESP_LOGI(TAG, "uart rx break");
+                    ESP_LOGE(TAG, "uart rx break");
                     break;
                 //Event of UART parity check error
                 case UART_PARITY_ERR:
-                    ESP_LOGI(TAG, "uart parity error");
+                    ESP_LOGE(TAG, "uart parity error");
                     break;
                 //Event of UART frame error
                 case UART_FRAME_ERR:
@@ -268,6 +271,10 @@ int configure_modem_for_ppp(void){
         vTaskDelay(pdMS_TO_TICKS(20000));
     }
     at_command_echo_set(false);
+
+    if(at_command_flow_ctrl_enable()<0){
+        ESP_LOGE(TAG, "Failed to enable flow control on cellular UART");
+    }
 
     char name[20];
     at_command_get_model_name(name, 20);
@@ -418,7 +425,7 @@ void ppp_task_start(void){
     hard_reset_cellular();
     configure_uart();
     ESP_LOGI(TAG, "uart configured");
-    xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 5, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 7, NULL);
 
     configure_modem_for_ppp(); // TODO rename
 
