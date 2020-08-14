@@ -42,7 +42,7 @@
 #include "sessionHandler.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
-#define USE_CELLULAR_CONNECTION 1
+//#define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE

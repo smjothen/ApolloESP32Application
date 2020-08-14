@@ -109,10 +109,10 @@ int NFCReadTag()
 	//{
 	readCount++;
 
-	if(readCount % 10 == 0)
+	/*if(readCount % 10 == 0)
 	{
 		printf("%d Ready...\n\n", readCount);
-	}
+	}*/
 
 
 
