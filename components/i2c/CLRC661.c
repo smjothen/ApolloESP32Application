@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "i2cInterface.h"
 #include "CLRC661.h"
+#include <string.h>
 
 static const char *TAG = "cmd_i2ctools";
 
@@ -95,7 +96,7 @@ struct TagInfo NFCGetTagInfo()
 
 void NFCClearTag()
 {
-	//memset(tagInfo, sizeof(struct TagInfo), 0);
+	memset(&tagInfo, 0, sizeof(struct TagInfo));
 }
 
 int NFCReadTag()
@@ -325,7 +326,7 @@ int NFCReadTag()
 
 		tagInfo.tagIsValid = true;
 		tagInfo.idLength = 4;
-		//memcpy(tagInfo.id, uid, 4);
+		memcpy(tagInfo.id, uid, tagInfo.idLength);
 	}
 	else if (uidLength == 7)
 	{
@@ -480,6 +481,10 @@ int NFCReadTag()
 		printf("%02X ", uid[i]);
 
 	printf("\n\n");
+
+	tagInfo.tagIsValid = true;
+	tagInfo.idLength = 7;
+	memcpy(tagInfo.id, uid, tagInfo.idLength);
 
 	validId = true;
 

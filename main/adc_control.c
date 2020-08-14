@@ -130,7 +130,7 @@ static void adc_task()
 
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
 		ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6, adc_reading3, voltage3);
-		vTaskDelay(pdMS_TO_TICKS(10000));
+		vTaskDelay(pdMS_TO_TICKS(5000));
 	}
 
 }
@@ -152,4 +152,5 @@ void adc_init(){
 #endif
 
 	xTaskCreate(adc_task, "adc_task", 4096, NULL, 3, NULL);
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
