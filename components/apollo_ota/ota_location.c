@@ -10,6 +10,8 @@
 #define MAX_HTTP_RECV_BUFFER 512
 #define MAX_HTTP_OUTPUT_BUFFER 2048
 
+extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     static char *output_buffer;  // Buffer to store response of http request from event handler
@@ -92,6 +94,7 @@ int get_image_location(char * location, int buffersize){
         .query = "esp",
         .event_handler = _http_event_handler,
         .user_data = local_response_buffer,
+        .cert_pem = (char *)server_cert_pem_start,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);

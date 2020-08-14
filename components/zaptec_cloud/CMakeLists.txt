@@ -9,4 +9,4 @@ idf_component_register(SRCS
                       "wpa_supplicant/sha256.c"
                       "wpa_supplicant/common.c"
                   INCLUDE_DIRS "./include" "./include/wpa_supplicant"
-                  REQUIRES json mqtt)    
+                  REQUIRES json mqtt apollo_ota)    

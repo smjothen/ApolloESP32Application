@@ -4,6 +4,7 @@
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 #include <string.h>
+#include "freertos/event_groups.h"
 
 #include "apollo_ota.h"
 #include "ota_location.h"
@@ -15,6 +16,9 @@ extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 extern const uint8_t dspic_bin_start[] asm("_binary_dspic_bin_start");
 extern const uint8_t dspic_bin_end[] asm("_binary_dspic_bin_end");
+
+static EventGroupHandle_t event_group;
+static const int OTA_UNBLOCKED = BIT0;
 
 //from https://rosettacode.org/wiki/CRC-32#C
 uint32_t
@@ -95,6 +99,8 @@ static void ota_task(void *pvParameters){
 
     while (true)
     {
+        ESP_LOGI(TAG, "waiting for ota event");
+        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
 
         get_image_location(image_location,sizeof(image_location));
@@ -142,6 +148,9 @@ void start_ota_task(void){
     // esp_log_level_set("esp_ota_ops", ESP_LOG_DEBUG);
     // esp_log_level_set("MQTT_CLIENT", ESP_LOG_INFO);
 
+    event_group = xEventGroupCreate();
+    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+    
     validate_booted_image();
 
     static uint8_t ucParameterToPass = {0};
@@ -156,4 +165,9 @@ void start_ota_task(void){
     int32_t dspic_len = dspic_bin_end - dspic_bin_start;
     ESP_LOGD(TAG, "dsPIC binary is %d bytes", dspic_len);
     ESP_LOGD(TAG, ">>>>dsPIC image crc32 is %d", rc_crc32(0,(const char *) dspic_bin_start, dspic_len));
+}
+
+int start_ota(void){
+    xEventGroupSetBits(event_group, OTA_UNBLOCKED);
+    return 0;
 }
