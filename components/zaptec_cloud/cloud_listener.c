@@ -10,10 +10,11 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-const char device_id[] = "ZAP000005";
+//const char device_id[15];
+//const char device_id[] = "ZAP000005";
 //const char device_id[] = "ZAP000007";
 //const char device_id[] = "ZAP000008";
-#define DEVICE_ID device_id
+//#define DEVICE_ID device_id
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
@@ -31,6 +32,8 @@ const char device_id[] = "ZAP000005";
 int resetCounter = 0;
 
 const char event_topic[128];
+
+static struct DeviceInfo cloudDeviceInfo;
 
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
@@ -61,7 +64,7 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60, &token);
+    create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, &token);
 	//create_sas_token(1*3600, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
@@ -93,7 +96,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
         char devicebound_topic[128];
-        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", DEVICE_ID);
+        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
         esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
@@ -159,18 +162,21 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 }
 
 
-void start_cloud_listener_task(void){
-    ESP_LOGI(TAG, "Connecting to IotHub");
+void start_cloud_listener_task(struct DeviceInfo deviceInfo){
+
+	cloudDeviceInfo = deviceInfo;
+
+	ESP_LOGI(TAG, "Connecting to IotHub");
 
     static char broker_url[128] = {0};
     sprintf(broker_url, "mqtts://%s", MQTT_HOST);
 
     static char username[128];
-    sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, DEVICE_ID);
+    sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
     sprintf(
         event_topic, MQTT_EVENT_PATTERN,
-        DEVICE_ID
+		cloudDeviceInfo.serialNumber
     );
 
     ESP_LOGI(TAG,
@@ -181,7 +187,7 @@ void start_cloud_listener_task(void){
         " > client id: %s\r\n"
         " > cert_pem len: %d\r\n"
         " > cert_pem: %s\r\n",
-        broker_url, MQTT_PORT, username, DEVICE_ID,
+        broker_url, MQTT_PORT, username, cloudDeviceInfo.serialNumber,
         strlen(cert), cert
     );
 
@@ -189,7 +195,7 @@ void start_cloud_listener_task(void){
     mqtt_config.event_handle = mqtt_event_handler;
     mqtt_config.port = MQTT_PORT;
     mqtt_config.username = username;
-    mqtt_config.client_id = DEVICE_ID;
+    mqtt_config.client_id = cloudDeviceInfo.serialNumber;
     mqtt_config.cert_pem = cert;
 
     mqtt_config.lwt_qos = 1;

@@ -6,7 +6,7 @@
 #include "esp_log.h"
 #include "i2cInterface.h"
 #include "EEPROM.h"
-
+#include <string.h>
 //static const char *TAG = "EEPROM   ";
 
 //EEPROM-CAT24C04
@@ -17,7 +17,7 @@ esp_err_t EEPROM_Read()
 {
 	uint8_t readBytes[16] = {0};
 
-	uint8_t readAddr = 0;
+	uint16_t readAddr = 0;
 	esp_err_t err = ESP_OK;
 	for (uint8_t line = 0; line <= 31; line++)
 	{
@@ -48,7 +48,7 @@ esp_err_t EEPROM_Write()
 	uint8_t writeBytes[16] = {0};
 
 	//WRITE
-	uint8_t startAddr = 0;
+	uint16_t startAddr = 0;
 	//uint8_t writeLine[16] = {0};
 	uint8_t valueIncrementor = 0;
 	//uint8_t line = 0;
@@ -97,6 +97,106 @@ esp_err_t EEPROM_Write()
 	}*/
 
 	return 0;
+}
+
+#define EEPROM_FORMAT_VERSON       0 // 1 byte  ->  0]
+#define EEPROM_ADDR_SERIAL_NUMBER 16 //10 bytes -> 25]
+#define EEPROM_ADDR_PSK_1_3 	  32 //16 bytes -> 47]
+#define EEPROM_ADDR_PSK_2_3 	  48 //16 bytes -> 63]
+#define EEPROM_ADDR_PSK_3_3 	  64 //13 bytes -> 76]
+#define EEPROM_ADDR_PIN 		  80 // 5 bytes -> 84]
+
+esp_err_t EEPROM_ReadFormatVersion(uint8_t formatVersionToRead)
+{
+	esp_err_t err = i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_FORMAT_VERSON, &formatVersionToRead, 1);
+	return err;
+}
+
+int EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite)
+{
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_FORMAT_VERSON, &formatVersionToWrite, 1);
+
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+
+	volatile uint8_t formatVersionToRead = 0;
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_FORMAT_VERSON, &formatVersionToRead, 1);
+
+	if(formatVersionToWrite == formatVersionToRead)
+		return 1;
+	else
+		return -1;
+}
+
+
+
+esp_err_t EEPROM_ReadSerialNumber(char * serianNumberToRead)
+{
+	esp_err_t err = i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_SERIAL_NUMBER, (uint8_t*)serianNumberToRead, 10);
+	return err;
+}
+
+int EEPROM_WriteSerialNumber(char * serialNumberToWrite)
+{
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_SERIAL_NUMBER, (uint8_t*)serialNumberToWrite, 10);
+
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+
+	volatile char serialNumberToRead[10] = {0};
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_SERIAL_NUMBER, (uint8_t*)serialNumberToRead, 10);
+	volatile int cmp = strcmp(serialNumberToWrite, serialNumberToRead);
+
+	return cmp;
+}
+
+
+
+esp_err_t EEPROM_ReadPSK(char * PSKToRead)
+{
+	esp_err_t err = i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_1_3, (uint8_t*)PSKToRead, 16);
+	err += i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_2_3, (uint8_t*)&PSKToRead[16], 16);
+	err += i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_3_3, (uint8_t*)&PSKToRead[32], 13);
+	return err;
+}
+
+int EEPROM_WritePSK(char * PSKToWrite)
+{
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_1_3, (uint8_t*)PSKToWrite, 16);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	volatile char PSKToRead[45] = {0};
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_1_3, (uint8_t*)PSKToRead, 16);
+
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_2_3, (uint8_t*)&PSKToWrite[16], 16);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_2_3, (uint8_t*)&PSKToRead[16], 16);
+
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_3_3, (uint8_t*)&PSKToWrite[32], 13);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	//volatile char PSKToRead[16] = {0};
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PSK_3_3, (uint8_t*)&PSKToRead[32], 13);
+
+	volatile int cmp = strcmp(PSKToWrite, PSKToRead);
+
+	return cmp;
+}
+
+
+esp_err_t EEPROM_ReadPin(char * pinToRead)
+{
+	esp_err_t err = i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PIN, (uint8_t*)pinToRead, 5);
+	return err;
+}
+
+int EEPROM_WritePin(char * pinToWrite)
+{
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PIN, (uint8_t*)pinToWrite, 5);
+
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+
+	char pinToRead[10] = {0};
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_ADDR_PIN, (uint8_t*)pinToRead, 5);
+	volatile int cmp = strcmp(pinToWrite, pinToRead);
+
+	return cmp;
 }
 
 
@@ -148,7 +248,7 @@ void EEPROM_WriteFullTest()
 //	    		if(line == 2)
 //	    			writeBytes[lineByte]=33;
 		}
-		i2c_master_write_slave_at_address(I2C_NUM_0, startAddr, (uint8_t*)&writeBytes, 16);
+		i2c_master_write_slave_at_address(slaveAddressEEPROM, startAddr, (uint8_t*)&writeBytes, 16);
 		startAddr += 16;
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 		printf("Wrote line #%d\n", line);
@@ -163,7 +263,7 @@ void EEPROM_WriteFullTest()
 		for (uint8_t line = 0; line <= 31; line++)
 		{
 			printf("#%02d:   ", line);
-			i2c_master_read_slave_at_address(I2C_NUM_0, readAddr, readBytes, 16);
+			i2c_master_read_slave_at_address(slaveAddressEEPROM, readAddr, readBytes, 16);
 			for (int i = 0; i <= 15; i++)
 			{
 				printf(" %03d", readBytes[i]);
@@ -180,4 +280,24 @@ void EEPROM_WriteFullTest()
 
 	}
 
+}
+
+
+
+void EEPROM_Erase()
+{
+	uint8_t writeBytes[16];
+	memset(writeBytes, 0xFF, 16);
+
+	uint16_t startAddr = 0;
+
+	for (uint8_t line = 0; line <= 31; line++)
+	{
+		i2c_master_write_slave_at_address(slaveAddressEEPROM, startAddr, (uint8_t*)writeBytes, 16);
+		startAddr += 16;
+		vTaskDelay(100 / portTICK_PERIOD_MS);
+		printf("Wrote line #%d\n", line);
+	}
+
+	printf("\n");
 }

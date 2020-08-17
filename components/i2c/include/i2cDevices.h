@@ -13,8 +13,12 @@
 extern "C" {
 #endif
 
-//void register_i2ctools(void);
+#include "../../main/DeviceInfo.h"
+
+struct DeviceInfo i2cGetSerialNumber();
 void I2CDevicesInit();
+
+
 float I2CGetSHT30Temperature();
 float I2CGetSHT30Humidity();
 //esp_err_t i2c_master_write_slave(uint8_t slave_addr, uint8_t *data_wr, size_t size);

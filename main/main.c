@@ -38,6 +38,7 @@
 #include "driver/ledc.h"
 //#include "connect.h"
 #include "i2cDevices.h"
+#include "DeviceInfo.h"
 
 #include "sessionHandler.h"
 
@@ -393,8 +394,9 @@ void app_main(void)
     //PlaySound();
     //PlaySoundShort();
 
-
+	//Read device ID from EEPROM
 	I2CDevicesInit();
+
     zaptecProtocolStart();
     // init_mcu();
 
@@ -418,7 +420,10 @@ void app_main(void)
 
 	obtain_time();
 
-	start_cloud_listener_task();
+	volatile struct DeviceInfo devInfo;
+	i2cGetSerialNumber();
+	devInfo = i2cGetSerialNumber();
+	start_cloud_listener_task(devInfo);
 
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
     

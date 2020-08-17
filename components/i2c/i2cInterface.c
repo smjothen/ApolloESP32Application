@@ -91,12 +91,15 @@ esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t siz
 }
 
 
-esp_err_t i2c_master_write_slave_at_address(uint8_t slave_addr, uint8_t wr_reg, uint8_t *data_wr, size_t size)
+esp_err_t i2c_master_write_slave_at_address(uint8_t slave_addr, uint16_t wr_reg, uint8_t *data_wr, size_t size)
 {
+	uint8_t highAddrBit = (uint8_t)(wr_reg >> 8);
+	uint8_t lowAddrByte = (uint8_t)(wr_reg & 0xff);
+
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, wr_reg, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, (slave_addr << 1) | (highAddrBit << 1) | WRITE_BIT, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, lowAddrByte, ACK_CHECK_EN);
     i2c_master_write(cmd, data_wr, size, ACK_CHECK_EN);
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 1000 / portTICK_RATE_MS);
@@ -105,15 +108,19 @@ esp_err_t i2c_master_write_slave_at_address(uint8_t slave_addr, uint8_t wr_reg, 
 }
 
 
-esp_err_t i2c_master_read_slave_at_address(uint8_t slave_addr, uint8_t rd_reg, uint8_t *data_rd, size_t size)
+esp_err_t i2c_master_read_slave_at_address(uint8_t slave_addr, uint16_t rd_reg, uint8_t *data_rd, size_t size)
 {
     if (size == 0) {
         return ESP_OK;
     }
+
+    uint8_t highAddrBit = (uint8_t)(rd_reg >> 8);
+    uint8_t lowAddrByte = (uint8_t)(rd_reg & 0xff);
+
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, rd_reg, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, (slave_addr << 1) | (highAddrBit << 1)| WRITE_BIT, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, lowAddrByte, ACK_CHECK_EN);
     //i2c_master_stop(cmd);
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (slave_addr << 1) | READ_BIT, ACK_CHECK_EN);

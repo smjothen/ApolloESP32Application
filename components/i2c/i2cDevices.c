@@ -26,6 +26,8 @@
 //#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/audio/include/audioBuzzer.h"
 
 #include "driver/ledc.h"
+#include <string.h>
+#include "i2cDevices.h"
 
 static const char *TAG = "I2C-DEVICES";
 
@@ -37,6 +39,14 @@ static float humidity = 0.0;
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   (2)
 static ledc_channel_config_t ledc_channel;
+
+
+struct DeviceInfo deviceInfo;
+
+struct DeviceInfo i2cGetSerialNumber()
+{
+	return deviceInfo;
+}
 
 
 float I2CGetSHT30Temperature()
@@ -136,7 +146,55 @@ static void i2cDevice_task(void *pvParameters)
 	NFCInit();
 
 	RTCWriteTime(writeTime);
+
+	//EEPROM_Erase();
+
 	EEPROM_Read();
+
+	uint8_t formatVersion = 1;
+	char * serialNumber = "ZAP000005";
+	char * psk = "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=";
+	char * pin = "4284";
+
+
+	uint8_t correctFormatVersion = 1;
+	uint8_t readFormatVersion = 0;
+
+	EEPROM_ReadFormatVersion(readFormatVersion);
+	if(readFormatVersion == correctFormatVersion)
+	{
+		ESP_LOGI(TAG, "EEPROM format version %d", readFormatVersion);
+	}
+	else
+	{
+		ESP_LOGI(TAG, "No format on EEPROM!!! %d", readFormatVersion);
+
+		EEPROM_WriteFormatVersion(formatVersion);
+	}
+
+
+	EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
+	int len = strlen(deviceInfo.serialNumber);
+
+	//Check for valid serial number
+	if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+	{
+		ESP_LOGI(TAG, "Serial number: %s", deviceInfo.serialNumber);
+
+		EEPROM_ReadPSK(deviceInfo.PSK);
+		ESP_LOGI(TAG, "PSK:           %s", deviceInfo.PSK);
+
+		EEPROM_ReadPin(deviceInfo.Pin);
+		ESP_LOGI(TAG, "PIN:           %s", deviceInfo.Pin);
+	}
+	//Write serial number
+	else
+	{
+		EEPROM_WriteSerialNumber(serialNumber);
+		EEPROM_WritePSK(psk);
+		EEPROM_WritePin(pin);
+		EEPROM_Read();
+	}
 
 
 	int i2cCount = 0;
@@ -166,7 +224,7 @@ static void i2cDevice_task(void *pvParameters)
 			//strftime(timebuf, sizeof(timebuf), "%c", &readTime);
 			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
 
-			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+			//ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
 
 			//EEPROM_Write();
 			//EEPROM_Read();
