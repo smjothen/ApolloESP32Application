@@ -7,6 +7,13 @@
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
 
+#include "esp_transport_ssl.h"
+//#include "mqtt_outbox.h"
+//#include "mqtt_supported_features.h"
+
+//#include "../components/mqtt/esp-mqtt/lib/include/mqtt_msg.h"
+#include "../lib/include/mqtt_msg.h"
+
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
@@ -29,9 +36,13 @@
 				   (routingId != null && routingId.Length > 0 ? "&ri=" + Uri.EscapeDataString(routingId) : "")
 					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
 				   : "");*/
+
+bool doNewAck = false;
+
 int resetCounter = 0;
 
 const char event_topic[128];
+const char event_topic_hold[128];
 
 static struct DeviceInfo cloudDeviceInfo;
 
@@ -64,7 +75,7 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, &token);
+    create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
@@ -87,10 +98,35 @@ int publish_iothub_event(const char *payload){
     return -2;
 }
 
+
+int publish_iothub_ack(const char *payload){
+
+	//if(doNewAck == false)
+		return 0;
+
+    if(mqtt_client == NULL){
+        return -1;
+    }
+
+    //mqtt_msg_puback(&mqtt_client->mqtt_state.mqtt_connection, msg_id);
+
+   /* int message_id = esp_mqtt_client_publish(
+            mqtt_client, event_topic_hold,
+            payload, 0, 0, 0
+    );*/
+
+    doNewAck = false;
+
+//    if(message_id>0){
+//        return 0;
+//    }
+    return -2;
+}
+
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
-    int msg_id;
+
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
@@ -105,10 +141,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
         // request twin data
-        esp_mqtt_client_publish(
-            mqtt_client, "$iothub/twin/GET/?$rid=1",
-            NULL, 0, 1, 0
-        );
+//        esp_mqtt_client_publish(
+//            mqtt_client, "$iothub/twin/GET/?$rid=1",
+//            NULL, 0, 1, 0
+//        );
 
         resetCounter = 0;
 
@@ -129,8 +165,39 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
+        printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
+        printf("rDATA=%.*s\r\n", event->data_len, event->data);
+
+
+
+        if(strstr(event->topic, "iothub/twin/res/200/"))
+        {
+
+        	//TOPIC=$iothub/twin/res/200/?$rid=
+        	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
+
+        	//publish_debug_telemetry_observation_cloud_settings();
+        	//esp_mqtt_client_publish(mqtt_client, event->topic, NULL, 0, 0, 0);
+        	//ESP_LOGD(TAG, "RESPONDED?");
+        }
+
+        if(strstr(event->topic, "iothub/methods/POST/300/"))
+        {
+        	//memcpy(event_topic_hold, event->topic, 128);
+        	//strcpy(event_topic_hold,"$iothub/methods/res/?$rid=1");
+        	//doNewAck = true;
+        	//publish_iothub_ack("", event->topic);
+
+        	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
+        	//publish_debug_telemetry_observation_local_settings();
+        }
+
+
+        if(strstr(event->topic, "iothub/methods/POST/102/"))
+        {
+
+        }
+
         // ESP_LOGD(TAG, "publishing %s", payloadstring);
         // if(mqtt_count<3){
         //     msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
@@ -185,10 +252,10 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
         " > port: %d\r\n"
         " > username: %s\r\n"
         " > client id: %s\r\n"
-        " > cert_pem len: %d\r\n"
-        " > cert_pem: %s\r\n",
+        " > cert_pem len: %d\r\n",
+        //" > cert_pem: %s\r\n",
         broker_url, MQTT_PORT, username, cloudDeviceInfo.serialNumber,
-        strlen(cert), cert
+        strlen(cert)//, cert
     );
 
     mqtt_config.uri = broker_url;
@@ -203,7 +270,10 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     static char *lwt = "{\"EventType\":30,\"Message\":\"mqtt connection broke[lwt]\",\"Type\":5}";
     mqtt_config.lwt_msg = lwt;
 
-    esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
+    mqtt_config.disable_auto_reconnect = false;
+    mqtt_config.reconnect_timeout_ms = 10000;
+
+    mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
     esp_mqtt_client_start(mqtt_client);
 }

@@ -1,11 +1,3 @@
-/* cmd_i2ctools.h
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 
 #pragma once
 
@@ -13,16 +5,17 @@
 extern "C" {
 #endif
 
+#include "esp_err.h"
 #include "../../main/DeviceInfo.h"
 
 struct DeviceInfo i2cGetSerialNumber();
 void I2CDevicesInit();
-
+void I2CDevicesStartTask();
+esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);
+struct DeviceInfo i2cReadDeviceInfoFromEEPROM();
 
 float I2CGetSHT30Temperature();
 float I2CGetSHT30Humidity();
-//esp_err_t i2c_master_write_slave(uint8_t slave_addr, uint8_t *data_wr, size_t size);
-//esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t size);
 
 #ifdef __cplusplus
 }

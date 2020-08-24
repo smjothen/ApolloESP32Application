@@ -184,7 +184,6 @@ static void on_uart_data(uint8_t* event_data,size_t size){
 static void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
-    size_t buffered_size;
     uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
     for(;;) {
         //Waiting for UART event.

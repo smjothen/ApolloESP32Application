@@ -33,7 +33,7 @@
 
 #include "ocpp_task.h"
 //#include "CLRC661.h"
-#include "uart1.h"
+
 #include "adc_control.h"
 #include "driver/ledc.h"
 //#include "connect.h"
@@ -41,6 +41,8 @@
 #include "DeviceInfo.h"
 
 #include "sessionHandler.h"
+#include "production_test.h"
+#include "EEPROM.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
 //#define USE_CELLULAR_CONNECTION 1
@@ -129,10 +131,6 @@ void Start4G()
 	io_conf.pull_up_en = 0;
 	//configure GPIO with the given settings
 	gpio_config(&io_conf);
-
-	uint32_t ledState = 0;
-	uint32_t loopCount = 0;
-
 
 	gpio_set_level(GPIO_OUTPUT_RESET, 1);
 	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
@@ -420,10 +418,48 @@ void app_main(void)
 
 	obtain_time();
 
+
+//#define WriteThisDeviceInfo
+//#define Erase
+
+#ifdef Erase
+	EEPROM_Erase();
+#endif
+
+#ifdef WriteThisDeviceInfo
+	volatile struct DeviceInfo writeDevInfo;
+	writeDevInfo.EEPROMFormatVersion = 1;
+//	strcpy(writeDevInfo.serialNumber, "ZAP000002");
+//	strcpy(writeDevInfo.PSK, "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=");
+//	strcpy(writeDevInfo.Pin, "0625");
+
+	strcpy(writeDevInfo.serialNumber, "ZAP000005");
+	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
+	strcpy(writeDevInfo.Pin, "4284");
+
+	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
+#endif
+
 	volatile struct DeviceInfo devInfo;
-	i2cGetSerialNumber();
-	devInfo = i2cGetSerialNumber();
+	devInfo = i2cReadDeviceInfoFromEEPROM();
+	if(devInfo.EEPROMFormatVersion == 0xFF)
+	{
+		//Invalid EEPROM content
+		prodtest_getNewId();
+
+		devInfo = i2cReadDeviceInfoFromEEPROM();
+	}
+	else if(devInfo.EEPROMFormatVersion == 0x0)
+	{
+		ESP_LOGE(TAG, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
+
+		vTaskDelay(3000 / portTICK_PERIOD_MS);
+	}
+
+	I2CDevicesStartTask();
+
 	start_cloud_listener_task(devInfo);
+
 
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
     
@@ -452,7 +488,7 @@ void app_main(void)
 
     	ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size));
 
-    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+    	vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
 }
 

@@ -10,6 +10,7 @@
 #include "zaptec_cloud_observations.h"
 #include "connect.h"
 #include "protocol_task.h"
+#include "zaptec_cloud_listener.h"
 
 
 #define NO_OF_SAMPLES   1//10          
@@ -109,9 +110,10 @@ static void sessionHandler_task()
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 10;
 
-    uint32_t signalCounter = 0;
     uint32_t signalInterval = 120;
+
 #ifdef USE_CELLULAR_CONNECTION
+    uint32_t signalCounter = 0;
     log_task_info();
     log_cellular_quality();
 #endif
@@ -121,6 +123,8 @@ static void sessionHandler_task()
 
 	while (1) {
 
+		//publish_ack();
+		publish_iothub_ack(" ");
 
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
 		if(authorizationRequired == true)
@@ -229,7 +233,7 @@ static void sessionHandler_task()
 
 			//rssi = rssi2;
 
-			size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+			//size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
 			ESP_LOGI(TAG,"  %d dBm  DataInterval: %d", rssi, dataInterval);
 

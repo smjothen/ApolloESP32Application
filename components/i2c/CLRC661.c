@@ -7,7 +7,7 @@
 #include "CLRC661.h"
 #include <string.h>
 
-static const char *TAG = "cmd_i2ctools";
+//static const char *TAG = "NFC     ";
 
 //static uint8_t slaveAddressNFC = 0x2A;
 //static uint8_t slaveAddressNFC = 0x2B;
@@ -24,13 +24,9 @@ int NFCInit()
     uint8_t reg = 0x7F;
     i2c_master_write_slave(slaveAddressNFC, &reg, 1);
 
-    volatile uint8_t message[5] = {0};
-    //volatile uint8_t uid[10] = {0};
-    //uint8_t uidLength = 0;
+    uint8_t message[5] = {0};
+
     i2c_master_read_slave(slaveAddressNFC, message, 1);
-
-    //uint responseDelay = 100;
-
 
     message[0] = 0x08; //IRQ0En
 	message[1] = 0x84;//0x84;//0x8C;//08;	//8=TxIRQEn
@@ -101,32 +97,16 @@ void NFCClearTag()
 
 int NFCReadTag()
 {
-    volatile uint8_t message[5] = {0};
-    volatile uint8_t uid[10] = {0};
+    uint8_t message[5] = {0};
+    uint8_t uid[10] = {0};
     uint8_t uidLength = 0;
 
-    //while(true)
-	//{
 	readCount++;
 
 	/*if(readCount % 10 == 0)
 	{
 		printf("%d Ready...\n\n", readCount);
 	}*/
-
-
-
-//		regNr = 0x06;
-//		i2c_master_write_slave(slaveAddressNFC, &regNr, 1);
-//		i2c_master_read_slave(slaveAddressNFC, message, 1);
-//		printf("Bef reg 0x%02X: 0x%02X\n",  regNr, message[0]);
-//
-//		regNr = 0x07;
-//		i2c_master_write_slave(slaveAddressNFC, &regNr, 1);
-//		i2c_master_read_slave(slaveAddressNFC, message, 1);
-//		printf("Bef reg 0x%02X: 0x%02X\n",  regNr, message[0]);
-
-
 
 	//7 **
 	message[0] = 0x06;  //IRQ0
@@ -197,17 +177,13 @@ int NFCReadTag()
 //		printf("1 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
 
 
-	bool cardDetected = false;
-
 	uint8_t regNr = 0x06;
 	i2c_master_write_slave(slaveAddressNFC, &regNr, 1);
 	i2c_master_read_slave(slaveAddressNFC, message, 1);
 	//printf("1 reg 0x%02X: 0x%02X\n",  regNr, message[0]);
 
 	//Check if RxIRQ bit is set in IRQ0 register
-	if(message[0] & (1<<2))
-		cardDetected = true;
-	else
+	if(!(message[0] & (1<<2)))
 		return 0;
 
 	printf("Card detected!\n");

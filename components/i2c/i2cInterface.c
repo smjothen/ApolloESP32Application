@@ -23,7 +23,7 @@
 #define ACK_VAL 0x0                 /*!< I2C ack value */
 #define NACK_VAL 0x1                /*!< I2C nack value */
 
-static const char *TAG = "I2C-INTERFACE";
+//static const char *TAG = "I2C-INTERFACE";
 
 static gpio_num_t i2c_gpio_sda = 19;
 static gpio_num_t i2c_gpio_scl = 18;
@@ -114,8 +114,8 @@ esp_err_t i2c_master_read_slave_at_address(uint8_t slave_addr, uint16_t rd_reg, 
         return ESP_OK;
     }
 
-    uint8_t highAddrBit = (uint8_t)(rd_reg >> 8);
-    uint8_t lowAddrByte = (uint8_t)(rd_reg & 0xff);
+    volatile uint8_t highAddrBit = (uint8_t)(rd_reg >> 8);
+    volatile uint8_t lowAddrByte = (uint8_t)(rd_reg & 0xff);
 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);

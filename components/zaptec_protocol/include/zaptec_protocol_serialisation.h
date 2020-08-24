@@ -25,10 +25,17 @@
         ParamTestDataPilotA = 105,
         ParamTestDataPilotC = 106,
         ParamTestDataPilotF = 107,
-                
+
+		AuthenticationRequired = 120,
+
         ParamLinuxStatus = 125,
 
-		ParamHwConfigFunctionalRelay = 150,
+		// Local settings
+		CommunicationMode  = 150,
+		PermanentCableLock = 151,
+		ProductCode = 152,
+		HmiBrightness = 153,
+		LockCableWhenConnected = 154,
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,
@@ -65,12 +72,15 @@
         ParamPowerFactor = 518,
         ParamSetPhases = 519,
         
-        ParamRcdCurrentMean = 520,
+		MaxPhases = 520,
+		ChargerOfflinePhase = 522,
+		ChargerOfflineCurrent = 523,
+        /*ParamRcdCurrentMean = 520,
         ParamRcdCurrentPeak = 521,
         ParamRcdCurrentRms = 522,
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
-        ParamRcdCalibrationNoise = 525,
+        ParamRcdCalibrationNoise = 525,*/
                 
         ParamRelayState = 530,
         ParamSoftStartDuration = 531,

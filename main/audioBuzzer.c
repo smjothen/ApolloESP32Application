@@ -10,7 +10,7 @@
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   (2)
 
-static const char *TAG = "AUDIO     ";
+//static const char *TAG = "AUDIO     ";
 
 static ledc_channel_config_t ledc_channel;
 

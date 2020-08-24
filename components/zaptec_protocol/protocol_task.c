@@ -94,7 +94,7 @@ void uartRecvTask(void *pvParameters){
             if(event.type != UART_DATA){continue;}
 
             if(uxSemaphoreGetCount(uart_write_lock)==1){
-                ESP_LOGE(TAG, "got uart data without outstanding request");
+                //ESP_LOGE(TAG, "got uart data without outstanding request");
                 continue;
             }
 

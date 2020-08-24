@@ -135,6 +135,38 @@ int publish_debug_telemetry_observation_power(
 }
 
 
+int publish_debug_telemetry_observation_cloud_settings(
+){
+    ESP_LOGD(TAG, "sending cloud settings");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
+    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+
+    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_local_settings(
+){
+    ESP_LOGD(TAG, "sending local settings");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, 4));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflineCurrent, 10));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, 1));
+
+    return publish_json(observations);
+}
+
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
 {
     ESP_LOGD(TAG, "sending charging telemetry");

@@ -29,6 +29,9 @@
 #define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
 #define CONFIG_EXAMPLE_WIFI_PASSWORD "Ilovezaptec"
 
+//#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
+
 //#define CONFIG_EXAMPLE_WIFI_SSID "Zaptec Garage ⚡️"
 //#define CONFIG_EXAMPLE_WIFI_PASSWORD "ZaptecSmart2017"
 

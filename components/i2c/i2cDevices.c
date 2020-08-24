@@ -29,7 +29,8 @@
 #include <string.h>
 #include "i2cDevices.h"
 
-static const char *TAG = "I2C-DEVICES";
+//static const char *TAG = "I2C-DEVICES";
+static const char *TAG_EEPROM = "EEPROM STATUS";
 
 static float temperature = 0.0;
 static float humidity = 0.0;
@@ -41,7 +42,12 @@ static float humidity = 0.0;
 static ledc_channel_config_t ledc_channel;
 
 
-struct DeviceInfo deviceInfo;
+static struct DeviceInfo deviceInfo;
+
+void I2CDevicesInit()
+{
+	do_i2cdetect_cmd();
+}
 
 struct DeviceInfo i2cGetSerialNumber()
 {
@@ -128,13 +134,120 @@ void audio_play_nfc_card_accepted_debug()
 }
 
 
-static void i2cDevice_task(void *pvParameters)
+
+esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo)
 {
 
-	do_i2cdetect_cmd();
+	//Write serial number
+	esp_err_t err = ESP_FAIL;
+	int count = 3;
+	while ((err != ESP_OK) && (count > 0))
+	{
+		err = EEPROM_WriteSerialNumber(newDeviceInfo.serialNumber);
+		count--;
+	}
+	if(count == 0)
+	{
+		ESP_LOGE(TAG_EEPROM, "Could not write serialNumber to EEPROM: %s", deviceInfo.serialNumber);
+		return ESP_FAIL;
+	}
+
+	err = ESP_FAIL;
+	count = 3;
+	while ((err != ESP_OK) && (count > 0))
+	{
+		err = EEPROM_WritePSK(newDeviceInfo.PSK);
+		count--;
+	}
+	if(count == 0)
+	{
+		ESP_LOGE(TAG_EEPROM, "Could not write PSK to EEPROM: %s", deviceInfo.serialNumber);
+		return ESP_FAIL;
+	}
+
+	err = ESP_FAIL;
+	count = 3;
+	while ((err != ESP_OK) && (count > 0))
+	{
+		err = EEPROM_WritePin(newDeviceInfo.Pin);
+		count--;
+	}
+	if(count == 0)
+	{
+		ESP_LOGE(TAG_EEPROM, "Could not write PSK to EEPROM: %s", deviceInfo.serialNumber);
+		return ESP_FAIL;
+	}
+
+	//Write this last to indicate valid EEPROM content
+	err = ESP_FAIL;
+	count = 3;
+	while ((err != ESP_OK) && (count > 0))
+	{
+		err = EEPROM_WriteFormatVersion(newDeviceInfo.EEPROMFormatVersion);
+		count--;
+	}
+	if(count == 0)
+	{
+		ESP_LOGE(TAG_EEPROM, "Could not write PSK to EEPROM: %s", deviceInfo.serialNumber);
+		return ESP_FAIL;
+	}
+
+	//Display full EEPROM content
+	EEPROM_Read();
+
+	return ESP_OK;
+}
+
+
+struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
+{
+	//Display full EEPROM content
+	EEPROM_Read();
+
+	EEPROM_ReadFormatVersion(&deviceInfo.EEPROMFormatVersion);
+	if(deviceInfo.EEPROMFormatVersion == GetEEPROMFormatVersion())
+	{
+		printf("\n********************************\n\n");
+			ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
+
+		EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
+		int len = strlen(deviceInfo.serialNumber);
+
+		//Check for valid serial number
+		if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+		{
+			ESP_LOGI(TAG_EEPROM, "Serial number: %s", deviceInfo.serialNumber);
+
+			EEPROM_ReadPSK(deviceInfo.PSK);
+			ESP_LOGI(TAG_EEPROM, "PSK:           %s", deviceInfo.PSK);
+
+			EEPROM_ReadPin(deviceInfo.Pin);
+			ESP_LOGI(TAG_EEPROM, "PIN:           %s", deviceInfo.Pin);
+
+			printf("\n********************************\n\n");
+		}
+		else
+		{
+			ESP_LOGE(TAG_EEPROM, "No valid serial number on EEPROM: %s", deviceInfo.serialNumber);
+		}
+
+	}
+	else
+	{
+		ESP_LOGI(TAG_EEPROM, "No format on EEPROM!!! %d", deviceInfo.EEPROMFormatVersion);
+		//Must perform factory onboarding
+	}
+
+	return deviceInfo;
+}
+
+
+static void i2cDevice_task(void *pvParameters)
+{
+	//do_i2cdetect_cmd();
+
+
 	SHT30Init();
-
-
 
 	struct tm writeTime = {0};
 	strptime("2020-06-29 11:10:01", "%Y-%m-%d %H:%M:%S", &writeTime);
@@ -146,55 +259,6 @@ static void i2cDevice_task(void *pvParameters)
 	NFCInit();
 
 	RTCWriteTime(writeTime);
-
-	//EEPROM_Erase();
-
-	EEPROM_Read();
-
-	uint8_t formatVersion = 1;
-	char * serialNumber = "ZAP000005";
-	char * psk = "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=";
-	char * pin = "4284";
-
-
-	uint8_t correctFormatVersion = 1;
-	uint8_t readFormatVersion = 0;
-
-	EEPROM_ReadFormatVersion(readFormatVersion);
-	if(readFormatVersion == correctFormatVersion)
-	{
-		ESP_LOGI(TAG, "EEPROM format version %d", readFormatVersion);
-	}
-	else
-	{
-		ESP_LOGI(TAG, "No format on EEPROM!!! %d", readFormatVersion);
-
-		EEPROM_WriteFormatVersion(formatVersion);
-	}
-
-
-	EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
-	int len = strlen(deviceInfo.serialNumber);
-
-	//Check for valid serial number
-	if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
-	{
-		ESP_LOGI(TAG, "Serial number: %s", deviceInfo.serialNumber);
-
-		EEPROM_ReadPSK(deviceInfo.PSK);
-		ESP_LOGI(TAG, "PSK:           %s", deviceInfo.PSK);
-
-		EEPROM_ReadPin(deviceInfo.Pin);
-		ESP_LOGI(TAG, "PIN:           %s", deviceInfo.Pin);
-	}
-	//Write serial number
-	else
-	{
-		EEPROM_WriteSerialNumber(serialNumber);
-		EEPROM_WritePSK(psk);
-		EEPROM_WritePin(pin);
-		EEPROM_Read();
-	}
 
 
 	int i2cCount = 0;
@@ -234,7 +298,8 @@ static void i2cDevice_task(void *pvParameters)
 	}
 }
 
-void I2CDevicesInit()
+
+void I2CDevicesStartTask()
 {
 	static uint8_t ucParameterToPass = {0};
 	TaskHandle_t taskHandle = NULL;
