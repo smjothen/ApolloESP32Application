@@ -3,6 +3,7 @@
 #include "time.h"
 #include <sys/time.h>
 #include "stdio.h"
+#include "esp_system.h"
 
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
@@ -91,29 +92,21 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
     return 0;
 }
 
-int publish_debug_telemetry_observation(
+/*int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter, double rssi
 ){
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
-    add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
-    add_observation_to_collection(observations, create_observation(808, "debugstring1"));
 
-    /*add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
-    add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
-    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));
-
-    add_observation_to_collection(observations, create_double_observation(507, current_l1));
-    add_observation_to_collection(observations, create_double_observation(508, current_l2));
-    add_observation_to_collection(observations, create_double_observation(509, current_l2));*/
+    //add_observation_to_collection(observations, create_observation(808, "debugstring1"));
 
     add_observation_to_collection(observations, create_double_observation(201, temperature_5));
     add_observation_to_collection(observations, create_double_observation(809, rssi));
     //add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
 
     return publish_json(observations);
-}
+}*/
 
 int publish_debug_telemetry_observation_power(
     double voltage_l1, double voltage_l2, double voltage_l3,
@@ -169,11 +162,25 @@ int publish_debug_telemetry_observation_local_settings(
 
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
 {
-    ESP_LOGD(TAG, "sending charging telemetry");
+    ESP_LOGD(TAG, "sending NFC telemetry");
 
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(722, NFCHexString));
+
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_StartUpParameters()
+{
+    ESP_LOGD(TAG, "sending startup telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, softwareVersion));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource,  0));
+    add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
 
     return publish_json(observations);
 }
@@ -191,8 +198,6 @@ int publish_debug_telemetry_observation_all(
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
-
-    add_observation_to_collection(observations, create_observation(911, "0.0.0.1"));
 
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));

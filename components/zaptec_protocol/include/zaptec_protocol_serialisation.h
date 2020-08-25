@@ -31,6 +31,10 @@
         ParamLinuxStatus = 125,
 
 		// Local settings
+
+		TransmitInterval = 145,
+		TransmitChangeLevel = 146,
+
 		CommunicationMode  = 150,
 		PermanentCableLock = 151,
 		ProductCode = 152,
@@ -130,6 +134,8 @@
         ParamResetSource = 811,
         ParamRxErrors = 812,
         ParamPacketErrors = 813,
+        ESPToMcuPacketErrors = 814,
+		ESPResetSource = 815,
         //..
 
 		ParamSmartMainboardAppSwVersion = 908,

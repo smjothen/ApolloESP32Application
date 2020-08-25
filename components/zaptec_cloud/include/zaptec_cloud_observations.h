@@ -16,6 +16,8 @@ int publish_debug_telemetry_observation_local_settings();
 
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
 
+int publish_debug_telemetry_observation_StartUpParameters();
+
 int publish_debug_telemetry_observation_all(
 	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
 	double temperature_TM, double temperature_TM2,

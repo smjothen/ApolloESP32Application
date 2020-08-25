@@ -11,7 +11,7 @@
 #include "connect.h"
 #include "protocol_task.h"
 #include "zaptec_cloud_listener.h"
-
+#include "DeviceInfo.h"
 
 #define NO_OF_SAMPLES   1//10          
 
@@ -119,17 +119,18 @@ static void sessionHandler_task()
 #endif
 
 
+    //Send at startup
+    publish_debug_telemetry_observation_StartUpParameters();
 
 
 	while (1) {
 
 		//publish_ack();
-		publish_iothub_ack(" ");
+		//publish_iothub_ack(" ");
 
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
 		if(authorizationRequired == true)
 		{
-
 
 			if(NFCGetTagInfo().tagIsValid == true)
 			{

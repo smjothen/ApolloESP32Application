@@ -8,8 +8,9 @@ set(COMPONENT_SRCS "main.c"
 				   "sessionHandler.c"
 				   "audioBuzzer.c"
 				   "production_test.c"
+				   "storage.c"
 				   )
-#set(COMPONENT_SRCS "uart.c")
+
 set(COMPONENT_ADD_INCLUDEDIRS "")
 
 register_component()

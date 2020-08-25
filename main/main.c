@@ -43,6 +43,7 @@
 #include "sessionHandler.h"
 #include "production_test.h"
 #include "EEPROM.h"
+#include "storage.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
 //#define USE_CELLULAR_CONNECTION 1
@@ -57,7 +58,7 @@
 static void obtain_time(void);
 static void initialize_sntp(void);
 
-char softwareVersion[] = "ZAP 0.0.0.1";
+//char softwareVersion[] = "ZAP 0.0.0.1";
 static const char *TAG = "MAIN     ";
 
 void time_sync_notification_cb(struct timeval *tv)
@@ -388,7 +389,35 @@ void app_main(void)
 	gpio_config(&output_conf);
     
 
+//	struct Configuration
+//	{
+//		bool dataStructureIsInitialized;
+//		uint32_t transmitInterval;
+//		float transmitChangeLevel;
+//
+//		uint32_t communicationMode;
+//		float HmiBrightness;
+//		uint32_t maxPhases;
+//	};
 
+//	struct Configuration configurationFile;
+//	configurationFile.dataStructureIsInitialized = true;
+//	configurationFile.transmitInterval = 60;
+//	configurationFile.transmitChangeLevel = 1.0;
+//	configurationFile.communicationMode = 0;
+//	configurationFile.HmiBrightness = 0.50;
+//	configurationFile.maxPhases = 3;
+//
+	storage_Init();
+	storage_Init_Configuration();
+	esp_err_t err = storage_SaveConfiguration();
+//
+//
+//	volatile struct Configuration configurationFileRead;
+//	volatile size_t readLength = sizeof(configurationFileRead);
+	err = storage_ReadConfiguration();
+//
+//	readLength = readLength;
     //PlaySound();
     //PlaySoundShort();
 
@@ -396,7 +425,8 @@ void app_main(void)
 	I2CDevicesInit();
 
     zaptecProtocolStart();
-    // init_mcu();
+
+
 
     //ocpp_task_start();
     
@@ -484,11 +514,15 @@ void app_main(void)
 
     	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    	if(counter % 10 == 0)
+    	{
+    		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    	ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size));
+    		ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size));
 
-    	vTaskDelay(10000 / portTICK_PERIOD_MS);
+    	}
+
+    	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 
