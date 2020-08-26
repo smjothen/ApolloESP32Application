@@ -9,6 +9,10 @@
 #include "apollo_ota.h"
 #include "ota_location.h"
 
+#include "zaptec_protocol_serialisation.h"
+#include "protocol_task.h"
+#include "mcu_communication.h"
+
 #define TAG "OTA"
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
@@ -141,6 +145,50 @@ void validate_booted_image(void){
     }
 }
 
+
+#define COMMAND_NACK        0x00
+#define COMMAND_ACK         0x01
+#define COMMAND_READ_PM     0x02
+#define COMMAND_WRITE_PM    0x03
+#define COMMAND_WRITE_CM    0x07
+#define COMMAND_START_APP   0x08
+#define COMMAND_START_BL    0x18
+#define COMMAND_READ_ID     0x09
+#define COMMAND_APP_CRC     0x0A
+
+void ensure_dspic_updated(void){
+    ESP_LOGI(TAG, "checking dsPIC FW version");
+    while (true)
+    {
+    
+        ESP_LOGI(TAG, "creating zap message");
+        ZapMessage txMsg;
+
+        // ZEncodeMessageHeader* does not check the length of the buffer!
+        // This should not be a problem for most usages, but make sure strings are within a range that fits!
+        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+        
+        txMsg.type = MsgFirmware;
+        txMsg.identifier = ParamRunTest;
+
+        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+            &txMsg, COMMAND_START_APP, txBuf, encodedTxBuf
+        );
+
+        ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
+        
+        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+        printf("frame type: %d \n\r", rxMsg.type);
+        printf("frame identifier: %d \n\r", rxMsg.identifier);
+        printf("frame timeId: %d \n\r", rxMsg.timeId);
+
+        // uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+        // printf("frame error code: %d\n\r", error_code);
+        freeZapMessageReply();
+        }
+}
+
 void start_ota_task(void){
     ESP_LOGI(TAG, "starting ota task");
     esp_log_level_set("HTTP_CLIENT", ESP_LOG_INFO);
@@ -151,6 +199,7 @@ void start_ota_task(void){
     event_group = xEventGroupCreate();
     xEventGroupClearBits(event_group,OTA_UNBLOCKED);
     
+    ensure_dspic_updated();
     validate_booted_image();
 
     static uint8_t ucParameterToPass = {0};

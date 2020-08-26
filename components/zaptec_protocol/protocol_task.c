@@ -31,12 +31,12 @@ void zaptecProtocolStart(){
     TaskHandle_t taskHandle = NULL;
     int stack_size = 4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 5, &uartRecvTaskHandle );
-    xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
+    //xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
     configASSERT(uartRecvTaskHandle);
-    configASSERT( taskHandle );
-    if( taskHandle == NULL ){
-        ESP_LOGE(TAG, "failed to start task");
-    }
+    // configASSERT( taskHandle );
+    // if( taskHandle == NULL ){
+    //     ESP_LOGE(TAG, "failed to start task");
+    // }
     
 }
 
@@ -48,6 +48,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
         uart_flush(uart_num);
         xQueueReset(uart_recv_message_queue);
 
+        ESP_LOGI(TAG, "sending %d bytes to dsPIC", length);
         uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 
         ZapMessage rxMsg;
@@ -154,8 +155,8 @@ void uartCommsTask(void *pvParameters){
 }
 
 void configureUart(){
-    int tx_pin = GPIO_NUM_17;
-    int rx_pin = GPIO_NUM_16;
+    int tx_pin = GPIO_NUM_26;
+    int rx_pin = GPIO_NUM_25;
 
     uart_config_t uart_config = {
         .baud_rate = 115200,

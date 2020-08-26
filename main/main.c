@@ -297,7 +297,7 @@ void app_main(void){
     //mbus_init();
     //register_i2ctools();
 
-    //zaptecProtocolStart();
+    zaptecProtocolStart();
     // init_mcu();
 
     //ocpp_task_start();
