@@ -8,10 +8,9 @@
 #include "zaptec_cloud_observations.h"
 
 #include "esp_transport_ssl.h"
-//#include "mqtt_outbox.h"
-//#include "mqtt_supported_features.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/protocol_task.h"
 
-//#include "../components/mqtt/esp-mqtt/lib/include/mqtt_msg.h"
 #include "../lib/include/mqtt_msg.h"
 
 #define TAG "Cloud Listener"
@@ -99,30 +98,62 @@ int publish_iothub_event(const char *payload){
 }
 
 
-int publish_iothub_ack(const char *payload){
 
-	//if(doNewAck == false)
-		return 0;
+void ParseParameterFromCloud(char * message, int message_len)
+{
+	if ((message[0] != '[') || (message[message_len-1] != ']'))
+		return;
 
-    if(mqtt_client == NULL){
-        return -1;
-    }
+	char recvString[message_len];
+	strncpy(recvString, message+1, message_len-2);
+	recvString[message_len-2] = '\0';
 
-    //mqtt_msg_puback(&mqtt_client->mqtt_state.mqtt_connection, msg_id);
+	char const separator[2] = ",";
+	char * stringPart;
 
-   /* int message_id = esp_mqtt_client_publish(
-            mqtt_client, event_topic_hold,
-            payload, 0, 0, 0
-    );*/
+	stringPart = strtok(recvString, separator);
+	if(stringPart != NULL)
+	{
+		ESP_LOGI(TAG, "Str: %s \n", stringPart);
+		if(strstr(stringPart, "Device_Parameters") != NULL)
+		{
+			stringPart = strtok(NULL, separator);
+			ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
-    doNewAck = false;
+			if(strstr(stringPart, "hmi_brightness") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				volatile float hmiBrightness = atof(stringPart+1);
+				ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
+				MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+			}
+			else if(strstr(stringPart, "network_type") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				//volatile float hmiBrightness = atof(stringPart+1);
+				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+			}
+		}
+	}
+	//while(stringPart != NULL)
+	//{
+		//ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
-//    if(message_id>0){
-//        return 0;
-//    }
-    return -2;
+		//stringPart = strtok(NULL, separator);
+	//}
 }
 
+
+
+
+static int ridNr = 4199;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
@@ -141,10 +172,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
         // request twin data
-//        esp_mqtt_client_publish(
-//            mqtt_client, "$iothub/twin/GET/?$rid=1",
-//            NULL, 0, 1, 0
-//        );
+        ridNr++;
+        char devicetwin_topic[64];
+        sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
+        esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
 
         resetCounter = 0;
 
@@ -173,6 +204,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
 
+        	//char devicetwin_topic[64];
+
+			//volatile char ridString[event->topic_len];
+
+			//strncpy(ridString, event->topic, event->topic_len);
+			//volatile char * ridSubString = strstr(ridString, "$rid=");
+			//char *strPart;
+			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
+			//sprintf(devicetwin_topic, "$iothub/twin/res/200/?rid=%d", ridNr);//ridSubString);
+			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+
         	//TOPIC=$iothub/twin/res/200/?$rid=
         	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
 
@@ -183,6 +225,33 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         if(strstr(event->topic, "iothub/methods/POST/300/"))
         {
+
+        	if(event->data_len > 10)
+        	{
+        		ParseParameterFromCloud(event->data, event->data_len);
+        	}
+
+			char devicetwin_topic[64];
+
+			volatile char ridString[event->topic_len+1];
+
+			strncpy(ridString, event->topic, event->topic_len);
+			ridString[event->topic_len] = '\0';
+			volatile char * ridSubString = strstr(ridString, "$rid=");
+			//char *strPart;
+			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
+			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
+			char * data = "\"[Device_Parameters]\\nserial = ZAP000005\\nmid = ZAP000005\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
+//			}
+//        	else
+//        	{
+//        		ParseParameterFromCloud(event->data, event->data_len);
+//
+//        	}
+
+            //messageId:2458,topic:$iothub/methods/res/200/?$rid=e)
         	//memcpy(event_topic_hold, event->topic, 128);
         	//strcpy(event_topic_hold,"$iothub/methods/res/?$rid=1");
         	//doNewAck = true;

@@ -125,9 +125,6 @@ static void sessionHandler_task()
 
 	while (1) {
 
-		//publish_ack();
-		//publish_iothub_ack(" ");
-
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
 		if(authorizationRequired == true)
 		{
@@ -202,7 +199,7 @@ static void sessionHandler_task()
 		{
 			if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			{
-				log_task_info();
+				//log_task_info();
 				log_cellular_quality();
 			}
 
@@ -226,18 +223,24 @@ static void sessionHandler_task()
 		if(statusCounter >= statusInterval)
 		{
 
+
+
+			//rssi = rssi2;
+
+			//size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
+#ifdef USE_CELLULAR_CONNECTION
+			int dBm = 2*rssi2 - 113;
+			ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssi2, dBm, dataInterval);
+#else
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
 				rssi = wifidata.rssi;
 			}
 			else
 				rssi = 0;
 
-			//rssi = rssi2;
-
-			//size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-
-			ESP_LOGI(TAG,"  %d dBm  DataInterval: %d", rssi, dataInterval);
-
+			ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
+#endif
 			statusCounter = 0;
 		}
 

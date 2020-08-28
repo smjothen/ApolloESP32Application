@@ -46,7 +46,7 @@
 #include "storage.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
-//#define USE_CELLULAR_CONNECTION 1
+// #define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -411,11 +411,13 @@ void app_main(void)
 	storage_Init();
 	storage_Init_Configuration();
 	esp_err_t err = storage_SaveConfiguration();
+	err = storage_ReadConfiguration();
+
 //
 //
 //	volatile struct Configuration configurationFileRead;
 //	volatile size_t readLength = sizeof(configurationFileRead);
-	err = storage_ReadConfiguration();
+
 //
 //	readLength = readLength;
     //PlaySound();

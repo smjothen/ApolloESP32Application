@@ -29,14 +29,18 @@ static struct Configuration configurationStruct;
 
 void storage_Init()
 {
-	 esp_err_t err = nvs_flash_init();
-	    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-	        // NVS partition was truncated and needs to be erased
-	        // Retry nvs_flash_init
-	        ESP_ERROR_CHECK(nvs_flash_erase());
-	        err = nvs_flash_init();
-	    }
-	    ESP_ERROR_CHECK( err );
+	esp_err_t err = nvs_flash_init();
+
+	//err = nvs_flash_erase();
+	//err = nvs_flash_init();
+
+	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+		// NVS partition was truncated and needs to be erased
+		// Retry nvs_flash_init
+		ESP_ERROR_CHECK(nvs_flash_erase());
+		err = nvs_flash_init();
+	}
+	ESP_ERROR_CHECK( err );
 
 	    //err = print_what_saved();
 	    //if (err != ESP_OK)
@@ -141,7 +145,7 @@ esp_err_t nvs_get_zfloat(nvs_handle_t handle, const char* key, float * outputVal
 {
 	uint32_t intToFloat;
 	err = nvs_get_u32(handle, key, &intToFloat);
-	memcpy(&outputValue, &intToFloat, 4);
+	memcpy(outputValue, &intToFloat, 4);
 
 	return err;
 }
@@ -159,14 +163,17 @@ esp_err_t storage_SaveConfiguration()
 	//err += nvs_set_zfloat(configuration_handle, "ParamHmiBrightness", configurationStruct.HmiBrightness);
 
 	err += nvs_set_u8(configuration_handle, "AuthRequired", (uint8_t)configurationStruct.authenticationRequired);
-	err += nvs_set_u32(configuration_handle, "TransmitInterval", configurationStruct.transmitInterval);
-	err += nvs_set_zfloat(configuration_handle, "ParamHmiBrightness", configurationStruct.hmiBrightness);
+	err += nvs_set_u32(configuration_handle, "TxInterval", configurationStruct.transmitInterval);
+	err += nvs_set_zfloat(configuration_handle, "HmiBrightness", configurationStruct.hmiBrightness);
 
-	err += nvs_set_u32(configuration_handle, "CommunicationMode", configurationStruct.communicationMode);
+	err += nvs_set_u32(configuration_handle, "ComMode", configurationStruct.communicationMode);
 	err += nvs_set_u32(configuration_handle, "MaxPhases", configurationStruct.maxPhases);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
+
+	memset(&configurationStruct, 0, sizeof(configurationStruct));
+
 	return err;
 }
 
@@ -175,23 +182,15 @@ esp_err_t storage_ReadConfiguration()
 {
 	esp_err_t err;
 	err = nvs_open(CONFIG_FILE, NVS_READONLY, &configuration_handle);
-	//volatile size_t requiredSize= 0;
 
-//	err += nvs_get_blob(configuration_handle, "ConfigStruct", NULL, &requiredSize);
-//	if(requiredSize != readLength)
-//	{
-//		nvs_close(configuration_handle);
-//		return err;
-//	}
 
-	//err += nvs_get_blob(configuration_handle, "ConfigStruct", value, &readLength);
-	//err += nvs_get_u8(factory_handle, "TestOk", pTestOk);
 	err += nvs_get_u8(configuration_handle, "AuthRequired", (uint8_t*)&configurationStruct.authenticationRequired);
-	err += nvs_get_u32(configuration_handle, "TransmitInterval", &configurationStruct.transmitInterval);
-	err += nvs_get_zfloat(configuration_handle, "ParamHmiBrightness", &configurationStruct.hmiBrightness);
+	err += nvs_get_u32(configuration_handle, "TxInterval", &configurationStruct.transmitInterval);
+	err += nvs_get_zfloat(configuration_handle, "HmiBrightness", &configurationStruct.hmiBrightness);
 
-	err += nvs_get_u32(configuration_handle, "CommunicationMode", &configurationStruct.communicationMode);
+	err += nvs_get_u32(configuration_handle, "ComMode", &configurationStruct.communicationMode);
 	err += nvs_get_u32(configuration_handle, "MaxPhases", &configurationStruct.maxPhases);
+
 
 	nvs_close(configuration_handle);
 

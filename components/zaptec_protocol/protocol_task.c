@@ -63,7 +63,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
         // dont release uart_write_lock, let caller use freeZapMessageReply()
         return rxMsg;
     }
-    configASSERT(false);
+    //configASSERT(false);
     ZapMessage dummmy_reply = {0};
     return dummmy_reply;
 }
@@ -176,6 +176,7 @@ void uartCommsTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
+        //if(new)
 
         switch (count)
         {
@@ -240,7 +241,7 @@ void uartCommsTask(void *pvParameters){
         if(count >= 16)
         {
         	//ESP_LOGI(TAG, "count == 12");
-        	vTaskDelay(1000 / portTICK_PERIOD_MS);
+        	vTaskDelay(3000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
         }
@@ -306,6 +307,10 @@ void uartCommsTask(void *pvParameters){
 	    	chargeOperationMode = rxMsg.data[0];
 	    	ESP_LOGW(TAG, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError);
         }
+	    else if(rxMsg.identifier == ParamHmiBrightness)
+	    {
+	    	ESP_LOGW(TAG, "**** Received HMI brightness ACK ****");
+	    }
 
         /*else if(rxMsg.type != 0)
         {
@@ -318,6 +323,30 @@ void uartCommsTask(void *pvParameters){
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
+}
+
+//void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length)
+void MCU_SendParameter(uint16_t paramIdentifier, float data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+	//txMsg.data = data;
+	//txMsg.length = length;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneFloat(&txMsg, data, txBuf, encodedTxBuf);
+
+//	uint encoded_length = ZEncodeMessageHeaderOnly(
+//			   &txMsg, txBuf, encodedTxBuf
+//		   );
+
+   //ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+   runRequest(encodedTxBuf, encoded_length);
+   freeZapMessageReply();
+
 }
 
 float MCU_GetEmeterTemperature(uint8_t phase)

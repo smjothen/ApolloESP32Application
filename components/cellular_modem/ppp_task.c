@@ -170,7 +170,7 @@ void clear_lines(void){
 
 static void on_uart_data(uint8_t* event_data,size_t size){
     if(xEventGroupGetBits(event_group) & UART_TO_PPP){
-        ESP_LOGI(TAG, "passing uart data to ppp driver");
+        //ESP_LOGI(TAG, "passing uart data to ppp driver");
         esp_netif_receive(ppp_netif, event_data, size, NULL);
     }else if(xEventGroupGetBits(event_group) & UART_TO_LINES){
         update_line_buffer(event_data, size);
@@ -189,14 +189,14 @@ static void uart_event_task(void *pvParameters)
         //Waiting for UART event.
         if(xQueueReceive(uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
             memset(dtmp, 0, RD_BUF_SIZE);
-            ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
+            //ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
             switch(event.type) {
                 //Event of UART receving data
                 /*We'd better handler data event fast, there would be much more data events than
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
                 case UART_DATA:
-                    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+                    //ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                     uart_read_bytes(UART_NUM_1, dtmp, event.size, portMAX_DELAY);
                     on_uart_data(dtmp, event.size);
                     // uart_write_bytes(UART_NUM_1, (const char*) dtmp, event.size);
@@ -343,11 +343,11 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
 
 static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
     if(!(xEventGroupGetBits(event_group) & UART_TO_PPP)){
-        ESP_LOGW(TAG, "got bytes from ppp driver while in command mode, discarding");
+        //ESP_LOGW(TAG, "got bytes from ppp driver while in command mode, discarding");
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "sending ppp data to modem");
+    //ESP_LOGI(TAG, "sending ppp data to modem");
     int sent_bytes = uart_write_bytes(UART_NUM_1, buffer, len);
     if(sent_bytes == len){
         return ESP_OK;
@@ -357,7 +357,7 @@ static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
 
 static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
 {
-    ESP_LOGI(TAG, "configuring uart transmit for PPP");
+    //ESP_LOGI(TAG, "configuring uart transmit for PPP");
     const esp_netif_driver_ifconfig_t driver_ifconfig = {
             .driver_free_rx_buffer = NULL,
             .transmit = send_ppp_bytes_to_uart,
@@ -370,7 +370,7 @@ static esp_err_t post_attach_cb(esp_netif_t * esp_netif, void * args)
 }
 
 int enter_command_mode(void){
-    ESP_LOGI(TAG, "Clearing out ppp");
+    //ESP_LOGI(TAG, "Clearing out ppp");
     xEventGroupClearBits(event_group, UART_TO_PPP);
 
     int at_result = -10;
@@ -386,7 +386,7 @@ int enter_command_mode(void){
         clear_lines();// clear any extra ppp data from the modem
         xEventGroupSetBits(event_group, UART_TO_LINES);
 
-        ESP_LOGD(TAG, "checking if ppp exit succeeded");
+        //ESP_LOGD(TAG, "checking if ppp exit succeeded");
         at_result = at_command_at();
 
         if(at_result < 0){

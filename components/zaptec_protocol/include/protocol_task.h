@@ -2,6 +2,9 @@
 #define PROTOCOL_TASK_H
 
 void zaptecProtocolStart();
+void MCU_SendParameter(uint16_t paramIdentifier, float data);
+//void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length);
+
 float MCU_GetEmeterTemperature(uint8_t phase);
 float MCU_GetTemperaturePowerBoard(uint8_t sensor);
 float MCU_GetTemperature();
