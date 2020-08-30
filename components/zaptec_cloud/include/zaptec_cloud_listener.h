@@ -3,6 +3,7 @@
 
 #include "../../main/DeviceInfo.h"
 
+bool isMqttConnected();
 void start_cloud_listener_task(struct DeviceInfo deviceInfo);
 
 int publish_iothub_event(const char *payload);

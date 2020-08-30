@@ -325,6 +325,12 @@ void uartCommsTask(void *pvParameters){
     
 }
 
+
+int MCU_GetSwitchState()
+{
+	return 0;
+}
+
 //void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length)
 void MCU_SendParameter(uint16_t paramIdentifier, float data)
 {

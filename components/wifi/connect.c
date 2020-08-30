@@ -29,9 +29,12 @@
 //#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
 //#define CONFIG_EXAMPLE_WIFI_PASSWORD "Ilovezaptec"
 
-#define CONFIG_EXAMPLE_WIFI_SSID "BVb"
-#define CONFIG_EXAMPLE_WIFI_PASSWORD "tk51mo79"
+//#define CONFIG_EXAMPLE_WIFI_SSID "BVb"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "tk51mo79"
 
+char WifiSSID[32]= {0};// = "BVb";
+char WifiPSK[64] = {0};//"tk51mo79";
+int switchState = 0;
 
 //#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
 //#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
@@ -109,7 +112,7 @@ esp_err_t example_connect(void)
     ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to %s", s_connection_name);
+    ESP_LOGI(TAG, "Connected to %s", WifiSSID);//s_connection_name);
     ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
@@ -180,10 +183,37 @@ static void start(void)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = CONFIG_EXAMPLE_WIFI_SSID,
-            .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
+            .ssid = {0x0}, //CONFIG_EXAMPLE_WIFI_SSID,
+            .password = {0x0},//CONFIG_EXAMPLE_WIFI_PASSWORD,
         },
     };
+
+    if(switchState == 1)//eConfig_Wifi_Zaptec
+	{
+		strcpy(WifiSSID, "ZaptecHQ");
+		strcpy(WifiPSK, "LuckyJack#003");
+	}
+    else if(switchState == 2)//eConfig_Wifi_Hotspot
+	{
+		strcpy(WifiSSID, "BV-LG");
+		strcpy(WifiPSK, "tk51mo79");
+	}
+    else if(switchState == 3)//eConfig_Wifi_Home_Wr32
+    {
+    	strcpy(WifiSSID, "BVb");
+    	strcpy(WifiPSK, "tk51mo79");
+	}
+
+    memset(wifi_config.sta.ssid, 0, 32);
+    memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+	memset(wifi_config.sta.password, 0, 64);
+	memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+
+
+
+
+
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
@@ -337,4 +367,18 @@ esp_netif_t *get_example_netif(void)
 void SetupWifi()
 {
 	start();
+}
+
+
+void configure_wifi(int switchstate){
+	switchState = switchstate;
+//	ESP_ERROR_CHECK( nvs_flash_init() );
+//    ESP_ERROR_CHECK(esp_netif_init());
+//    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
 }

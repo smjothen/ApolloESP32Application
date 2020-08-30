@@ -17,9 +17,21 @@
 
 static const char *TAG = "SESSION    ";
 
+int networkType = 0;
+
 //#define USE_CELLULAR_CONNECTION 1
 
 //uint32_t template = 0;
+enum eNetworkType
+{
+	eWifi = 0,
+	e4G = 1
+};
+
+void SetNetworkType(int network_type)
+{
+	networkType = network_type;
+}
 
 bool authorizationRequired = true;
 static int rssi2 = 0;
@@ -112,16 +124,21 @@ static void sessionHandler_task()
 
     uint32_t signalInterval = 120;
 
-#ifdef USE_CELLULAR_CONNECTION
     uint32_t signalCounter = 0;
-    log_task_info();
-    log_cellular_quality();
-#endif
+
+    if (isMqttConnected() == true)
+    {
+		if (networkType == e4G)
+		{
+			log_task_info();
+			log_cellular_quality();
+		}
 
 
-    //Send at startup
-    publish_debug_telemetry_observation_StartUpParameters();
+		//Send at startup
 
+		publish_debug_telemetry_observation_StartUpParameters();
+    }
 
 	while (1) {
 
@@ -136,7 +153,8 @@ static void sessionHandler_task()
 				for (i = 0; i < NFCGetTagInfo().idLength; i++)
 					sprintf(NFCHexString+(i*2),"%02X ", NFCGetTagInfo().id[i] );
 
-				publish_debug_telemetry_observation_NFC_tag_id(NFCHexString);
+				if (isMqttConnected() == true)
+					publish_debug_telemetry_observation_NFC_tag_id(NFCHexString);
 
 				NFCClearTag();
 			}
@@ -167,14 +185,16 @@ static void sessionHandler_task()
 			else
 				rssi = 0;
 
-		#ifdef USE_CELLULAR_CONNECTION
-			rssi = rssi2;
-		#endif
+			if (networkType == e4G)
+			{
+				rssi = rssi2;
+			}
 
 
 			//mqtt_reconnect();
 
-			if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			//if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			if (isMqttConnected() == true)
 			{
 				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
 				//publish_debug_telemetry_observation(temperature, 0.0, rssi);
@@ -193,24 +213,27 @@ static void sessionHandler_task()
 		}
 
 
-	#ifdef USE_CELLULAR_CONNECTION
-		signalCounter++;
-		if(signalCounter >= signalInterval)
+		if (networkType == e4G)
 		{
-			if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			signalCounter++;
+			if(signalCounter >= signalInterval)
 			{
-				//log_task_info();
-				log_cellular_quality();
-			}
+				//if((WifiIsConnected() == true) || (LteIsConnected() == true))
+				if (isMqttConnected() == true)
+				{
+					//log_task_info();
+					log_cellular_quality();
+				}
 
-			signalCounter = 0;
+				signalCounter = 0;
+			}
 		}
-	#endif
 
 		pulseCounter++;
 		if(pulseCounter >= 60)
 		{
-			if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			//if((WifiIsConnected() == true) || (LteIsConnected() == true))
+			if (isMqttConnected() == true)
 			{
 				publish_cloud_pulse();
 			}
@@ -223,24 +246,24 @@ static void sessionHandler_task()
 		if(statusCounter >= statusInterval)
 		{
 
-
-
-			//rssi = rssi2;
-
-			//size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-
-#ifdef USE_CELLULAR_CONNECTION
-			int dBm = 2*rssi2 - 113;
-			ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssi2, dBm, dataInterval);
-#else
-			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
-				rssi = wifidata.rssi;
+			if (networkType == e4G)
+			{
+				int dBm = 2*rssi2 - 113;
+				ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssi2, dBm, dataInterval);
 			}
 			else
-				rssi = 0;
+			{
 
-			ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
-#endif
+				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+				{
+					rssi = wifidata.rssi;
+				}
+				else
+					rssi = 0;
+
+				ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
+			}
+
 			statusCounter = 0;
 		}
 

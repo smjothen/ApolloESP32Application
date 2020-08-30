@@ -36,7 +36,7 @@
 
 #include "adc_control.h"
 #include "driver/ledc.h"
-//#include "connect.h"
+#include "connect.h"
 #include "i2cDevices.h"
 #include "DeviceInfo.h"
 
@@ -44,6 +44,7 @@
 #include "production_test.h"
 #include "EEPROM.h"
 #include "storage.h"
+#include "network.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
 // #define USE_CELLULAR_CONNECTION 1
@@ -66,17 +67,6 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
-void configure_wifi(void){
-	ESP_ERROR_CHECK( nvs_flash_init() );
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK( esp_event_loop_create_default() );
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    ESP_ERROR_CHECK(example_connect());
-}
 
 
 
@@ -102,11 +92,11 @@ void init_mcu(){
 
 }
 
+//OUTPUT PINTS
 //LED
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_PWRKEY		21
 #define GPIO_OUTPUT_RESET		33
-
 //AUDIO
 #define LEDC_TEST_CH_NUM_E 0
 #define GPIO_OUTPUT_AUDIO   (2)
@@ -114,7 +104,76 @@ void init_mcu(){
 //#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET | 1ULL<<GPIO_OUTPUT_AUDIO)
 
+//INPUT PINS
+#define GPIO_INPUT_nHALL_FX    4
+#define GPIO_INPUT_nNFC_IRQ    36
+#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_nHALL_FX) | (1ULL<<GPIO_INPUT_nNFC_IRQ))
+#define ESP_INTR_FLAG_DEFAULT 0
 
+
+
+//static xQueueHandle gpio_evt_queue = NULL;
+
+/*static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}*/
+
+
+/*static void gpio_task_example(void* arg)
+{
+    uint32_t io_num;
+    for(;;) {
+        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
+        }
+    }
+}*/
+
+
+void InitGPIOs()
+{
+
+//	gpio_config_t io_conf;
+//	//disable interrupt
+//	io_conf.intr_type = GPIO_PIN_INTR_ANYEDGE;//GPIO_PIN_INTR_DISABLE;
+//	 //bit mask of the pins, use GPIO4/5 here
+//	io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+//	//set as input mode
+//	io_conf.mode = GPIO_MODE_INPUT;
+//	//enable pull-up mode
+//	io_conf.pull_up_en = 0;
+//	gpio_config(&io_conf);
+
+
+	//gpio_set_intr_type(GPIO_INPUT_IO_0, GPIO_INTR_ANYEDGE);
+
+	//create a queue to handle gpio event from isr
+	//gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+	//start gpio task
+	//xTaskCreate(gpio_task_example, "gpio_task_example", 2048, NULL, 10, NULL);
+
+	//install gpio isr service
+	//gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+	//hook isr handler for specific gpio pin
+	//gpio_isr_handler_add(GPIO_INPUT_nHALL_FX, gpio_isr_handler, (void*) GPIO_INPUT_nHALL_FX);
+	//hook isr handler for specific gpio pin
+	//gpio_isr_handler_add(GPIO_INPUT_nNFC_IRQ, gpio_isr_handler, (void*) GPIO_INPUT_nNFC_IRQ);
+
+	//remove isr handler for gpio number.
+	//gpio_isr_handler_remove(GPIO_INPUT_IO_0);
+	//hook isr handler for specific gpio pin again
+	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
+
+    gpio_config_t output_conf;
+	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	output_conf.mode = GPIO_MODE_OUTPUT;
+	output_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+	output_conf.pull_down_en = 0;
+	output_conf.pull_up_en = 0;
+	gpio_config(&output_conf);
+}
 
 
 void Start4G()
@@ -301,29 +360,6 @@ void PlaySoundShort()
 	//}
 }
 
-#define GPIO_INPUT_nHALL_FX    4
-#define GPIO_INPUT_nNFC_IRQ    36
-#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_nHALL_FX) | (1ULL<<GPIO_INPUT_nNFC_IRQ))
-#define ESP_INTR_FLAG_DEFAULT 0
-
-//static xQueueHandle gpio_evt_queue = NULL;
-
-/*static void IRAM_ATTR gpio_isr_handler(void* arg)
-{
-    uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
-}*/
-
-
-/*static void gpio_task_example(void* arg)
-{
-    uint32_t io_num;
-    for(;;) {
-        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
-        }
-    }
-}*/
 
 
 //float network_WifiSignalStrength()
@@ -342,51 +378,12 @@ void app_main(void)
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
-	ESP_LOGE(TAG, "Apollo");
+	InitGPIOs();
+
+	ESP_LOGE(TAG, "Apollo multi-mode");
 
 
 
-	gpio_config_t io_conf;
-	//disable interrupt
-	io_conf.intr_type = GPIO_PIN_INTR_ANYEDGE;//GPIO_PIN_INTR_DISABLE;
-	 //bit mask of the pins, use GPIO4/5 here
-	io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
-	//set as input mode
-	io_conf.mode = GPIO_MODE_INPUT;
-	//enable pull-up mode
-	io_conf.pull_up_en = 0;
-	gpio_config(&io_conf);
-
-
-	//gpio_set_intr_type(GPIO_INPUT_IO_0, GPIO_INTR_ANYEDGE);
-
-	//create a queue to handle gpio event from isr
-	//gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-	//start gpio task
-	//xTaskCreate(gpio_task_example, "gpio_task_example", 2048, NULL, 10, NULL);
-
-	//install gpio isr service
-	//gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
-	//hook isr handler for specific gpio pin
-	//gpio_isr_handler_add(GPIO_INPUT_nHALL_FX, gpio_isr_handler, (void*) GPIO_INPUT_nHALL_FX);
-	//hook isr handler for specific gpio pin
-	//gpio_isr_handler_add(GPIO_INPUT_nNFC_IRQ, gpio_isr_handler, (void*) GPIO_INPUT_nNFC_IRQ);
-
-	//remove isr handler for gpio number.
-	//gpio_isr_handler_remove(GPIO_INPUT_IO_0);
-	//hook isr handler for specific gpio pin again
-	//gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
-
-
-
-
-    gpio_config_t output_conf; 
-	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-	output_conf.mode = GPIO_MODE_OUTPUT;
-	output_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
-	output_conf.pull_down_en = 0;
-	output_conf.pull_up_en = 0;
-	gpio_config(&output_conf);
     
 
 //	struct Configuration
@@ -408,10 +405,11 @@ void app_main(void)
 //	configurationFile.HmiBrightness = 0.50;
 //	configurationFile.maxPhases = 3;
 //
-	storage_Init();
-	storage_Init_Configuration();
-	esp_err_t err = storage_SaveConfiguration();
-	err = storage_ReadConfiguration();
+
+	//storage_Init();
+	//storage_Init_Configuration();
+	//esp_err_t err = storage_SaveConfiguration();
+	//err = storage_ReadConfiguration();
 
 //
 //
@@ -428,23 +426,43 @@ void app_main(void)
 
     zaptecProtocolStart();
 
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    enum sConfig {
+    	eConfig_Wifi_Zaptec  	= 1,
+		eConfig_Wifi_Hotspot 	= 2,
+		eConfig_Wifi_Home_Wr32	= 3,
+		eConfig_Wifi_EMC 		= 4,
+		eConfig_Wifi_EMC_TCP    = 5,
+		eConfig_Wifi_Post		= 6,
+		eConfig_4G 				= 7,
+		eConfig_4G_Post			= 8,
+		eConfig_4G_bridge 		= 9
+    };
+
+    int switchState = 3;//MCU_GetSwitchState();
+
+    if (switchState <= eConfig_Wifi_EMC_TCP)
+    {
+    	ESP_ERROR_CHECK( nvs_flash_init() );
+		ESP_ERROR_CHECK(esp_netif_init());
+		ESP_ERROR_CHECK( esp_event_loop_create_default() );
+		configure_wifi(switchState);
+    }
 
 
-    //ocpp_task_start();
+    ////ocpp_task_start(); //For future use
     
-    #ifdef BRIDGE_CELLULAR_MODEM
-    hard_reset_cellular();
-    mbus_init();
-    #else
-	#ifdef USE_CELLULAR_CONNECTION
-    ppp_task_start();
-	#endif
-    #endif
+    //#ifdef BRIDGE_CELLULAR_MODEM
+    //hard_reset_cellular();
+    //mbus_init();
 
-	
-	#ifndef USE_CELLULAR_CONNECTION
-	configure_wifi();
-	#endif
+    if((switchState == eConfig_4G) ||
+    		(switchState == eConfig_4G_Post) ||
+			(switchState == eConfig_4G_bridge))
+    {
+    	ppp_task_start();
+    }
 
 	vTaskDelay(pdMS_TO_TICKS(3000));
 
@@ -488,9 +506,10 @@ void app_main(void)
 		vTaskDelay(3000 / portTICK_PERIOD_MS);
 	}
 
-	I2CDevicesStartTask();
+	if(switchState != eConfig_Wifi_Home_Wr32)
+		I2CDevicesStartTask();
 
-	start_cloud_listener_task(devInfo);
+	//start_cloud_listener_task(devInfo);
 
 
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
@@ -504,6 +523,8 @@ void app_main(void)
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
     uint32_t counter = 0;
+	
+	network_init();
 
     while (true)
     {

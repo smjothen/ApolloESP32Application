@@ -45,6 +45,8 @@ const char event_topic_hold[128];
 
 static struct DeviceInfo cloudDeviceInfo;
 
+bool mqttConnected = false;
+
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
 "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\r\n"
@@ -68,6 +70,11 @@ const char cert[] =
 "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\r\n"
 "-----END CERTIFICATE-----\r\n"
 ;
+
+bool isMqttConnected()
+{
+	return mqttConnected;
+}
 
 esp_mqtt_client_handle_t mqtt_client = {0};
 esp_mqtt_client_config_t mqtt_config = {0};
@@ -179,9 +186,12 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         resetCounter = 0;
 
+        mqttConnected = true;
+
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        mqttConnected = false;
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
