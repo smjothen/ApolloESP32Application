@@ -440,7 +440,7 @@ void app_main(void)
 		eConfig_4G_bridge 		= 9
     };
 
-    int switchState = MCU_GetSwitchState();
+    int switchState = eConfig_Wifi_Home_Wr32;//MCU_GetSwitchState();
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
@@ -498,20 +498,23 @@ void app_main(void)
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
-	volatile struct DeviceInfo devInfo;
-	devInfo = i2cReadDeviceInfoFromEEPROM();
-	if(devInfo.EEPROMFormatVersion == 0xFF)
+	if(switchState != eConfig_Wifi_Home_Wr32)
 	{
-		//Invalid EEPROM content
-		prodtest_getNewId();
-
+		volatile struct DeviceInfo devInfo;
 		devInfo = i2cReadDeviceInfoFromEEPROM();
-	}
-	else if(devInfo.EEPROMFormatVersion == 0x0)
-	{
-		ESP_LOGE(TAG, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
+		if(devInfo.EEPROMFormatVersion == 0xFF)
+		{
+			//Invalid EEPROM content
+			prodtest_getNewId();
 
-		vTaskDelay(3000 / portTICK_PERIOD_MS);
+			devInfo = i2cReadDeviceInfoFromEEPROM();
+		}
+		else if(devInfo.EEPROMFormatVersion == 0x0)
+		{
+			ESP_LOGE(TAG, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
+
+			vTaskDelay(3000 / portTICK_PERIOD_MS);
+		}
 	}
 
 	if(switchState != eConfig_Wifi_Home_Wr32)
