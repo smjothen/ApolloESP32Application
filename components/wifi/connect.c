@@ -203,6 +203,12 @@ static void start(void)
     	strcpy(WifiSSID, "BVb");
     	strcpy(WifiPSK, "tk51mo79");
 	}
+    else if(switchState == 4)//eConfig_Wifi_Home_Wr32
+    {
+       	strcpy(WifiSSID, "APPLICA-GJEST");
+       	strcpy(WifiPSK, "Deter1findagidag!");
+   	}
+
 
     memset(wifi_config.sta.ssid, 0, 32);
     memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));

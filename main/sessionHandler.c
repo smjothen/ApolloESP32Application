@@ -17,7 +17,8 @@
 
 static const char *TAG = "SESSION    ";
 
-int networkType = 0;
+static int networkType = 0;
+static uint32_t dataTestInterval = 0;
 
 //#define USE_CELLULAR_CONNECTION 1
 
@@ -31,6 +32,12 @@ enum eNetworkType
 void SetNetworkType(int network_type)
 {
 	networkType = network_type;
+}
+
+
+void SetDataInterval(int newDataInterval)
+{
+	dataTestInterval = newDataInterval;
 }
 
 bool authorizationRequired = true;
@@ -172,6 +179,10 @@ static void sessionHandler_task()
 				dataInterval = 60;
 			else
 				dataInterval = 600;
+
+			//Test-mode overrides default
+			if(dataTestInterval != 0)
+				dataInterval = dataTestInterval;
 
 			signalInterval = 300;
 		}

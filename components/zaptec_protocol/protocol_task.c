@@ -24,6 +24,8 @@ SemaphoreHandle_t uart_write_lock;
 QueueHandle_t uart_recv_message_queue;
 QueueHandle_t uart0_events_queue;
 uint32_t mcuCommunicationError = 0;
+uint8_t receivedSwitchState = 0;
+uint8_t previousSwitchState = 0xFF;
 
 const int uart_num = UART_NUM_2;
 
@@ -165,7 +167,7 @@ void uartCommsTask(void *pvParameters){
     int count = 0;
     while (true)
     {
-    	count++;
+    	//count++;
 
         // tx test
         //ESP_LOGI(TAG, "creating zap message");
@@ -180,6 +182,9 @@ void uartCommsTask(void *pvParameters){
 
         switch (count)
         {
+        	case 0:
+        		txMsg.identifier = SwitchPosition;
+        		break;
         	case 1:
 				txMsg.identifier = ParamInternalTemperatureEmeter;
 				break;
@@ -238,6 +243,8 @@ void uartCommsTask(void *pvParameters){
         		break;*/
         }
 
+        count++;
+
         if(count >= 16)
         {
         	//ESP_LOGI(TAG, "count == 12");
@@ -245,6 +252,7 @@ void uartCommsTask(void *pvParameters){
         	count = 0;
         	continue;
         }
+
 
         txMsg.type = MsgRead;//MsgWrite;
 
@@ -272,7 +280,23 @@ void uartCommsTask(void *pvParameters){
         	printf("Temperature: %f C\n\r", temperature5);
         }*/
 
-        if(rxMsg.identifier == ParamInternalTemperatureEmeter)
+        if(rxMsg.identifier == SwitchPosition)
+        {
+        	receivedSwitchState = rxMsg.data[0];
+
+        	ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
+
+        	if(previousSwitchState != 0xff)
+        	{
+        		if(receivedSwitchState != previousSwitchState)
+        		{
+        			ESP_LOGW(TAG, "**** Switch reset ****");
+        			//esp_restart();
+        		}
+        	}
+        	previousSwitchState = receivedSwitchState;
+        }
+        else if(rxMsg.identifier == ParamInternalTemperatureEmeter)
 			temperatureEmeter[0] = GetFloat(rxMsg.data);
 		else if(rxMsg.identifier == ParamInternalTemperatureEmeter2)
 			temperatureEmeter[1] = GetFloat(rxMsg.data);
@@ -328,7 +352,8 @@ void uartCommsTask(void *pvParameters){
 
 int MCU_GetSwitchState()
 {
-	return 0;
+	ESP_LOGW(TAG, "**** Switch used: %d ****", receivedSwitchState);
+	return receivedSwitchState;
 }
 
 //void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length)

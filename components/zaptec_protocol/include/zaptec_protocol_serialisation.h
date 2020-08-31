@@ -120,6 +120,8 @@
         ParamSessionChargeCycle = 720,
         ParamMaxSessionRestart = 721,
 
+		SwitchPosition = 730,
+
         ParamHmiBrightness = 800,
         ParamAveraging = 801,
         //...

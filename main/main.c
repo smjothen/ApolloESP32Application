@@ -440,7 +440,7 @@ void app_main(void)
 		eConfig_4G_bridge 		= 9
     };
 
-    int switchState = 3;//MCU_GetSwitchState();
+    int switchState = MCU_GetSwitchState();
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
@@ -457,16 +457,24 @@ void app_main(void)
     //hard_reset_cellular();
     //mbus_init();
 
-    if((switchState == eConfig_4G) ||
-    		(switchState == eConfig_4G_Post) ||
-			(switchState == eConfig_4G_bridge))
+    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
     {
     	ppp_task_start();
     }
 
+    if(switchState == eConfig_4G_bridge)
+	{
+		hard_reset_cellular();
+	}
+
 	vTaskDelay(pdMS_TO_TICKS(3000));
 
-	obtain_time();
+	if((switchState != eConfig_Wifi_Home_Wr32) &&
+		(switchState != eConfig_Wifi_EMC_TCP) &&
+		(switchState != eConfig_4G_bridge))
+	{
+		obtain_time();
+	}
 
 
 //#define WriteThisDeviceInfo
@@ -509,22 +517,33 @@ void app_main(void)
 	if(switchState != eConfig_Wifi_Home_Wr32)
 		I2CDevicesStartTask();
 
-	//start_cloud_listener_task(devInfo);
 
+	if((switchState == eConfig_Wifi_Zaptec) ||
+	   (switchState == eConfig_Wifi_Hotspot) ||
+	   (switchState == eConfig_Wifi_EMC) ||
+	   (switchState == eConfig_4G))
+	{
+		start_cloud_listener_task(devInfo);
+	}
 
-	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
+	{
+		SetDataInterval(10);
+	}
     
 	uint32_t ledState = 0;
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    sessionHandler_init();
+    if(switchState != eConfig_4G_bridge)
+    {
+    	sessionHandler_init();
+    	network_init();
+    }
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
     uint32_t counter = 0;
-	
-	network_init();
 
     while (true)
     {
@@ -541,8 +560,7 @@ void app_main(void)
     	{
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    		ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size));
-
+    		ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i, Sw: %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
     	}
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);

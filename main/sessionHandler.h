@@ -8,7 +8,7 @@ extern "C" {
 
 uint32_t GetTemplate();
 void sessionHandler_init();
-
+void SetDataInterval(int newDataInterval);
 
 #ifdef __cplusplus
 }

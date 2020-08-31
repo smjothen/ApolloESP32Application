@@ -225,7 +225,8 @@ int publish_debug_telemetry_observation_all(
 
 	txCnt++;
 	char buf[256];
-	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
+	//sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  S: %d", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState());
+	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f ", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
 	add_observation_to_collection(observations, create_observation(808, buf));
 
 	int ret = publish_json(observations);
