@@ -359,14 +359,14 @@ void prodtest_perform()
 	while(testCounter != 1)
 	{
 
-		uint8_t energy = GetHANEnergyLevel();
-		if(energy > 20)
-		{
-			ESP_LOGI(TAG, "EnergyLevel: OK: %d >= 20", energy);
-			sprintf(payload, "0|1|EnergyLevel\r\n");
-			prodtest_send(0);
-			testCounter++;
-		}
+//		uint8_t energy = GetHANEnergyLevel();
+//		if(energy > 20)
+//		{
+//			ESP_LOGI(TAG, "EnergyLevel: OK: %d >= 20", energy);
+//			sprintf(payload, "0|1|EnergyLevel\r\n");
+//			prodtest_send(0);
+//			testCounter++;
+//		}
 //		else
 //		{
 //			ESP_LOGE(TAG, "EnergyLevel: FAILED: %d < 20", energy);
@@ -386,14 +386,14 @@ void prodtest_perform()
 
 	while(testCounter != 2)
 	{
-		float hwIdLevel = GetHwIdVoltageLevel();
-		if((3.0 > hwIdLevel) && (hwIdLevel > 2.0))
-		{
-			ESP_LOGI(TAG, "HwIdLevel: OK: 3.0 > %.2f > 2.0", hwIdLevel);
-			sprintf(payload, "1|1|HwIdLevel\r\n");
-			prodtest_send(0);
-			testCounter++;
-		}
+//		float hwIdLevel = GetHwIdVoltageLevel();
+//		if((3.0 > hwIdLevel) && (hwIdLevel > 2.0))
+//		{
+//			ESP_LOGI(TAG, "HwIdLevel: OK: 3.0 > %.2f > 2.0", hwIdLevel);
+//			sprintf(payload, "1|1|HwIdLevel\r\n");
+//			prodtest_send(0);
+//			testCounter++;
+//		}
 //		else
 //		{
 //			ESP_LOGE(TAG, "HwIdLevel: FAILED: %.2f != [3.0, 2.0]", hwIdLevel);

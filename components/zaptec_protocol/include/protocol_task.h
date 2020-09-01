@@ -19,4 +19,8 @@ float MCU_GetEnergy();
 uint8_t MCU_GetchargeMode();
 uint8_t MCU_GetChargeOperatingMode();
 
+uint32_t MCU_GetDebugCounter();
+uint32_t MCU_GetWarnings();
+uint8_t MCU_GetResetSource();
+
 #endif /* PROTOCOL_TASK_H */

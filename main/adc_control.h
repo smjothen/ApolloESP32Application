@@ -7,8 +7,8 @@ extern "C" {
 
 uint8_t HANEnergyLevel;
 float hwIdVoltageLevel;
-uint8_t GetHANEnergyLevel();
-float GetHwIdVoltageLevel();
+float GetHardwareId();
+float GetPowerMeas();
 void adc_init();
 
 

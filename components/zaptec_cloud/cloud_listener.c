@@ -136,7 +136,7 @@ void ParseParameterFromCloud(char * message, int message_len)
 				volatile float hmiBrightness = atof(stringPart+1);
 				ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
 				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
-				MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
 			}
 			else if(strstr(stringPart, "network_type") != NULL)
 			{

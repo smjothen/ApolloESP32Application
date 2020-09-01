@@ -20,7 +20,7 @@
 //#include "m_bus.h"
 #include "adc_control.h"
 #include "driver/uart.h"
-
+#include "protocol_task.h"
 
 //#include "mdns.h"
 //#include <sys/socket.h>
@@ -342,7 +342,7 @@ static void tcp_server_task(void *pvParameters)
 
 			//value = (readData[1] << 8) + readData[0];
 
-			value++;
+			//value++;
 
 			float wifiRSSI = 0.0;
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0)
@@ -352,10 +352,19 @@ static void tcp_server_task(void *pvParameters)
 			esp_wifi_get_max_tx_power(&power);
 
 			jsonObject = cJSON_CreateObject();
-			cJSON_AddNumberToObject(jsonObject, "Value", value);
-			cJSON_AddNumberToObject(jsonObject, "TransactionId", byteCount);
+			cJSON_AddNumberToObject(jsonObject, "MCUcnt", MCU_GetDebugCounter());
+			cJSON_AddNumberToObject(jsonObject, "ESPcnt", byteCount);
+
 			cJSON_AddNumberToObject(jsonObject, "WifiRSSI", wifiRSSI);
-			cJSON_AddNumberToObject(jsonObject, "HANEnergy", GetHANEnergyLevel());
+
+			cJSON_AddNumberToObject(jsonObject, "HwId", GetHardwareId());
+			cJSON_AddNumberToObject(jsonObject, "PwrMeas", GetPowerMeas());
+
+			cJSON_AddNumberToObject(jsonObject, "Warning", MCU_GetWarnings());
+
+			cJSON_AddNumberToObject(jsonObject, "MCUrst", MCU_GetResetSource());
+			cJSON_AddNumberToObject(jsonObject, "ESPrst", (unsigned int)esp_reset_reason());
+
 			cJSON_AddNumberToObject(jsonObject, "TxP", power);
 
 			jsonString = cJSON_Print(jsonObject);

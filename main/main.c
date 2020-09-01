@@ -45,6 +45,7 @@
 #include "EEPROM.h"
 #include "storage.h"
 #include "network.h"
+//#include "ble_interface.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
 // #define USE_CELLULAR_CONNECTION 1
@@ -384,7 +385,7 @@ void app_main(void)
 
 
 
-    
+	//ble_interface_init();
 
 //	struct Configuration
 //	{
@@ -440,7 +441,13 @@ void app_main(void)
 		eConfig_4G_bridge 		= 9
     };
 
-    int switchState = eConfig_Wifi_Home_Wr32;//MCU_GetSwitchState();
+    int switchState = MCU_GetSwitchState();
+
+    while(switchState == 0)
+    {
+    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+    	switchState = MCU_GetSwitchState();
+    }
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
@@ -491,16 +498,20 @@ void app_main(void)
 //	strcpy(writeDevInfo.PSK, "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=");
 //	strcpy(writeDevInfo.Pin, "0625");
 
-	strcpy(writeDevInfo.serialNumber, "ZAP000005");
-	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
-	strcpy(writeDevInfo.Pin, "4284");
+//	strcpy(writeDevInfo.serialNumber, "ZAP000005");
+//	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
+//	strcpy(writeDevInfo.Pin, "4284");
+
+	strcpy(writeDevInfo.serialNumber, "ZAP000010");
+	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
+	strcpy(writeDevInfo.Pin, "6695");
 
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
+	volatile struct DeviceInfo devInfo;
 	if(switchState != eConfig_Wifi_Home_Wr32)
 	{
-		volatile struct DeviceInfo devInfo;
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{

@@ -143,6 +143,9 @@ volatile static float totalChargePowerSession = 0.0;
 volatile static uint8_t chargeMode = 0;
 volatile static uint8_t chargeOperationMode = 0;
 
+volatile static uint32_t mcuDebugCounter = 0;
+volatile static uint32_t mcuWarnings = 0;
+volatile static uint8_t mcuResetSource = 0;
 
 float GetFloat(uint8_t * input)
 {
@@ -156,6 +159,21 @@ float GetFloat(uint8_t * input)
 	memcpy(&tmp, &swap[0], 4);
 	return tmp;
 }
+
+
+float GetUint32_t(uint8_t * input)
+{
+	uint32_t tmp = 0;
+
+	uint8_t swap[4] = {0};
+	swap[0] = input[3];
+	swap[1] = input[2];
+	swap[2] = input[1];
+	swap[3] = input[0];
+	memcpy(&tmp, &swap[0], 4);
+	return tmp;
+}
+
 
 
 void uartCommsTask(void *pvParameters){
@@ -236,6 +254,15 @@ void uartCommsTask(void *pvParameters){
 			case 15:
 				txMsg.identifier = ParamChargeOperationMode;
 				break;
+			case 16:
+				txMsg.identifier = DebugCounter;
+				break;
+			case 17:
+				txMsg.identifier = ParamResetSource;
+				break;
+			case 18:
+				txMsg.identifier = ParamWarnings;
+				break;
 
         	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -245,7 +272,7 @@ void uartCommsTask(void *pvParameters){
 
         count++;
 
-        if(count >= 16)
+        if(count >= 19)
         {
         	//ESP_LOGI(TAG, "count == 12");
         	vTaskDelay(3000 / portTICK_PERIOD_MS);
@@ -291,7 +318,7 @@ void uartCommsTask(void *pvParameters){
         		if(receivedSwitchState != previousSwitchState)
         		{
         			ESP_LOGW(TAG, "**** Switch reset ****");
-        			//esp_restart();
+        			esp_restart();
         		}
         	}
         	previousSwitchState = receivedSwitchState;
@@ -335,6 +362,13 @@ void uartCommsTask(void *pvParameters){
 	    {
 	    	ESP_LOGW(TAG, "**** Received HMI brightness ACK ****");
 	    }
+	    else if(rxMsg.identifier == DebugCounter)
+	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
+		else if(rxMsg.identifier == ParamResetSource)
+			mcuResetSource = rxMsg.data[0];
+		else if(rxMsg.identifier == ParamWarnings)
+			mcuWarnings = GetUint32_t(rxMsg.data);
+
 
         /*else if(rxMsg.type != 0)
         {
@@ -426,6 +460,19 @@ uint8_t MCU_GetChargeOperatingMode()
 	return chargeOperationMode;
 }
 
+
+uint32_t MCU_GetDebugCounter()
+{
+	return mcuDebugCounter;
+}
+uint32_t MCU_GetWarnings()
+{
+	return mcuWarnings;
+}
+uint8_t MCU_GetResetSource()
+{
+	return mcuResetSource;
+}
 
 void configureUart(){
     int tx_pin = GPIO_NUM_26;

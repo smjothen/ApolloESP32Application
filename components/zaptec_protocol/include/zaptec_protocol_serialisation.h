@@ -121,6 +121,7 @@
         ParamMaxSessionRestart = 721,
 
 		SwitchPosition = 730,
+		DebugCounter = 731,
 
         ParamHmiBrightness = 800,
         ParamAveraging = 801,

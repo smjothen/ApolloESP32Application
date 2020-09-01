@@ -190,12 +190,14 @@ static void start(void)
 
     if(switchState == 1)//eConfig_Wifi_Zaptec
 	{
+    	//strcpy(WifiSSID, "BVb");
+		//strcpy(WifiPSK, "tk51mo79");
 		strcpy(WifiSSID, "ZaptecHQ");
 		strcpy(WifiPSK, "LuckyJack#003");
 	}
     else if(switchState == 2)//eConfig_Wifi_Hotspot
 	{
-		strcpy(WifiSSID, "BV-LG");
+		strcpy(WifiSSID, "BVb");
 		strcpy(WifiPSK, "tk51mo79");
 	}
     else if(switchState == 3)//eConfig_Wifi_Home_Wr32

@@ -14,6 +14,8 @@
 
 #define TAG "OBSERVATIONS POSTER"
 
+static bool startupMessage = true;
+
 int publish_json(cJSON *payload){
     char *message = cJSON_PrintUnformatted(payload);
 
@@ -222,11 +224,20 @@ int publish_debug_telemetry_observation_all(
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
+
+	if(startupMessage == true)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource, (uint32_t)MCU_GetResetSource()));
+		add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource, (uint32_t)esp_reset_reason()));
+
+		startupMessage = false;
+	}
 
 	txCnt++;
 	char buf[256];
-	//sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  S: %d", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState());
-	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f ", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
+	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  DBC: %d", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState(), MCU_GetDebugCounter());
+	//sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f ", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
 	add_observation_to_collection(observations, create_observation(808, buf));
 
 	int ret = publish_json(observations);
