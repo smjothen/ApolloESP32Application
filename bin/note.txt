@@ -1,2 +1,13 @@
 bin files to be included in the build of images for the ESP32
 
+---
+
+The FW for the dsPic was converted using a python package
+
+https://pypi.org/project/IntelHex/
+https://github.com/python-intelhex/intelhex
+https://python-intelhex.readthedocs.io/en/latest/part3-1.html
+
+python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0xA000  ../bootloadable_app_test/dist/messy_offset_3c00/production/bootloadable_app_test.production.hex | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
+
+

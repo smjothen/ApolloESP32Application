@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 // Hack for not overflowing protocol buffers
-#define ZAP_PROTOCOL_BUFFER_SIZE             128
+#define ZAP_PROTOCOL_BUFFER_SIZE             128*5
 #define ZAP_PROTOCOL_BUFFER_SIZE_ENCODED     (ZAP_PROTOCOL_BUFFER_SIZE + 1 /* overhead byte */ + 1 /* delimiter byte */ + 0 /* ~one byte overhead per 256 bytes */ + 5 /*extra*/)
 #define ZAP_PROTOCOL_MAX_DATA_LENGTH         (ZAP_PROTOCOL_BUFFER_SIZE - 7 /* worst-case header */ - 2 /* checksum */ - 5 /*extra*/)
     
@@ -196,6 +196,7 @@
     uint16_t ZEncodeMessageHeaderAndOneByte(ZapMessage* msg, uint8_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneUInt16(ZapMessage* msg, uint16_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneUInt32(ZapMessage* msg, uint32_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);
+    uint16_t ZEncodeMessageHeaderAndByteArray(ZapMessage* msg, const char* array, size_t length, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneString(ZapMessage* msg, const char* str, uint8_t* txBuf, uint8_t* encodedTxBuf);
 
     uint16_t ZEncodeAck(const ZapMessage* request, uint8_t errorCode, uint8_t* txBuf, uint8_t* encodedTxBuf);

@@ -298,6 +298,12 @@ void app_main(void){
     //register_i2ctools();
 
     zaptecProtocolStart();
+	start_ota_task();
+	while (true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(8000))	;
+	}
+	
     // init_mcu();
 
     //ocpp_task_start();
@@ -318,7 +324,7 @@ void app_main(void){
 
 	obtain_time();
     start_cloud_listener_task();
-	start_ota_task();
+	// start_ota_task();
 
 
 	//wait for mqtt connect, then publish

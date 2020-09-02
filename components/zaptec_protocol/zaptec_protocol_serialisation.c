@@ -334,21 +334,26 @@ uint16_t ZEncodeMessageHeaderAndOneUInt32(ZapMessage* msg, uint32_t val, uint8_t
     return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
 }
 
-uint16_t ZEncodeMessageHeaderAndOneString(ZapMessage* msg, const char* str, uint8_t* txBuf, uint8_t* encodedTxBuf)
+uint16_t ZEncodeMessageHeaderAndByteArray(ZapMessage* msg, const char* array, size_t length, uint8_t* txBuf, uint8_t* encodedTxBuf)
 {
     uint8_t* ptr = txBuf;
     
-    size_t length = strlen(str);
-    // Bad hack to prevent buffer overflows from long strings
+    // Bad hack to prevent buffer overflows from long strings/arrays
     if(length > ZAP_PROTOCOL_MAX_DATA_LENGTH) {
         length = ZAP_PROTOCOL_MAX_DATA_LENGTH;
     }
     
     msg->length = length;
     ptr += ZEncodeMessageHeader(msg, txBuf);
-    memcpy(ptr, str, msg->length);
+    memcpy(ptr, array, msg->length);
     ptr += msg->length;
     return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
+}
+
+uint16_t ZEncodeMessageHeaderAndOneString(ZapMessage* msg, const char* str, uint8_t* txBuf, uint8_t* encodedTxBuf)
+{
+    size_t length = strlen(str);
+    return ZEncodeMessageHeaderAndByteArray(msg, str, length, txBuf, encodedTxBuf);
 }
 
 uint16_t ZEncodeAck(const ZapMessage* request, uint8_t errorCode, uint8_t* txBuf, uint8_t* encodedTxBuf)
