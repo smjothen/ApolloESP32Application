@@ -192,8 +192,10 @@ static void start(void)
 	{
     	//strcpy(WifiSSID, "BVb");
 		//strcpy(WifiPSK, "tk51mo79");
-		strcpy(WifiSSID, "ZaptecHQ");
-		strcpy(WifiPSK, "LuckyJack#003");
+		//strcpy(WifiSSID, "ZaptecHQ");
+		//strcpy(WifiPSK, "LuckyJack#003");
+		strcpy(WifiSSID, "CMW-AP");
+		//strcpy(WifiPSK, "LuckyJack#003");
 	}
     else if(switchState == 2)//eConfig_Wifi_Hotspot
 	{
@@ -208,7 +210,8 @@ static void start(void)
     else if(switchState == 4)//eConfig_Wifi_Home_Wr32
     {
        	strcpy(WifiSSID, "APPLICA-GJEST");
-       	strcpy(WifiPSK, "Deter1findagidag!");
+       	strcpy(WifiPSK, "2Sykkelturer!Varmen");
+       	//strcpy(WifiPSK, "Deter1findagidag!");
    	}
 
 
