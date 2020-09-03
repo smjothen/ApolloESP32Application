@@ -67,6 +67,7 @@ rc_crc32(uint32_t crc, const char *buf, size_t len)
 
 int transfer_dspic_fw(void);
 void ensure_dspic_updated(void);
+void delete_dspic_fw(void);
 
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -98,6 +99,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 
 static void ota_task(void *pvParameters){
+    delete_dspic_fw();
     transfer_dspic_fw();
     ensure_dspic_updated();
     char image_location[256] = {0};
@@ -164,6 +166,7 @@ void validate_booted_image(void){
 #define COMMAND_START_BL    0x18
 #define COMMAND_READ_ID     0x09
 #define COMMAND_APP_CRC     0x0A
+#define COMMAND_APP_DELETE  0x0B
 
 int transfer_dspic_fw(void){
     ESP_LOGI(TAG, "sending fw to dspic");
@@ -262,6 +265,37 @@ void ensure_dspic_updated(void){
         // printf("frame error code: %d\n\r", error_code);
         freeZapMessageReply();
         }
+}
+
+void delete_dspic_fw(void){
+    ESP_LOGI(TAG, "deleting dsPIC FW");
+
+    ESP_LOGI(TAG, "creating zap message");
+    ZapMessage txMsg;
+
+    // ZEncodeMessageHeader* does not check the length of the buffer!
+    // This should not be a problem for most usages, but make sure strings are within a range that fits!
+    uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+    uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+    
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = ParamRunTest; // ignored on bootloader?
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, COMMAND_APP_DELETE, txBuf, encodedTxBuf
+    );
+
+    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
+    
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+    printf("frame type: %d \n\r", rxMsg.type);
+    printf("frame identifier: %d \n\r", rxMsg.identifier);
+    printf("frame timeId: %d \n\r", rxMsg.timeId);
+
+    // uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+    // printf("frame error code: %d\n\r", error_code);
+    freeZapMessageReply();
+        
 }
 
 void start_ota_task(void){
