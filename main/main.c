@@ -45,7 +45,7 @@
 #include "EEPROM.h"
 #include "storage.h"
 #include "network.h"
-//#include "ble_interface.h"
+//#include "../components/ble/ble_interface.h"
 
 // #define BRIDGE_CELLULAR_MODEM 1
 // #define USE_CELLULAR_CONNECTION 1

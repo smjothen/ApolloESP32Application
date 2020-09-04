@@ -183,19 +183,16 @@ static void start(void)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = {0x0}, //CONFIG_EXAMPLE_WIFI_SSID,
-            .password = {0x0},//CONFIG_EXAMPLE_WIFI_PASSWORD,
+            .ssid = {0x0},
+            .password = {0x0},
         },
     };
 
     if(switchState == 1)//eConfig_Wifi_Zaptec
 	{
-    	//strcpy(WifiSSID, "BVb");
-		//strcpy(WifiPSK, "tk51mo79");
-		//strcpy(WifiSSID, "ZaptecHQ");
-		//strcpy(WifiPSK, "LuckyJack#003");
-		strcpy(WifiSSID, "CMW-AP");
-		//strcpy(WifiPSK, "LuckyJack#003");
+		strcpy(WifiSSID, "ZaptecHQ");
+		strcpy(WifiPSK, "LuckyJack#003");
+		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
 	}
     else if(switchState == 2)//eConfig_Wifi_Hotspot
 	{
@@ -207,11 +204,10 @@ static void start(void)
     	strcpy(WifiSSID, "BVb");
     	strcpy(WifiPSK, "tk51mo79");
 	}
-    else if(switchState == 4)//eConfig_Wifi_Home_Wr32
+    else if(switchState == 4) //Applica - EMC config
     {
        	strcpy(WifiSSID, "APPLICA-GJEST");
-       	strcpy(WifiPSK, "2Sykkelturer!Varmen");
-       	//strcpy(WifiPSK, "Deter1findagidag!");
+       	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
    	}
 
 

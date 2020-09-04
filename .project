@@ -20,7 +20,7 @@
 	<variableList>
 		<variable>
 			<name>EXTRA_COMPONENTS_DIRS</name>
-			<value>file:/C:/gitHub/Apollo/goEsp32/esp-idf/components/bt</value>
+			<value>file:/C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/bt</value>
 		</variable>
 		<variable>
 			<name>IDF_PATH</name>
