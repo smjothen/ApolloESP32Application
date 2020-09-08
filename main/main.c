@@ -36,7 +36,7 @@
 
 #include "adc_control.h"
 #include "driver/ledc.h"
-#include "connect.h"
+#include "../components/wifi/include/network.h"
 #include "i2cDevices.h"
 #include "DeviceInfo.h"
 
@@ -44,7 +44,7 @@
 #include "production_test.h"
 #include "EEPROM.h"
 #include "storage.h"
-#include "network.h"
+#include "diagnostics_port.h"
 
 //#include "esp_gap_ble_api.h"
 //#include "esp_gatts_api.h"

@@ -16,7 +16,7 @@
 #include "esp_sleep.h"
 
 
-#include "network.h"
+#include "diagnostics_port.h"
 //#include "m_bus.h"
 #include "adc_control.h"
 #include "driver/uart.h"

@@ -10,7 +10,7 @@ set(COMPONENT_SRCS "main.c"
 				   "audioBuzzer.c"
 				   "production_test.c"
 				   "storage.c"
-				   "network.c"
+				   "diagnostics_port.c"
 				   )
 
 set(COMPONENT_ADD_INCLUDEDIRS "")

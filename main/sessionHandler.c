@@ -8,7 +8,7 @@
 #include "ppp_task.h"
 #include "at_commands.h"
 #include "zaptec_cloud_observations.h"
-#include "connect.h"
+#include "network.h"
 #include "protocol_task.h"
 #include "zaptec_cloud_listener.h"
 #include "DeviceInfo.h"
