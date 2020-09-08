@@ -8,7 +8,7 @@ extern "C" {
 #include "esp_err.h"
 #include "../../main/DeviceInfo.h"
 
-struct DeviceInfo i2cGetSerialNumber();
+struct DeviceInfo i2cGetLoadedDeviceInfo();
 void I2CDevicesInit();
 void I2CDevicesStartTask();
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);

@@ -49,7 +49,7 @@ void I2CDevicesInit()
 	do_i2cdetect_cmd();
 }
 
-struct DeviceInfo i2cGetSerialNumber()
+struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
 	return deviceInfo;
 }

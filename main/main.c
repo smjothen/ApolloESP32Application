@@ -45,7 +45,17 @@
 #include "EEPROM.h"
 #include "storage.h"
 #include "network.h"
-//#include "../components/ble/ble_interface.h"
+
+//#include "esp_gap_ble_api.h"
+//#include "esp_gatts_api.h"
+//#include "esp_bt_defs.h"
+//#include "esp_bt_main.h"
+//#include "esp_gatt_common_api.h"
+
+#include "../components/ble/ble_interface.h"
+//#include "esp_ble_mesh_defs.h"
+//#include "../bt/esp_ble_mesh/api/esp_ble_mesh_defs.h"
+
 
 // #define BRIDGE_CELLULAR_MODEM 1
 // #define USE_CELLULAR_CONNECTION 1
@@ -384,9 +394,6 @@ void app_main(void)
 	ESP_LOGE(TAG, "Apollo multi-mode");
 
 
-
-	//ble_interface_init();
-
 //	struct Configuration
 //	{
 //		bool dataStructureIsInitialized;
@@ -527,6 +534,16 @@ void app_main(void)
 			vTaskDelay(3000 / portTICK_PERIOD_MS);
 		}
 	}
+
+
+	ble_interface_init();
+//
+//	while(1)
+//	{
+//		vTaskDelay(3000 / portTICK_PERIOD_MS);
+//		ESP_LOGE(TAG, "Apollo multi-mode");
+//	}
+
 
 	if(switchState != eConfig_Wifi_Home_Wr32)
 		I2CDevicesStartTask();
