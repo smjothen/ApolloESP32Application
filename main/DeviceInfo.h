@@ -18,6 +18,6 @@ struct DeviceInfo
 
 static uint8_t GetEEPROMFormatVersion() { return 1;}
 
-static char softwareVersion[] = "ZAP 0.0.0.2";
+static char softwareVersion[] = "0.0.0.2";
 
 #endif /* DEVICEINFO_H_ */

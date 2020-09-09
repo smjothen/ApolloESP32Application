@@ -27,7 +27,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "ppp_task.h"
 //#include "at_commands.h"
-#include "mqtt_demo.h"
+//#include "mqtt_demo.h"
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
 
@@ -36,7 +36,7 @@
 
 #include "adc_control.h"
 #include "driver/ledc.h"
-#include "../components/wifi/include/network.h"
+#include "network.h"
 #include "i2cDevices.h"
 #include "DeviceInfo.h"
 
@@ -535,6 +535,9 @@ void app_main(void)
 		}
 	}
 
+	//strcpy(devInfo.serialNumber, "ZAP000010");
+	//strcpy(devInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
+	//strcpy(devInfo.Pin, "6695");
 
 	ble_interface_init();
 //

@@ -132,20 +132,7 @@ static void sessionHandler_task()
     uint32_t signalInterval = 120;
 
     uint32_t signalCounter = 0;
-
-    if (isMqttConnected() == true)
-    {
-		if (networkType == e4G)
-		{
-			log_task_info();
-			log_cellular_quality();
-		}
-
-
-		//Send at startup
-
-		publish_debug_telemetry_observation_StartUpParameters();
-    }
+    bool startupSent = false;
 
 	while (1) {
 
@@ -207,6 +194,17 @@ static void sessionHandler_task()
 			//if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			if (isMqttConnected() == true)
 			{
+				if (startupSent == false)
+				{
+					if (networkType == e4G)
+					{
+						log_task_info();
+						log_cellular_quality();
+					}
+
+					publish_debug_telemetry_observation_StartUpParameters();
+					startupSent = true;
+				}
 				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
 				//publish_debug_telemetry_observation(temperature, 0.0, rssi);
 				//publish_debug_telemetry_observation_power(MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));

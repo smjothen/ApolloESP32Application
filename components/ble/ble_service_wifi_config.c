@@ -11,7 +11,7 @@
 #include <string.h>
 
 #include "../../main/storage.h"
-//#include "../../main/network.h"
+#include "../../components/wifi/include/network.h"
 #include "string.h"
 #include "esp_wifi.h"
 
@@ -220,11 +220,11 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 	//Check authentication before allowing reads
-	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_DEVICE_MID_VAL))
-	{
-		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
-		return;
-	}
+//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_DEVICE_MID_VAL))
+//	{
+//		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
+//		return;
+//	}
 
 	char *jsonString;
 	//char jsonString[] = "{\"wifi\":{\"ip\":\"10.0.0.1\",\"link\":-54},\"online\":true}";//"{'{', '"', 'o', 'n', 'l', 'i', 'n', 'e', '"', '=', 't', 'r', 'u', 'e', '}', '\0'};
@@ -256,7 +256,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case WIFI_SSID_VAL:
 	    memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-	    char * SSID = "SSID";///network_getWifiSSID();
+	    char * SSID = network_getWifiSSID();
 	    int len = strlen(SSID);
 	    //memcpy(rsp->attr_value.value, WIFI_SERV_CHAR_SSID_val, sizeof(WIFI_SERV_CHAR_SSID_val));
 	    //memcpy(rsp->attr_value.value, WIFI_SERV_CHAR_SSID_val, len);
@@ -399,13 +399,16 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		//{"wifi":{"ip":"10.0.0.1","link":-54},"online":true}
 
+    	ESP_LOGI(TAG, "BLE IP4 Address: %s", network_GetIP4Address());
+
 		jsonObject = cJSON_CreateObject();
 
-		cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
-		//cJSON_AddStringToObject(wifiObject, "ip", network_GetIPAddress());
-		///cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
 
-		///cJSON_AddBoolToObject(jsonObject, "online", network_isOnline());
+		cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
+		cJSON_AddStringToObject(wifiObject, "ip", network_GetIP4Address());
+		cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
+
+		cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -452,11 +455,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 	//Check authentication before allowing writes
-	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_AUTH_VAL))
-	{
-		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
-		return;
-	}
+//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_AUTH_VAL))
+//	{
+//		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
+//		return;
+//	}
 
     switch( attrIndex )
     {

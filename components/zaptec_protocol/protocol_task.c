@@ -275,7 +275,7 @@ void uartCommsTask(void *pvParameters){
         if(count >= 19)
         {
         	//ESP_LOGI(TAG, "count == 12");
-        	vTaskDelay(3000 / portTICK_PERIOD_MS);
+        	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
         }

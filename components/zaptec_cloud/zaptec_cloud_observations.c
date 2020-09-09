@@ -180,6 +180,13 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
+	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+
+    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+
     add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, softwareVersion));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource,  0));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
