@@ -323,7 +323,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			wifiRemainder = 0;
     		memset(wifiPackage, 0, 500);
 
-    		///network_startWifiScan();
+    		network_startWifiScan();
 
     		esp_wifi_scan_get_ap_num(&apNr);
 			ESP_LOGE(TAG, "No of APs: %d", apNr);

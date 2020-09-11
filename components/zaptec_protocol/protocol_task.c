@@ -311,7 +311,7 @@ void uartCommsTask(void *pvParameters){
         {
         	receivedSwitchState = rxMsg.data[0];
 
-        	ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
+        	//ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
 
         	if(previousSwitchState != 0xff)
         	{

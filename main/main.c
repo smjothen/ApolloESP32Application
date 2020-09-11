@@ -436,17 +436,7 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    enum sConfig {
-    	eConfig_Wifi_Zaptec  	= 1,
-		eConfig_Wifi_Hotspot 	= 2,
-		eConfig_Wifi_Home_Wr32	= 3,
-		eConfig_Wifi_EMC 		= 4,
-		eConfig_Wifi_EMC_TCP    = 5,
-		eConfig_Wifi_Post		= 6,
-		eConfig_4G 				= 7,
-		eConfig_4G_Post			= 8,
-		eConfig_4G_bridge 		= 9
-    };
+
 
     int switchState = MCU_GetSwitchState();
 
@@ -552,8 +542,8 @@ void app_main(void)
 		I2CDevicesStartTask();
 
 
-	if((switchState == eConfig_Wifi_Zaptec) ||
-	   (switchState == eConfig_Wifi_Hotspot) ||
+	if((switchState == eConfig_Wifi_NVS) ||
+	   (switchState == eConfig_Wifi_Zaptec) ||
 	   (switchState == eConfig_Wifi_EMC) ||
 	   (switchState == eConfig_4G))
 	{

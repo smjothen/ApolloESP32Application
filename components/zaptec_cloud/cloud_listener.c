@@ -81,7 +81,8 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+    //create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
@@ -351,6 +352,8 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_config.disable_auto_reconnect = false;
     mqtt_config.reconnect_timeout_ms = 10000;
+    mqtt_config.keepalive = 120;
+    //mqtt_config.refresh_connection_after_ms = 30000;
 
     mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");

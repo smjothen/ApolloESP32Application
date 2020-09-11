@@ -270,7 +270,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
+				//ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
 			}
 
 			statusCounter = 0;

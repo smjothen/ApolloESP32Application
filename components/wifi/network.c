@@ -24,6 +24,7 @@
 #include "freertos/event_groups.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "network.h"
 
 
 //#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
@@ -209,18 +210,21 @@ static void start(void)
         },
     };
 
-    if(switchState == 1)//eConfig_Wifi_Zaptec
+
+
+    if(switchState == eConfig_Wifi_NVS)
+	{
+    	network_CheckWifiParameters();
+	}
+
+    if(switchState == eConfig_Wifi_Zaptec)
 	{
 		strcpy(WifiSSID, "ZaptecHQ");
 		strcpy(WifiPSK, "LuckyJack#003");
 		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
 	}
-    else if(switchState == 2)//eConfig_Wifi_Hotspot
-	{
-		strcpy(WifiSSID, "BVb");
-		strcpy(WifiPSK, "tk51mo79");
-	}
-    else if(switchState == 3)//eConfig_Wifi_Home_Wr32
+
+    else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
     {
     	strcpy(WifiSSID, "BVb");
     	strcpy(WifiPSK, "tk51mo79");
@@ -230,7 +234,6 @@ static void start(void)
        	strcpy(WifiSSID, "APPLICA-GJEST");
        	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
    	}
-
 
     memset(wifi_config.sta.ssid, 0, 32);
     memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));

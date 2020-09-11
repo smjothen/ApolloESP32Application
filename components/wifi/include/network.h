@@ -5,9 +5,24 @@
 extern "C" {
 #endif
 
+
+enum sConfig
+{
+	eConfig_Wifi_NVS	  	= 1,
+	eConfig_Wifi_Zaptec 	= 2,
+	eConfig_Wifi_Home_Wr32	= 3,
+	eConfig_Wifi_EMC 		= 4,
+	eConfig_Wifi_EMC_TCP    = 5,
+	eConfig_Wifi_Post		= 6,
+	eConfig_4G 				= 7,
+	eConfig_4G_Post			= 8,
+	eConfig_4G_bridge 		= 9
+};
+
 void configure_wifi(int switchstate);
 void SetupWifi();
 bool network_WifiIsConnected();
+bool network_CheckWifiParameters();
 
 void network_stopWifi();
 void network_clearWifi();
