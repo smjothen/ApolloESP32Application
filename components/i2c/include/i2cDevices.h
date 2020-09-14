@@ -9,6 +9,7 @@ extern "C" {
 #include "../../main/DeviceInfo.h"
 
 struct DeviceInfo i2cGetLoadedDeviceInfo();
+void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo);
 void I2CDevicesInit();
 void I2CDevicesStartTask();
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);

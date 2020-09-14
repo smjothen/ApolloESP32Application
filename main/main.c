@@ -17,7 +17,7 @@
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
-#include "nvs_flash.h"
+//#include "nvs_flash.h"
 #include "protocol_examples_common.h"
 #include "esp_sntp.h"
 #include "esp_websocket_client.h"
@@ -53,6 +53,7 @@
 //#include "esp_gatt_common_api.h"
 
 #include "../components/ble/ble_interface.h"
+#include "connectivity.h"
 //#include "esp_ble_mesh_defs.h"
 //#include "../bt/esp_ble_mesh/api/esp_ble_mesh_defs.h"
 
@@ -393,6 +394,7 @@ void app_main(void)
 
 	ESP_LOGE(TAG, "Apollo multi-mode");
 
+	storage_Init();
 
 //	struct Configuration
 //	{
@@ -434,11 +436,14 @@ void app_main(void)
 
     zaptecProtocolStart();
 
+
+
     vTaskDelay(pdMS_TO_TICKS(3000));
 
 
-
-    int switchState = MCU_GetSwitchState();
+#define DEV
+#ifdef DEV
+    int switchState = eConfig_Wifi_Home_Wr32;//MCU_GetSwitchState();
 
     while(switchState == 0)
     {
@@ -448,12 +453,53 @@ void app_main(void)
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
-    	ESP_ERROR_CHECK( nvs_flash_init() );
-		ESP_ERROR_CHECK(esp_netif_init());
-		ESP_ERROR_CHECK( esp_event_loop_create_default() );
-		configure_wifi(switchState);
+		char WifiSSID[32]= {0};// = "BVb";
+		char WifiPSK[64] = {0};//"tk51mo79";
+
+		if(switchState == eConfig_Wifi_NVS)
+		{
+			network_CheckWifiParameters();
+		}
+		else
+		{
+			if(switchState == eConfig_Wifi_Zaptec)
+			{
+				strcpy(WifiSSID, "ZaptecHQ");
+				strcpy(WifiPSK, "LuckyJack#003");
+				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
+			}
+
+			else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
+			{
+				strcpy(WifiSSID, "BVb");
+				strcpy(WifiPSK, "tk51mo79");
+			}
+			else if(switchState == 4) //Applica - EMC config
+			{
+				strcpy(WifiSSID, "APPLICA-GJEST");
+				strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+			}
+
+			storage_Init_Configuration();
+			Storage_Set_CommunicationMode(eCONNECTION_WIFI);
+			storage_SaveConfiguration();
+			storage_SaveWifiParameters(WifiSSID, WifiPSK);
+		}
+    }
+#endif
+
+
+    if (switchState <= eConfig_Wifi_EMC_TCP)
+    {
+//    	ESP_ERROR_CHECK( nvs_flash_init() );
+//		ESP_ERROR_CHECK(esp_netif_init());
+//		ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+    	//configure_wifi(switchState);
+
     }
 
+    connectivity_init();
 
     ////ocpp_task_start(); //For future use
     
@@ -499,9 +545,13 @@ void app_main(void)
 //	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
 //	strcpy(writeDevInfo.Pin, "4284");
 
-	strcpy(writeDevInfo.serialNumber, "ZAP000010");
-	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
-	strcpy(writeDevInfo.Pin, "6695");
+	strcpy(writeDevInfo.serialNumber, "ZAP000008");
+	strcpy(writeDevInfo.PSK, "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=");
+	strcpy(writeDevInfo.Pin, "7833");
+
+//	strcpy(writeDevInfo.serialNumber, "ZAP000010");
+//	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
+//	strcpy(writeDevInfo.Pin, "6695");
 
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
@@ -523,13 +573,22 @@ void app_main(void)
 
 			vTaskDelay(3000 / portTICK_PERIOD_MS);
 		}
+
+		I2CDevicesStartTask();
+	}
+	else
+	{
+		strcpy(devInfo.serialNumber, "ZAP000005");
+		strcpy(devInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
+		strcpy(devInfo.Pin, "4284");
+		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}
 
 	//strcpy(devInfo.serialNumber, "ZAP000010");
 	//strcpy(devInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
 	//strcpy(devInfo.Pin, "6695");
 
-	ble_interface_init();
+
 //
 //	while(1)
 //	{
@@ -538,9 +597,7 @@ void app_main(void)
 //	}
 
 
-	if(switchState != eConfig_Wifi_Home_Wr32)
-		I2CDevicesStartTask();
-
+	vTaskDelay(500 / portTICK_PERIOD_MS);
 
 	if((switchState == eConfig_Wifi_NVS) ||
 	   (switchState == eConfig_Wifi_Zaptec) ||
@@ -554,7 +611,9 @@ void app_main(void)
 	{
 		SetDataInterval(10);
 	}
-    
+
+	ble_interface_init();
+
 	uint32_t ledState = 0;
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
@@ -562,12 +621,17 @@ void app_main(void)
     if(switchState != eConfig_4G_bridge)
     {
     	sessionHandler_init();
-    	network_init();
+    	//diagnostics_port_init();
     }
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
     uint32_t counter = 0;
+
+    int secleft = 0;
+    int min = 0;
+    int hours = 0;
+    int days = 0;
 
     while (true)
     {
@@ -582,9 +646,18 @@ void app_main(void)
 
     	if(counter % 10 == 0)
     	{
+    		days = counter / 86400;
+    		secleft = counter % 86400;
+
+    		hours = secleft / 3600;
+    		secleft = secleft % 3600;
+
+    		min = secleft / 60;
+    		secleft = secleft % 60;
+
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    		ESP_LOGE(TAG, "# %d:  %s , rst: %d, Heaps: %i %i, Sw: %i", counter, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
+    		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
     	}
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);

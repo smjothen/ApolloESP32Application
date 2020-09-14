@@ -6,8 +6,8 @@ extern "C" {
 #endif
 
 
-void network_init();
-int network_getSocket();
+void diagnostics_port_init();
+//int network_getSocket();
 
 
 #ifdef __cplusplus

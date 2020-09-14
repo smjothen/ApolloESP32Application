@@ -54,6 +54,11 @@ struct DeviceInfo i2cGetLoadedDeviceInfo()
 	return deviceInfo;
 }
 
+void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo)
+{
+	deviceInfo = debugDevInfo;
+}
+
 
 float I2CGetSHT30Temperature()
 {

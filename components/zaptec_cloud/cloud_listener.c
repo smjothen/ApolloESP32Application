@@ -359,3 +359,8 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     ESP_LOGI(TAG, "starting mqtt");
     esp_mqtt_client_start(mqtt_client);
 }
+
+void stop_cloud_listener_task()
+{
+	esp_mqtt_client_stop(mqtt_client);
+}

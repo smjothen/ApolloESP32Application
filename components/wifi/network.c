@@ -25,6 +25,8 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "network.h"
+#include "nvs_flash.h"
+#include "../../main/storage.h"
 
 
 //#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
@@ -39,7 +41,7 @@ char WifiPSK[64] = {0};//"tk51mo79";
 static char previousWifiSSID[32] = {0};
 static char previousWifiPSK[32] = {0};
 
-int switchState = 0;
+//int switchState = 0;
 char ip4Address[16] = {0};
 char ip6Address;
 static bool wifiScan = false;
@@ -71,7 +73,7 @@ static esp_netif_t *s_example_esp_netif = NULL;
 static esp_ip6_addr_t s_ipv6_addr;
 #endif
 
-static const char *TAG = "example_connect";
+static const char *TAG = "NETWORK ";
 
 bool isConnected = false;
 
@@ -124,14 +126,23 @@ static void on_got_ipv6(void *arg, esp_event_base_t event_base,
 
 #endif // CONFIG_EXAMPLE_CONNECT_IPV6
 
-esp_err_t example_connect(void)
+esp_err_t network_connect_wifi(void)
 {
+	ESP_ERROR_CHECK(esp_netif_init());
+	if(firstTime == true)
+	{
+		//ESP_ERROR_CHECK( nvs_flash_init() );
+		//ESP_ERROR_CHECK(esp_netif_init());
+	    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+	}
+
     if (s_connect_event_group != NULL) {
         return ESP_ERR_INVALID_STATE;
     }
     s_connect_event_group = xEventGroupCreate();
     start();
-    ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
+    if(firstTime == true)
+    	ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
     ESP_LOGI(TAG, "Connected to %s", WifiSSID);//s_connection_name);
@@ -139,10 +150,13 @@ esp_err_t example_connect(void)
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
 #endif
+
+    firstTime = false;
+
     return ESP_OK;
 }
 
-esp_err_t example_disconnect(void)
+esp_err_t network_disconnect_wifi(void)
 {
     if (s_connect_event_group == NULL) {
         return ESP_ERR_INVALID_STATE;
@@ -211,29 +225,29 @@ static void start(void)
     };
 
 
-
-    if(switchState == eConfig_Wifi_NVS)
-	{
-    	network_CheckWifiParameters();
-	}
-
-    if(switchState == eConfig_Wifi_Zaptec)
-	{
-		strcpy(WifiSSID, "ZaptecHQ");
-		strcpy(WifiPSK, "LuckyJack#003");
-		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
-	}
-
-    else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
-    {
-    	strcpy(WifiSSID, "BVb");
-    	strcpy(WifiPSK, "tk51mo79");
-	}
-    else if(switchState == 4) //Applica - EMC config
-    {
-       	strcpy(WifiSSID, "APPLICA-GJEST");
-       	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
-   	}
+    network_CheckWifiParameters();
+//    if(switchState == eConfig_Wifi_NVS)
+//	{
+//    	network_CheckWifiParameters();
+//	}
+//
+//    if(switchState == eConfig_Wifi_Zaptec)
+//	{
+//		strcpy(WifiSSID, "ZaptecHQ");
+//		strcpy(WifiPSK, "LuckyJack#003");
+//		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
+//	}
+//
+//    else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
+//    {
+//    	strcpy(WifiSSID, "BVb");
+//    	strcpy(WifiPSK, "tk51mo79");
+//	}
+//    else if(switchState == 4) //Applica - EMC config
+//    {
+//       	strcpy(WifiSSID, "APPLICA-GJEST");
+//       	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+//   	}
 
     memset(wifi_config.sta.ssid, 0, 32);
     memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
@@ -401,17 +415,17 @@ void SetupWifi()
 }
 
 
-void configure_wifi(int switchstate){
-	switchState = switchstate;
-//	ESP_ERROR_CHECK( nvs_flash_init() );
-//    ESP_ERROR_CHECK(esp_netif_init());
-//    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+void configure_wifi(){
+	//switchState = switchstate;
+	ESP_ERROR_CHECK( nvs_flash_init() );
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK( esp_event_loop_create_default() );
 
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
      */
-    ESP_ERROR_CHECK(example_connect());
+    ESP_ERROR_CHECK(network_connect_wifi());
 }
 
 
@@ -440,7 +454,7 @@ char * network_getWifiSSID()
 
 bool network_CheckWifiParameters()
 {
-	esp_err_t err = ESP_OK;//storage_ReadWifiParameters(WifiSSID, WifiPSK);
+	esp_err_t err = storage_ReadWifiParameters(WifiSSID, WifiPSK);
 	int ssidLength = strlen(WifiSSID);
 
 	if((32 >= ssidLength) && (ssidLength >= 1))

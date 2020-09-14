@@ -415,7 +415,7 @@ int network_getSocket()
 
 
 
-void network_init()
+void diagnostics_port_init()
 {
 	//initialise_wifi();
 	//wait_for_ip();

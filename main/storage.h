@@ -8,17 +8,7 @@ extern "C" {
 #include "freertos/FreeRTOS.h"
 
 
-struct Configuration
-{
-	bool dataStructureIsInitialized;
-	bool authenticationRequired;
-	uint32_t transmitInterval;
-	float transmitChangeLevel;
-
-	uint32_t communicationMode;
-	float hmiBrightness;
-	uint32_t maxPhases;
-};
+#include "DeviceInfo.h"
 
 
 void storage_Init();

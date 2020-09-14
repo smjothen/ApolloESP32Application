@@ -19,7 +19,10 @@ enum sConfig
 	eConfig_4G_bridge 		= 9
 };
 
-void configure_wifi(int switchstate);
+esp_err_t network_connect_wifi(void);
+esp_err_t network_disconnect_wifi(void);
+
+void configure_wifi();
 void SetupWifi();
 bool network_WifiIsConnected();
 bool network_CheckWifiParameters();

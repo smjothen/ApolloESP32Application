@@ -72,10 +72,15 @@ int NFCInit()
 	message[1] = 0xB0;
 	i2c_master_write_slave(slaveAddressNFC, message, 2);
 
-	//6
-	message[0] = 0x28;
-	message[1] = 0x8E;
-	i2c_master_write_slave(slaveAddressNFC, message, 2);
+//	uint8_t	regNr = 0x28;
+//	i2c_master_write_slave(slaveAddressNFC, &regNr, 1);
+//	i2c_master_read_slave(slaveAddressNFC, message, 1);
+//	printf("##### reg 0x%02X: 0x%02X #####\n\n",  regNr, message[0]);
+
+//	//6
+//	message[0] = 0x28;
+//	message[1] = 0x8E;
+//	i2c_master_write_slave(slaveAddressNFC, message, 2);
 
 
 
@@ -102,6 +107,11 @@ int NFCReadTag()
     uint8_t uidLength = 0;
 
 	readCount++;
+
+	//6
+	message[0] = 0x28;
+	message[1] = 0x8E;
+	i2c_master_write_slave(slaveAddressNFC, message, 2);
 
 	/*if(readCount % 10 == 0)
 	{
@@ -184,9 +194,16 @@ int NFCReadTag()
 
 	//Check if RxIRQ bit is set in IRQ0 register
 	if(!(message[0] & (1<<2)))
-		return 0;
+	{
+		//6-> Tx off
+		message[0] = 0x28;
+		message[1] = 0x86;
+		i2c_master_write_slave(slaveAddressNFC, message, 2);
 
-	printf("Card detected!\n");
+		return 0;
+	}
+
+	printf("Card detected! (Rx off version)\n");
 
 
 
@@ -213,6 +230,11 @@ int NFCReadTag()
 	{
 		if((message[0] != 0x26) && (message[0] != 0x26))
 			printf("Unknown ATQA: %02X %02X\n", message[1], message[0]);
+
+		//6-> Tx off
+		message[0] = 0x28;
+		message[1] = 0x86;
+		i2c_master_write_slave(slaveAddressNFC, message, 2);
 
 		vTaskDelay(500 / portTICK_PERIOD_MS);
 		return -1;
@@ -288,6 +310,12 @@ int NFCReadTag()
 	else
 	{
 		printf("Invalid BBC %X != %X\n", BBC, message[4]);
+
+		//6-> Tx off
+		message[0] = 0x28;
+		message[1] = 0x86;
+		i2c_master_write_slave(slaveAddressNFC, message, 2);
+
 		vTaskDelay(2000 / portTICK_PERIOD_MS);
 		return -2;
 	}
@@ -313,6 +341,12 @@ int NFCReadTag()
 	else
 	{
 		printf("Unknown uidLength\n\n");
+
+		//6-> Tx off
+		message[0] = 0x28;
+		message[1] = 0x86;
+		i2c_master_write_slave(slaveAddressNFC, message, 2);
+
 		vTaskDelay(2000 / portTICK_PERIOD_MS);
 		return -3;
 	}
@@ -321,6 +355,12 @@ int NFCReadTag()
 	{
 		printf("\n\n");
 		//vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+		//6-> Tx off
+		message[0] = 0x28;
+		message[1] = 0x86;
+		i2c_master_write_slave(slaveAddressNFC, message, 2);
+
 		return 1;
 	}
 
@@ -464,6 +504,10 @@ int NFCReadTag()
 
 	validId = true;
 
+	//6-> Tx off
+	message[0] = 0x28;
+	message[1] = 0x86;
+	i2c_master_write_slave(slaveAddressNFC, message, 2);
 	//vTaskDelay(3000 / portTICK_PERIOD_MS);
 
     return 2;

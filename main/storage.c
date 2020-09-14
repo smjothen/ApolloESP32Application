@@ -65,10 +65,11 @@ void storage_Init_Configuration()
 	configurationStruct.authenticationRequired = false;
 	configurationStruct.transmitInterval = 60;
 	configurationStruct.transmitChangeLevel = 1.0;
-	configurationStruct.communicationMode = 0;
-	configurationStruct.hmiBrightness = 0.5;
+	configurationStruct.communicationMode = eCONNECTION_NO_INTERFACE;
+	configurationStruct.hmiBrightness = 0.1;
 	configurationStruct.maxPhases = 3;
 }
+
 
 struct Configuration storage_GetConfigurationParameers()
 {
@@ -172,7 +173,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
 
-	memset(&configurationStruct, 0, sizeof(configurationStruct));
+	//memset(&configurationStruct, 0, sizeof(configurationStruct));
 
 	return err;
 }

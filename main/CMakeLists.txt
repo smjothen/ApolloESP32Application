@@ -9,6 +9,7 @@ set(COMPONENT_SRCS "main.c"
 				   "audioBuzzer.c"
 				   "production_test.c"
 				   "storage.c"
+				   "connectivity.c"
 				   "diagnostics_port.c"
 				   )
 
