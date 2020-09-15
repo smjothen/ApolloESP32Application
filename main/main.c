@@ -471,8 +471,10 @@ void app_main(void)
 
 			else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
 			{
-				strcpy(WifiSSID, "BVb");
-				strcpy(WifiPSK, "tk51mo79");
+				strcpy(WifiSSID, "ZaptecHQ-guest");
+				strcpy(WifiPSK, "Ilovezaptec");
+				//strcpy(WifiSSID, "BVb");
+				//strcpy(WifiPSK, "tk51mo79");
 			}
 			else if(switchState == 4) //Applica - EMC config
 			{
@@ -481,7 +483,7 @@ void app_main(void)
 			}
 
 			storage_Init_Configuration();
-			Storage_Set_CommunicationMode(eCONNECTION_WIFI);
+			storage_Set_CommunicationMode(eCONNECTION_WIFI);
 			storage_SaveConfiguration();
 			storage_SaveWifiParameters(WifiSSID, WifiPSK);
 		}
@@ -578,9 +580,13 @@ void app_main(void)
 	}
 	else
 	{
-		strcpy(devInfo.serialNumber, "ZAP000005");
-		strcpy(devInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
-		strcpy(devInfo.Pin, "4284");
+		strcpy(devInfo.serialNumber, "ZAP000011");
+		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+		strcpy(devInfo.Pin, "7053");
+//		strcpy(devInfo.serialNumber, "ZAP000012");
+//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
+//		strcpy(devInfo.Pin, "5662");
+		devInfo.EEPROMFormatVersion = 1;
 		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}
 

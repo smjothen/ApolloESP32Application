@@ -32,7 +32,7 @@ const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
 //static const uint16_t WIFI_SERV_CHAR_config_uuid    = 0xFF02;
 
 ////////////////////
-//static const uint16_t ADAPTER_SERV_CHAR_config_uuid    = 0xABCD;
+//static const uint16_t CHARGER_SERV_CHAR_config_uuid    = 0xABCD;
 
 static bool wasValid = false;
 //static int nextIndex = 0;
@@ -63,18 +63,18 @@ static uint8_t WIFI_SERV_CHAR_SSID_val[32];        		//= "abcdefgh";//{0x00};
 
 const uint8_t WiFiPSK_uid128[ESP_UUID_LEN_128] = {0xd4, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t WIFI_SERV_CHAR_PSK_descr[]   		= "Wifi password";
-static uint8_t WIFI_SERV_CHAR_PSK_val[32]          		= {0x00};
+static uint8_t WIFI_SERV_CHAR_PSK_val[64]          		= {0x00};
 
 
 //const uint8_t 	DeviceMID_uid128[ESP_UUID_LEN_128] = {0xc0, 0x6b, 0xe8, 0x8c, 0x3f, 0xe6, 0x1c, 0xe9, 0xfb, 0x4c, 0x22, 0xf7, 0x00, 0x00, 0x00, 0x00};
 const uint8_t DeviceMID_uuid128[ESP_UUID_LEN_128] = {0xd7, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
-static const uint8_t ADAPTER_SERV_CHAR_ADAPTER_MID_descr[]  = "Device MID";
-//static uint8_t ADAPTER_SERV_CHAR_ADAPTER_MID_val[9]    		= "APM000003";
-static uint8_t ADAPTER_SERV_CHAR_ADAPTER_MID_val[9];
+static const uint8_t CHARGER_SERV_CHAR_CHARGER_MID_descr[]  = "Device MID";
+//static uint8_t CHARGER_SERV_CHAR_CHARGER_MID_val[9]    		= "APM000003";
+static uint8_t CHARGER_SERV_CHAR_CHARGER_MID_val[9];
 
 
 const uint8_t 	PIN_uuid128[ESP_UUID_LEN_128] = {0xd8, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
-static const uint8_t ADAPTER_SERV_CHAR_pin_descr[]  	= "Set PIN";
+static const uint8_t CHARGER_SERV_CHAR_pin_descr[]  	= "Set PIN";
 static uint8_t WIFI_SERV_CHAR_PIN_val[4]        		= {0x30, 0x30, 0x30, 0x30};
 
 
@@ -91,8 +91,6 @@ const uint8_t 	Warnings_uuid128[ESP_UUID_LEN_128] 		= {0x01, 0xfe, 0xb5, 0xc0, 0
 //static uint8_t WARNINGS_SERV_CHAR_PIN_val[4]        	= {0x00, 0x00, 0x00, 0x00};
 
 
-
-
 const uint8_t 	Auth_uuid128[ESP_UUID_LEN_128] 		= {0x00, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t AUTH_CHAR_pin_descr[]  		= "Auth";
 static uint8_t AUTH_SERV_CHAR_val[]        		= {"0"};
@@ -104,9 +102,18 @@ static uint8_t SAVE_SERV_CHAR_val[]        		= {"0"};
 
 
 
-static uint8_t WIFI_SERV_CHAR_info_ccc[2]           	= {0x00,0x00};
-static uint8_t WIFI_SERV_CHAR_config_ccc[2]         	= {0x00,0x00};
-static uint8_t ADAPTER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
+
+const uint8_t CommunicationMode_uid128[ESP_UUID_LEN_128] = {0xd2, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+static const uint8_t COMMUNICATION_MODE_CHAR_descr[]   	= "Communication Mode";
+static uint8_t COMMUNICATION_MODE_val[32]          		= {0x00};
+
+
+
+
+
+//static uint8_t WIFI_SERV_CHAR_info_ccc[2]           	= {0x00,0x00};
+//static uint8_t WIFI_SERV_CHAR_config_ccc[2]         	= {0x00,0x00};
+static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
 static char wifiPackage[500] = {0};
 
@@ -123,58 +130,64 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	//[WIFI_SERV] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), sizeof(WIFI_SERV_uuid), (uint8_t *)&WIFI_SERV_uuid}},
 	//[WIFI_SERV] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uid128, ESP_GATT_PERM_READ, 0, 0, (uint8_t *)&WIFI_SERV_uuid}},
 
-    //[WIFI_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Wifi_SERVICE_uuid, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+    //[WIFI_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Wifi_SERVICE_uuid, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
 	//[WIFI_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &WIFI_SERV_CHAR_descr, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
-	     [WIFI_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ,  sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[WIFI_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ,  sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 	//[WIFI_SSID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_info_ccc), (uint8_t *)WIFI_SERV_CHAR_info_ccc}},
 
 	[WIFI_SSID_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[WIFI_SSID_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &WifiSSID_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[WIFI_SSID_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &WifiSSID_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[WIFI_SSID_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[WIFI_SSID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_info_ccc), (uint8_t *)WIFI_SERV_CHAR_info_ccc}},
+	//[WIFI_SSID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_info_ccc), (uint8_t *)WIFI_SERV_CHAR_info_ccc}},
 
 	[WIFI_PSK_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-    [WIFI_PSK_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &WiFiPSK_uid128, ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+    [WIFI_PSK_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &WiFiPSK_uid128, ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
     [WIFI_PSK_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-    [WIFI_PSK_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_config_ccc), (uint8_t *)WIFI_SERV_CHAR_config_ccc}},
+    //[WIFI_PSK_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_config_ccc), (uint8_t *)WIFI_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_DEVICE_MID_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_DEVICE_MID_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_DEVICE_MID_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_DEVICE_MID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_DEVICE_MID_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_DEVICE_MID_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_DEVICE_MID_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_DEVICE_MID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_PIN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_PIN_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &PIN_uuid128, ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_PIN_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_PIN_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_PIN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_PIN_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &PIN_uuid128, ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_PIN_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_PIN_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
 
-	[ADAPTER_AVAIL_WIFI_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_AVAIL_WIFI_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &AvailableWifi_uuid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_AVAIL_WIFI_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_AVAIL_WIFI_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_AVAIL_WIFI_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_AVAIL_WIFI_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &AvailableWifi_uuid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_AVAIL_WIFI_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_AVAIL_WIFI_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_NETWORK_STATUS_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_NETWORK_STATUS_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkStatus_uuid128, ESP_GATT_PERM_READ , sizeof(uint16_t), 0, NULL}},
-	//[ADAPTER_NETWORK_STATUS_VAL] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkStatus_uuid128, ESP_GATT_PERM_READ , sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_NETWORK_STATUS_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_NETWORK_STATUS_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_NETWORK_STATUS_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_NETWORK_STATUS_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkStatus_uuid128, ESP_GATT_PERM_READ , sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_NETWORK_STATUS_UUID] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkStatus_uuid128, ESP_GATT_PERM_READ , sizeof(uint16_t), 0, NULL}},
+	[CHARGER_NETWORK_STATUS_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_NETWORK_STATUS_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_WARNINGS_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_WARNINGS_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Warnings_uuid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_WARNINGS_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_WARNINGS_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_WARNINGS_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_WARNINGS_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Warnings_uuid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_WARNINGS_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_WARNINGS_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_AUTH_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_AUTH_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Auth_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_AUTH_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_AUTH_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_AUTH_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_AUTH_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Auth_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_AUTH_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_AUTH_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
-	[ADAPTER_SAVE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[ADAPTER_SAVE_VAL] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Save_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
-	[ADAPTER_SAVE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
-	[ADAPTER_SAVE_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(ADAPTER_SERV_CHAR_config_ccc), (uint8_t *)ADAPTER_SERV_CHAR_config_ccc}},
+	[CHARGER_SAVE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_SAVE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Save_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_SAVE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_SAVE_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
+
+	[CHARGER_COMMUNICATION_MODE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_COMMUNICATION_MODE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &CommunicationMode_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_COMMUNICATION_MODE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+
 
 };
 
@@ -188,7 +201,7 @@ void charInit()
 
 void setDeviceNameAsChar(char * devName)
 {
-	memcpy(ADAPTER_SERV_CHAR_ADAPTER_MID_val, devName, 9);
+	memcpy(CHARGER_SERV_CHAR_CHARGER_MID_val, devName, 9);
 }
 
 void setPinAsChar(char * pin)
@@ -220,7 +233,7 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 	//Check authentication before allowing reads
-//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_DEVICE_MID_VAL))
+//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_DEVICE_MID_UUID))
 //	{
 //		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
 //		return;
@@ -232,11 +245,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 	//int jsonStringLen = strlen(jsonString);
 
 	static int statusSegmentCount = 0;
-	if(attrIndex != ADAPTER_NETWORK_STATUS_VAL)
+	if(attrIndex != CHARGER_NETWORK_STATUS_UUID)
 		statusSegmentCount = 0;
 
 	static int wifiSegmentCount = 0;
-	if(attrIndex != ADAPTER_AVAIL_WIFI_VAL)
+	if(attrIndex != CHARGER_AVAIL_WIFI_UUID)
 		wifiSegmentCount = 0;
 
 	cJSON *jsonObject;
@@ -247,13 +260,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     // Characteristic read values
     /*
      * Write only
-     case WIFI_PSK_VAL:
+     case WIFI_PSK_UUID:
 	    memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 	    memcpy(rsp->attr_value.value, WIFI_SERV_CHAR_info_val, sizeof(WIFI_SERV_CHAR_info_val));
 	    rsp->attr_value.len = sizeof(WIFI_SERV_CHAR_info_val);
 	    break;*/
 
-    case WIFI_SSID_VAL:
+    case WIFI_SSID_UUID:
 	    memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
 	    char * SSID = network_getWifiSSID();
@@ -279,42 +292,42 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
         break;
 
 
-    case ADAPTER_DEVICE_MID_VAL:
+    case CHARGER_DEVICE_MID_UUID:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
-		memcpy(rsp->attr_value.value, ADAPTER_SERV_CHAR_ADAPTER_MID_val, sizeof(ADAPTER_SERV_CHAR_ADAPTER_MID_val));
-		rsp->attr_value.len = sizeof(ADAPTER_SERV_CHAR_ADAPTER_MID_val);
+		memcpy(rsp->attr_value.value, CHARGER_SERV_CHAR_CHARGER_MID_val, sizeof(CHARGER_SERV_CHAR_CHARGER_MID_val));
+		rsp->attr_value.len = sizeof(CHARGER_SERV_CHAR_CHARGER_MID_val);
 		break;
 
-    case ADAPTER_DEVICE_MID_DESCR:
+    case CHARGER_DEVICE_MID_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
-		memcpy(rsp->attr_value.value, ADAPTER_SERV_CHAR_ADAPTER_MID_descr, sizeof(ADAPTER_SERV_CHAR_ADAPTER_MID_descr));
-		rsp->attr_value.len = sizeof(ADAPTER_SERV_CHAR_ADAPTER_MID_descr);
+		memcpy(rsp->attr_value.value, CHARGER_SERV_CHAR_CHARGER_MID_descr, sizeof(CHARGER_SERV_CHAR_CHARGER_MID_descr));
+		rsp->attr_value.len = sizeof(CHARGER_SERV_CHAR_CHARGER_MID_descr);
 		break;
 
-    case ADAPTER_PIN_DESCR:
+    case CHARGER_PIN_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
-		memcpy(rsp->attr_value.value, ADAPTER_SERV_CHAR_pin_descr, sizeof(ADAPTER_SERV_CHAR_pin_descr));
-		rsp->attr_value.len = sizeof(ADAPTER_SERV_CHAR_pin_descr);
+		memcpy(rsp->attr_value.value, CHARGER_SERV_CHAR_pin_descr, sizeof(CHARGER_SERV_CHAR_pin_descr));
+		rsp->attr_value.len = sizeof(CHARGER_SERV_CHAR_pin_descr);
 		break;
 
-    case ADAPTER_AUTH_DESCR:
+    case CHARGER_AUTH_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 		memcpy(rsp->attr_value.value, AUTH_CHAR_pin_descr, sizeof(AUTH_CHAR_pin_descr));
 		rsp->attr_value.len = sizeof(AUTH_CHAR_pin_descr);
 		break;
-    case ADAPTER_SAVE_DESCR:
+    case CHARGER_SAVE_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 		memcpy(rsp->attr_value.value, SAVE_CHAR_pin_descr, sizeof(SAVE_CHAR_pin_descr));
 		rsp->attr_value.len = sizeof(SAVE_CHAR_pin_descr);
 		break;
 
-    case ADAPTER_AVAIL_WIFI_DESCR:
+    case CHARGER_AVAIL_WIFI_DESCR:
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 		memcpy(rsp->attr_value.value, AVAILABLE_WIFI_CHAR_pin_descr, sizeof(AVAILABLE_WIFI_CHAR_pin_descr));
 		rsp->attr_value.len = sizeof(AVAILABLE_WIFI_CHAR_pin_descr);
 		break;
 
-    case ADAPTER_AVAIL_WIFI_VAL:
+    case CHARGER_AVAIL_WIFI_UUID:
 
     	if(wifiSegmentCount == 0)
     	{
@@ -395,7 +408,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		}
     	break;
 
-    case ADAPTER_NETWORK_STATUS_VAL:
+    case CHARGER_NETWORK_STATUS_UUID:
 
 		//{"wifi":{"ip":"10.0.0.1","link":-54},"online":true}
 
@@ -438,24 +451,59 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     	break;
 
-    case ADAPTER_AUTH_VAL:
+    case CHARGER_AUTH_UUID:
     	rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
     	rsp->attr_value.len = 1;
     	break;
 
-    case ADAPTER_SAVE_VAL:
+    case CHARGER_SAVE_UUID:
     	rsp->attr_value.value[0] = SAVE_SERV_CHAR_val[0];
     	rsp->attr_value.len = 1;
         break;
+
+    case CHARGER_COMMUNICATION_MODE_UUID:
+
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+		{
+			memcpy(COMMUNICATION_MODE_val, "Wifi",4);
+			memcpy(rsp->attr_value.value, COMMUNICATION_MODE_val, sizeof(COMMUNICATION_MODE_val));
+			rsp->attr_value.len = 4;
+			ESP_LOGI(TAG, "Read Wifi");
+		}
+		else if (storage_Get_CommunicationMode() == eCONNECTION_4G)
+		{
+			memcpy(COMMUNICATION_MODE_val, "4G",2);
+			memcpy(rsp->attr_value.value, COMMUNICATION_MODE_val, sizeof(COMMUNICATION_MODE_val));
+			rsp->attr_value.len = 2;
+			ESP_LOGI(TAG, "Read 4G");
+		}
+		else
+		{
+			memcpy(COMMUNICATION_MODE_val, "None",4);
+			memcpy(rsp->attr_value.value, COMMUNICATION_MODE_val, sizeof(COMMUNICATION_MODE_val));
+			rsp->attr_value.len = 4;
+			ESP_LOGI(TAG, "Read None");
+		}
+		break;
+
+    case CHARGER_COMMUNICATION_MODE_DESCR:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		memcpy(rsp->attr_value.value, COMMUNICATION_MODE_CHAR_descr, sizeof(COMMUNICATION_MODE_CHAR_descr));
+		rsp->attr_value.len = sizeof(COMMUNICATION_MODE_CHAR_descr);
+		break;
 
     }
 
 }
 
+static bool saveWifi = false;
+static bool saveConfiguration = false;
+
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 	//Check authentication before allowing writes
-//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != ADAPTER_AUTH_VAL))
+//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_AUTH_UUID))
 //	{
 //		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
 //		return;
@@ -463,7 +511,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     switch( attrIndex )
     {
-    case WIFI_PSK_VAL:
+    case WIFI_PSK_UUID:
         /*
          *  Handle any writes to Wifi Info char here
          */
@@ -475,13 +523,15 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(WIFI_SERV_CHAR_PSK_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_PSK_val);
 
+		saveWifi = true;
+
 //		storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
 //
 //		//Make the values
 //		network_CheckWifiParameters();
 	    break;
 
-    case WIFI_SSID_VAL:
+    case WIFI_SSID_UUID:
         /*
          *  Handle any writes to Wifi Val char here
          */
@@ -491,10 +541,28 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(WIFI_SERV_CHAR_SSID_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
 
-
+		saveWifi = true;
 	    break;
 
-    case ADAPTER_AUTH_VAL:
+
+
+    case CHARGER_COMMUNICATION_MODE_UUID:
+
+    	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
+
+    	memset(COMMUNICATION_MODE_val,0, sizeof(WIFI_SERV_CHAR_SSID_val));
+		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
+		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
+
+		//saveConfiguration
+
+
+
+   		break;
+
+
+
+    case CHARGER_AUTH_UUID:
 
 		ESP_LOGI(TAG, "Adapter pin %02x", param->write.value[0]);
 
@@ -528,19 +596,52 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		break;
 
-    case ADAPTER_SAVE_VAL:
+    case CHARGER_SAVE_UUID:
 		//ESP_LOGI(TAG, "Save value %02x", param->write.value[0]);
 
     	///wasValid = network_wifiIsValid();
 
 		SAVE_SERV_CHAR_val[0] = '1';
-		if(SAVE_SERV_CHAR_val[0] == '1')
+		if((SAVE_SERV_CHAR_val[0] == '1') && (saveWifi == true))
 		{
-			///storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
+			storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
 
 			//Make the values active
-			///network_CheckWifiParameters();
+			network_CheckWifiParameters();
+
+			saveWifi = false;
 		}
+
+
+		if((SAVE_SERV_CHAR_val[0] == '1') && (saveConfiguration == true))
+		{
+			if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
+			{
+				storage_Set_CommunicationMode(eCONNECTION_WIFI);
+				ESP_LOGI(TAG, "Set Wifi");
+
+			}
+			else if(strncmp("4G", (char*)COMMUNICATION_MODE_val, 2) == 0)
+			{
+				storage_Set_CommunicationMode(eCONNECTION_4G);
+				ESP_LOGI(TAG, "Set 4G");
+			}
+			else
+			{
+				storage_Set_CommunicationMode(eCONNECTION_NONE);
+				ESP_LOGI(TAG, "Set None");
+			}
+
+			//storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
+
+
+
+
+
+			saveConfiguration = false;
+		}
+
+
 
 		///if(wasValid == true)
 			///network_updateWifi();
@@ -548,6 +649,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		ESP_LOGI(TAG, "Save val pin %s", SAVE_SERV_CHAR_val);
 
 		break;
+
+
+
 	}
 
 

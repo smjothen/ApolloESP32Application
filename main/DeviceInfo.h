@@ -22,7 +22,7 @@ static char softwareVersion[] = "0.0.0.2";
 
 enum ConnectionInterface
 {
-	eCONNECTION_NO_INTERFACE = 0,
+	eCONNECTION_NONE 		 = 0,
 	eCONNECTION_WIFI		 = 1,
 	eCONNECTION_4G			 = 2,
 	eCONNECTION_4G_TO_WIFI	 = 3
@@ -30,14 +30,22 @@ enum ConnectionInterface
 
 struct Configuration
 {
-	bool dataStructureIsInitialized;
-	bool authenticationRequired;
+	uint32_t saveCounter;
+
+	uint8_t authenticationRequired;
 	uint32_t transmitInterval;
 	float transmitChangeLevel;
 
-	uint32_t communicationMode;
+	uint8_t communicationMode;
 	float hmiBrightness;
-	uint32_t maxPhases;
+	uint8_t permanentLock;
+
+	uint8_t standalone;
+	uint8_t standalonePhase;
+	float standaloneCurrent;
+	float maxInstallationCurrentConfig;
+	uint8_t maxPhases;
+	uint8_t phaseRotation;
 };
 
 #endif /* DEVICEINFO_H_ */

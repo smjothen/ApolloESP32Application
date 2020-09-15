@@ -12,9 +12,9 @@
 static const char *TAG = "CONNECTIVITY: ";
 
 
-enum ConnectionInterface activeInterface = eCONNECTION_NO_INTERFACE;
-static enum ConnectionInterface staticNewInterface = eCONNECTION_NO_INTERFACE;
-static enum ConnectionInterface previousInterface = eCONNECTION_NO_INTERFACE;
+enum ConnectionInterface activeInterface = eCONNECTION_NONE;
+static enum ConnectionInterface staticNewInterface = eCONNECTION_NONE;
+static enum ConnectionInterface previousInterface = eCONNECTION_NONE;
 
 void connectivityActivateInterface(enum ConnectionInterface selectedInterface)
 {
@@ -36,9 +36,9 @@ static void connectivity_task()
 
 	//Read from Flash. If no interface is configured, use none and wait for setting
 	//activeInterface
-	staticNewInterface = (enum ConnectionInterface)Storage_Get_CommunicationMode();
+	staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
 
-	enum ConnectionInterface localNewInterface = eCONNECTION_NO_INTERFACE;
+	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
 
@@ -54,7 +54,7 @@ static void connectivity_task()
 		// If an interface is active and there is a change
 		if(interfaceChange == true)		//  (localActiveInterface != eCONNECTION_NO_INTERFACE) && (localActiveInterface != previousInterface))
 		{
-			if(activeInterface == eCONNECTION_NO_INTERFACE)
+			if(activeInterface == eCONNECTION_NONE)
 			{
 				ESP_LOGI(TAG, "Nothing to deinit, ready to init new interface");
 			}
@@ -80,7 +80,7 @@ static void connectivity_task()
 		{
 
 
-			if(localNewInterface == eCONNECTION_NO_INTERFACE)
+			if(localNewInterface == eCONNECTION_NONE)
 			{
 				ESP_LOGI(TAG, "No network interface selected");
 			}
