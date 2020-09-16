@@ -12,6 +12,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "protocol_task.h"
 #include "mcu_communication.h"
+#include "crc32.h"
 
 #define TAG "OTA"
 
@@ -28,46 +29,10 @@ const uint32_t DSPIC_LINE_SIZE = _DSPIC_LINE_SIZE;
 static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 
-//from https://rosettacode.org/wiki/CRC-32#C
-uint32_t
-rc_crc32(uint32_t crc, const char *buf, size_t len)
-{
-	static uint32_t table[256];
-	static int have_table = 0;
-	uint32_t rem;
-	uint8_t octet;
-	int i, j;
-	const char *p, *q;
- 
-	/* This check is not thread safe; there is no mutex. */
-	if (have_table == 0) {
-		/* Calculate CRC table. */
-		for (i = 0; i < 256; i++) {
-			rem = i;  /* remainder from polynomial division */
-			for (j = 0; j < 8; j++) {
-				if (rem & 1) {
-					rem >>= 1;
-					rem ^= 0xedb88320;
-				} else
-					rem >>= 1;
-			}
-			table[i] = rem;
-		}
-		have_table = 1;
-	}
- 
-	crc = ~crc;
-	q = buf + len;
-	for (p = buf; p < q; p++) {
-		octet = *p;  /* Cast to unsigned octet. */
-		crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
-	}
-	return ~crc;
-}
-
 int transfer_dspic_fw(void);
-void ensure_dspic_updated(void);
+void boot_dspic_app(void);
 void delete_dspic_fw(void);
+void set_dspic_header(void);
 
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -99,9 +64,11 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 
 static void ota_task(void *pvParameters){
+    set_dspic_header();// test only
     delete_dspic_fw();
     transfer_dspic_fw();
-    ensure_dspic_updated();
+    set_dspic_header();
+    boot_dspic_app();
     char image_location[256] = {0};
     esp_http_client_config_t config = {
         .url = image_location,
@@ -157,16 +124,17 @@ void validate_booted_image(void){
 }
 
 
-#define COMMAND_NACK        0x00
-#define COMMAND_ACK         0x01
-#define COMMAND_READ_PM     0x02
-#define COMMAND_WRITE_PM    0x03
-#define COMMAND_WRITE_CM    0x07
-#define COMMAND_START_APP   0x08
-#define COMMAND_START_BL    0x18
-#define COMMAND_READ_ID     0x09
-#define COMMAND_APP_CRC     0x0A
-#define COMMAND_APP_DELETE  0x0B
+#define COMMAND_NACK         0x00
+#define COMMAND_ACK          0x01
+#define COMMAND_READ_PM      0x02
+#define COMMAND_WRITE_PM     0x03
+#define COMMAND_WRITE_CM     0x07
+#define COMMAND_START_APP    0x08
+#define COMMAND_START_BL     0x18
+#define COMMAND_READ_ID      0x09
+#define COMMAND_APP_CRC      0x0A
+#define COMMAND_APP_DELETE   0x0B
+#define COMMAND_WRITE_HEADER 0x0C
 
 int transfer_dspic_fw(void){
     ESP_LOGI(TAG, "sending fw to dspic");
@@ -234,8 +202,8 @@ int transfer_dspic_fw(void){
     return 0;
 }
 
-void ensure_dspic_updated(void){
-    ESP_LOGI(TAG, "checking dsPIC FW version");
+void boot_dspic_app(void){
+    ESP_LOGI(TAG, "starting dsPIC app");
     while (true)
     {
     
@@ -298,8 +266,62 @@ void delete_dspic_fw(void){
         
 }
 
+void set_dspic_header(void){
+    ESP_LOGI(TAG, "sending header to dsPIC");
+
+
+    ZapMessage txMsg;
+
+    // ZEncodeMessageHeader* does not check the length of the buffer!
+    // This should not be a problem for most usages, but make sure strings are within a range that fits!
+    uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+    uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+    
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = ParamRunTest; // ignored on bootloader?
+
+    uint8_t message_data[10];
+    message_data[0] = COMMAND_WRITE_HEADER;
+    message_data[1] = 1; // header version
+
+    uint32_t app_size = dspic_bin_end - dspic_bin_start; // this must be a multiple of 4
+
+    uint32_t app_crc = crc32(0,(const char *) dspic_bin_start, app_size);
+
+    memcpy(message_data+2, &app_size, sizeof(uint32_t));
+    memcpy(message_data+2+4, &app_crc, sizeof(uint32_t));
+
+    ESP_LOGI(TAG, "Sending crc %u for %u bytes", app_crc, app_size);
+
+    uint encoded_length = ZEncodeMessageHeaderAndByteArray(
+        &txMsg, (char *) message_data, sizeof(message_data), txBuf, encodedTxBuf
+    );
+
+    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
+    
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+    printf("frame type: %d \n\r", rxMsg.type);
+    printf("frame identifier: %d \n\r", rxMsg.identifier);
+    printf("frame timeId: %d \n\r", rxMsg.timeId);
+
+
+    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+    if(error_code==0){
+        ESP_LOGI(TAG, "dsPIC flashed, and header updated");
+    }else{
+        ESP_LOGW(TAG, "CRC related failure when updating dsPIC (%d)", error_code);
+    }
+
+    freeZapMessageReply();    
+}
+
+
 void start_ota_task(void){
     ESP_LOGI(TAG, "starting ota task");
+    
+    ESP_LOGD(TAG, ">>>>dsPIC CROPED image crc32 is %u (%d)", crc32(0,(const char *) dspic_bin_start, 128*2), 128*2);
+    ESP_LOGD(TAG, "crc done");
+
     esp_log_level_set("HTTP_CLIENT", ESP_LOG_INFO);
     // esp_log_level_set("esp_https_ota", ESP_LOG_DEBUG);
     // esp_log_level_set("esp_ota_ops", ESP_LOG_DEBUG);
@@ -307,10 +329,6 @@ void start_ota_task(void){
 
     event_group = xEventGroupCreate();
     xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-    
-    //ensure_dspic_updated();
-    //transfer_dspic_fw();
-    //validate_booted_image();
 
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t taskHandle = NULL;
@@ -323,7 +341,9 @@ void start_ota_task(void){
 
     int32_t dspic_len = dspic_bin_end - dspic_bin_start;
     ESP_LOGD(TAG, "dsPIC binary is %d bytes", dspic_len);
-    ESP_LOGD(TAG, ">>>>dsPIC image crc32 is %d", rc_crc32(0,(const char *) dspic_bin_start, dspic_len));
+    uint32_t crc = crc32(0,(const char *) dspic_bin_start, dspic_len);
+    ESP_LOGD(TAG, ">>>>dsPIC image crc32 is %d", crc );
+    
 }
 
 int start_ota(void){
