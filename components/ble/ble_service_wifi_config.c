@@ -233,20 +233,20 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 
 
 
-	[CHARGER_STAND_ALONE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_STAND_ALONE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[CHARGER_STAND_ALONE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	[CHARGER_STANDALONE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_STANDALONE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_STANDALONE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
-	[CHARGER_STAND_ALONE_PHASE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_STAND_ALONE_PHASE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_Phase_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[CHARGER_STAND_ALONE_PHASE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	[CHARGER_STANDALONE_PHASE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_STANDALONE_PHASE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_Phase_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_STANDALONE_PHASE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
-	[CHARGER_STAND_ALONE_CURRENT_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_STAND_ALONE_CURRENT_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_Current_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[CHARGER_STAND_ALONE_CURRENT_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	[CHARGER_STANDALONE_CURRENT_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_STANDALONE_CURRENT_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Standalone_Current_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_STANDALONE_CURRENT_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 	[CHARGER_PERMANENT_LOCK_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_PERMANENT_LOCK_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Permanent_Lock_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_PERMANENT_LOCK_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Permanent_Lock_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_PERMANENT_LOCK_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 	[CHARGER_WARNINGS_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
@@ -262,11 +262,11 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_MAX_INST_CURRENT_SWITCH_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 	[CHARGER_MAX_INST_CURRENT_CONFIG_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_MAX_INST_CURRENT_CONFIG_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Max_Inst_Current_Config_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_MAX_INST_CURRENT_CONFIG_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Max_Inst_Current_Config_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_MAX_INST_CURRENT_CONFIG_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 	[CHARGER_PHASE_ROTATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_PHASE_ROTATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 };
@@ -613,7 +613,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 
 
-    case CHARGER_STAND_ALONE_UUID:
+    case CHARGER_STANDALONE_UUID:
 
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
@@ -632,14 +632,14 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		break;
 
-    case CHARGER_STAND_ALONE_DESCR:
+    case CHARGER_STANDALONE_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 		memcpy(rsp->attr_value.value, Standalone_descr, sizeof(Standalone_descr));
 		rsp->attr_value.len = sizeof(Standalone_descr);
 		break;
 
 
-    case CHARGER_STAND_ALONE_PHASE_UUID:
+    case CHARGER_STANDALONE_PHASE_UUID:
 
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
@@ -653,14 +653,14 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
  		break;
 
-     case CHARGER_STAND_ALONE_PHASE_DESCR:
+     case CHARGER_STANDALONE_PHASE_DESCR:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
  		memcpy(rsp->attr_value.value, StandalonePhase_descr, sizeof(StandalonePhase_descr));
  		rsp->attr_value.len = sizeof(StandalonePhase_descr);
  		break;
 
 
-     case CHARGER_STAND_ALONE_CURRENT_UUID:
+     case CHARGER_STANDALONE_CURRENT_UUID:
 
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
@@ -674,7 +674,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		break;
 
-     case CHARGER_STAND_ALONE_CURRENT_DESCR:
+     case CHARGER_STANDALONE_CURRENT_DESCR:
   		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
   		memcpy(rsp->attr_value.value, Standalone_Current_descr, sizeof(Standalone_Current_descr));
   		rsp->attr_value.len = sizeof(Standalone_Current_descr);
@@ -900,7 +900,117 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
    		break;
 
+    case CHARGER_STANDALONE_UUID:
 
+    	ESP_LOGI(TAG, "Standalone written %02x", param->write.value[0]);
+
+    	if(param->write.value[0] == '0')
+    	{
+    		storage_Set_Standalone(0);
+    		ESP_LOGI(TAG, "Set standalone: 0");
+    		saveConfiguration = true;
+    	}
+    	else if (param->write.value[0] == '1')
+    	{
+    		storage_Set_Standalone(1);
+    		ESP_LOGI(TAG, "Set standalone: 1");
+    		saveConfiguration = true;
+    	}
+
+   		break;
+
+
+    case CHARGER_STANDALONE_PHASE_UUID:
+
+    	ESP_LOGI(TAG, "Standalone PHASE written %02x", param->write.value[0]);
+
+    	memset(nrTostr, 0, sizeof(nrTostr));
+    	memcpy(nrTostr, param->write.value, param->write.len);
+    	uint8_t standalonePhase = (uint8_t)atoi(nrTostr);
+
+    	//Sanity check
+    	if((10 >= standalonePhase) && (standalonePhase >= 1))
+    	{
+    		storage_Set_StandalonePhase(standalonePhase);
+    		ESP_LOGI(TAG, "Set standalone Phase: %d", standalonePhase);
+    		saveConfiguration = true;
+    	}
+
+   		break;
+    case CHARGER_STANDALONE_CURRENT_UUID:
+
+    	//ESP_LOGI(TAG, "Standalone PHASE written %02x", param->write.value[0]);
+
+    	memset(nrTostr, 0, sizeof(nrTostr));
+    	memcpy(nrTostr, param->write.value, param->write.len);
+    	float standaloneCurrent = atof(nrTostr);
+
+    	ESP_LOGI(TAG, "Standalone CURRENT written %f", standaloneCurrent);
+
+    	//Sanity check
+    	if((32.0 >= standaloneCurrent) && (standaloneCurrent >= 6.0))
+    	{
+    		storage_Set_StandaloneCurrent(standaloneCurrent);
+    		ESP_LOGI(TAG, "Set standalone Current: %f", standaloneCurrent);
+    		saveConfiguration = true;
+    	}
+
+   		break;
+
+    case CHARGER_PERMANENT_LOCK_UUID:
+
+    	ESP_LOGI(TAG, "Permanent lock written %02x", param->write.value[0]);
+
+    	if(param->write.value[0] == '0')
+    	{
+    		storage_Set_PermanentLock(0);
+    		ESP_LOGI(TAG, "Set Permanent Lock: 0");
+    		saveConfiguration = true;
+    	}
+    	else if (param->write.value[0] == '1')
+    	{
+    		storage_Set_PermanentLock(1);
+    		ESP_LOGI(TAG, "Set Permanent Lock: 1");
+    		saveConfiguration = true;
+    	}
+
+   		break;
+
+    case CHARGER_MAX_INST_CURRENT_CONFIG_UUID:
+
+    	memset(nrTostr, 0, sizeof(nrTostr));
+    	memcpy(nrTostr, param->write.value, param->write.len);
+    	float maxInstCurrConfig = atof(nrTostr);
+
+    	ESP_LOGI(TAG, "Max installation current CONFIG written %f", maxInstCurrConfig);
+
+    	//Sanity check
+    	if((63.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
+    	{
+    		storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
+    		ESP_LOGI(TAG, "Set standalone Current: %f", maxInstCurrConfig);
+    		saveConfiguration = true;
+    	}
+
+   		break;
+
+    case CHARGER_PHASE_ROTATION_UUID:
+
+    	ESP_LOGI(TAG, "PhaseRotation written %02x", param->write.value[0]);
+
+    	memset(nrTostr, 0, sizeof(nrTostr));
+    	memcpy(nrTostr, param->write.value, param->write.len);
+    	uint8_t phaseRotation = (uint8_t)atoi(nrTostr);
+
+    	//Sanity check
+    	if((3 >= phaseRotation) && (phaseRotation >= 1))
+    	{
+    		storage_Set_PhaseRotation(phaseRotation);
+    		ESP_LOGI(TAG, "Set phaseRotation: %d", phaseRotation);
+    		saveConfiguration = true;
+    	}
+
+   		break;
 
     case CHARGER_AUTH_UUID:
 
