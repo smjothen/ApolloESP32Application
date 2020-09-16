@@ -147,6 +147,8 @@ volatile static uint32_t mcuDebugCounter = 0;
 volatile static uint32_t mcuWarnings = 0;
 volatile static uint8_t mcuResetSource = 0;
 
+static float mcuMaxInstallationCurrentSwitch = 20.0;//TODO set to 0;
+
 float GetFloat(uint8_t * input)
 {
 	float tmp = 0.0;
@@ -472,6 +474,11 @@ uint32_t MCU_GetWarnings()
 uint8_t MCU_GetResetSource()
 {
 	return mcuResetSource;
+}
+
+float MCU_GetMaxInstallationCurrentSwitch()
+{
+	return mcuMaxInstallationCurrentSwitch;
 }
 
 void configureUart(){

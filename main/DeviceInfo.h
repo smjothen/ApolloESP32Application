@@ -18,7 +18,7 @@ struct DeviceInfo
 
 static uint8_t GetEEPROMFormatVersion() { return 1;}
 
-static char softwareVersion[] = "0.0.0.2";
+static char softwareVersion[] = "2.8.0.2";
 
 enum ConnectionInterface
 {

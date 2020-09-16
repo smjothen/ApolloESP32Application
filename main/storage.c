@@ -68,7 +68,7 @@ void storage_Init_Configuration()
 
 	configurationStruct.standalone 				= 1;	//0/1
 	configurationStruct.standalonePhase 		= 1;	//Nr
-	configurationStruct.standaloneCurrent		= 6;	//A
+	configurationStruct.standaloneCurrent		= 10;	//A
 	configurationStruct.maxInstallationCurrentConfig = 0;
 
 	configurationStruct.maxPhases 				= 3;

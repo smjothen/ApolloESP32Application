@@ -23,4 +23,7 @@ uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
 uint8_t MCU_GetResetSource();
 
+float MCU_GetMaxInstallationCurrentSwitch();
+
+
 #endif /* PROTOCOL_TASK_H */
