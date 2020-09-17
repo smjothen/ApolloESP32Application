@@ -42,6 +42,7 @@ static bool wasValid = false;
 //static int nextIndex = 0;
 static int nrOfWifiSegments = 0;
 static int wifiRemainder = 0;
+static int MTUsize = 22;
 
 static int pinRetryCounter = 0;
 
@@ -152,7 +153,7 @@ static uint8_t Phase_Rotation_val[1]          			= {0x0};
 static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
 static char wifiPackage[500] = {0};
-
+//static char *wifiPackage;
 
 
 
@@ -448,37 +449,56 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		{
 			//(sizeof(ap_records) * 10) + (5*10)
 			//char package[500] = {0};
-			wifiPackage[0] = 0;	//version
-			wifiPackage[1] = apNr; //Nr of discovered access points
 
-			int nextIndex = 2;
-			int i;
-			for (i = 0; i < apNr; i++)
+			if(wifiSegmentCount == 0)
 			{
-				wifiPackage[nextIndex++] = ap_records[apNr].rssi;
 
-				if(ap_records[i].authmode == WIFI_AUTH_OPEN)
-					wifiPackage[nextIndex++] = 0;
-				else
-					wifiPackage[nextIndex++] = 1;
+				wifiPackage[0] = 0;	//version
+				wifiPackage[1] = apNr; //Nr of discovered access points
 
-				//Add SSID length to package
-				int ssidLen = strlen((char*)ap_records[i].ssid);
-				if (ssidLen <= 32)
-					wifiPackage[nextIndex++] = ssidLen;
 
-				//Add SSID name to package
-				memcpy(&wifiPackage[nextIndex], &ap_records[i].ssid, ssidLen);
-				nextIndex += ssidLen;
 
-				///if(network_wifiIsValid() == false)
-					///network_stopWifi();
+				int nextIndex = 2;
+				int i;
+				for (i = 0; i < apNr; i++)
+				{
+					int j;
+					bool duplicateDetected = false;
+					for(j = 0; j<i; j++)
+					{
+						if(memcmp(ap_records[i].ssid, ap_records[j].ssid, 32) == 0)
+						{
+							ESP_LOGE(TAG, "Duplicate: %s, i=%d, j=%d", ap_records[i].ssid, i,j);
+							duplicateDetected = true;
+						}
+					}
+					if(duplicateDetected == true)
+						continue;
+
+					wifiPackage[nextIndex++] = ap_records[apNr].rssi;
+
+					if(ap_records[i].authmode == WIFI_AUTH_OPEN)
+						wifiPackage[nextIndex++] = 0;
+					else
+						wifiPackage[nextIndex++] = 1;
+
+					//Add SSID length to package
+					int ssidLen = strlen((char*)ap_records[i].ssid);
+					if (ssidLen <= 32)
+						wifiPackage[nextIndex++] = ssidLen;
+
+					//Add SSID name to package
+					memcpy(&wifiPackage[nextIndex], &ap_records[i].ssid, ssidLen);
+					nextIndex += ssidLen;
+
+					///if(network_wifiIsValid() == false)
+						///network_stopWifi();
+				}
+
+				//int MTUsize = 22;
+				nrOfWifiSegments = nextIndex/MTUsize;
+				wifiRemainder = nextIndex % MTUsize;
 			}
-
-			int MTUsize = 22;
-			nrOfWifiSegments = nextIndex/MTUsize;
-			wifiRemainder = nextIndex % MTUsize;
-
 
 			if (wifiSegmentCount <= nrOfWifiSegments - 1)
 			{

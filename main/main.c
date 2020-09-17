@@ -591,12 +591,12 @@ void app_main(void)
 	}
 	else
 	{
-//		strcpy(devInfo.serialNumber, "ZAP000011");
-//		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-//		strcpy(devInfo.Pin, "7053");
-		strcpy(devInfo.serialNumber, "ZAP000012");
-		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
-		strcpy(devInfo.Pin, "5662");
+		strcpy(devInfo.serialNumber, "ZAP000011");
+		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+		strcpy(devInfo.Pin, "7053");
+//		strcpy(devInfo.serialNumber, "ZAP000012");
+//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
+//		strcpy(devInfo.Pin, "5662");
 		devInfo.EEPROMFormatVersion = 1;
 		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}
