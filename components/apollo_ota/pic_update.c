@@ -1,5 +1,8 @@
 #include "esp_log.h"
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
 
 #include "pic_update.h"
 
@@ -11,6 +14,10 @@
 
 #define TAG "pic_update"
 
+static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*60;
+static EventGroupHandle_t event_group;
+static const int DSPIC_COMMS_ERROR = BIT0;
+static const int DSPIC_UPDATE_COMPLETE = BIT1;
 
 extern const uint8_t dspic_bin_start[] asm("_binary_dspic_bin_start");
 extern const uint8_t dspic_bin_end[] asm("_binary_dspic_bin_end");
@@ -44,7 +51,7 @@ int boot_dspic_app(void);
 int delete_dspic_fw(void);
 int set_dspic_header(void);
 
-void update_dspic_task(void){
+static void update_dspic_task(void *pvParameters){
     
     if(delete_dspic_fw()>=0){
         ESP_LOGI(TAG, "update stage delete: success!");
@@ -71,7 +78,8 @@ void update_dspic_task(void){
     }
 
     ESP_LOGI(TAG, "SUCCESS, dspic updated");
-    return;
+    xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
+    vTaskSuspend(NULL);
 
     err_delete:
         ESP_LOGW(TAG, "failed to delete dspic fw");
@@ -81,10 +89,54 @@ void update_dspic_task(void){
         ESP_LOGW(TAG, "failed to flash dspic header");
     err_app_boot:
         ESP_LOGW(TAG, "failed to boot new fw");
+
+    xEventGroupSetBits(event_group, DSPIC_COMMS_ERROR);
+    vTaskSuspend(NULL);
 }
 
 int update_dspic(void){
-    update_dspic_task();
+    event_group = xEventGroupCreate();
+    bool update_success = false;
+
+    for(int retry=0; retry<5; retry++){
+
+        if(retry == 0){
+            ESP_LOGI(TAG, "starting dspic update task");
+        }else{
+            ESP_LOGI(TAG, "retrying dspic update task (attempt: %d)", retry+1);
+        }
+
+        xEventGroupClearBits(event_group,
+            DSPIC_COMMS_ERROR | DSPIC_UPDATE_COMPLETE);
+
+        static uint8_t ucParameterToPass = {0};
+        TaskHandle_t taskHandle = NULL;
+        int stack_size = 4096*2;
+        xTaskCreate( 
+            &update_dspic_task, "otatask", stack_size, 
+            &ucParameterToPass, 4, &taskHandle
+        );
+
+        EventBits_t task_results = xEventGroupWaitBits(event_group,
+            DSPIC_COMMS_ERROR | DSPIC_UPDATE_COMPLETE,
+            pdFALSE, pdFALSE, pdMS_TO_TICKS(DSPIC_UPDATE_TIMEOUT_MS));
+
+        if(task_results & DSPIC_UPDATE_COMPLETE){
+            ESP_LOGI(TAG, "update success, terminating update task (attempt: %d)", retry+1);
+        }else if (task_results & DSPIC_COMMS_ERROR){
+            ESP_LOGW(TAG, "error while updating dspic(attempt: %d)", retry+1);
+        }else{
+            ESP_LOGW(TAG, "timeout while updating dspic(attempt: %d)", retry+1);
+            update_success = true;
+        }
+
+        vTaskDelete(taskHandle);
+    
+    }
+
+    if(update_success == false){
+        return -1;
+    }
 
     return 0;
 }
@@ -133,9 +185,6 @@ int transfer_dspic_fw(void){
         // }
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-        printf("frame type: %d \n\r", rxMsg.type);
-        printf("frame identifier: %d \n\r", rxMsg.identifier);
-        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
         uint8_t message_type = rxMsg.type;
         uint8_t error_code = ZDecodeUInt8(rxMsg.data);
@@ -166,9 +215,6 @@ int boot_dspic_app(void){
     ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-    printf("frame type: %d \n\r", rxMsg.type);
-    printf("frame identifier: %d \n\r", rxMsg.identifier);
-    printf("frame timeId: %d \n\r", rxMsg.timeId);
 
     uint8_t message_type = rxMsg.type;
     uint8_t error_code = ZDecodeUInt8(rxMsg.data);
@@ -185,8 +231,6 @@ int boot_dspic_app(void){
 
 int delete_dspic_fw(void){
     ESP_LOGI(TAG, "deleting dsPIC FW");
-
-    ESP_LOGI(TAG, "creating zap message");
     
     txMsg.type = MsgFirmware;
     txMsg.identifier = ParamRunTest; // ignored on bootloader?

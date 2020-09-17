@@ -49,7 +49,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 static void ota_task(void *pvParameters){
 
-    update_dspic();
+    update_dspic(); // for testing only
 
     char image_location[256] = {0};
     esp_http_client_config_t config = {
@@ -92,12 +92,21 @@ void validate_booted_image(void){
 
     if(ota_state == ESP_OTA_IMG_PENDING_VERIFY)
     {
-        ret = esp_ota_mark_app_valid_cancel_rollback();
-        if(ret != ESP_OK){
-             ESP_LOGE(TAG, "marking partition as valid failed with: %d", ret);
+        ESP_LOGI(TAG, "we booted a new image, lets make sure the dsPIC has the FW from this image");
+        int dspic_update_success = update_dspic();
+        if(dspic_update_success<0){
+            ESP_LOGE(TAG, "FAILED to update dsPIC");
+            //TODO  do we need to reflash the PIC on next boot?
         }else{
-            ESP_LOGI(TAG, "partition marked as valid");
+            ret = esp_ota_mark_app_valid_cancel_rollback();
+            if(ret != ESP_OK){
+                ESP_LOGE(TAG, "marking partition as valid failed with: %d", ret);
+            }else{
+                ESP_LOGI(TAG, "partition marked as valid");
+            }
+
         }
+        
     }
     else
     {
