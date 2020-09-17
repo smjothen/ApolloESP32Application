@@ -19,6 +19,11 @@ extern const uint8_t dspic_bin_end[] asm("_binary_dspic_bin_end");
 const uint32_t DSPIC_LINE_SIZE = _DSPIC_LINE_SIZE;
 #define DSPIC_APP_START 0x3C00
 
+ZapMessage txMsg;
+// ZEncodeMessageHeader* does not check the length of the buffer!
+// This should not be a problem for most usages, but make sure strings are within a range that fits!
+uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 
 
 #define COMMAND_NACK         0x00
@@ -35,15 +40,51 @@ const uint32_t DSPIC_LINE_SIZE = _DSPIC_LINE_SIZE;
 
 
 int transfer_dspic_fw(void);
-void boot_dspic_app(void);
-void delete_dspic_fw(void);
-void set_dspic_header(void);
+int boot_dspic_app(void);
+int delete_dspic_fw(void);
+int set_dspic_header(void);
+
+void update_dspic_task(void){
+    
+    if(delete_dspic_fw()>=0){
+        ESP_LOGI(TAG, "update stage delete: success!");
+    }else{
+        goto err_delete;
+    }
+
+    if(transfer_dspic_fw()>=0){
+        ESP_LOGI(TAG, "update stage transfer: success!");
+    }else{
+        goto err_flash;
+    }
+
+    if(set_dspic_header()>=0){
+        ESP_LOGI(TAG, "update stage header: success!");
+    }else{
+        goto err_header;
+    }
+
+    if(boot_dspic_app()>=0){
+        ESP_LOGI(TAG, "update stage boot: success!");
+    }else{
+        goto err_app_boot;
+    }
+
+    ESP_LOGI(TAG, "SUCCESS, dspic updated");
+    return;
+
+    err_delete:
+        ESP_LOGW(TAG, "failed to delete dspic fw");
+    err_flash:
+        ESP_LOGW(TAG, "failed to flash dspic fw");
+    err_header:
+        ESP_LOGW(TAG, "failed to flash dspic header");
+    err_app_boot:
+        ESP_LOGW(TAG, "failed to boot new fw");
+}
 
 int update_dspic(void){
-    delete_dspic_fw();
-    transfer_dspic_fw();
-    set_dspic_header();
-    boot_dspic_app();
+    update_dspic_task();
 
     return 0;
 }
@@ -61,12 +102,6 @@ int transfer_dspic_fw(void){
     ESP_LOGI(TAG, "will flash %u lines, %u bytes; each line is %d bytes", fw_line_count, fw_byte_size, DSPIC_LINE_SIZE);
     //fw_line_count = 1;
 
-    ZapMessage txMsg;
-    // ZEncodeMessageHeader* does not check the length of the buffer!
-    // This should not be a problem for most usages, but make sure strings are within a range that fits!
-    uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-    uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
-
     int address_size = 4;
     uint8_t message_data[1 + address_size +DSPIC_LINE_SIZE ];
         
@@ -78,10 +113,6 @@ int transfer_dspic_fw(void){
         uint32_t words_per_line = DSPIC_LINE_SIZE/2;
         uint32_t address = DSPIC_APP_START + (line*words_per_line);
         const uint8_t *start_of_line = dspic_bin_start + (line*DSPIC_LINE_SIZE);
-
-        if(address > 21500){
-            ESP_LOGW(TAG, "does it still work_");
-        }
 
         message_data[0] = COMMAND_WRITE_PM;
         memcpy(message_data+1, &address, address_size);
@@ -106,57 +137,56 @@ int transfer_dspic_fw(void){
         printf("frame identifier: %d \n\r", rxMsg.identifier);
         printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-        // uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-        // printf("frame error code: %d\n\r", error_code);
+        uint8_t message_type = rxMsg.type;
+        uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+
         freeZapMessageReply();
+
+        if((message_type != MsgFirmwareAck) || (error_code != 0)){
+            ESP_LOGW(TAG, "error in dspic response when writing FW (error: %d)", error_code);
+            return -1;
+        }
+
+        
     }
 
     return 0;
 }
 
-void boot_dspic_app(void){
+int boot_dspic_app(void){
     ESP_LOGI(TAG, "starting dsPIC app");
-    while (true)
-    {
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = ParamRunTest;
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, COMMAND_START_APP, txBuf, encodedTxBuf
+    );
+
+    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
     
-        ESP_LOGI(TAG, "creating zap message");
-        ZapMessage txMsg;
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+    printf("frame type: %d \n\r", rxMsg.type);
+    printf("frame identifier: %d \n\r", rxMsg.identifier);
+    printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-        // ZEncodeMessageHeader* does not check the length of the buffer!
-        // This should not be a problem for most usages, but make sure strings are within a range that fits!
-        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
-        
-        txMsg.type = MsgFirmware;
-        txMsg.identifier = ParamRunTest;
+    uint8_t message_type = rxMsg.type;
+    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
 
-        uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-            &txMsg, COMMAND_START_APP, txBuf, encodedTxBuf
-        );
+    freeZapMessageReply();
 
-        ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
-        
-        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-        printf("frame type: %d \n\r", rxMsg.type);
-        printf("frame identifier: %d \n\r", rxMsg.identifier);
-        printf("frame timeId: %d \n\r", rxMsg.timeId);
+    if((message_type != MsgFirmwareAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "error in dspic response when giving boot command (error: %d)", error_code);
+        return -1;
+    }
 
-        // uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-        // printf("frame error code: %d\n\r", error_code);
-        freeZapMessageReply();
-        }
+    return 0;
 }
 
-void delete_dspic_fw(void){
+int delete_dspic_fw(void){
     ESP_LOGI(TAG, "deleting dsPIC FW");
 
     ESP_LOGI(TAG, "creating zap message");
-    ZapMessage txMsg;
-
-    // ZEncodeMessageHeader* does not check the length of the buffer!
-    // This should not be a problem for most usages, but make sure strings are within a range that fits!
-    uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-    uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
     
     txMsg.type = MsgFirmware;
     txMsg.identifier = ParamRunTest; // ignored on bootloader?
@@ -168,17 +198,22 @@ void delete_dspic_fw(void){
     ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-    printf("frame type: %d \n\r", rxMsg.type);
-    printf("frame identifier: %d \n\r", rxMsg.identifier);
-    printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-    // uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-    // printf("frame error code: %d\n\r", error_code);
+    uint8_t message_type = rxMsg.type;
+    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+
     freeZapMessageReply();
-        
+
+    if((message_type != MsgFirmwareAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "error in dspic response when deleteing app (error: %d)", error_code);
+        return -1;
+    }
+
+    return 0;
+    
 }
 
-void set_dspic_header(void){
+int set_dspic_header(void){
     ESP_LOGI(TAG, "sending header to dsPIC");
 
 
@@ -212,17 +247,18 @@ void set_dspic_header(void){
     ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-    printf("frame type: %d \n\r", rxMsg.type);
-    printf("frame identifier: %d \n\r", rxMsg.identifier);
-    printf("frame timeId: %d \n\r", rxMsg.timeId);
-
-
+    uint8_t message_type = rxMsg.type;
     uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-    if(error_code==0){
-        ESP_LOGI(TAG, "dsPIC flashed, and header updated");
+
+    freeZapMessageReply();
+
+    if((message_type != MsgFirmwareAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "error in dspic response when writing header (error: %d)", error_code);
+        return -1;
     }else{
-        ESP_LOGW(TAG, "CRC related failure when updating dsPIC (%d)", error_code);
+        ESP_LOGI(TAG, "dsPIC flashed, and header updated");
     }
 
-    freeZapMessageReply();    
+    return 0;
+
 }
