@@ -111,7 +111,7 @@ void storage_Set_CommunicationMode(uint8_t newValue)
 
 void storage_Set_PermanentLock(uint8_t newValue)
 {
-	configurationStruct.communicationMode = newValue;
+	configurationStruct.permanentLock = newValue;
 }
 
 void storage_Set_Standalone(uint8_t newValue)

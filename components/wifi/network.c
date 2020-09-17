@@ -454,6 +454,7 @@ char * network_getWifiSSID()
 
 bool network_CheckWifiParameters()
 {
+	network_clearWifi();
 	esp_err_t err = storage_ReadWifiParameters(WifiSSID, WifiPSK);
 	int ssidLength = strlen(WifiSSID);
 
@@ -480,6 +481,11 @@ bool network_wifiIsValid()
 
 void network_updateWifi()
 {
+	network_disconnect_wifi();
+	network_connect_wifi();
+	return;
+
+
 	if(network_wifiIsValid())
 	{
 		//Only update if both
@@ -524,7 +530,7 @@ void network_stopWifi()
 void network_clearWifi()
 {
 	memset(WifiSSID, 0, 32);
-	memset(WifiPSK, 0, 32);
+	memset(WifiPSK, 0, 64);
 }
 
 

@@ -464,28 +464,39 @@ void app_main(void)
 		{
 			if(switchState == eConfig_Wifi_Zaptec)
 			{
+
 				strcpy(WifiSSID, "ZaptecHQ");
 				strcpy(WifiPSK, "LuckyJack#003");
 				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
+				storage_SaveWifiParameters(WifiSSID, WifiPSK);
+
 			}
 
 			else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
 			{
-				strcpy(WifiSSID, "ZaptecHQ-guest");
-				strcpy(WifiPSK, "Ilovezaptec");
-				//strcpy(WifiSSID, "BVb");
-				//strcpy(WifiPSK, "tk51mo79");
+				if(network_CheckWifiParameters() == false)
+				{
+					strcpy(WifiSSID, "ZaptecHQ-guest");
+					strcpy(WifiPSK, "Ilovezaptec");
+					//strcpy(WifiSSID, "BVb");
+					//strcpy(WifiPSK, "tk51mo79");
+					storage_SaveWifiParameters(WifiSSID, WifiPSK);
+				}
 			}
 			else if(switchState == 4) //Applica - EMC config
 			{
 				strcpy(WifiSSID, "APPLICA-GJEST");
 				strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+				storage_SaveWifiParameters(WifiSSID, WifiPSK);
 			}
 
-			storage_Init_Configuration();
-			storage_Set_CommunicationMode(eCONNECTION_WIFI);
-			storage_SaveConfiguration();
-			storage_SaveWifiParameters(WifiSSID, WifiPSK);
+			if(storage_ReadConfiguration() != ESP_OK)
+			{
+				storage_Init_Configuration();
+				storage_Set_CommunicationMode(eCONNECTION_WIFI);
+				storage_SaveConfiguration();
+			}
+
 		}
     }
 #endif
@@ -580,12 +591,12 @@ void app_main(void)
 	}
 	else
 	{
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
-//		strcpy(devInfo.serialNumber, "ZAP000012");
-//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
-//		strcpy(devInfo.Pin, "5662");
+//		strcpy(devInfo.serialNumber, "ZAP000011");
+//		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+//		strcpy(devInfo.Pin, "7053");
+		strcpy(devInfo.serialNumber, "ZAP000012");
+		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
+		strcpy(devInfo.Pin, "5662");
 		devInfo.EEPROMFormatVersion = 1;
 		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}

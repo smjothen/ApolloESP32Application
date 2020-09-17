@@ -17,6 +17,7 @@
 
 #include "../../main/DeviceInfo.h"
 #include "../zaptec_protocol/include/protocol_task.h"
+#include "../../main/connectivity.h"
 
 //#define TAG "ble wifi service"
 static const char *TAG = "BLE SERVICE";
@@ -502,16 +503,29 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		//{"wifi":{"ip":"10.0.0.1","link":-54},"online":true}
 
-    	ESP_LOGI(TAG, "BLE IP4 Address: %s", network_GetIP4Address());
+
 
 		jsonObject = cJSON_CreateObject();
 
+		if(storage_Get_CommunicationMode() == eCONNECTION_NONE)
+		{
+			ESP_LOGI(TAG, "BLE IP4 Address: 0.0.0.0");
+			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
+			cJSON_AddStringToObject(wifiObject, "ip", "0.0.0.0");
+			cJSON_AddNumberToObject(wifiObject, "link", 0);
+			cJSON_AddBoolToObject(jsonObject, "online", false);
 
-		cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
-		cJSON_AddStringToObject(wifiObject, "ip", network_GetIP4Address());
-		cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
+		}
+		else //Wifi
+		{
+			ESP_LOGI(TAG, "BLE IP4 Address: %s", network_GetIP4Address());
+			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
+			cJSON_AddStringToObject(wifiObject, "ip", network_GetIP4Address());
+			cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
+			cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
+		}
 
-		cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
+		//TODO add for 4G
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -706,10 +720,12 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		ESP_LOGI(TAG, "Read Warning %d ", MCU_GetWarnings());
 
   		memset(nrTostr, 0, sizeof(nrTostr));
-  		itoa(MCU_GetWarnings(), nrTostr, 10);
+  		//itoa(MCU_GetWarnings(), nrTostr, 10);
 
-  		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
-  		rsp->attr_value.len = strlen(nrTostr);
+  		//memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
+  		uint32_t warning = 0;//MCU_GetWarnings();
+		memcpy(rsp->attr_value.value, &warning, sizeof(warning));
+  		rsp->attr_value.len = 1;//sizeof(warning);
 
   		break;
 
@@ -824,11 +840,17 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
         // This prints the first byte written to the characteristic
         ESP_LOGI(TAG, "Wifi Info characteristic written with %02x", param->write.value[0]);
 
-        memset(WIFI_SERV_CHAR_PSK_val,0, sizeof(WIFI_SERV_CHAR_PSK_val));
-		memcpy(WIFI_SERV_CHAR_PSK_val,param->write.value, param->write.len);
-		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_PSK_val);
 
-		saveWifi = true;
+        if(param->write.len <= 64)
+        {
+        	memset(WIFI_SERV_CHAR_PSK_val,0, sizeof(WIFI_SERV_CHAR_PSK_val));
+        	memcpy(WIFI_SERV_CHAR_PSK_val,param->write.value, param->write.len);
+        	ESP_LOGI(TAG, "New Wifi PSK %s", WIFI_SERV_CHAR_PSK_val);
+
+        	saveWifi = true;
+        }
+        else
+        	ESP_LOGE(TAG, "To long Wifi PSK %s", WIFI_SERV_CHAR_PSK_val);
 
 //		storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
 //
@@ -841,12 +863,17 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
          *  Handle any writes to Wifi Val char here
          */
     	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
-
     	memset(WIFI_SERV_CHAR_SSID_val,0, sizeof(WIFI_SERV_CHAR_SSID_val));
-		memcpy(WIFI_SERV_CHAR_SSID_val,param->write.value, param->write.len);
-		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
+    	if((32 >= param->write.len) && (param->write.len > 0))
+    	{
+    		memcpy(WIFI_SERV_CHAR_SSID_val,param->write.value, param->write.len);
+    		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
 
-		saveWifi = true;
+    		saveWifi = true;
+    	}
+    	else
+    		ESP_LOGE(TAG, "To long Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
+
 	    break;
 
 
@@ -879,22 +906,27 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
 
+		enum ConnectionInterface interface;
+
 		if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
 		{
-			storage_Set_CommunicationMode(eCONNECTION_WIFI);
+			interface = eCONNECTION_WIFI;
 			ESP_LOGI(TAG, "Set Wifi");
 
 		}
 		else if(strncmp("4G", (char*)COMMUNICATION_MODE_val, 2) == 0)
 		{
-			storage_Set_CommunicationMode(eCONNECTION_4G);
+			interface = eCONNECTION_4G;
 			ESP_LOGI(TAG, "Set 4G");
 		}
 		else
 		{
-			storage_Set_CommunicationMode(eCONNECTION_NONE);
+			interface = eCONNECTION_NONE;
 			ESP_LOGI(TAG, "Set None");
 		}
+
+		storage_Set_CommunicationMode(interface);
+		connectivityActivateInterface(interface);
 
 		saveConfiguration = true;
 
@@ -1022,9 +1054,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				(param->write.value[3] == WIFI_SERV_CHAR_PIN_val[3]))
 		{
 
-			memset(WIFI_SERV_CHAR_PIN_val,0, sizeof(WIFI_SERV_CHAR_PIN_val));
-			memcpy(WIFI_SERV_CHAR_PIN_val,param->write.value, param->write.len);
-			ESP_LOGI(TAG, "Auth value %s", AUTH_SERV_CHAR_val);
+			///memset(WIFI_SERV_CHAR_PIN_val,0, sizeof(WIFI_SERV_CHAR_PIN_val));	//TODO check how this works
+			///memcpy(WIFI_SERV_CHAR_PIN_val,param->write.value, param->write.len);
 
 			pinRetryCounter = 0;
 			AUTH_SERV_CHAR_val[0] = '1';
@@ -1044,6 +1075,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			}
 		}
 
+		AUTH_SERV_CHAR_val[0] = '1'; //TODO remove to force PIN
+		ESP_LOGI(TAG, "Auth value %s", AUTH_SERV_CHAR_val);
+
 		break;
 
     case CHARGER_SAVE_UUID:
@@ -1057,7 +1091,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
 
 			//Make the values active
-			network_CheckWifiParameters();
+			wasValid = network_CheckWifiParameters();
+
+			if(wasValid == true)
+				network_updateWifi();
 
 			saveWifi = false;
 		}

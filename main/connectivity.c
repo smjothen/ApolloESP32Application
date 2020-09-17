@@ -62,7 +62,7 @@ static void connectivity_task()
 			{
 				ESP_LOGI(TAG, "Deinit Wifi interface");
 				// Stop mqtt
-				stop_cloud_listener_task();
+				//stop_cloud_listener_task();
 
 				// Disconnect wifi
 				network_disconnect_wifi();

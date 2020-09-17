@@ -5,12 +5,10 @@
 extern "C" {
 #endif
 
-
-
-
+#include "DeviceInfo.h"
 
 void connectivity_init();
-
+void connectivityActivateInterface(enum ConnectionInterface selectedInterface);
 
 
 #ifdef __cplusplus
