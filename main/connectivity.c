@@ -8,6 +8,10 @@
 #include "DeviceInfo.h"
 #include "storage.h"
 #include "zaptec_cloud_listener.h"
+#include "zaptec_cloud_observations.h"
+#include "../components/ntp/zntp.h"
+#include "i2cDevices.h"
+#include "../components/cellular_modem/include/ppp_task.h"
 
 static const char *TAG = "CONNECTIVITY: ";
 
@@ -15,6 +19,9 @@ static const char *TAG = "CONNECTIVITY: ";
 enum ConnectionInterface activeInterface = eCONNECTION_NONE;
 static enum ConnectionInterface staticNewInterface = eCONNECTION_NONE;
 static enum ConnectionInterface previousInterface = eCONNECTION_NONE;
+
+static bool sntpInitialized = false;
+static bool mqttInitialized = false;
 
 void connectivityActivateInterface(enum ConnectionInterface selectedInterface)
 {
@@ -41,7 +48,7 @@ static void connectivity_task()
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
-
+	bool zntpIsRunning = false;
 
 	while (1) {
 
@@ -79,7 +86,6 @@ static void connectivity_task()
 		if(interfaceChange == true)
 		{
 
-
 			if(localNewInterface == eCONNECTION_NONE)
 			{
 				ESP_LOGI(TAG, "No network interface selected");
@@ -100,8 +106,48 @@ static void connectivity_task()
 		previousInterface = activeInterface;
 		activeInterface = localNewInterface;
 
-		ESP_LOGW(TAG, "**** Connectivity ****");
-		vTaskDelay(pdMS_TO_TICKS(3000));
+
+		//Handle SNTP connection if we are online either with Wifi or 4G.
+		if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
+		{
+			if(sntpInitialized == false)
+			{
+				ESP_LOGW(TAG, "Initializing SNTP after first network connection");
+				zntp_init();
+				zntp_checkSyncStatus();
+
+				zntpIsRunning = true;
+				sntpInitialized = true;
+			}
+			else if (zntpIsRunning == false)
+			{
+				ESP_LOGW(TAG, "Restarting SNTP after network reconnection");
+				zntp_restart();
+				zntpIsRunning = true;
+			}
+		}
+		else if(zntp_enabled() == 1)
+		{
+			ESP_LOGW(TAG, "Stopping SNTP after network disconnection");
+			zntp_stop();
+			zntpIsRunning = false;
+		}
+
+
+		//Activate MQTT when we are online and has NTP time or RTC time is good.
+		if((sntpInitialized == true) && (mqttInitialized == false))
+		{
+			//Make sure Device info has been read from EEPROM before connecting to cloud.
+			if(i2CDeviceInfoIsLoaded() == true)
+			{
+				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+				mqttInitialized = true;
+			}
+		}
+
+
+		//ESP_LOGI(TAG, "**** Connectivity ****");
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
 }

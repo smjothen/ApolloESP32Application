@@ -17,22 +17,13 @@
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
-//#include "nvs_flash.h"
-#include "protocol_examples_common.h"
-#include "esp_sntp.h"
+
+//#include "protocol_examples_common.h"
 #include "esp_websocket_client.h"
-
 #include "protocol_task.h"
-#include "mcu_communication.h"
-#include "zaptec_protocol_serialisation.h"
 #include "ppp_task.h"
-//#include "at_commands.h"
-//#include "mqtt_demo.h"
-#include "zaptec_cloud_listener.h"
-#include "zaptec_cloud_observations.h"
 
-#include "ocpp_task.h"
-//#include "CLRC661.h"
+//#include "ocpp_task.h"
 
 #include "adc_control.h"
 #include "driver/ledc.h"
@@ -46,63 +37,17 @@
 #include "storage.h"
 #include "diagnostics_port.h"
 
-//#include "esp_gap_ble_api.h"
-//#include "esp_gatts_api.h"
-//#include "esp_bt_defs.h"
-//#include "esp_bt_main.h"
-//#include "esp_gatt_common_api.h"
-
 #include "../components/ble/ble_interface.h"
 #include "connectivity.h"
-//#include "esp_ble_mesh_defs.h"
-//#include "../bt/esp_ble_mesh/api/esp_ble_mesh_defs.h"
-
-
-// #define BRIDGE_CELLULAR_MODEM 1
-// #define USE_CELLULAR_CONNECTION 1
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
-
 #define LEDC_TEST_CH_NUM       (1)
-//#define LEDC_TEST_DUTY         (4000)
-//#define LEDC_TEST_FADE_TIME    (3000)
 
-static void obtain_time(void);
-static void initialize_sntp(void);
 
-//char softwareVersion[] = "ZAP 0.0.0.1";
 static const char *TAG = "MAIN     ";
 
-void time_sync_notification_cb(struct timeval *tv)
-{
-    ESP_LOGI(TAG, "Notification of a time synchronization event");
-}
 
-
-
-
-
-void init_mcu(){
-    ZapMessage txMsg;
-
-	// ZEncodeMessageHeader* does not check the length of the buffer!
-	// This should not be a problem for most usages, but make sure strings are within a range that fits!
-	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
-
-	txMsg.type = MsgWrite;
-	txMsg.identifier = ParamRunTest;
-
-	uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-		&txMsg, 34, txBuf, encodedTxBuf
-	);
-	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-	ESP_LOGI(TAG, "MCU initialised");
-	freeZapMessageReply();
-
-}
 
 //OUTPUT PINTS
 //LED
@@ -122,26 +67,6 @@ void init_mcu(){
 #define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_nHALL_FX) | (1ULL<<GPIO_INPUT_nNFC_IRQ))
 #define ESP_INTR_FLAG_DEFAULT 0
 
-
-
-//static xQueueHandle gpio_evt_queue = NULL;
-
-/*static void IRAM_ATTR gpio_isr_handler(void* arg)
-{
-    uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
-}*/
-
-
-/*static void gpio_task_example(void* arg)
-{
-    uint32_t io_num;
-    for(;;) {
-        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
-        }
-    }
-}*/
 
 
 void InitGPIOs()
@@ -374,17 +299,6 @@ void PlaySoundShort()
 
 
 
-//float network_WifiSignalStrength()
-//{
-//	wifi_ap_record_t wifidata;
-//	float wifiRSSI = 0.0;
-//	if (esp_wifi_sta_get_ap_info(&wifidata)==0)
-//		wifiRSSI= (float)wifidata.rssi;
-//
-//	return wifiRSSI;
-//}
-
-
 void app_main(void)
 {
 	//First check hardware revision in order to configure io accordingly
@@ -396,54 +310,21 @@ void app_main(void)
 
 	storage_Init();
 
-//	struct Configuration
-//	{
-//		bool dataStructureIsInitialized;
-//		uint32_t transmitInterval;
-//		float transmitChangeLevel;
-//
-//		uint32_t communicationMode;
-//		float HmiBrightness;
-//		uint32_t maxPhases;
-//	};
 
-//	struct Configuration configurationFile;
-//	configurationFile.dataStructureIsInitialized = true;
-//	configurationFile.transmitInterval = 60;
-//	configurationFile.transmitChangeLevel = 1.0;
-//	configurationFile.communicationMode = 0;
-//	configurationFile.HmiBrightness = 0.50;
-//	configurationFile.maxPhases = 3;
-//
-
-	//storage_Init();
-	//storage_Init_Configuration();
-	//esp_err_t err = storage_SaveConfiguration();
-	//err = storage_ReadConfiguration();
-
-//
-//
-//	volatile struct Configuration configurationFileRead;
-//	volatile size_t readLength = sizeof(configurationFileRead);
-
-//
-//	readLength = readLength;
     //PlaySound();
     //PlaySoundShort();
 
-	//Read device ID from EEPROM
+	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
     zaptecProtocolStart();
-
-
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
 
 #define DEV
 #ifdef DEV
-    int switchState = eConfig_Wifi_Home_Wr32;//MCU_GetSwitchState();
+    int switchState = MCU_GetSwitchState();
 
     while(switchState == 0)
     {
@@ -453,8 +334,8 @@ void app_main(void)
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
-		char WifiSSID[32]= {0};// = "BVb";
-		char WifiPSK[64] = {0};//"tk51mo79";
+		char WifiSSID[32]= {0};
+		char WifiPSK[64] = {0};
 
 		if(switchState == eConfig_Wifi_NVS)
 		{
@@ -501,24 +382,9 @@ void app_main(void)
     }
 #endif
 
-
-    if (switchState <= eConfig_Wifi_EMC_TCP)
-    {
-//    	ESP_ERROR_CHECK( nvs_flash_init() );
-//		ESP_ERROR_CHECK(esp_netif_init());
-//		ESP_ERROR_CHECK( esp_event_loop_create_default() );
-
-    	//configure_wifi(switchState);
-
-    }
-
+    // Read connection mode from flash and start interface
     connectivity_init();
 
-    ////ocpp_task_start(); //For future use
-    
-    //#ifdef BRIDGE_CELLULAR_MODEM
-    //hard_reset_cellular();
-    //mbus_init();
 
     if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
     {
@@ -532,12 +398,6 @@ void app_main(void)
 
 	vTaskDelay(pdMS_TO_TICKS(3000));
 
-	if((switchState != eConfig_Wifi_Home_Wr32) &&
-		(switchState != eConfig_Wifi_EMC_TCP) &&
-		(switchState != eConfig_4G_bridge))
-	{
-		obtain_time();
-	}
 
 
 //#define WriteThisDeviceInfo
@@ -591,38 +451,30 @@ void app_main(void)
 	}
 	else
 	{
+		//Wroom32 ID - BLE - (no EEPROM)
 		strcpy(devInfo.serialNumber, "ZAP000011");
 		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
 		strcpy(devInfo.Pin, "7053");
+
+		//Wroom32 ID - BLE - (no EEPROM)
 //		strcpy(devInfo.serialNumber, "ZAP000012");
 //		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
 //		strcpy(devInfo.Pin, "5662");
+
 		devInfo.EEPROMFormatVersion = 1;
 		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}
 
-	//strcpy(devInfo.serialNumber, "ZAP000010");
-	//strcpy(devInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
-	//strcpy(devInfo.Pin, "6695");
-
-
-//
-//	while(1)
-//	{
-//		vTaskDelay(3000 / portTICK_PERIOD_MS);
-//		ESP_LOGE(TAG, "Apollo multi-mode");
-//	}
-
 
 	vTaskDelay(500 / portTICK_PERIOD_MS);
 
-	if((switchState == eConfig_Wifi_NVS) ||
-	   (switchState == eConfig_Wifi_Zaptec) ||
-	   (switchState == eConfig_Wifi_EMC) ||
-	   (switchState == eConfig_4G))
-	{
-		start_cloud_listener_task(devInfo);
-	}
+//	if((switchState == eConfig_Wifi_NVS) ||
+//	   (switchState == eConfig_Wifi_Zaptec) ||
+//	   (switchState == eConfig_Wifi_EMC) ||
+//	   (switchState == eConfig_4G))
+//	{
+//		start_cloud_listener_task(devInfo);
+//	}
 
 	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
 	{
@@ -638,7 +490,7 @@ void app_main(void)
     if(switchState != eConfig_4G_bridge)
     {
     	sessionHandler_init();
-    	//diagnostics_port_init();
+    	diagnostics_port_init();
     }
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -681,57 +533,3 @@ void app_main(void)
     }
 }
 
-static void obtain_time(void)
-{
-    //ESP_ERROR_CHECK( nvs_flash_init() );
-	//ESP_ERROR_CHECK(esp_netif_init());
-    //ESP_ERROR_CHECK( esp_event_loop_create_default() );
-
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-
-    //ESP_ERROR_CHECK(example_connect());
-
-    initialize_sntp();
-
-    // wait for time to be set
-    time_t now = 0;
-    struct tm timeinfo = { 0 };
-
-    int retry = 0;
-    const int retry_count = 60;
-    while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
-        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d), status: %d", retry, retry_count, sntp_get_sync_status());
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
-
-    // ESP_ERROR_CHECK( example_disconnect() );
-
-    //now = 1596673284;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-
-    char strftime_buf[64];
-    setenv("TZ", "UTC-0", 1);
-    tzset();
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    ESP_LOGI(TAG, "The sensible time is: %s", strftime_buf);
-}
-
-static void initialize_sntp(void)
-{
-    ESP_LOGI(TAG, "Initializing SNTP");
-    sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    //sntp_set_sync_interval(20000);
-    sntp_setservername(0, "pool.ntp.org");
-    //sntp_setserver(1,"216.239.35.12");//0xD8EF230C);// 216.239.35.12)
-    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-#ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
-    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-#endif
-    sntp_init();
-}

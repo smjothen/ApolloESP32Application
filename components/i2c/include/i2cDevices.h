@@ -10,6 +10,7 @@ extern "C" {
 
 struct DeviceInfo i2cGetLoadedDeviceInfo();
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo);
+bool i2CDeviceInfoIsLoaded();
 void I2CDevicesInit();
 void I2CDevicesStartTask();
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);

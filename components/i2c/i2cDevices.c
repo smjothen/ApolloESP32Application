@@ -43,6 +43,7 @@ static ledc_channel_config_t ledc_channel;
 
 
 static struct DeviceInfo deviceInfo;
+static bool deviceInfoLoaded = false;
 
 void I2CDevicesInit()
 {
@@ -57,8 +58,14 @@ struct DeviceInfo i2cGetLoadedDeviceInfo()
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo)
 {
 	deviceInfo = debugDevInfo;
+	deviceInfoLoaded = true;
 }
 
+
+bool i2CDeviceInfoIsLoaded()
+{
+	return deviceInfoLoaded;
+}
 
 float I2CGetSHT30Temperature()
 {
@@ -242,6 +249,8 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		ESP_LOGI(TAG_EEPROM, "No format on EEPROM!!! %d", deviceInfo.EEPROMFormatVersion);
 		//Must perform factory onboarding
 	}
+
+	deviceInfoLoaded = true;
 
 	return deviceInfo;
 }

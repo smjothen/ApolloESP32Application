@@ -16,9 +16,9 @@ struct DeviceInfo
 	char Pin[5];
 };
 
-static uint8_t GetEEPROMFormatVersion() { return 1;}
+static const uint8_t GetEEPROMFormatVersion() { return 1;}
 
-static char softwareVersion[] = "2.8.0.2";
+static const char softwareVersion[] = "2.8.0.2";
 
 enum ConnectionInterface
 {
