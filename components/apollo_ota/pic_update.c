@@ -52,8 +52,18 @@ int boot_dspic_app(void);
 int delete_dspic_fw(void);
 int set_dspic_header(void);
 int is_bootloader(bool *result);
+int get_application_header(uint32_t *crc, uint32_t *length);
 
 static void update_dspic_task(void *pvParameters){
+
+    uint32_t crc = 0;
+    uint32_t app_length = 0;
+    if(get_application_header(&crc, &app_length)<0){
+        //goto err_header_read
+    }
+
+    ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
+    ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
     
    bool bootloader_detected = false;
     if(is_bootloader(&bootloader_detected)<0){
@@ -83,6 +93,13 @@ static void update_dspic_task(void *pvParameters){
     }else{
         goto err_header;
     }
+
+    if(get_application_header(&crc, &app_length)<0){
+        //goto err_header_read
+    }
+
+    ESP_LOGE(TAG, "header crc: %u, header app len: %u", crc, app_length);
+    ESP_LOGE(TAG, "header crc: %x, header app len: %x", crc, app_length);
 
     if(boot_dspic_app()>=0){
         ESP_LOGI(TAG, "update stage boot: success!");
@@ -138,19 +155,19 @@ int update_dspic(void){
 
         if(task_results & DSPIC_UPDATE_COMPLETE){
             ESP_LOGI(TAG, "update success, terminating update task (attempt: %d)", retry+1);
+            update_success = true;
         }else if (task_results & DSPIC_COMMS_ERROR){
             ESP_LOGW(TAG, "error while updating dspic(attempt: %d)", retry+1);
         }else{
             ESP_LOGW(TAG, "timeout while updating dspic(attempt: %d)", retry+1);
-            update_success = true;
         }
 
         vTaskDelete(taskHandle);
-    
-    }
 
-    if(update_success == false){
-        return -1;
+        if(update_success == false){
+            return -1;
+        }
+    
     }
 
     return 0;
@@ -341,5 +358,35 @@ int is_bootloader(bool *result){
     }
 
     *result = true;
+    return 0;
+}
+
+
+int get_application_header(uint32_t *crc, uint32_t *length){
+    ESP_LOGI(TAG, "reading applicaiton header");
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = 0; // ignored on bootloader?
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, COMMAND_APP_CRC, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    uint8_t message_type = rxMsg.type;
+    uint8_t error_code = rxMsg.data[0];
+
+    *length = ZDecodeUint32(&(rxMsg.data[1]));
+    *crc = ZDecodeUint32(&(rxMsg.data[5]));
+
+    freeZapMessageReply();
+
+    if((message_type != MsgReadAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
+            message_type, error_code
+        );
+        return 0;
+    }
     return 0;
 }
