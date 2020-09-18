@@ -22,6 +22,7 @@ static enum ConnectionInterface previousInterface = eCONNECTION_NONE;
 
 static bool sntpInitialized = false;
 static bool mqttInitialized = false;
+int switchState = 0;
 
 void connectivityActivateInterface(enum ConnectionInterface selectedInterface)
 {
@@ -42,8 +43,12 @@ static void connectivity_task()
 {
 
 	//Read from Flash. If no interface is configured, use none and wait for setting
-	//activeInterface
-	staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
+	if(switchState == eConfig_NVS)
+		staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
+	else if(switchState <= eConfig_Wifi_Post)
+		staticNewInterface = eCONNECTION_WIFI;
+	else if(switchState == eConfig_4G_bridge)
+		staticNewInterface = eCONNECTION_4G;
 
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
 
@@ -99,7 +104,8 @@ static void connectivity_task()
 			else if(localNewInterface == eCONNECTION_4G)
 			{
 				ESP_LOGI(TAG, "4G interface activating");
-
+				ppp_task_start();
+				interfaceChange = false;
 			}
 		}
 
@@ -153,8 +159,9 @@ static void connectivity_task()
 }
 
 
-void connectivity_init(){
-
+void connectivity_init(int inputSwitchState)
+{
+	switchState = inputSwitchState;
 
 	xTaskCreate(connectivity_task, "connectivity_task", 4096, NULL, 2, NULL);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);

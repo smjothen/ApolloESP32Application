@@ -13,16 +13,11 @@
 #include "zaptec_cloud_listener.h"
 #include "DeviceInfo.h"
 
-#define NO_OF_SAMPLES   1//10          
-
 static const char *TAG = "SESSION    ";
 
 static int networkType = 0;
 static uint32_t dataTestInterval = 0;
 
-//#define USE_CELLULAR_CONNECTION 1
-
-//uint32_t template = 0;
 enum eNetworkType
 {
 	eWifi = 0,
@@ -73,9 +68,6 @@ void log_cellular_quality(void){
 
 	int enter_data_mode_result = enter_data_mode();
 	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
-
-
-	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
 }
 
 
@@ -134,9 +126,9 @@ static void sessionHandler_task()
     uint32_t signalCounter = 0;
     bool startupSent = false;
 
-	while (1) {
+	while (1)
+	{
 
-		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
 		if(authorizationRequired == true)
 		{
 
@@ -153,8 +145,6 @@ static void sessionHandler_task()
 				NFCClearTag();
 			}
 		}
-
-		//ESP_LOGI(TAG, "SessionHandler");
 		
 
 		onTime++;
@@ -188,10 +178,6 @@ static void sessionHandler_task()
 				rssi = rssi2;
 			}
 
-
-			//mqtt_reconnect();
-
-			//if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			if (isMqttConnected() == true)
 			{
 				if (startupSent == false)
@@ -205,9 +191,7 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_StartUpParameters();
 					startupSent = true;
 				}
-				//publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, temperature, 42.0);
-				//publish_debug_telemetry_observation(temperature, 0.0, rssi);
-				//publish_debug_telemetry_observation_power(MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+
 				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
 			}
 			else
@@ -215,10 +199,7 @@ static void sessionHandler_task()
 				ESP_LOGE(TAG, "No network DISCONNECTED");
 			}
 
-			//mqtt_disconnect();
-
 			dataCounter = 0;
-
 		}
 
 
@@ -227,7 +208,6 @@ static void sessionHandler_task()
 			signalCounter++;
 			if(signalCounter >= signalInterval)
 			{
-				//if((WifiIsConnected() == true) || (LteIsConnected() == true))
 				if (isMqttConnected() == true)
 				{
 					//log_task_info();
@@ -241,7 +221,6 @@ static void sessionHandler_task()
 		pulseCounter++;
 		if(pulseCounter >= 60)
 		{
-			//if((WifiIsConnected() == true) || (LteIsConnected() == true))
 			if (isMqttConnected() == true)
 			{
 				publish_cloud_pulse();
@@ -249,7 +228,6 @@ static void sessionHandler_task()
 
 			pulseCounter = 0;
 		}
-
 
 		statusCounter++;
 		if(statusCounter >= statusInterval)
@@ -280,12 +258,6 @@ static void sessionHandler_task()
 	}
 }
 
-
-
-uint32_t GetTemplate()
-{
-	return 0;//template;
-}
 
 void sessionHandler_init(){
 

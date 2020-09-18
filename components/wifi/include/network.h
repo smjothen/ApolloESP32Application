@@ -8,6 +8,7 @@ extern "C" {
 
 enum sConfig
 {
+	eConfig_NVS			  	= 0,
 	eConfig_Wifi_NVS	  	= 1,
 	eConfig_Wifi_Zaptec 	= 2,
 	eConfig_Wifi_Home_Wr32	= 3,

@@ -18,7 +18,7 @@ static const char *TAG = "PPP_TASK";
 
 #define GPIO_OUTPUT_PWRKEY		21
 #define GPIO_OUTPUT_RESET		33
-#define GPIO_OUTPUT_DEBUG_LED    0
+//#define GPIO_OUTPUT_DEBUG_LED    0
 
 #define CELLULAR_RX_SIZE 1024
 #define CELLULAR_TX_SIZE 1024
