@@ -153,7 +153,7 @@ static uint8_t Phase_Rotation_val[1]          			= {0x0};
 static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
 static char wifiPackage[500] = {0};
-//static char *wifiPackage;
+
 
 
 
