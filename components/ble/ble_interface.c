@@ -5,10 +5,6 @@
 #include "esp_log.h"
 
 #include "esp_bt.h"
-//#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_gap_ble_api.h"
-//#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_gatts_api.h"
-//#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_bt_defs.h"
-//#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_bt_main.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"

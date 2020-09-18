@@ -1,12 +1,12 @@
 
 #include "ble_service_wifi_config.h"
 
-//#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_gatts_api.h"
+
 #include "esp_gatts_api.h"
 #include "esp_log.h"
 
 #include "ble_common.h"
-//#include "../ble_common.h"
+
 #include "../../../esp-idf/components/json/cJSON/cJSON.h"
 #include <string.h>
 
@@ -19,46 +19,27 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../../main/connectivity.h"
 
-//#define TAG "ble wifi service"
 static const char *TAG = "BLE SERVICE";
-//========================================================================
-//		Wifi Service
-//========================================================================
 
-
-//10492c5a-deec-4577-a25a-6950c0b5fd07
-
-
-const uint16_t WIFI_SERV_uuid 				        = 0x00FF;//0x1801;//0x00FF;
+const uint16_t WIFI_SERV_uuid 				        = 0x00FF;
 const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
-//const uint16_t WIFI_SERV_uuid 				        = 0;
-//static const uint16_t WIFI_SERV_CHAR_info_uuid      = 0xFF01;
-//static const uint16_t WIFI_SERV_CHAR_config_uuid    = 0xFF02;
-
-////////////////////
-//static const uint16_t CHARGER_SERV_CHAR_config_uuid    = 0xABCD;
 
 static bool wasValid = false;
-//static int nextIndex = 0;
 static int nrOfWifiSegments = 0;
 static int wifiRemainder = 0;
 static int MTUsize = 22;
-
 static int pinRetryCounter = 0;
 
 uint8_t apNr = 0;
 uint16_t maxAp = 10;
 wifi_ap_record_t ap_records[10];
 
-//10492c5a-deec-4577-a25a-6950c0b5fcd3
-//const uint8_t	WifiSSID_uuid[ESP_UUID_LEN_128] = {0xd3, 0xfc, 0xb5 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
-
 
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t WIFI_SERV_CHAR_descr[]  			= "ZAP Service";
-static uint8_t WIFI_SERV_CHAR_val[32];
+//static uint8_t WIFI_SERV_CHAR_val[32];
 //static const uint8_t WIFI_SERV_descr[]              	= "ZAPTEC Service";
 
 
@@ -90,11 +71,9 @@ const uint8_t 	Auth_uuid128[ESP_UUID_LEN_128] 			= {0x00, 0xfd, 0xb5, 0xc0, 0x50
 static const uint8_t AUTH_CHAR_pin_descr[]  			= "Auth";
 static uint8_t AUTH_SERV_CHAR_val[]        				= {"0"};
 
-
 const uint8_t 	Save_uuid128[ESP_UUID_LEN_128] 			= {0xd5, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t SAVE_CHAR_pin_descr[]  			= "Save";
 static uint8_t SAVE_SERV_CHAR_val[]        				= {"0"};
-
 
 const uint8_t HmiBrightness_uid128[ESP_UUID_LEN_128] 	= {0x09, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t HMI_BRIGHTNESS_descr[]  		 	= "HMI brightness";
@@ -106,13 +85,12 @@ static uint8_t COMMUNICATION_MODE_val[8]          		= {0x00};
 
 const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128] = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t FIRMWARE_VERSION_CHAR_descr[]   	= "Firmware Version";
-static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
-
+//static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
 
 
 const uint8_t Standalone_uid128[ESP_UUID_LEN_128] 		= {0xd9, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Standalone_descr[]  			 	= "Standalone";
-static uint8_t Standalone_val[8]          				= {0x00};
+//static uint8_t Standalone_val[8]          				= {0x00};
 
 const uint8_t Standalone_Phase_uid128[ESP_UUID_LEN_128] = {0x06, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t StandalonePhase_descr[]   			= "Standalone Phase";
@@ -120,42 +98,37 @@ static const uint8_t StandalonePhase_descr[]   			= "Standalone Phase";
 
 const uint8_t Standalone_Current_uid128[ESP_UUID_LEN_128] = {0x04, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Standalone_Current_descr[]   		= "Standalone Current";
-static uint8_t Standalone_Current_val[8]          		= {0x00};
+//static uint8_t Standalone_Current_val[8]          		= {0x00};
 
 const uint8_t Permanent_Lock_uid128[ESP_UUID_LEN_128]	= {0x08, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Permanent_Lock_descr[]   			= "Permanent Lock";
-static uint8_t Permanent_Lock_val[1]          			= {0x0};
+//static uint8_t Permanent_Lock_val[1]          			= {0x0};
 
 const uint8_t 	Warnings_uuid128[ESP_UUID_LEN_128] 		= {0x01, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Warnings_descr[]  					= "Warnings";
-static uint8_t Warnings_val[8]        					= {0x00};
+//static uint8_t Warnings_val[8]        					= {0x00};
 
 
 const uint8_t Wifi_MAC_uid128[ESP_UUID_LEN_128] 		= {0x05, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Wifi_MAC_descr[]   				= "Wifi MAC";
-static uint8_t Wifi_MAC_val[17]          				= {0x00};
+//static uint8_t Wifi_MAC_val[17]          				= {0x00};
 
 const uint8_t Max_Inst_Current_Switch_uid128[ESP_UUID_LEN_128] 	= {0x06, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Max_Inst_Current_Switch_descr[]   	= "Max Installation Current Switch";
-static uint8_t Max_Inst_Current_Switch_val[8]          	= {0x00};
+//static uint8_t Max_Inst_Current_Switch_val[8]          	= {0x00};
 
 const uint8_t Max_Inst_Current_Config_uid128[ESP_UUID_LEN_128] = {0x07, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Max_Inst_Current_Config_descr[]   	= "Max Installation Current Config";
-static uint8_t Max_Inst_Current_Config_val[8]          	= {0x00};
+//static uint8_t Max_Inst_Current_Config_val[8]          	= {0x00};
 
 const uint8_t Phase_Rotation_uid128[ESP_UUID_LEN_128] 	= {0x08, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
-static uint8_t Phase_Rotation_val[1]          			= {0x0};
+//static uint8_t Phase_Rotation_val[1]          			= {0x0};
 
 
-//static uint8_t WIFI_SERV_CHAR_info_ccc[2]           	= {0x00,0x00};
-//static uint8_t WIFI_SERV_CHAR_config_ccc[2]         	= {0x00,0x00};
-static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
+//static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
 static char wifiPackage[500] = {0};
-
-
-
 
 
 
@@ -456,8 +429,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				wifiPackage[0] = 0;	//version
 				wifiPackage[1] = apNr; //Nr of discovered access points
 
-
-
 				int nextIndex = 2;
 				int i;
 				for (i = 0; i < apNr; i++)
@@ -522,7 +493,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_NETWORK_STATUS_UUID:
 
 		//{"wifi":{"ip":"10.0.0.1","link":-54},"online":true}
-
 
 
 		jsonObject = cJSON_CreateObject();
@@ -645,8 +615,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
  		break;
 
 
-
-
     case CHARGER_STANDALONE_UUID:
 
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -755,13 +723,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		rsp->attr_value.len = sizeof(Warnings_descr);
 		break;
 
-
-
     case CHARGER_WIFI_MAC_UUID:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
  		volatile uint8_t wifiMAC[18] = {0};
- 		esp_err_t err = esp_read_mac(wifiMAC, 0); //0=Wifi station
+ 		esp_read_mac(wifiMAC, 0); //0=Wifi station
  		sprintf(wifiMAC, "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
 
  		ESP_LOGI(TAG, "Read Wifi MAC: %s, len %d", (char*)wifiMAC, strlen((char*)wifiMAC));
@@ -833,8 +799,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		memcpy(rsp->attr_value.value, Phase_Rotation_descr, sizeof(Phase_Rotation_descr));
   		rsp->attr_value.len = sizeof(Phase_Rotation_descr);
   		break;
-
-
     }
 }
 
@@ -915,8 +879,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		}
 
    		break;
-
-
 
     case CHARGER_COMMUNICATION_MODE_UUID:
 

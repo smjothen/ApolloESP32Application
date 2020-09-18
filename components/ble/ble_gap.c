@@ -10,17 +10,14 @@
 #include "esp_bt_device.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
-
 #include "ble_service_wifi_config.h"
-//#include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
 #include "string.h"
 
 #define TAG "ble gap"
 
-
 static uint8_t adv_config_done = 0;
-//#define CONFIG_SET_RAW_ADV_DATA
+
 
 #ifdef CONFIG_SET_RAW_ADV_DATA
 	static uint8_t raw_adv_data[] = {
@@ -53,20 +50,12 @@ static uint8_t adv_config_done = 0;
 			0x4d, 0x59, 0x5f, 0x45, 0x53, 0x50, 0x33, 0x32, 0x5f, 0x53, 0x45, 0x4e, 0x53, 0x4f, 0x52 // MY_ESP32_SENSOR
 	};
 #else
-//	static uint8_t service_uuid[16] = {
-//		/* LSB <--------------------------------------------------------------------------------> MSB */
-//		//first uuid, 16bit, [12],[13] is the value
-//		0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
-//	};
 
 	static uint8_t service_uuid[32] = {
 		/* LSB <--------------------------------------------------------------------------------> MSB */
 		//first uuid, 16bit, [12],[13] is the value
-		//0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
 		0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10,
 		0x08, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10,
-		//0xc0, 0x6b, 0xe8, 0x8c, 0x3f, 0xe6, 0x1c, 0xe9, 0xfb, 0x4c, 0x22, 0xf7, 0x00, 0x00, 0x00, 0x00,
-		//0xc0, 0x6b, 0xe8, 0x8c, 0x3f, 0xe6, 0x1c, 0xe9, 0xfb, 0x4c, 0x22, 0xf7, 0x00, 0x00, 0x00, 0x00,
 	};
 
 	/* The length of adv data must be less than 31 bytes */
@@ -191,35 +180,16 @@ void ble_gap_setAdvertisingData(void)
 {
 	charInit();
 
-	//char BLEUniqueId[10];
 	esp_err_t set_dev_name_ret = ESP_FAIL;
 
 	if(i2cGetLoadedDeviceInfo().EEPROMFormatVersion != 0)
 	{
 		setDeviceNameAsChar(i2cGetLoadedDeviceInfo().serialNumber);
 		setPinAsChar(i2cGetLoadedDeviceInfo().Pin);
-		esp_err_t set_dev_name_ret = esp_ble_gap_set_device_name((const char*)i2cGetLoadedDeviceInfo().serialNumber);
+		set_dev_name_ret = esp_ble_gap_set_device_name((const char*)i2cGetLoadedDeviceInfo().serialNumber);
 	}
 
-	///storage_readFactoryUniqueId(BLEUniqueId);
-	//volatile int len = strlen(BLEUniqueId);
-
-//	if (BLEUniqueId[0] == 'a')
-//		BLEUniqueId[0] = 'A';
-//	if (BLEUniqueId[1] == 'p')
-//		BLEUniqueId[1] = 'P';
-//	if (BLEUniqueId[2] == 'm')
-//		BLEUniqueId[2] = 'M';
-
-
-
-	//char factoryPin[5];
-	///storage_readFactoryPin(factoryPin);
-	//setPinAsChar(factoryPin);
-
-    //esp_err_t set_dev_name_ret = esp_ble_gap_set_device_name(BLE_DEVICE_NAME);
-	//esp_err_t set_dev_name_ret = esp_ble_gap_set_device_name((const char*)BLEUniqueId);
-    if (set_dev_name_ret)
+    if (set_dev_name_ret != ESP_OK)
     {
         ESP_LOGE(TAG,"set device name failed, error code = %x", set_dev_name_ret);
     }

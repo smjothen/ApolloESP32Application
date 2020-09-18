@@ -3,8 +3,6 @@
     #define WIFI_CONFIG_SERVICE_H_
     #include <stdint.h>
 
-    //#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_gatt_defs.h"
-    //#include "/Users/eirik/esp/esp-idf/components/bt/host/bluedroid/api/include/api/esp_gatts_api.h"
 	#include "esp_gatt_defs.h"
     #include "esp_gatts_api.h"
 
