@@ -33,26 +33,39 @@ uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
 uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 
 
-#define COMMAND_NACK         0x00
-#define COMMAND_ACK          0x01
-#define COMMAND_READ_PM      0x02
-#define COMMAND_WRITE_PM     0x03
-#define COMMAND_WRITE_CM     0x07
-#define COMMAND_START_APP    0x08
-#define COMMAND_START_BL     0x18
-#define COMMAND_READ_ID      0x09
-#define COMMAND_APP_CRC      0x0A
-#define COMMAND_APP_DELETE   0x0B
-#define COMMAND_WRITE_HEADER 0x0C
+#define COMMAND_NACK               0x00
+#define COMMAND_ACK                0x01
+#define COMMAND_READ_PM            0x02
+#define COMMAND_WRITE_PM           0x03
+#define COMMAND_WRITE_CM           0x07
+#define COMMAND_START_APP          0x08
+#define COMMAND_START_BL           0x18
+#define COMMAND_READ_ID            0x09
+#define COMMAND_APP_CRC            0x0A
+#define COMMAND_APP_DELETE         0x0B
+#define COMMAND_WRITE_HEADER       0x0C
+#define COMMAND_BOOTLOADER_VERSION 0x0D
 
 
 int transfer_dspic_fw(void);
 int boot_dspic_app(void);
 int delete_dspic_fw(void);
 int set_dspic_header(void);
+int is_bootloader(bool *result);
 
 static void update_dspic_task(void *pvParameters){
     
+   bool bootloader_detected = false;
+    if(is_bootloader(&bootloader_detected)<0){
+        goto err_bootloader_detect;
+    }
+
+    if (bootloader_detected == true){
+        ESP_LOGI(TAG, "confirmed dspic in bootloader mode, proceeding" );
+    }else{
+        ESP_LOGI(TAG, "sending dspic to bootloader mode");
+    }
+        
     if(delete_dspic_fw()>=0){
         ESP_LOGI(TAG, "update stage delete: success!");
     }else{
@@ -81,6 +94,8 @@ static void update_dspic_task(void *pvParameters){
     xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
     vTaskSuspend(NULL);
 
+    err_bootloader_detect:
+        ESP_LOGW(TAG, "dspic failed to enter bootloader");
     err_delete:
         ESP_LOGW(TAG, "failed to delete dspic fw");
     err_flash:
@@ -113,7 +128,7 @@ int update_dspic(void){
         TaskHandle_t taskHandle = NULL;
         int stack_size = 4096*2;
         xTaskCreate( 
-            &update_dspic_task, "otatask", stack_size, 
+            &update_dspic_task, "picflash", stack_size, 
             &ucParameterToPass, 4, &taskHandle
         );
 
@@ -259,14 +274,6 @@ int delete_dspic_fw(void){
 
 int set_dspic_header(void){
     ESP_LOGI(TAG, "sending header to dsPIC");
-
-
-    ZapMessage txMsg;
-
-    // ZEncodeMessageHeader* does not check the length of the buffer!
-    // This should not be a problem for most usages, but make sure strings are within a range that fits!
-    uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-    uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
     
     txMsg.type = MsgFirmware;
     txMsg.identifier = ParamRunTest; // ignored on bootloader?
@@ -305,4 +312,34 @@ int set_dspic_header(void){
 
     return 0;
 
+}
+
+int is_bootloader(bool *result){
+    ESP_LOGI(TAG, "reading bootloader version");
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = 0; // ignored on bootloader?
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, COMMAND_BOOTLOADER_VERSION, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    uint8_t message_type = rxMsg.type;
+    uint8_t error_code = rxMsg.data[0];
+    uint8_t bootloader_version = rxMsg.data[1];
+
+    freeZapMessageReply();
+
+    if((message_type != MsgReadAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "detected communication with dsPIC app (type %d, error: %d)",
+            message_type, error_code
+        );
+        *result = false;
+        return 0;
+    }
+
+    *result = true;
+    return 0;
 }
