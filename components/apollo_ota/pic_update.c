@@ -14,7 +14,7 @@
 
 #define TAG "pic_update"
 
-static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*60;
+static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*30;
 static EventGroupHandle_t event_group;
 static const int DSPIC_COMMS_ERROR = BIT0;
 static const int DSPIC_UPDATE_COMPLETE = BIT1;
@@ -53,27 +53,42 @@ int delete_dspic_fw(void);
 int set_dspic_header(void);
 int is_bootloader(bool *result);
 int get_application_header(uint32_t *crc, uint32_t *length);
+int enter_bootloader(void);
 
 static void update_dspic_task(void *pvParameters){
 
     uint32_t crc = 0;
     uint32_t app_length = 0;
-    if(get_application_header(&crc, &app_length)<0){
+    //if(get_application_header(&crc, &app_length)<0){
         //goto err_header_read
-    }
+    //}
 
-    ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
-    ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
+    //ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
+    //ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
     
    bool bootloader_detected = false;
     if(is_bootloader(&bootloader_detected)<0){
         goto err_bootloader_detect;
-    }
+    }else{}
 
     if (bootloader_detected == true){
         ESP_LOGI(TAG, "confirmed dspic in bootloader mode, proceeding" );
     }else{
         ESP_LOGI(TAG, "sending dspic to bootloader mode");
+        int bootloader_enter_result = enter_bootloader();
+        if(bootloader_enter_result<0){
+            ESP_LOGW(TAG, "failure in enter bootloader comand");
+            goto err_bootloader_enter;
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        if(is_bootloader(&bootloader_detected)<0){
+            ESP_LOGW(TAG, "failed to check for bootloader after command");
+            if(bootloader_detected!=true){
+                ESP_LOGW(TAG, "Could not enter bootloader correctly");
+            }
+            goto err_bootloader_enter;
+        }
     }
         
     if(delete_dspic_fw()>=0){
@@ -112,6 +127,7 @@ static void update_dspic_task(void *pvParameters){
     vTaskSuspend(NULL);
 
     err_bootloader_detect:
+    err_bootloader_enter:
         ESP_LOGW(TAG, "dspic failed to enter bootloader");
     err_delete:
         ESP_LOGW(TAG, "failed to delete dspic fw");
@@ -149,6 +165,11 @@ int update_dspic(void){
             &ucParameterToPass, 4, &taskHandle
         );
 
+        if(taskHandle == NULL){
+            ESP_LOGW(TAG, "Failed to start dspic update task");
+            continue;
+        }
+
         EventBits_t task_results = xEventGroupWaitBits(event_group,
             DSPIC_COMMS_ERROR | DSPIC_UPDATE_COMPLETE,
             pdFALSE, pdFALSE, pdMS_TO_TICKS(DSPIC_UPDATE_TIMEOUT_MS));
@@ -164,10 +185,16 @@ int update_dspic(void){
 
         vTaskDelete(taskHandle);
 
-        if(update_success == false){
-            return -1;
+        ESP_LOGD(TAG, "task handle deleted");
+
+        if(update_success == true){
+            break;
         }
     
+    }
+
+    if(update_success == false){
+        return -1;
     }
 
     return 0;
@@ -379,6 +406,37 @@ int get_application_header(uint32_t *crc, uint32_t *length){
 
     *length = ZDecodeUint32(&(rxMsg.data[1]));
     *crc = ZDecodeUint32(&(rxMsg.data[5]));
+
+    freeZapMessageReply();
+
+    if((message_type != MsgReadAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
+            message_type, error_code
+        );
+        return 0;
+    }
+    return 0;
+}
+
+int enter_bootloader(void){
+    ESP_LOGI(TAG, "sending enter bootloader command");
+
+    txMsg.type = MsgCommand;
+    txMsg.identifier = CommandUpgradeMcuFirmware;
+    //txMsg.length = 0;
+
+    //uint8_t* ptr = txBuf;
+    //ptr += ZEncodeMessageHeader(&txMsg, txBuf);
+    //uint encoded_length = ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, 42, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    uint8_t message_type = rxMsg.type;
+    uint8_t error_code = rxMsg.data[0];
 
     freeZapMessageReply();
 

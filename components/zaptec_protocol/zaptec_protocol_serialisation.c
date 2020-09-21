@@ -141,7 +141,6 @@ uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin)
     {
     case MsgRead:
     case MsgReadGroup:
-    case MsgCommand:
     case MsgFirmwareAck:
         ZEncodeUint16(msg->timeId, ptr);
         ptr += 2;
@@ -150,6 +149,7 @@ uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin)
     break;
 
     case MsgReadAck:
+    case MsgCommand:
     case MsgWrite:
     case MsgWriteAck:
     case MsgCommandAck:
