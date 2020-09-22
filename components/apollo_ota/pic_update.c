@@ -59,12 +59,12 @@ static void update_dspic_task(void *pvParameters){
 
     uint32_t crc = 0;
     uint32_t app_length = 0;
-    //if(get_application_header(&crc, &app_length)<0){
-        //goto err_header_read
-    //}
+    if(get_application_header(&crc, &app_length)<0){
+        goto err_header_read;
+    }
 
-    //ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
-    //ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
+    ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
+    ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
     
    bool bootloader_detected = false;
     if(is_bootloader(&bootloader_detected)<0){
@@ -126,6 +126,8 @@ static void update_dspic_task(void *pvParameters){
     xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
     vTaskSuspend(NULL);
 
+    err_header_read:
+        ESP_LOGW(TAG, "failed to compare ap crc with target crc");
     err_bootloader_detect:
     err_bootloader_enter:
         ESP_LOGW(TAG, "dspic failed to enter bootloader");
