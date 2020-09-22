@@ -12,7 +12,7 @@
 //#include "storage.h"
 //#include "network.h"
 
-#include "adc_control.h"
+//#include "adc_control.h"
 
 #include "lwip/sockets.h"
 

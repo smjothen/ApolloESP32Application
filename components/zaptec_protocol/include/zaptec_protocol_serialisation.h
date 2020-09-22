@@ -120,6 +120,9 @@
         ParamSessionChargeCycle = 720,
         ParamMaxSessionRestart = 721,
 
+        ChargerCurrentUserUuid = 722,
+        CompletedSession = 723,
+
 		SwitchPosition = 730,
 		DebugCounter = 731,
 

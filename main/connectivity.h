@@ -7,6 +7,7 @@ extern "C" {
 
 #include "DeviceInfo.h"
 
+bool connectivity_GetSNTPInitialized();
 void connectivity_init(int switchState);
 void connectivityActivateInterface(enum ConnectionInterface selectedInterface);
 

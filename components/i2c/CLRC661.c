@@ -94,6 +94,10 @@ struct TagInfo NFCGetTagInfo()
 	return tagInfo;
 }
 
+void NFCTagInfoClearValid()
+{
+	tagInfo.tagIsValid = false;
+}
 
 void NFCClearTag()
 {
@@ -331,6 +335,13 @@ int NFCReadTag()
 		tagInfo.tagIsValid = true;
 		tagInfo.idLength = 4;
 		memcpy(tagInfo.id, uid, tagInfo.idLength);
+
+		int i = 0;
+		for (i = 0; i < tagInfo.idLength; i++)
+		{
+			sprintf(tagInfo.idAsString+(i*2),"%02X ", tagInfo.id[i] );
+		}
+
 	}
 	else if (uidLength == 7)
 	{
@@ -501,6 +512,12 @@ int NFCReadTag()
 	tagInfo.tagIsValid = true;
 	tagInfo.idLength = 7;
 	memcpy(tagInfo.id, uid, tagInfo.idLength);
+
+	int i = 0;
+	for (i = 0; i < tagInfo.idLength; i++)
+	{
+		sprintf(tagInfo.idAsString+(i*2),"%02X ", tagInfo.id[i] );
+	}
 
 	validId = true;
 

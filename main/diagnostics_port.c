@@ -18,7 +18,8 @@
 
 #include "diagnostics_port.h"
 //#include "m_bus.h"
-#include "adc_control.h"
+//#include "adc_control.h"
+#include "../components/adc/adc_control.h"
 #include "driver/uart.h"
 #include "protocol_task.h"
 

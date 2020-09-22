@@ -13,7 +13,7 @@
 #include "esp_websocket_client.h"
 #include "protocol_task.h"
 #include "ppp_task.h"
-#include "adc_control.h"
+#include "../components/adc/adc_control.h"
 #include "network.h"
 #include "i2cDevices.h"
 #include "DeviceInfo.h"

@@ -12,6 +12,7 @@
 #include "protocol_task.h"
 #include "zaptec_cloud_listener.h"
 #include "DeviceInfo.h"
+#include "chargeSession.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -105,7 +106,13 @@ void log_task_info(void){
 	ESP_LOGD(TAG, "log_task_info done");
 }
 
-
+enum CarChargeMode
+{
+	eCAR_UNINITIALIZED = 0xFF,
+	eCAR_DISCONNECTED = 12,
+	eCAR_CONNECTED = 9,
+	eCAR_CHARGING = 6,
+};
 
 static void sessionHandler_task()
 {
@@ -126,26 +133,54 @@ static void sessionHandler_task()
     uint32_t signalCounter = 0;
     bool startupSent = false;
 
+    enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
+    enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
+
 	while (1)
 	{
+		currentCarChargeMode = MCU_GetchargeMode();
 
-		if(authorizationRequired == true)
+		// Check if car connecting -> start a new session
+		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+			chargeSession_Start();
+
+		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
 		{
 
 			if(NFCGetTagInfo().tagIsValid == true)
 			{
-				char NFCHexString[11];
-				int i = 0;
-				for (i = 0; i < NFCGetTagInfo().idLength; i++)
-					sprintf(NFCHexString+(i*2),"%02X ", NFCGetTagInfo().id[i] );
+//				int i = 0;
+//				for (i = 0; i < NFCGetTagInfo().idLength; i++)
+//				{
+//					sprintf(NFCGetTagInfo().idAsString+(i*2),"%02X ", NFCGetTagInfo().id[i] );
+//				}
 
 				if (isMqttConnected() == true)
-					publish_debug_telemetry_observation_NFC_tag_id(NFCHexString);
+				{
+					publish_debug_telemetry_observation_NFC_tag_id(NFCGetTagInfo().idAsString);
+				}
 
-				NFCClearTag();
+				chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+				NFCTagInfoClearValid();
+
 			}
 		}
+
+		// Check if car connecting -> start a new session
+		if((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED))
+		{
+			//Make sure to get the final energy reading
+			MCU_GetEnergy();
+
+			chargeSession_End();
+			char completedSessionString[200] = {0};
+			chargeSession_GetSessionAsString(completedSessionString);
+			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			NFCClearTag();
+		}
 		
+		previousCarChargeMode = currentCarChargeMode;
 
 		onTime++;
 		dataCounter++;

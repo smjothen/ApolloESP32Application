@@ -1,14 +1,5 @@
-/* cmd_i2ctools.c
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
 
-//#include "argtable3/argtable3.h"
 #include <time.h>
 #include "driver/i2c.h"
 #include "esp_console.h"
@@ -20,10 +11,7 @@
 #include "RTC.h"
 #include "EEPROM.h"
 #include "CLRC661.h"
-//#include "audioBuzzer.h"
-//#include "../audio/include/audioBuzzer.h"
-#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/main/audioBuzzer.h"
-//#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/audio/include/audioBuzzer.h"
+#include "../audioBuzzer/audioBuzzer.h"
 
 #include "driver/ledc.h"
 #include <string.h>

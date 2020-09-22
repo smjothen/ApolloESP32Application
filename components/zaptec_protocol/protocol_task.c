@@ -77,7 +77,7 @@ void freeZapMessageReply(){
 void uartRecvTask(void *pvParameters){
     uart_write_lock = xSemaphoreCreateMutex();
     configASSERT(uart_write_lock);
-    uart_recv_message_queue = xQueueCreate( 1, sizeof( ZapMessage ) );
+    uart_recv_message_queue = xQueueCreate( 1, sizeof( ZapMessage ));
     configASSERT(uart_recv_message_queue);
 
     configureUart();
@@ -189,8 +189,6 @@ void uartCommsTask(void *pvParameters){
     {
     	//count++;
 
-        // tx test
-        //ESP_LOGI(TAG, "creating zap message");
         ZapMessage txMsg;
 
         // ZEncodeMessageHeader* does not check the length of the buffer!
@@ -198,7 +196,7 @@ void uartCommsTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-        //if(new)
+
 
         switch (count)
         {
@@ -276,7 +274,6 @@ void uartCommsTask(void *pvParameters){
 
         if(count >= 19)
         {
-        	//ESP_LOGI(TAG, "count == 12");
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -297,17 +294,6 @@ void uartCommsTask(void *pvParameters){
         //printf("frame identifier: %d \n\r", rxMsg.identifier);
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
-
-        /*uint8_t swap[4] = {0};
-        if(rxMsg.identifier == 201)
-        {
-        	swap[0] = rxMsg.data[3];
-        	swap[1] = rxMsg.data[2];
-        	swap[2] = rxMsg.data[1];
-        	swap[3] = rxMsg.data[0];
-        	memcpy(&temperature5, &swap[0], 4);
-        	printf("Temperature: %f C\n\r", temperature5);
-        }*/
 
         if(rxMsg.identifier == SwitchPosition)
         {
@@ -379,7 +365,6 @@ void uartCommsTask(void *pvParameters){
         }*/
         freeZapMessageReply();
 
-
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
@@ -410,7 +395,7 @@ void MCU_SendParameter(uint16_t paramIdentifier, float data)
 //			   &txMsg, txBuf, encodedTxBuf
 //		   );
 
-   //ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+   ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
    runRequest(encodedTxBuf, encoded_length);
    freeZapMessageReply();
 

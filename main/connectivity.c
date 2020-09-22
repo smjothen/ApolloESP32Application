@@ -24,6 +24,12 @@ static bool sntpInitialized = false;
 static bool mqttInitialized = false;
 int switchState = 0;
 
+
+bool connectivity_GetSNTPInitialized()
+{
+	return sntpInitialized;
+}
+
 void connectivityActivateInterface(enum ConnectionInterface selectedInterface)
 {
 	staticNewInterface = selectedInterface;
