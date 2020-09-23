@@ -13,9 +13,16 @@
 static const char *TAG = "STORAGE:";
 
 #define CONFIG_FILE "CONFIG_FILE"
-nvs_handle factory_handle;
 nvs_handle configuration_handle;
+
+// "factory"
+nvs_handle factory_handle;
+
+// "wifi"
 nvs_handle wifi_handle;
+
+#define CS_RESET_FILE "CS_RESET_FILE"
+nvs_handle session_reset_handle;
 
 esp_err_t err;
 
@@ -299,6 +306,63 @@ esp_err_t storage_ReadConfiguration()
 
 
 
+esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
+{
+	volatile esp_err_t err;
+
+	err = nvs_open(CS_RESET_FILE, NVS_READWRITE, &session_reset_handle);
+
+	err += nvs_set_str(session_reset_handle, "csId", csId);
+	err += nvs_set_str(session_reset_handle, "csStartTime", csStartTime);
+	err += nvs_set_u32(session_reset_handle, "csUnixTime", csUnixTime);
+	err += nvs_set_zfloat(session_reset_handle, "csEnergy", csEnergy);
+	err += nvs_set_str(session_reset_handle, "csAuthCode", csAuthCode);
+
+	err += nvs_commit(session_reset_handle);
+	nvs_close(session_reset_handle);
+
+	return err;
+}
+
+
+esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
+{
+	size_t readSize;
+
+	esp_err_t err;
+	err = nvs_open(CS_RESET_FILE, NVS_READONLY, &session_reset_handle);
+
+	err += nvs_get_str(session_reset_handle, "csId", NULL, &readSize);
+	//Only continue to read if there is a session start stored
+	if((readSize > 0) && (err == ESP_OK))
+	{
+		err += nvs_get_str(session_reset_handle, "csId", csId, &readSize);
+
+		err += nvs_get_str(session_reset_handle, "csStartTime", NULL, &readSize);
+		err += nvs_get_str(session_reset_handle, "csStartTime", csStartTime, &readSize);
+
+		err += nvs_get_u32(session_reset_handle, "csUnixTime", &csUnixTime);
+		err += nvs_get_zfloat(session_reset_handle, "csEnergy", &csEnergy);
+
+		err += nvs_get_str(session_reset_handle, "csAuthCode", NULL, &readSize);
+		err += nvs_get_str(session_reset_handle, "csAuthCode", &csAuthCode, &readSize);
+	}
+
+	nvs_close(session_reset_handle);
+
+	return err;
+}
+
+
+esp_err_t storage_clearSessionResetInfo()
+{
+	err = nvs_open(CS_RESET_FILE, NVS_READWRITE, &session_reset_handle);
+	err += nvs_erase_all(session_reset_handle);
+	err += nvs_commit(session_reset_handle);
+	nvs_close(session_reset_handle);
+
+	return err;
+}
 
 
 esp_err_t storage_SaveFactoryTestState(uint8_t testOk)

@@ -13,6 +13,7 @@
 #include "zaptec_cloud_listener.h"
 #include "DeviceInfo.h"
 #include "chargeSession.h"
+#include "storage.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -140,6 +141,12 @@ static void sessionHandler_task()
 	{
 		currentCarChargeMode = MCU_GetchargeMode();
 
+		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
+		{
+			esp_err_t clearErr = storage_clearSessionResetInfo();
+			ESP_LOGI(TAG, "Clearing csResetSession file due to eCAR_DISCONNECTED at start: %d", clearErr);
+		}
+
 		// Check if car connecting -> start a new session
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
 			chargeSession_Start();
@@ -158,6 +165,7 @@ static void sessionHandler_task()
 				if (isMqttConnected() == true)
 				{
 					publish_debug_telemetry_observation_NFC_tag_id(NFCGetTagInfo().idAsString);
+
 				}
 
 				chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
@@ -175,7 +183,9 @@ static void sessionHandler_task()
 			chargeSession_End();
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
-			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
 
 			NFCClearTag();
 		}

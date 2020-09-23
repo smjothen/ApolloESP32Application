@@ -15,6 +15,7 @@ struct ChargeSession
 	bool ReliableClock;
 	bool StoppedByRFID;
 	char AuthenticationCode[37];//Up to GUID string.
+	uint32_t unixStartTime;
 };
 
 void chargeSession_Start();
@@ -24,6 +25,9 @@ void chargeSession_SetEnergy(float energy);
 
 struct ChargeSession chargeSession_Get();
 int chargeSession_GetSessionAsString(char * message);
+
+esp_err_t chargeSession_SaveSessionResetInfo();
+esp_err_t chargeSession_ReadSessionResetInfo();
 
 #ifdef __cplusplus
 }

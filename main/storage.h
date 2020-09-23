@@ -57,6 +57,10 @@ esp_err_t storage_readFactoryTestState(uint8_t *pTestOk);
 void storage_SaveWifiParameters(char *SSID, char *PSK);
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK);
 
+esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode);
+esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode);
+esp_err_t storage_clearSessionResetInfo();
+
 esp_err_t storage_clearWifiParameters();
 esp_err_t storage_clearRegistrationParameters();
 

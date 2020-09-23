@@ -9,6 +9,7 @@
 #include <string.h>
 #include "connectivity.h"
 #include "cJSON.h"
+#include "storage.h"
 
 
 
@@ -51,6 +52,7 @@ void GetUTCTimeString(char * timeString)
 	strcpy(timeString, strftime_buf);
 }
 
+
 static void ChargeSession_Set_StartTime()
 {
 	GetUTCTimeString(chargeSession.StartTime);
@@ -58,20 +60,47 @@ static void ChargeSession_Set_StartTime()
 	ESP_LOGI(TAG, "Start time is: %s", chargeSession.StartTime);
 }
 
+
 void chargeSession_Start()
 {
-	memset(&chargeSession, 0, sizeof(chargeSession));
-	ChargeSession_Set_GUID();
-	if(connectivity_GetSNTPInitialized() == true)
+	/// First check for resetSession on Flash
+	esp_err_t readErr = chargeSession_ReadSessionResetInfo();
+
+	if (readErr != ESP_OK)
 	{
-		ChargeSession_Set_StartTime();
-		chargeSession.ReliableClock = true;
+		if(readErr == 4354)
+			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo(): No file found: %d. Cleaning session and returning", readErr);
+		else
+			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo() failed: %d. Cleaning session and returning", readErr);
+
+		memset(&chargeSession, 0, sizeof(chargeSession));
+	}
+
+	if((strlen(chargeSession.SessionId) == 36) && (readErr == ESP_OK))
+	{
+		ESP_LOGI(TAG, "chargeSession_Start() using resetSession");
 	}
 	else
 	{
-		chargeSession.ReliableClock = false;
-	}
+		/// If no resetSession is found on Flash create new session
+		memset(&chargeSession, 0, sizeof(chargeSession));
+		ChargeSession_Set_GUID();
+		if(connectivity_GetSNTPInitialized() == true)
+		{
+			ChargeSession_Set_StartTime();
+			chargeSession.ReliableClock = true;
+		}
+		else
+		{
+			chargeSession.ReliableClock = false;
+		}
 
+		esp_err_t saveErr = chargeSession_SaveSessionResetInfo();
+		if (saveErr != ESP_OK)
+		{
+			ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", saveErr);
+		}
+	}
 }
 
 
@@ -80,6 +109,14 @@ void chargeSession_End()
 	GetUTCTimeString(chargeSession.EndTime);
 
 	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);
+
+	esp_err_t clearErr = storage_clearSessionResetInfo();
+	ESP_LOGI(TAG, "Clearing csResetSession file");
+
+	if (clearErr != ESP_OK)
+	{
+		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
+	}
 }
 
 
@@ -125,4 +162,41 @@ int chargeSession_GetSessionAsString(char * message)
 	free(buf);
 
 	return 0;
+}
+
+
+esp_err_t chargeSession_SaveSessionResetInfo()
+{
+	ESP_LOGI(TAG, "Saving resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+	esp_err_t err = storage_SaveSessionResetInfo(chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+	if (err != ESP_OK)
+		ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", err);
+
+	return err;
+}
+
+esp_err_t chargeSession_ReadSessionResetInfo()
+{
+	esp_err_t err = ESP_OK;
+
+	if(strlen(chargeSession.SessionId) != 36)
+	{
+		ESP_LOGI(TAG, "No SessionId, checking flash for resetSession");
+
+		err = storage_ReadSessionResetInfo(chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+		if (err != ESP_OK)
+		{
+			return err;
+		}
+
+		if(strlen(chargeSession.SessionId) == 36)
+		{
+			ESP_LOGI(TAG, "Loaded resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+		}
+		else
+		{
+			ESP_LOGI(TAG, "No SessionId, found on flash. Starting with clean session");
+		}
+	}
+	return err;
 }
