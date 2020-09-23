@@ -5,20 +5,23 @@
 
 #include "device_methods.h"
 #include "zaptec_cloud_listener.h"
-#include "apollo_ota.h"
+#include "ota_command.h"
+
 
 #define TAG "device_methods"
 
 
 static int handle_cable_lock(const cJSON *payload){
-    ESP_LOGW(TAG, "misusing cable lock command to start OTA");
-    start_ota();
+    ESP_LOGW(TAG, "misusing cable lock command to start forced OTA");
+    on_forced_ota_command();
     return 0;
 }
 
 static void route_method_call(const char *method_name, const cJSON *parsed_payload){
     if(strcmp(method_name, "300")==0){
         handle_cable_lock(parsed_payload);
+    }else if(strcmp(method_name, "200")==0){
+        on_ota_command();
     }else{
         ESP_LOGW(TAG, "method not implemented");
     }

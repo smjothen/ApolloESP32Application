@@ -56,20 +56,48 @@ int get_application_header(uint32_t *crc, uint32_t *length);
 int enter_bootloader(void);
 
 static void update_dspic_task(void *pvParameters){
+    bool bootloader_detected = false;
 
+    uint32_t target_crc = crc32(0,(const char *) dspic_bin_start,dspic_bin_end - dspic_bin_start);
     uint32_t crc = 0;
     uint32_t app_length = 0;
+
     if(get_application_header(&crc, &app_length)<0){
         goto err_header_read;
     }
 
-    ESP_LOGI(TAG, "header crc: %u, header app len: %u", crc, app_length);
     ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
+
+    if(crc==target_crc){
+        ESP_LOGI(TAG, "Correct application found in dspic");
+
+        if(is_bootloader(&bootloader_detected)<0){
+            goto err_bootloader_detect;
+        }
     
-   bool bootloader_detected = false;
+        if(bootloader_detected == true){
+            // our check for the crc may have caused the bootloader to stay active instead of time out
+            // OR the crc in the header may not match the app in the flash
+            ESP_LOGI(TAG, "starting app with correct header");
+
+            if(enter_bootloader()<0){
+                ESP_LOGW(TAG, "failed to start application, reflashing it now");
+            }else{
+                ESP_LOGI(TAG, "Successful jump to the target app");
+                goto success;
+            }
+
+        }else{
+            ESP_LOGI(TAG, "target app already running");
+            goto success;
+        }
+    }
+
+    ESP_LOGI(TAG, "Proceeding to flash dsPIC");
+
     if(is_bootloader(&bootloader_detected)<0){
         goto err_bootloader_detect;
-    }else{}
+    }
 
     if (bootloader_detected == true){
         ESP_LOGI(TAG, "confirmed dspic in bootloader mode, proceeding" );
@@ -109,22 +137,28 @@ static void update_dspic_task(void *pvParameters){
         goto err_header;
     }
 
-    if(get_application_header(&crc, &app_length)<0){
-        //goto err_header_read
+    if(get_application_header(&crc, &app_length)>=0){
+        ESP_LOGI(TAG, "new header crc: %x, new header app len: %x", crc, app_length);
+        if(crc==target_crc){
+            ESP_LOGI(TAG, "confirmed header match, ready to start app");
+        }else{
+            goto flash_confirm_error;
+        }
+    }else{
+        goto flash_confirm_error;
     }
-
-    ESP_LOGE(TAG, "header crc: %u, header app len: %u", crc, app_length);
-    ESP_LOGE(TAG, "header crc: %x, header app len: %x", crc, app_length);
-
+    
+    
     if(boot_dspic_app()>=0){
         ESP_LOGI(TAG, "update stage boot: success!");
     }else{
         goto err_app_boot;
     }
 
-    ESP_LOGI(TAG, "SUCCESS, dspic updated");
-    xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
-    vTaskSuspend(NULL);
+    success:
+        ESP_LOGI(TAG, "SUCCESS, dspic updated");
+        xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
+        vTaskSuspend(NULL); // halts the task, ensuring we dont run the error handeling 
 
     err_header_read:
         ESP_LOGW(TAG, "failed to compare ap crc with target crc");
@@ -137,6 +171,8 @@ static void update_dspic_task(void *pvParameters){
         ESP_LOGW(TAG, "failed to flash dspic fw");
     err_header:
         ESP_LOGW(TAG, "failed to flash dspic header");
+    flash_confirm_error:
+        ESP_LOGW(TAG, "failed to confirm header");
     err_app_boot:
         ESP_LOGW(TAG, "failed to boot new fw");
 

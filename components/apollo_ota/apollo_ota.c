@@ -49,8 +49,6 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 static void ota_task(void *pvParameters){
 
-    update_dspic(); // for testing only
-
     char image_location[256] = {0};
     esp_http_client_config_t config = {
         .url = image_location,
@@ -87,16 +85,19 @@ void validate_booted_image(void){
     const esp_partition_t * partition = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Checking if VALID on partition %s ", partition->label);
 
+    int dspic_update_success = update_dspic();
+
     esp_ota_img_states_t ota_state;
     esp_err_t ret = esp_ota_get_state_partition(partition, &ota_state);
 
     if(ota_state == ESP_OTA_IMG_PENDING_VERIFY)
     {
         ESP_LOGI(TAG, "we booted a new image, lets make sure the dsPIC has the FW from this image");
-        int dspic_update_success = update_dspic();
         if(dspic_update_success<0){
             ESP_LOGE(TAG, "FAILED to update dsPIC");
-            //TODO  do we need to reflash the PIC on next boot?
+            // We failed to bring the dsPIC app to the version embedded in this code
+            // On next reboot we will roll back, and the old dsPIC app will be flashed
+            // TODO: should we restart now?
         }else{
             ret = esp_ota_mark_app_valid_cancel_rollback();
             if(ret != ESP_OK){

@@ -299,10 +299,6 @@ void app_main(void){
 
     zaptecProtocolStart();
 	start_ota_task();
-	while (true)
-	{
-		vTaskDelay(pdMS_TO_TICKS(8000))	;
-	}
 	
     // init_mcu();
 
@@ -330,6 +326,15 @@ void app_main(void){
 	//wait for mqtt connect, then publish
 	vTaskDelay(pdMS_TO_TICKS(8000));
 	// publish_debug_telemetry_observation(221.0, 222, 0.0, 1.0,2.0,3.0, 23.0, 42.0);
+
+
+	validate_booted_image();
+	
+	while (true)
+	{
+		publish_cloud_pulse();
+		vTaskDelay(pdMS_TO_TICKS(80000))	;
+	}
 
 	log_task_info();
 	log_cellular_quality();
