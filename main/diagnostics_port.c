@@ -4,7 +4,8 @@
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
-#include "esp_event_loop.h"
+//#include "esp_event_loop.h"
+//#include "esp_event.h"
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
@@ -62,91 +63,91 @@
 
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
-static EventGroupHandle_t wifi_event_group;
+//static EventGroupHandle_t wifi_event_group;
 
-const int IPV4_GOTIP_BIT = BIT0;
-const int IPV6_GOTIP_BIT = BIT1;
+//const int IPV4_GOTIP_BIT = BIT0;
+//const int IPV6_GOTIP_BIT = BIT1;
 
 static const char *TAG = "NETWORK:";
 int sock;
 
 //extern uint8_t *obisRawData;
 
-static esp_err_t event_handler(void *ctx, system_event_t *event)
-{
-	ESP_LOGI(TAG, "Event handler");
+//static esp_err_t event_handler(void *ctx, system_event_t *event)
+//{
+//	ESP_LOGI(TAG, "Event handler");
+//
+//    switch (event->event_id) {
+//
+//    case SYSTEM_EVENT_AP_START:
+//		ESP_LOGI(TAG, "SoftAP started");
+//		break;
+//	case SYSTEM_EVENT_AP_STOP:
+//		ESP_LOGI(TAG, "SoftAP stopped");
+//		break;
+//
+//    case SYSTEM_EVENT_STA_START:
+//        esp_wifi_connect();
+//        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_START");
+//        break;
+//    case SYSTEM_EVENT_STA_CONNECTED:
+//        /* enable ipv6 */
+//        tcpip_adapter_create_ip6_linklocal(TCPIP_ADAPTER_IF_STA);
+//        break;
+//    case SYSTEM_EVENT_STA_GOT_IP:
+//        xEventGroupSetBits(wifi_event_group, IPV4_GOTIP_BIT);
+//        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP");
+//        break;
+//    case SYSTEM_EVENT_STA_DISCONNECTED:
+//        /* This is a workaround as ESP32 WiFi libs don't currently auto-reassociate. */
+//        esp_wifi_connect();
+//        xEventGroupClearBits(wifi_event_group, IPV4_GOTIP_BIT);
+//        xEventGroupClearBits(wifi_event_group, IPV6_GOTIP_BIT);
+//        break;
+//    case SYSTEM_EVENT_AP_STA_GOT_IP6:
+//        xEventGroupSetBits(wifi_event_group, IPV6_GOTIP_BIT);
+//        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP6");
+//
+//        char *ip6 = ip6addr_ntoa(&event->event_info.got_ip6.ip6_info.ip);
+//        ESP_LOGI(TAG, "IPv6: %s", ip6);
+//        break;
+//    default:
+//        break;
+//    }
+//    return ESP_OK;
+//}
 
-    switch (event->event_id) {
+//static void initialise_wifi(void)
+//{
+//    tcpip_adapter_init();
+//    wifi_event_group = xEventGroupCreate();
+//    ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
+//    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+//    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+//    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+//    wifi_config_t wifi_config = {
+//        .sta = {
+//            .ssid = EXAMPLE_WIFI_SSID,
+//            .password = EXAMPLE_WIFI_PASS,
+//        },
+//    };
+//    ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
+//    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+//    ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+//    ESP_ERROR_CHECK( esp_wifi_start() );
+//
+//    //esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+//    esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+//}
 
-    case SYSTEM_EVENT_AP_START:
-		ESP_LOGI(TAG, "SoftAP started");
-		break;
-	case SYSTEM_EVENT_AP_STOP:
-		ESP_LOGI(TAG, "SoftAP stopped");
-		break;
-
-    case SYSTEM_EVENT_STA_START:
-        esp_wifi_connect();
-        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_START");
-        break;
-    case SYSTEM_EVENT_STA_CONNECTED:
-        /* enable ipv6 */
-        tcpip_adapter_create_ip6_linklocal(TCPIP_ADAPTER_IF_STA);
-        break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-        xEventGroupSetBits(wifi_event_group, IPV4_GOTIP_BIT);
-        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP");
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        /* This is a workaround as ESP32 WiFi libs don't currently auto-reassociate. */
-        esp_wifi_connect();
-        xEventGroupClearBits(wifi_event_group, IPV4_GOTIP_BIT);
-        xEventGroupClearBits(wifi_event_group, IPV6_GOTIP_BIT);
-        break;
-    case SYSTEM_EVENT_AP_STA_GOT_IP6:
-        xEventGroupSetBits(wifi_event_group, IPV6_GOTIP_BIT);
-        ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP6");
-
-        char *ip6 = ip6addr_ntoa(&event->event_info.got_ip6.ip6_info.ip);
-        ESP_LOGI(TAG, "IPv6: %s", ip6);
-        break;
-    default:
-        break;
-    }
-    return ESP_OK;
-}
-
-static void initialise_wifi(void)
-{
-    tcpip_adapter_init();
-    wifi_event_group = xEventGroupCreate();
-    ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
-    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = EXAMPLE_WIFI_SSID,
-            .password = EXAMPLE_WIFI_PASS,
-        },
-    };
-    ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-    ESP_ERROR_CHECK( esp_wifi_start() );
-
-    //esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-    esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
-}
-
-static void wait_for_ip()
-{
-    uint32_t bits = IPV4_GOTIP_BIT | IPV6_GOTIP_BIT ;
-
-    ESP_LOGI(TAG, "Waiting for AP connection...");
-    xEventGroupWaitBits(wifi_event_group, bits, false, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to AP");
-}
+//static void wait_for_ip()
+//{
+//    uint32_t bits = IPV4_GOTIP_BIT | IPV6_GOTIP_BIT ;
+//
+//    ESP_LOGI(TAG, "Waiting for AP connection...");
+//    xEventGroupWaitBits(wifi_event_group, bits, false, true, portMAX_DELAY);
+//    ESP_LOGI(TAG, "Connected to AP");
+//}
 
 
 
@@ -160,18 +161,18 @@ static void wait_for_ip()
 
 static void tcp_server_task(void *pvParameters)
 {
-    char rx_buffer[50];
+    //char rx_buffer[50];
     //char tx_buffer[54];
     char addr_str[128];
     int addr_family;
     int ip_protocol;
-    unsigned int connectionTimout = 17000;
+   // unsigned int connectionTimout = 17000;
     //int value;
     int firstTime = 0;
     int err;
     int listen_sock;
-    int mbusTimeout = 150;
-    unsigned int status = 0;
+   // int mbusTimeout = 150;
+    //unsigned int status = 0;
 
     while (1) {
 #define  CONFIG_EXAMPLE_IPV4
@@ -283,9 +284,9 @@ static void tcp_server_task(void *pvParameters)
 
 			// Configure a temporary buffer for the incoming data
 		//uint8_t * readData = (uint8_t *) malloc(150);
-		uint8_t * holdData = (uint8_t *) malloc(1024);
+	//	uint8_t * holdData = (uint8_t *) malloc(1024);
 
-	    int receivedLength = 0;
+	   // int receivedLength = 0;
 
 
 
@@ -293,17 +294,17 @@ static void tcp_server_task(void *pvParameters)
 
 
         cJSON *jsonObject = NULL;
-        unsigned char * string64;// = (unsigned char *) malloc(500);
+   //     unsigned char * string64;// = (unsigned char *) malloc(500);
         char * jsonString;// = (char *) malloc(600);
         wifi_ap_record_t wifidata;
 
         int len = 0;
         unsigned int byteCount = 0;
-        unsigned int bufferSize = 0;
+        //unsigned int bufferSize = 0;
         unsigned int value = 0;
         while (1) {
         	vTaskDelay(1);
-        	bufferSize = 0;
+        	//bufferSize = 0;
 
         	//uart_get_buffered_data_len(UART_NUM_2, &bufferSize);
 //        	if(bufferSize >= 4)

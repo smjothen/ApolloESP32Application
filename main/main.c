@@ -31,6 +31,18 @@ static const char *TAG = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
+char softwareVersion[] = "2.8.0.2";
+
+uint8_t GetEEPROMFormatVersion()
+{
+	return 1;
+}
+
+char * GetSoftwareVersion()
+{
+	return softwareVersion;
+}
+
 void InitGPIOs()
 {
     gpio_config_t output_conf;
@@ -227,8 +239,8 @@ void app_main(void)
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    if((switchState != eConfig_4G) && (switchState != eConfig_4G_bridge))
-    	diagnostics_port_init();
+    //if((switchState != eConfig_4G) && (switchState != eConfig_4G_bridge))
+    	//diagnostics_port_init();
 
     if( (switchState != eConfig_4G_bridge))
     	sessionHandler_init();

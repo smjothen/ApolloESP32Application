@@ -92,7 +92,7 @@ struct tm RTCReadTime()
 {
 	struct tm RTCtime = {0};
 
-	volatile uint8_t readBytes[7] = {0};
+	uint8_t readBytes[7] = {0};
 
 	uint8_t readreg = 4;
 	i2c_master_read_slave_at_address(slaveAddressRTC, readreg, readBytes, 7);

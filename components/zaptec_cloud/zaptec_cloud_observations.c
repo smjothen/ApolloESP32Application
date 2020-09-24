@@ -199,7 +199,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
 
-    add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, softwareVersion));
+    add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource,  0));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
 
