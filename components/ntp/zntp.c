@@ -4,6 +4,8 @@
 #include "esp_log.h"
 #include "esp_sntp.h"
 #include "zntp.h"
+#include "../i2c/include/RTC.h"
+#include "string.h"
 
 
 static const char *TAG = "ZNTP     ";
@@ -49,8 +51,16 @@ void zntp_checkSyncStatus()
 	    setenv("TZ", "UTC-0", 1);
 	    tzset();
 	    localtime_r(&now, &timeinfo);
-	    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
 	    ESP_LOGI(TAG, "The sensible time is: %s", strftime_buf);
+
+	    RTCWriteTime(timeinfo);
+
+	    struct tm RTCtime = RTCReadTime();
+	    memset(strftime_buf,0,sizeof(strftime_buf));
+		strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &RTCtime);
+
+		ESP_LOGW(TAG, "NTP synced time read from RTC: %s", strftime_buf);
 }
 
 

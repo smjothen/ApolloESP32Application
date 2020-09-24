@@ -122,7 +122,7 @@ static void connectivity_task()
 		//Handle SNTP connection if we are online either with Wifi or 4G.
 		if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
 		{
-			if(sntpInitialized == false)
+			if((sntpInitialized == false) && (i2cRTCChecked() == true))
 			{
 				ESP_LOGW(TAG, "Initializing SNTP after first network connection");
 				zntp_init();

@@ -136,7 +136,7 @@ void app_main(void)
 		hard_reset_cellular();
 	}
 
-	vTaskDelay(pdMS_TO_TICKS(3000));
+	//vTaskDelay(pdMS_TO_TICKS(3000));
 
 
 

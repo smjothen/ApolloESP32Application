@@ -15,6 +15,7 @@ void I2CDevicesInit();
 void I2CDevicesStartTask();
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);
 struct DeviceInfo i2cReadDeviceInfoFromEEPROM();
+bool i2cRTCChecked();
 
 float I2CGetSHT30Temperature();
 float I2CGetSHT30Humidity();

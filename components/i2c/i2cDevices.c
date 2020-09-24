@@ -1,10 +1,9 @@
 #include <stdio.h>
-
-#include <time.h>
 #include "driver/i2c.h"
 #include "esp_console.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include <time.h>
 
 #include "i2cInterface.h"
 #include "SHT30.h"
@@ -17,7 +16,6 @@
 #include <string.h>
 #include "i2cDevices.h"
 
-//static const char *TAG = "I2C-DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
 
 static float temperature = 0.0;
@@ -32,6 +30,7 @@ static ledc_channel_config_t ledc_channel;
 
 static struct DeviceInfo deviceInfo;
 static bool deviceInfoLoaded = false;
+static bool RTCchecked = false;
 
 void I2CDevicesInit()
 {
@@ -243,36 +242,34 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 	return deviceInfo;
 }
 
+//This function is needed to avoid conflict between NTP and RTC.
+bool i2cRTCChecked()
+{
+	return RTCchecked;
+}
+
 
 static void i2cDevice_task(void *pvParameters)
 {
-	//do_i2cdetect_cmd();
+	RTCReadAndUseTime();
 
+	RTCchecked = true;
 
 	SHT30Init();
-
-	struct tm writeTime = {0};
-	strptime("2020-06-29 11:10:01", "%Y-%m-%d %H:%M:%S", &writeTime);
-
-	struct tm readTime = {0};
 
 	audioInit();
 
 	NFCInit();
 
-	RTCWriteTime(writeTime);
-
-
 	int i2cCount = 0;
 	int nfcCardDetected = 0;
+	struct tm readTime = {0};
 
 	while (true)
 	{
-
 		nfcCardDetected = NFCReadTag();
 		if(nfcCardDetected > 0)
 			audio_play_nfc_card_accepted_debug();
-
 
 		i2cCount++;
 		if(i2cCount >= 2)
@@ -282,18 +279,11 @@ static void i2cDevice_task(void *pvParameters)
 			temperature = SHT30ReadTemperature();
 			humidity = SHT30ReadHumidity();
 
-			readTime = RTCReadTime();
-			char timebuf[30];
-			//setenv("TZ", "UTC-0", 1);
-			//tzset();
-			//localtime_r(&now, &timeinfo);
-			//strftime(timebuf, sizeof(timebuf), "%c", &readTime);
-			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-
+			//Debug
+			//readTime = RTCReadTime();
+			//char timebuf[30];
+			//strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
 			//ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
-
-			//EEPROM_Write();
-			//EEPROM_Read();
 		}
 
 		vTaskDelay(500 / portTICK_RATE_MS);

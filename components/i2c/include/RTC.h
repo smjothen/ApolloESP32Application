@@ -10,6 +10,9 @@ extern "C" {
 
 esp_err_t RTCWriteTime(struct tm newTime);
 struct tm RTCReadTime();
+void RTCSoftwareReset();
+bool RTCReadAndUseTime();
+void RTCTestTime();
 
 
 #ifdef __cplusplus
