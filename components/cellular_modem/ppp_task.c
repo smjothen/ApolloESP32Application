@@ -47,6 +47,8 @@ static const int UART_TO_LINES = BIT6;
 esp_netif_t *ppp_netif = NULL;
 // esp_event_loop_handle_t ppp_netif_management_event_loop;
 
+static bool hasLTEConnection = false;
+
 ESP_EVENT_DEFINE_BASE(ESP_MODEM_EVENT);
 typedef enum {
     ESP_MODEM_EVENT_PPP_START = 0,       /*!< ESP Modem Start PPP Session */
@@ -318,14 +320,23 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
         xEventGroupSetBits(event_group, CONNECT_BIT);
 
         ESP_LOGI(TAG, "GOT ip event!!!");
+        hasLTEConnection = true;
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
+        hasLTEConnection = false;
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
         ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
         ESP_LOGI(TAG, "Got IPv6 address " IPV6STR, IPV62STR(event->ip6_info.ip));
+        hasLTEConnection = true;
     }
+}
+
+
+bool LteIsConnected()
+{
+	return hasLTEConnection;
 }
 
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,

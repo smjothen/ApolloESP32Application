@@ -13,4 +13,6 @@ void clear_lines(void);
 int enter_command_mode(void);
 int enter_data_mode(void);
 
+bool LteIsConnected();
+
 #endif /* PPP_TASK_H */

@@ -20,7 +20,8 @@ static const adc_channel_t channel3 = ADC_CHANNEL_3;	 //PWR_MEAS	//ADC_CHANNEL_7
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
 static const adc_unit_t unit = ADC_UNIT_1;
 
-
+float voltage6HWid = 0.0;
+float voltage3PwrMeas = 0.0;
 
 //static void check_efuse()
 //{
@@ -95,7 +96,7 @@ static void adc_task()
 	//Characterize ADC
 	adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
 	esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, ADC_WIDTH_BIT_12, DEFAULT_VREF, adc_chars);
-	//print_char_val_type(val_type);
+	print_char_val_type(val_type);
 
 	//Continuously sample ADC1
 	while (1) {
@@ -116,8 +117,8 @@ static void adc_task()
 		adc_reading3 /= NO_OF_SAMPLES;
 
 		//Convert adc_reading to voltage in mV
-		float voltage6 = esp_adc_cal_raw_to_voltage(adc_reading6, adc_chars) * 0.001;
-		float voltage3 = esp_adc_cal_raw_to_voltage(adc_reading3, adc_chars) * 0.001;
+		voltage6HWid = esp_adc_cal_raw_to_voltage(adc_reading6, adc_chars) * 0.001;
+		voltage3PwrMeas = esp_adc_cal_raw_to_voltage(adc_reading3, adc_chars) * 0.001;
 
 		//int8_t percentage0 = (int8_t)(((voltage0 * voltage0)-(1.6 * 1.6)) / 4.6 * 100);
 //		if(percentage0>100)
@@ -129,20 +130,20 @@ static void adc_task()
 //		hwIdVoltageLevel = voltage6;
 
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
-		ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6, adc_reading3, voltage3);
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		//ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
+		vTaskDelay(pdMS_TO_TICKS(100));
 	}
 
 }
 
-uint8_t GetHANEnergyLevel()
+float GetHardwareId()
 {
-	return HANEnergyLevel;
+	return voltage6HWid;
 }
 
-float GetHwIdVoltageLevel()
+float GetPowerMeas()
 {
-	return hwIdVoltageLevel;
+	return voltage3PwrMeas;
 }
 
 void adc_init(){
@@ -151,5 +152,6 @@ void adc_init(){
     esp_log_level_set(TAG, ESP_LOG_INFO);
 #endif
 
-	xTaskCreate(adc_task, "adc_task", 4096, NULL, 3, NULL);
+	xTaskCreate(adc_task, "adc_task", 4096, NULL, 2, NULL);
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

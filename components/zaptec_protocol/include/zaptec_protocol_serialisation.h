@@ -25,13 +25,29 @@
         ParamTestDataPilotA = 105,
         ParamTestDataPilotC = 106,
         ParamTestDataPilotF = 107,
-                
+
+		AuthenticationRequired = 120,
+
         ParamLinuxStatus = 125,
 
-		ParamHwConfigFunctionalRelay = 150,
+		// Local settings
+
+		TransmitInterval = 145,
+		TransmitChangeLevel = 146,
+
+		CommunicationMode  = 150,
+		PermanentCableLock = 151,
+		ProductCode = 152,
+		HmiBrightness = 153,
+		LockCableWhenConnected = 154,
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,
+		ParamInternalTemperatureEmeter2 = 204,
+		ParamInternalTemperatureEmeter3 = 205,
+		ParamInternalTemperatureT = 206,
+		ParamInternalTemperatureT2 = 207,
+
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
                 
@@ -60,12 +76,15 @@
         ParamPowerFactor = 518,
         ParamSetPhases = 519,
         
-        ParamRcdCurrentMean = 520,
+		MaxPhases = 520,
+		ChargerOfflinePhase = 522,
+		ChargerOfflineCurrent = 523,
+        /*ParamRcdCurrentMean = 520,
         ParamRcdCurrentPeak = 521,
         ParamRcdCurrentRms = 522,
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
-        ParamRcdCalibrationNoise = 525,
+        ParamRcdCalibrationNoise = 525,*/
                 
         ParamRelayState = 530,
         ParamSoftStartDuration = 531,
@@ -101,6 +120,12 @@
         ParamSessionChargeCycle = 720,
         ParamMaxSessionRestart = 721,
 
+        ChargerCurrentUserUuid = 722,
+        CompletedSession = 723,
+
+		SwitchPosition = 730,
+		DebugCounter = 731,
+
         ParamHmiBrightness = 800,
         ParamAveraging = 801,
         //...
@@ -110,10 +135,13 @@
         ParamFlags = 807,
         //..
         ParamDiagnosticsString = 808,
+		CommunicationSignalStrength = 809,
         //..
         ParamResetSource = 811,
         ParamRxErrors = 812,
         ParamPacketErrors = 813,
+        ESPToMcuPacketErrors = 814,
+		ESPResetSource = 815,
         //..
 
 		ParamSmartMainboardAppSwVersion = 908,
@@ -192,6 +220,7 @@
     bool ZParseFrame(uint8_t nextRxByte, ZapMessage* outMsg);
     uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin);
     uint16_t ZAppendChecksumAndStuffBytes(uint8_t* startOfMsg, uint16_t lengthOfMsg, uint8_t* outByteStuffedMsg);
+    uint16_t ZEncodeMessageHeaderOnly(ZapMessage* msg, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneFloat(ZapMessage* msg, float val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneByte(ZapMessage* msg, uint8_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);
     uint16_t ZEncodeMessageHeaderAndOneUInt16(ZapMessage* msg, uint16_t val, uint8_t* txBuf, uint8_t* encodedTxBuf);

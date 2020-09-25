@@ -6,22 +6,46 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
-#include "device_twin.h"
-#include "device_methods.h"
+
+#include "esp_transport_ssl.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/protocol_task.h"
+
+#include "../lib/include/mqtt_msg.h"
 
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-const char device_id[] = "ZAP000001";
-#define DEVICE_ID device_id
-#define ROUTING_ID "myri"
-#define INSTALLATION_ID "myii"
+//const char device_id[15];
+//const char device_id[] = "ZAP000005";
+//const char device_id[] = "ZAP000007";
+//const char device_id[] = "ZAP000008";
+//#define DEVICE_ID device_id
+#define ROUTING_ID "default"
+#define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
-//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
-#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+/*#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
+(existing != null ? existing + "&" : "")
+				+ "$.ct=application%2Fjson&$.ce=utf-8"
+				+ (addRouting ?
+				   (routingId != null && routingId.Length > 0 ? "&ri=" + Uri.EscapeDataString(routingId) : "")
+					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
+				   : "");*/
+
+bool doNewAck = false;
+
+int resetCounter = 0;
+
 const char event_topic[128];
+const char event_topic_hold[128];
+
+static struct DeviceInfo cloudDeviceInfo;
+
+bool mqttConnected = false;
 
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
@@ -47,73 +71,128 @@ const char cert[] =
 "-----END CERTIFICATE-----\r\n"
 ;
 
+bool isMqttConnected()
+{
+	return mqttConnected;
+}
+
 esp_mqtt_client_handle_t mqtt_client = {0};
 esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60, &token);
+    //create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	//create_sas_token(1*3600, &token);
     ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
     return 0;
 }
 
-int publish_to_iothub(const char* payload, const char* topic){
+int publish_iothub_event(const char *payload){
     if(mqtt_client == NULL){
         return -1;
     }
 
     int message_id = esp_mqtt_client_publish(
-            mqtt_client, topic,
+            mqtt_client, event_topic,
             payload, 0, 1, 0
     );
 
     if(message_id>0){
         return 0;
     }
-    ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
 }
 
-int publish_iothub_event(const char *payload){
-    return publish_to_iothub(payload, event_topic);
+
+
+void ParseParameterFromCloud(char * message, int message_len)
+{
+	if ((message[0] != '[') || (message[message_len-1] != ']'))
+		return;
+
+	char recvString[message_len];
+	strncpy(recvString, message+1, message_len-2);
+	recvString[message_len-2] = '\0';
+
+	char const separator[2] = ",";
+	char * stringPart;
+
+	stringPart = strtok(recvString, separator);
+	if(stringPart != NULL)
+	{
+		ESP_LOGI(TAG, "Str: %s \n", stringPart);
+		if(strstr(stringPart, "Device_Parameters") != NULL)
+		{
+			stringPart = strtok(NULL, separator);
+			ESP_LOGI(TAG, "Str: %s \n", stringPart);
+
+			if(strstr(stringPart, "hmi_brightness") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				volatile float hmiBrightness = atof(stringPart+1);
+				ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
+				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+			}
+			else if(strstr(stringPart, "network_type") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				//volatile float hmiBrightness = atof(stringPart+1);
+				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+			}
+		}
+	}
+	//while(stringPart != NULL)
+	//{
+		//ESP_LOGI(TAG, "Str: %s \n", stringPart);
+
+		//stringPart = strtok(NULL, separator);
+	//}
 }
 
+
+
+
+static int ridNr = 4199;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
-    int msg_id;
+
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
         char devicebound_topic[128];
-        sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", DEVICE_ID);
+        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
         esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 1);
 
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
-        publish_diagnostics_observation("[mqtt connected]");
-
-        static bool is_first_connection = true;
-        if(is_first_connection){
-            is_first_connection = false;
-            char boot_message[256];
-            snprintf(boot_message, 256, "[booted] first connect after boot, uptime_ms: %d", esp_log_timestamp());
-            publish_diagnostics_observation(boot_message);
-        }
 
         // request twin data
-        esp_mqtt_client_publish(
-            mqtt_client, "$iothub/twin/GET/?$rid=1",
-            NULL, 0, 1, 0
-        );
+        ridNr++;
+        char devicetwin_topic[64];
+        sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
+        esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+
+        resetCounter = 0;
+
+        mqttConnected = true;
 
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        mqttConnected = false;
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -128,28 +207,83 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+        printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
+        printf("rDATA=%.*s\r\n", event->data_len, event->data);
 
-        char* topic = malloc(event->topic_len+1);
-        char* data = malloc(event->data_len+1);
 
-        strncpy(topic, event->topic, event->topic_len);
-        strncpy(data, event->data, event->data_len);
-        topic[event->topic_len] = 0;
-        data[event->data_len] = 0;
 
-        ESP_LOGI(TAG, "got mqtt event:\r\n\tTOPIC=%s\r\n\tDATA=%s", topic, data);
+        if(strstr(event->topic, "iothub/twin/res/200/"))
+        {
 
-        const char* twin_topic_head = "$iothub/twin/res/";
-        const char* method_topic_head = "$iothub/methods/POST/";
+        	//char devicetwin_topic[64];
 
-        if(strncmp(twin_topic_head, topic, strlen(twin_topic_head))==0){
-            on_device_twin_message(data);
-        } else if (strncmp(method_topic_head, topic, strlen(twin_topic_head))==0){
-            on_method_call(topic, data);
+			//volatile char ridString[event->topic_len];
+
+			//strncpy(ridString, event->topic, event->topic_len);
+			//volatile char * ridSubString = strstr(ridString, "$rid=");
+			//char *strPart;
+			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
+			//sprintf(devicetwin_topic, "$iothub/twin/res/200/?rid=%d", ridNr);//ridSubString);
+			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+
+        	//TOPIC=$iothub/twin/res/200/?$rid=
+        	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
+
+        	//publish_debug_telemetry_observation_cloud_settings();
+        	//esp_mqtt_client_publish(mqtt_client, event->topic, NULL, 0, 0, 0);
+        	//ESP_LOGD(TAG, "RESPONDED?");
         }
 
-        free(topic);
-        free(data);
+        if(strstr(event->topic, "iothub/methods/POST/300/"))
+        {
+
+        	if(event->data_len > 10)
+        	{
+        		ParseParameterFromCloud(event->data, event->data_len);
+        	}
+
+			char devicetwin_topic[64];
+
+			volatile char ridString[event->topic_len+1];
+
+			strncpy(ridString, event->topic, event->topic_len);
+			ridString[event->topic_len] = '\0';
+			volatile char * ridSubString = strstr(ridString, "$rid=");
+			//char *strPart;
+			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
+			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
+			char * data = "\"[Device_Parameters]\\nserial = ZAP000005\\nmid = ZAP000005\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
+//			}
+//        	else
+//        	{
+//        		ParseParameterFromCloud(event->data, event->data_len);
+//
+//        	}
+
+            //messageId:2458,topic:$iothub/methods/res/200/?$rid=e)
+        	//memcpy(event_topic_hold, event->topic, 128);
+        	//strcpy(event_topic_hold,"$iothub/methods/res/?$rid=1");
+        	//doNewAck = true;
+        	//publish_iothub_ack("", event->topic);
+
+        	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
+        	//publish_debug_telemetry_observation_local_settings();
+        }
+
+
+        if(strstr(event->topic, "iothub/methods/POST/102/"))
+        {
+
+        }
+
+        // ESP_LOGD(TAG, "publishing %s", payloadstring);
+        // if(mqtt_count<3){
+        //     msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
+        //     mqtt_count += 1;
+        // }else
+        //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
@@ -157,7 +291,23 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         break;
     case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+    	resetCounter++;
+
+    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
+
+        if(resetCounter == 5)
+        {
+        	esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
+        	ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+        }
+
+        if(resetCounter == 10)
+        {
+        	ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+        	esp_restart();
+        }
+
+
         break;
     default:
         ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
@@ -167,18 +317,21 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 }
 
 
-void start_cloud_listener_task(void){
-    ESP_LOGI(TAG, "Connecting to IotHub");
+void start_cloud_listener_task(struct DeviceInfo deviceInfo){
+
+	cloudDeviceInfo = deviceInfo;
+
+	ESP_LOGI(TAG, "Connecting to IotHub");
 
     static char broker_url[128] = {0};
     sprintf(broker_url, "mqtts://%s", MQTT_HOST);
 
     static char username[128];
-    sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, DEVICE_ID);
+    sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
     sprintf(
         event_topic, MQTT_EVENT_PATTERN,
-        DEVICE_ID
+		cloudDeviceInfo.serialNumber
     );
 
     ESP_LOGI(TAG,
@@ -187,17 +340,17 @@ void start_cloud_listener_task(void){
         " > port: %d\r\n"
         " > username: %s\r\n"
         " > client id: %s\r\n"
-        " > cert_pem len: %d\r\n"
-        " > cert_pem: %s\r\n",
-        broker_url, MQTT_PORT, username, DEVICE_ID,
-        strlen(cert), cert
+        " > cert_pem len: %d\r\n",
+        //" > cert_pem: %s\r\n",
+        broker_url, MQTT_PORT, username, cloudDeviceInfo.serialNumber,
+        strlen(cert)//, cert
     );
 
     mqtt_config.uri = broker_url;
     mqtt_config.event_handle = mqtt_event_handler;
     mqtt_config.port = MQTT_PORT;
     mqtt_config.username = username;
-    mqtt_config.client_id = DEVICE_ID;
+    mqtt_config.client_id = cloudDeviceInfo.serialNumber;
     mqtt_config.cert_pem = cert;
 
     mqtt_config.lwt_qos = 1;
@@ -205,7 +358,17 @@ void start_cloud_listener_task(void){
     static char *lwt = "{\"EventType\":30,\"Message\":\"mqtt connection broke[lwt]\",\"Type\":5}";
     mqtt_config.lwt_msg = lwt;
 
-    esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
+    mqtt_config.disable_auto_reconnect = false;
+    mqtt_config.reconnect_timeout_ms = 10000;
+    mqtt_config.keepalive = 120;
+    //mqtt_config.refresh_connection_after_ms = 30000;
+
+    mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
     esp_mqtt_client_start(mqtt_client);
+}
+
+void stop_cloud_listener_task()
+{
+	esp_mqtt_client_stop(mqtt_client);
 }

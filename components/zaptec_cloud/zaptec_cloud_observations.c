@@ -3,11 +3,18 @@
 #include "time.h"
 #include <sys/time.h>
 #include "stdio.h"
+#include "esp_system.h"
 
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
+//#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../i2c/include/i2cDevices.h"
+#include "../zaptec_protocol/include/protocol_task.h"
 
 #define TAG "OBSERVATIONS POSTER"
+
+static bool startupMessage = true;
 
 int publish_json(cJSON *payload){
     char *message = cJSON_PrintUnformatted(payload);
@@ -63,6 +70,12 @@ cJSON *create_double_observation(int observation_id, double value){
     return create_observation(observation_id, value_string);
 }
 
+cJSON *create_uint32_t_observation(int observation_id, uint32_t value){
+    char value_string[32];
+    sprintf(value_string, "%d", value);
+    return create_observation(observation_id, value_string);
+}
+
 cJSON *create_observation_collection(void){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
@@ -81,16 +94,29 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
     return 0;
 }
 
-int publish_debug_telemetry_observation(
-    double voltage_l1, double voltage_l2, double voltage_l3,
-    double current_l1, double current_l2, double current_l3,
-    double temperature_5, double temperature_emeter
+/*int publish_debug_telemetry_observation(
+    double temperature_5, double temperature_emeter, double rssi
 ){
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
-    add_observation_to_collection(observations, create_observation(808, "debugstring1"));
-    add_observation_to_collection(observations, create_observation(808, "debugstring2"));
+
+    //add_observation_to_collection(observations, create_observation(808, "debugstring1"));
+
+    add_observation_to_collection(observations, create_double_observation(201, temperature_5));
+    add_observation_to_collection(observations, create_double_observation(809, rssi));
+    //add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
+
+    return publish_json(observations);
+}*/
+
+int publish_debug_telemetry_observation_power(
+    double voltage_l1, double voltage_l2, double voltage_l3,
+    double current_l1, double current_l2, double current_l3
+){
+    ESP_LOGD(TAG, "sending charging telemetry");
+
+    cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
     add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
@@ -100,11 +126,146 @@ int publish_debug_telemetry_observation(
     add_observation_to_collection(observations, create_double_observation(508, current_l2));
     add_observation_to_collection(observations, create_double_observation(509, current_l2));
 
-    add_observation_to_collection(observations, create_double_observation(201, temperature_5));
-    add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_cloud_settings(
+){
+    ESP_LOGD(TAG, "sending cloud settings");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
+    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+
+    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
 
     return publish_json(observations);
 }
+
+
+int publish_debug_telemetry_observation_local_settings(
+){
+    ESP_LOGD(TAG, "sending local settings");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, 4));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflineCurrent, 10));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, 1));
+
+    return publish_json(observations);
+}
+
+int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
+{
+    ESP_LOGD(TAG, "sending NFC telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(ChargerCurrentUserUuid, NFCHexString));
+
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_CompletedSession(char * CompletedSessionString)
+{
+    ESP_LOGD(TAG, "sending CompletedSession");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(CompletedSession, CompletedSessionString));
+
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_StartUpParameters()
+{
+    ESP_LOGD(TAG, "sending startup telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
+	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+
+    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+
+    add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource,  0));
+    add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
+
+    return publish_json(observations);
+}
+
+
+static uint32_t txCnt = 0;
+
+int publish_debug_telemetry_observation_all(
+	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
+	double temperature_TM, double temperature_TM2,
+    double voltage_l1, double voltage_l2, double voltage_l3,
+    double current_l1, double current_l2, double current_l3,
+	double rssi
+){
+    ESP_LOGD(TAG, "sending charging telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
+    add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
+
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, temperature_emeter1));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, temperature_emeter2));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, temperature_emeter3));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, temperature_TM));
+    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, temperature_TM2));
+
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, voltage_l1));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, voltage_l2));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, voltage_l3));
+
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, current_l1));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
+
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+
+	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
+
+	if(startupMessage == true)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource, (uint32_t)MCU_GetResetSource()));
+		add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource, (uint32_t)esp_reset_reason()));
+
+		startupMessage = false;
+	}
+
+	txCnt++;
+	char buf[256];
+	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  DBC: %d", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState(), MCU_GetDebugCounter());
+	//sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f ", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
+	add_observation_to_collection(observations, create_observation(808, buf));
+
+	int ret = publish_json(observations);
+
+	//cJSON_Delete(observations);
+
+    return ret;//publish_json(observations);
+}
+
 
 int publish_diagnostics_observation(char *message){
     return publish_json(create_observation(808, message));

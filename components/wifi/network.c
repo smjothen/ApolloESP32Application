@@ -24,14 +24,40 @@
 #include "freertos/event_groups.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "network.h"
+#include "nvs_flash.h"
+#include "../../main/storage.h"
 
 
-#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
-#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
+//#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "Ilovezaptec"
+
+//#define CONFIG_EXAMPLE_WIFI_SSID "BVb"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "tk51mo79"
+
+char WifiSSID[32]= {0};// = "BVb";
+char WifiPSK[64] = {0};//"tk51mo79";
+
+static char previousWifiSSID[32] = {0};
+static char previousWifiPSK[32] = {0};
+
+//int switchState = 0;
+char ip4Address[16] = {0};
+char ip6Address;
+static bool wifiScan = false;
+static bool wifiIsValid = false;
+static bool firstTime = true;
+static bool connecting = false;
+
+//#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
+
+//#define CONFIG_EXAMPLE_WIFI_SSID "Zaptec Garage âš¡ï¸�"
+//#define CONFIG_EXAMPLE_WIFI_PASSWORD "ZaptecSmart2017"
 
 #define GOT_IPV4_BIT BIT(0)
 #define GOT_IPV6_BIT BIT(1)
-
+#undef CONFIG_EXAMPLE_CONNECT_IPV6
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
 #define CONNECTED_BITS (GOT_IPV4_BIT | GOT_IPV6_BIT)
 #else
@@ -47,7 +73,14 @@ static esp_netif_t *s_example_esp_netif = NULL;
 static esp_ip6_addr_t s_ipv6_addr;
 #endif
 
-static const char *TAG = "example_connect";
+static const char *TAG = "NETWORK ";
+
+bool isConnected = false;
+
+bool network_WifiIsConnected()
+{
+	return isConnected;
+}
 
 /* set up connection, Wi-Fi or Ethernet */
 static void start(void);
@@ -58,10 +91,22 @@ static void stop(void);
 static void on_got_ip(void *arg, esp_event_base_t event_base,
                       int32_t event_id, void *event_data)
 {
+	isConnected = true;
     ESP_LOGI(TAG, "Got IP event!");
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     memcpy(&s_ip_addr, &event->ip_info.ip, sizeof(s_ip_addr));
     xEventGroupSetBits(s_connect_event_group, GOT_IPV4_BIT);
+
+    //ip4Address = ip4addr_ntoa(&event->ip_info.ip.addr);
+    esp_netif_ip_info_t ip_info;
+        esp_netif_get_ip_info(IP_EVENT_STA_GOT_IP,&ip_info);
+
+
+	ESP_LOGI(TAG, "IP4 Address:" IPSTR, IP2STR(&event->ip_info.ip));
+
+	sprintf(ip4Address, IPSTR, IP2STR(&event->ip_info.ip));
+	ESP_LOGI(TAG, "IP4 Address string: %s, %d",ip4Address, strlen(ip4Address));
+
 }
 
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
@@ -81,25 +126,37 @@ static void on_got_ipv6(void *arg, esp_event_base_t event_base,
 
 #endif // CONFIG_EXAMPLE_CONNECT_IPV6
 
-esp_err_t example_connect(void)
+esp_err_t network_connect_wifi(void)
 {
+	ESP_ERROR_CHECK(esp_netif_init());
+	if(firstTime == true)
+	{
+		//ESP_ERROR_CHECK( nvs_flash_init() );
+		//ESP_ERROR_CHECK(esp_netif_init());
+	    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+	}
+
     if (s_connect_event_group != NULL) {
         return ESP_ERR_INVALID_STATE;
     }
     s_connect_event_group = xEventGroupCreate();
     start();
-    ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
+    if(firstTime == true)
+    	ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to %s", s_connection_name);
+    ESP_LOGI(TAG, "Connected to %s", WifiSSID);//s_connection_name);
     ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
 #endif
+
+    firstTime = false;
+
     return ESP_OK;
 }
 
-esp_err_t example_disconnect(void)
+esp_err_t network_disconnect_wifi(void)
 {
     if (s_connect_event_group == NULL) {
         return ESP_ERR_INVALID_STATE;
@@ -118,6 +175,7 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     ESP_LOGI(TAG, "Wi-Fi disconnected, trying to reconnect...");
+    isConnected = false;
     esp_err_t err = esp_wifi_connect();
     if (err == ESP_ERR_WIFI_NOT_STARTED) {
         return;
@@ -161,10 +219,46 @@ static void start(void)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = CONFIG_EXAMPLE_WIFI_SSID,
-            .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
+            .ssid = {0x0},
+            .password = {0x0},
         },
     };
+
+
+    network_CheckWifiParameters();
+//    if(switchState == eConfig_Wifi_NVS)
+//	{
+//    	network_CheckWifiParameters();
+//	}
+//
+//    if(switchState == eConfig_Wifi_Zaptec)
+//	{
+//		strcpy(WifiSSID, "ZaptecHQ");
+//		strcpy(WifiPSK, "LuckyJack#003");
+//		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
+//	}
+//
+//    else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
+//    {
+//    	strcpy(WifiSSID, "BVb");
+//    	strcpy(WifiPSK, "tk51mo79");
+//	}
+//    else if(switchState == 4) //Applica - EMC config
+//    {
+//       	strcpy(WifiSSID, "APPLICA-GJEST");
+//       	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+//   	}
+
+    memset(wifi_config.sta.ssid, 0, 32);
+    memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+	memset(wifi_config.sta.password, 0, 64);
+	memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+
+
+
+
+
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
@@ -313,4 +407,228 @@ static void stop(void)
 esp_netif_t *get_example_netif(void)
 {
     return s_example_esp_netif;
+}
+
+void SetupWifi()
+{
+	start();
+}
+
+
+void configure_wifi(){
+	//switchState = switchstate;
+	ESP_ERROR_CHECK( nvs_flash_init() );
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK( esp_event_loop_create_default() );
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(network_connect_wifi());
+}
+
+
+
+char * network_GetIP4Address()
+{
+	return ip4Address;
+}
+
+float network_WifiSignalStrength()
+{
+	wifi_ap_record_t wifidata;
+	float wifiRSSI = 0.0;
+	if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+		wifiRSSI= (float)wifidata.rssi;
+
+	return wifiRSSI;
+}
+
+
+char * network_getWifiSSID()
+{
+	return WifiSSID;
+}
+
+
+bool network_CheckWifiParameters()
+{
+	network_clearWifi();
+	esp_err_t err = storage_ReadWifiParameters(WifiSSID, WifiPSK);
+	int ssidLength = strlen(WifiSSID);
+
+	if((32 >= ssidLength) && (ssidLength >= 1))
+	{
+		if(err == ESP_OK)
+			wifiIsValid = true;
+		else
+			wifiIsValid = false;
+	}
+	else
+	{
+		wifiIsValid = false;
+	}
+
+	return wifiIsValid;
+}
+
+bool network_wifiIsValid()
+{
+	return wifiIsValid;
+}
+
+
+void network_updateWifi()
+{
+	network_disconnect_wifi();
+	network_connect_wifi();
+	return;
+
+
+	if(network_wifiIsValid())
+	{
+		//Only update if both
+		//if((strcmp(previousWifiSSID, WifiSSID) != 0) || (strcmp(previousWifiPSK, WifiPSK) != 0) )
+		//{
+
+			ESP_ERROR_CHECK( esp_wifi_stop() );
+
+			wifi_config_t wifi_config = {
+					.sta = {
+						.ssid = {0x0},
+						.password = {0x0},
+
+					},
+				};
+
+			memset(wifi_config.sta.ssid, 0, 32);
+			memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+			memset(wifi_config.sta.password, 0, 64);
+			memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+
+			ESP_LOGI(TAG, "Setting WiFi configuration SSID %s PSK %s", (char*)wifi_config.sta.ssid, (char*)wifi_config.sta.password);
+			ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+			ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+			ESP_ERROR_CHECK( esp_wifi_start() );
+
+			//Hold the new values
+			memcpy(previousWifiSSID, WifiSSID, 32);
+			memcpy(previousWifiPSK, WifiPSK, 32);
+		//}
+	}
+}
+
+
+
+void network_stopWifi()
+{
+	esp_wifi_stop();
+}
+
+void network_clearWifi()
+{
+	memset(WifiSSID, 0, 32);
+	memset(WifiPSK, 0, 64);
+}
+
+
+void network_startWifiScan()
+{
+	wifiScan = true;
+
+	if(firstTime)
+	{
+		//initialise_wifi(0);
+		/*tcpip_adapter_init();
+		wifi_event_group = xEventGroupCreate();
+		ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
+		wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+		ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+		ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM));//WIFI_STORAGE_FLASH ) );
+*/
+		firstTime = false;
+	}
+
+    wifi_scan_config_t scanConf = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = false
+    };
+
+
+    while(connecting == true)
+    {
+    	ESP_LOGE(TAG, "Waiting for connecting release");
+    	vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_ERROR_CHECK( esp_wifi_start() );
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scanConf, true));
+    ESP_ERROR_CHECK(esp_wifi_scan_stop());
+
+    //if(network_wifiIsValid() == false)
+    //	ESP_ERROR_CHECK( esp_wifi_stop() );
+
+    /*wifi_scan_config_t config = {
+			.scan_method = WIFI_ALL_CHANNEL_SCAN,
+            .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
+	};
+	bool block = false;
+	esp_wifi_scan_start(config, block);*/
+
+    wifiScan = false;
+}
+
+
+//static bool wait_for_ip(bool prod)
+//{
+//    bool successfulConnection = 0;
+//
+//	uint32_t bits = IPV4_GOTIP_BIT;// | IPV6_GOTIP_BIT ;
+//
+//	TickType_t xTicksToWait;
+//
+//	/*if(prod == true)
+//		xTicksToWait = 20000 / portTICK_PERIOD_MS;
+//	else*/
+//	xTicksToWait = 5000 / portTICK_PERIOD_MS;
+//
+//    ESP_LOGI(TAG, "Waiting for AP connection...");
+//    EventBits_t uxBits = xEventGroupWaitBits(wifi_event_group, bits, false, true, xTicksToWait);
+//
+//    if(uxBits == 0)
+//    {
+//    	esp_wifi_stop();
+//    	connecting = false;
+//    	successfulConnection = 0;
+//		ESP_LOGI(TAG, "Deinit wifi, bits: %d, uxBits: %d", bits, uxBits);
+//
+//		//Delay before new round - need to charge capasitor
+//
+//		if(prod == false)
+//		{
+//				vTaskDelay(pdMS_TO_TICKS(2000));
+//				ESP_LOGI(TAG, "Waiting 2 sec");
+//		}
+//    }
+//    else
+//    {
+//    	ESP_LOGI(TAG, "Connected to AP, bits: %d, uxBits: %d", bits, uxBits);
+//    	successfulConnection = 1;
+//    }
+//
+//    return successfulConnection;
+//}
+
+
+bool network_renewConnection()
+{
+	if(wifiScan == true)
+		return false;
+
+	network_updateWifi();
+	return true;//wait_for_ip(false);
 }

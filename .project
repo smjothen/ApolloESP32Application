@@ -19,6 +19,10 @@
 	</natures>
 	<variableList>
 		<variable>
+			<name>EXTRA_COMPONENTS_DIRS</name>
+			<value>file:/C:/gitHub/Apollo/goEsp32/esp-idf/components/bt/controller/lib</value>
+		</variable>
+		<variable>
 			<name>IDF_PATH</name>
 			<value>file:/C:/gitHub/Apollo/goEsp32/esp-idf</value>
 		</variable>
