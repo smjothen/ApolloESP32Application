@@ -87,6 +87,13 @@ void validate_booted_image(void){
 
     int dspic_update_success = update_dspic();
 
+    if(dspic_update_success<0){
+            ESP_LOGE(TAG, "FAILED to update dsPIC");
+            // We failed to bring the dsPIC app to the version embedded in this code
+            // On next reboot we will roll back, and the old dsPIC app will be flashed
+            // TODO: should we restart now?
+    }
+
     esp_ota_img_states_t ota_state;
     esp_err_t ret = esp_ota_get_state_partition(partition, &ota_state);
 
@@ -94,10 +101,7 @@ void validate_booted_image(void){
     {
         ESP_LOGI(TAG, "we booted a new image, lets make sure the dsPIC has the FW from this image");
         if(dspic_update_success<0){
-            ESP_LOGE(TAG, "FAILED to update dsPIC");
-            // We failed to bring the dsPIC app to the version embedded in this code
-            // On next reboot we will roll back, and the old dsPIC app will be flashed
-            // TODO: should we restart now?
+            // could we use other error handeling here? Or should everything be handeled above?
         }else{
             ret = esp_ota_mark_app_valid_cancel_rollback();
             if(ret != ESP_OK){
