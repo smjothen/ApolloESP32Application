@@ -144,10 +144,10 @@ bool RTCReadAndUseTime()
 {
 	bool RTCvalid = false;
 
-	struct tm writeTime = {0};
-	strptime("2020-09-23 05:01:02", "%Y-%m-%d %H:%M:%S", &writeTime);
+	//struct tm writeTime = {0};
+	//strptime("2020-09-23 05:01:02", "%Y-%m-%d %H:%M:%S", &writeTime);
 
-	RTCWriteTime(writeTime);
+	//RTCWriteTime(writeTime);
 
 	struct tm readTime = {0};
 
@@ -165,11 +165,10 @@ bool RTCReadAndUseTime()
 	{
 		RTCvalid = false;
 		//Must wait for NTP connection to get valid time
+		ESP_LOGE(TAG_RTC, "RTC time is invalid: Year == %d", readTime.tm_year);
 	}
 	else
 	{
-		//readTime.tm_year += 2000;
-		//readTime.tm_year = (readTime.tm_year + 2000) - 1970;
 		RTCvalid = true;
 
 		time_t epochSec = mktime(&readTime);
@@ -178,9 +177,15 @@ bool RTCReadAndUseTime()
 
 		struct timeval tv;
 		tv.tv_sec = epochSec;
-		settimeofday(&tv, NULL);
+		int ret = settimeofday(&tv, NULL);
 
-		ESP_LOGW(TAG_RTC, "RTC time set as System time: %s", buffer);
+		ESP_LOGW(TAG_RTC, "RTC time set as System time: %s, ret: %d", buffer, ret);
+
+		// Must read back using gettimeofday() to avoid library bug where set time diffs from written time by 1073 sec!
+		struct timeval tvRead = {0};
+		tv.tv_sec = epochSec;
+		gettimeofday(&tvRead, NULL);
+		ESP_LOGW(TAG_RTC, "read sec: %ld, diff: %ld", tvRead.tv_sec, tvRead.tv_sec-tv.tv_sec);
 	}
 
 	return RTCvalid;
