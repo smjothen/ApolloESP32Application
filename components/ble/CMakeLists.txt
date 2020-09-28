@@ -1,5 +1,5 @@
 # Edit following two lines to set component requirements (see docs)
-set(COMPONENT_REQUIRES "bt")
+set(COMPONENT_REQUIRES "bt" json)
 #set(COMPONENT_PRIV_REQUIRES )
 
 set(COMPONENT_SRCS "ble_common.c"

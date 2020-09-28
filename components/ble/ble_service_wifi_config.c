@@ -7,7 +7,7 @@
 
 #include "ble_common.h"
 
-#include "../../../esp-idf/components/json/cJSON/cJSON.h"
+#include "cJSON.h"
 #include <string.h>
 
 #include "../../main/storage.h"
