@@ -300,6 +300,13 @@ void app_main(void)
     		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
     	}
 
+    	//Until BLE driver error is resolved, disable ble after 1 hour.
+//    	if(counter == 60)//3600)
+//    	{
+//    		ESP_LOGW(TAG,"Deinitializing BLE");
+//    		ble_interface_deinit();
+//    	}
+
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
