@@ -33,16 +33,17 @@ void zaptecProtocolStart(){
     ESP_LOGI(TAG, "starting protocol task");
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t uartRecvTaskHandle = NULL;
-    TaskHandle_t taskHandle = NULL;
     int stack_size = 8192;//4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
-    xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
     configASSERT(uartRecvTaskHandle);
+}
+
+void dspic_periodic_poll_start(){
+    static uint8_t ucParameterToPass = {0};
+    TaskHandle_t taskHandle = NULL;
+    int stack_size = 8192;//4096;
+    xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
     configASSERT( taskHandle );
-    if( taskHandle == NULL ){
-        ESP_LOGE(TAG, "failed to start task");
-    }
-    
 }
 
 ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){

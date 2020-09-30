@@ -80,6 +80,9 @@ void app_main(void)
     zaptecProtocolStart();
 
     start_ota_task();
+	validate_booted_image();
+	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
+	dspic_periodic_poll_start(); 
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
@@ -87,6 +90,7 @@ void app_main(void)
 #define DEV
 #ifdef DEV
     int switchState = MCU_GetSwitchState();
+	switchState = eConfig_Wifi_Zaptec;
 
     while(switchState == 0)
     {
@@ -172,6 +176,11 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
+
+	// strcpy(writeDevInfo.serialNumber, "ZAP000001");
+	// strcpy(writeDevInfo.PSK, "ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=");
+	// strcpy(writeDevInfo.Pin, "2121");
+
 //	strcpy(writeDevInfo.serialNumber, "ZAP000002");
 //	strcpy(writeDevInfo.PSK, "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=");
 //	strcpy(writeDevInfo.Pin, "0625");
@@ -180,9 +189,9 @@ void app_main(void)
 //	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
 //	strcpy(writeDevInfo.Pin, "4284");
 
-	strcpy(writeDevInfo.serialNumber, "ZAP000008");
-	strcpy(writeDevInfo.PSK, "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=");
-	strcpy(writeDevInfo.Pin, "7833");
+	// strcpy(writeDevInfo.serialNumber, "ZAP000008");
+	// strcpy(writeDevInfo.PSK, "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=");
+	// strcpy(writeDevInfo.Pin, "7833");
 
 //	strcpy(writeDevInfo.serialNumber, "ZAP000010");
 //	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
