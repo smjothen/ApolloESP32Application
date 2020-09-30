@@ -396,7 +396,7 @@ void MCU_SendParameter(uint16_t paramIdentifier, float data)
 //		   );
 
    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-   runRequest(encodedTxBuf, encoded_length);
+   //runRequest(encodedTxBuf, encoded_length);
    freeZapMessageReply();
 
 }
