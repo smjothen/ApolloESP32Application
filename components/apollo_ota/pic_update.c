@@ -80,7 +80,7 @@ static void update_dspic_task(void *pvParameters){
             // OR the crc in the header may not match the app in the flash
             ESP_LOGI(TAG, "starting app with correct header");
 
-            if(enter_bootloader()<0){
+            if(boot_dspic_app()<0){
                 ESP_LOGW(TAG, "failed to start application, reflashing it now");
             }else{
                 ESP_LOGI(TAG, "Successful jump to the target app");
@@ -451,7 +451,7 @@ int get_application_header(uint32_t *crc, uint32_t *length){
         ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
             message_type, error_code
         );
-        return 0;
+        return -1;
     }
     return 0;
 }
@@ -474,15 +474,18 @@ int enter_bootloader(void){
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
     uint8_t message_type = rxMsg.type;
-    uint8_t error_code = rxMsg.data[0];
-
+    uint8_t error_code = 1;
+    if(rxMsg.length > 0){
+        error_code = rxMsg.data[0];
+    }
+    
     freeZapMessageReply();
 
     if((message_type != MsgReadAck) || (error_code != 0)){
         ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
             message_type, error_code
         );
-        return 0;
+        return -1;
     }
     return 0;
 }
