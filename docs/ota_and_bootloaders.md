@@ -85,10 +85,10 @@ The flash layout, the constants defining it, and the alignments should probably 
 ### Building and image creation
 The linker script for the bootloader is at `ApolloMCUApplication/mccbootloader/mccbootlader.X/p33CK256MP506.gld`. When building a "bootloadable" version of the app the linker script at `/home/arnt/zaptec/ApolloMCUApplication/smart/smart/p33CK256MP506_offset_3c00.gld` must be used. Together they ensure the flash layout described in the table above.
 
-After building with the linker script, there will be a `.hex` file describing the full flash at `/smart/smart/dist/apollo_offset/production/smart.production.hex`. Some slight modifications needs to be done to this file. Use this command:
+After building with the linker script, there will be a `.hex` file describing the full flash at `/smart/smart/dist/AppWithBootloader/production/smart.production.hex`. Some slight modifications needs to be done to this file. Use this command:
 
 ```
-python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0x1AFFF --pad=00  ../smart/smart/dist/apollo_offset/production/smart.production.hex  | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
+python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0x1AFFF --pad=00  ../smart/smart/dist/AppWithBootloader/production/smart.production.hex  | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
 ```
 
 This changes the file in the following ways:
