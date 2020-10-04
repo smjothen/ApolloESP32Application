@@ -53,7 +53,7 @@ static void connectivity_task()
 		staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
-	else if(switchState == eConfig_4G_bridge)
+	else if(switchState == eConfig_4G)
 		staticNewInterface = eCONNECTION_4G;
 
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;

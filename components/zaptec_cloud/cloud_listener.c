@@ -159,6 +159,55 @@ void ParseParameterFromCloud(char * message, int message_len)
 }
 
 
+void ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
+{
+	//Don't spend time in this function, must return from mqtt-event. May need separate process
+	if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
+	{
+		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
+		esp_restart();
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
+	{
+		ESP_LOGI(TAG, "Received \"Restart MCU\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	{
+		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	{
+		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
+	{
+		//rDATA=["16","4"]
+		/*char * currentFromCloudString = strtok(commandEvent->data, ",");
+
+		int startIndex = strchr(currentFromCloudString, '"');
+		int stopIndex = strrchr(currentFromCloudString, '"');
+		if(startIndex >= stopIndex)
+		{
+			ESP_LOGE(TAG, "Invalid string");
+			return;
+		}
+		currentFromCloudString = currentFromCloudString[startIndex];
+		currentFromCloudString[stopIndex] = '\0';
+
+		int currentFromCloud = atoi(currentFromCloudString);
+
+		char * phaseFromCloudString = strtok(NULL, ",");
+		int phaseFromCloud = atoi(phaseFromCloudString);
+
+		ESP_LOGI(TAG, "Start: %d PhaseId: %d \n", currentFromCloud, phaseFromCloud);*/
+	}
+
+
+
+}
 
 
 static int ridNr = 4199;
@@ -273,9 +322,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         }
 
 
-        if(strstr(event->topic, "iothub/methods/POST/102/"))
+        if(strstr(event->topic, "iothub/methods/POST/"))
         {
-
+        	ParseCommandFromCloud(event);
         }
 
         // ESP_LOGD(TAG, "publishing %s", payloadstring);

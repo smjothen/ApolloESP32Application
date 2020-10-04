@@ -203,7 +203,7 @@ void uartCommsTask(void *pvParameters){
         	case 0:
         		txMsg.identifier = SwitchPosition;
         		break;
-        	case 1:
+        	/*case 1:
 				txMsg.identifier = ParamInternalTemperatureEmeter;
 				break;
         	case 2:
@@ -262,7 +262,7 @@ void uartCommsTask(void *pvParameters){
 				break;
 			case 18:
 				txMsg.identifier = ParamWarnings;
-				break;
+				break;*/
 
         	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -272,9 +272,10 @@ void uartCommsTask(void *pvParameters){
 
         count++;
 
-        if(count >= 19)
+        //if(count >= 19)
+        if(count >= 2)
         {
-        	vTaskDelay(1000 / portTICK_PERIOD_MS);
+        	vTaskDelay(5000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
         }
@@ -299,7 +300,7 @@ void uartCommsTask(void *pvParameters){
         {
         	receivedSwitchState = rxMsg.data[0];
 
-        	//ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
+        	ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
 
         	if(previousSwitchState != 0xff)
         	{

@@ -30,7 +30,8 @@ static const char *TAG = "MAIN     ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
+#define GPIO_OUTPUT_WRITE_PROTECT    4
+#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_WRITE_PROTECT)
 
 char softwareVersion[] = "0.0.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
@@ -79,7 +80,7 @@ void app_main(void)
 
     zaptecProtocolStart();
 
-    start_ota_task();
+    //start_ota_task();
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
@@ -197,8 +198,19 @@ void app_main(void)
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
+			while(network_WifiIsConnected() == false)
+			{
+				ESP_LOGI(TAG, "Waiting for IP...");
+				vTaskDelay(2000 / portTICK_PERIOD_MS);
+			}
+
+
+
 			//Invalid EEPROM content
+			gpio_set_level(GPIO_OUTPUT_WRITE_PROTECT, 0);
 			prodtest_getNewId();
+			gpio_set_level(GPIO_OUTPUT_WRITE_PROTECT, 1);
+
 
 			devInfo = i2cReadDeviceInfoFromEEPROM();
 		}
@@ -213,10 +225,14 @@ void app_main(void)
 	}
 	else
 	{
+		strcpy(devInfo.serialNumber, "ZAP000005");
+		strcpy(devInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
+		strcpy(devInfo.Pin, "4284");
+
 		//Wroom32 ID - BLE - (no EEPROM)
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
+//		strcpy(devInfo.serialNumber, "ZAP000011");
+//		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+//		strcpy(devInfo.Pin, "7053");
 
 		//Wroom32 ID - BLE - (no EEPROM)
 //		strcpy(devInfo.serialNumber, "ZAP000012");
