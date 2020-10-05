@@ -158,6 +158,8 @@ static void connectivity_task()
 		}
 
 
+		cloud_listener_check_cmd();
+
 		//ESP_LOGI(TAG, "**** Connectivity ****");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}

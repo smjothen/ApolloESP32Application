@@ -120,6 +120,7 @@ void ParseParameterFromCloud(char * message, int message_len)
 	char * stringPart;
 
 	stringPart = strtok(recvString, separator);
+
 	if(stringPart != NULL)
 	{
 		ESP_LOGI(TAG, "Str: %s \n", stringPart);
@@ -158,55 +159,73 @@ void ParseParameterFromCloud(char * message, int message_len)
 	//}
 }
 
+static bool restartCmdReceived = false;
 
-void ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
+void cloud_listener_check_cmd()
 {
+	if(restartCmdReceived == true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		esp_restart();
+	}
+}
+
+
+int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
+{
+	int responseStatus = 0;
+
 	//Don't spend time in this function, must return from mqtt-event. May need separate process
 	if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
-		esp_restart();
+		//Execute delayed in another thread to allow command ack to be sent to cloud
+		restartCmdReceived = true;
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart MCU\"-command");
 		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
 		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 400;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
 		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 400;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
 		//rDATA=["16","4"]
-		/*char * currentFromCloudString = strtok(commandEvent->data, ",");
+		char commandString[commandEvent->data_len+1];
+		//char commandString[20] = {0};
+		commandString[commandEvent->data_len] = '\0';
+		strncpy(commandString, commandEvent->data, commandEvent->data_len);
 
-		int startIndex = strchr(currentFromCloudString, '"');
-		int stopIndex = strrchr(currentFromCloudString, '"');
-		if(startIndex >= stopIndex)
+		//Replace apostrophe with space for sscanf() to work
+		for (int i = 0; i < commandEvent->data_len; i++)
 		{
-			ESP_LOGE(TAG, "Invalid string");
-			return;
+			if(commandString[i] == '"')
+				commandString[i] = ' ';
 		}
-		currentFromCloudString = currentFromCloudString[startIndex];
-		currentFromCloudString[stopIndex] = '\0';
 
-		int currentFromCloud = atoi(currentFromCloudString);
+		float currentFromCloud = 0;
+		int phaseFromCloud = 0;
+		sscanf(commandString,"%*s%f%*s%d%*s", &currentFromCloud, &phaseFromCloud);
 
-		char * phaseFromCloudString = strtok(NULL, ",");
-		int phaseFromCloud = atoi(phaseFromCloudString);
-
-		ESP_LOGI(TAG, "Start: %d PhaseId: %d \n", currentFromCloud, phaseFromCloud);*/
+		ESP_LOGI(TAG, "Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
+		responseStatus = 200;
 	}
 
 
-
+	return responseStatus;
 }
 
 
@@ -291,40 +310,43 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         		ParseParameterFromCloud(event->data, event->data_len);
         	}
 
+        	//Build LocalSettings-response
 			char devicetwin_topic[64];
-
 			volatile char ridString[event->topic_len+1];
-
 			strncpy(ridString, event->topic, event->topic_len);
 			ridString[event->topic_len] = '\0';
 			volatile char * ridSubString = strstr(ridString, "$rid=");
-			//char *strPart;
+
 			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
-			char * data = "\"[Device_Parameters]\\nserial = ZAP000005\\nmid = ZAP000005\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
-			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
-			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
-//			}
-//        	else
-//        	{
-//        		ParseParameterFromCloud(event->data, event->data_len);
-//
-//        	}
+			char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
 
-            //messageId:2458,topic:$iothub/methods/res/200/?$rid=e)
-        	//memcpy(event_topic_hold, event->topic, 128);
-        	//strcpy(event_topic_hold,"$iothub/methods/res/?$rid=1");
-        	//doNewAck = true;
-        	//publish_iothub_ack("", event->topic);
+			//BuildLocalSettingsResponse();
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
+
 
         	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
         	//publish_debug_telemetry_observation_local_settings();
         }
 
-
+        //Handle incoming commands
         if(strstr(event->topic, "iothub/methods/POST/"))
         {
-        	ParseCommandFromCloud(event);
+        	int responseStatus = ParseCommandFromCloud(event);
+
+    		char devicetwin_topic[64];
+
+    		volatile char ridString[event->topic_len+1];
+
+    		strncpy(ridString, event->topic, event->topic_len);
+    		ridString[event->topic_len] = '\0';
+    		volatile char * ridSubString = strstr(ridString, "$rid=");
+
+    		sprintf(devicetwin_topic, "$iothub/methods/res/%d/?%s", responseStatus, ridSubString);//200 = OK, 400 = FAIL
+
+    		char * data = NULL;
+    		esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
+
         }
 
         // ESP_LOGD(TAG, "publishing %s", payloadstring);

@@ -4,6 +4,7 @@
 #include "../../main/DeviceInfo.h"
 
 bool isMqttConnected();
+void cloud_listener_check_cmd();
 void start_cloud_listener_task(struct DeviceInfo deviceInfo);
 void stop_cloud_listener_task();
 
