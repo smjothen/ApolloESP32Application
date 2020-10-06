@@ -27,8 +27,8 @@ enum ConnectionInterface
 {
 	eCONNECTION_NONE 		 = 0,
 	eCONNECTION_WIFI		 = 1,
-	eCONNECTION_4G			 = 2,
-	eCONNECTION_4G_TO_WIFI	 = 3
+	eCONNECTION_LTE			 = 2,
+	eCONNECTION_LTE_TO_WIFI	 = 3
 };
 
 struct Configuration
@@ -49,6 +49,7 @@ struct Configuration
 	float maxInstallationCurrentConfig;
 	uint8_t maxPhases;
 	uint8_t phaseRotation;
+	uint8_t networkType;
 };
 
 #endif /* DEVICEINFO_H_ */

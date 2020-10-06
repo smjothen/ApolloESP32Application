@@ -54,7 +54,7 @@ static void connectivity_task()
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
 	else if(switchState == eConfig_4G)
-		staticNewInterface = eCONNECTION_4G;
+		staticNewInterface = eCONNECTION_LTE;
 
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
 
@@ -87,9 +87,9 @@ static void connectivity_task()
 
 				vTaskDelay(pdMS_TO_TICKS(3000));
 			}
-			else if(activeInterface == eCONNECTION_4G)
+			else if(activeInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG, "Deinit 4G interface");
+				ESP_LOGI(TAG, "Deinit LTE interface");
 			}
 		}
 
@@ -107,9 +107,9 @@ static void connectivity_task()
 				network_connect_wifi();
 				interfaceChange = false;
 			}
-			else if(localNewInterface == eCONNECTION_4G)
+			else if(localNewInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG, "4G interface activating");
+				ESP_LOGI(TAG, "LTE interface activating");
 				ppp_task_start();
 				interfaceChange = false;
 			}

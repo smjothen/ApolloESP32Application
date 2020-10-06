@@ -151,6 +151,10 @@ void storage_Set_PhaseRotation(uint8_t newValue)
 	configurationStruct.phaseRotation = newValue;
 }
 
+void storage_Set_NetworkType(uint8_t newValue)
+{
+	configurationStruct.networkType = newValue;
+}
 
 
 
@@ -216,7 +220,10 @@ uint8_t storage_Get_PhaseRotation()
 	return configurationStruct.phaseRotation;
 }
 
-
+uint8_t storage_Get_NetworkType()
+{
+	return configurationStruct.networkType;
+}
 
 
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
@@ -265,6 +272,7 @@ esp_err_t storage_SaveConfiguration()
 
 	err += nvs_set_u8(configuration_handle, "MaxPhases", configurationStruct.maxPhases);
 	err += nvs_set_u8(configuration_handle, "PhaseRotation", configurationStruct.phaseRotation);
+	err += nvs_set_u8(configuration_handle, "NetworkType", configurationStruct.networkType);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -298,6 +306,7 @@ esp_err_t storage_ReadConfiguration()
 
 	err += nvs_get_u8(configuration_handle, "MaxPhases", &configurationStruct.maxPhases);
 	err += nvs_get_u8(configuration_handle, "PhaseRotation", &configurationStruct.phaseRotation);
+	err += nvs_get_u8(configuration_handle, "NetworkType", &configurationStruct.networkType);
 
 	nvs_close(configuration_handle);
 

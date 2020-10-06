@@ -28,6 +28,7 @@ void storage_Set_MaxInstallationCurrentConfig(float newValue);
 
 void storage_Set_MaxPhases(uint8_t newValue);
 void storage_Set_PhaseRotation(uint8_t newValue);
+void storage_Set_NetworkType(uint8_t newValue);
 
 
 uint8_t storage_Get_AuthenticationRequired();
@@ -46,6 +47,7 @@ float storage_Get_MaxInstallationCurrentConfig();
 
 uint8_t storage_Get_MaxPhases();
 uint8_t storage_Get_PhaseRotation();
+uint8_t storage_Get_NetworkType();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();

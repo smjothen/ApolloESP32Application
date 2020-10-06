@@ -12,6 +12,8 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 
 #include "../lib/include/mqtt_msg.h"
+#include "../../main/storage.h"
+#include "../i2c/include/i2cDevices.h"
 
 #define TAG "Cloud Listener"
 
@@ -106,8 +108,27 @@ int publish_iothub_event(const char *payload){
 }
 
 
+void ParseCloudSettingsFromCloud(char message, int message_len)
+{
+//	if ((message[0] != '{') || (message[message_len-1] != '}'))
+//			return;
+//
+//	char recvString[message_len];
+//	strncpy(recvString, message+1, message_len-2);
+//	recvString[message_len-2] = '\0';
+//
+//	//Replace apostrophe with space for sscanf() to work
+//	for (int i = 0; i < message_len; i++)
+//	{
+//		if(recvString[i] == '"')
+//			recvString[i] = ' ';
+//	}
 
-void ParseParameterFromCloud(char * message, int message_len)
+        	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
+        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
+}
+
+void ParseLocalSettingsFromCloud(char * message, int message_len)
 {
 	if ((message[0] != '[') || (message[message_len-1] != ']'))
 		return;
@@ -129,34 +150,148 @@ void ParseParameterFromCloud(char * message, int message_len)
 			stringPart = strtok(NULL, separator);
 			ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
-			if(strstr(stringPart, "hmi_brightness") != NULL)
+			if(strstr(stringPart, "standalone_setting") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+
+				if(strstr(stringPart, "system"))
+				{
+					storage_Set_Standalone(0);
+					esp_err_t err = storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Saved SYSTEM, %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+
+				}
+				else if(strstr(stringPart, "standalone"))
+				{
+					storage_Set_Standalone(0);
+					esp_err_t err = storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Saved STANDALONE, %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+				}
+			}
+
+			else if(strstr(stringPart, "standalone_phase") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				uint8_t standalonePhase = atoi(stringPart+1);
+
+				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
+				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
+				{
+					storage_Set_StandalonePhase(standalonePhase);
+					esp_err_t err = storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid standalonePhase: %d \n", standalonePhase);
+				}
+			}
+
+			else if(strstr(stringPart, "max_standalone_current"))
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				float maxStandaloneCurrent = atof(stringPart+1);
+
+				storage_Set_StandaloneCurrent(maxStandaloneCurrent);
+				esp_err_t err = storage_SaveConfiguration();
+				ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
+
+
+				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
+				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+			}
+
+
+			else if(strstr(stringPart, "network_type"))
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				int networkType = 0;
+				if(strstr(stringPart, "IT_1"))
+					networkType = 1;
+				else if(strstr(stringPart, "IT_3"))
+					networkType = 2;
+				else if(strstr(stringPart, "TN_1"))
+					networkType = 3;
+				else if(strstr(stringPart, "TN_3"))
+					networkType = 4;
+
+				if(networkType != 0)
+				{
+					storage_Set_NetworkType(networkType);
+					esp_err_t err = storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid NetworkType: %d \n", networkType);
+				}
+
+				ESP_LOGI(TAG, "Network type: %d\n", networkType);
+			}
+
+			else if(strstr(stringPart, "hmi_brightness"))
 			{
 				stringPart = strtok(NULL, separator);
 				ESP_LOGI(TAG, "Str: %s \n", stringPart);
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
 				volatile float hmiBrightness = atof(stringPart+1);
-				ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+
+				storage_Set_StandaloneCurrent(hmiBrightness);
+				esp_err_t err = storage_SaveConfiguration();
+				ESP_LOGI(TAG, "Saved HMI_BRIGHTNESS=%f, %s=%d\n", hmiBrightness, (err == 0 ? "OK" : "FAIL"), err);
+
 				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
 				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
 			}
-			else if(strstr(stringPart, "network_type") != NULL)
+		}
+		else if(strstr(stringPart, "Cable"))
+		{
+			stringPart = strtok(NULL, separator);
+
+			if(strstr(stringPart, "permanent_lock"))
 			{
 				stringPart = strtok(NULL, separator);
 				ESP_LOGI(TAG, "Str: %s \n", stringPart);
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
-				//volatile float hmiBrightness = atof(stringPart+1);
-				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
-			}
-		}
-	}
-	//while(stringPart != NULL)
-	//{
-		//ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
-		//stringPart = strtok(NULL, separator);
-	//}
+				uint8_t lockValue = 0;
+				if(strstr(stringPart,"true") || strstr(stringPart,"True"))
+				{
+					lockValue = 1;
+				}
+				else if(strstr(stringPart,"false") || strstr(stringPart,"False"))
+				{
+					lockValue = 0;
+				}
+
+				storage_Set_PermanentLock(lockValue);
+				esp_err_t err = storage_SaveConfiguration();
+				ESP_LOGI(TAG, "Saved PermanentLock=%d, %s=%d\n", lockValue, (err == 0 ? "OK" : "FAIL"), err);
+
+			}
+
+
+			//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
+			//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+		}
+
+	}
+
 }
 
 static bool restartCmdReceived = false;
@@ -229,6 +364,54 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 }
 
 
+static void BuildLocalSettingsResponse(char * responseBuffer)
+{
+	//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+	char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\n"
+			"communication_mode = Wifi\\n"
+			"standalone_setting = standalone\\n"
+			"max_standalone_current = 16.00\\n"
+			"network_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+
+	sprintf(responseBuffer, "\"[Device_Parameters]\\nserial = %s\\nmid = %s\\n", i2cGetLoadedDeviceInfo().serialNumber, i2cGetLoadedDeviceInfo().serialNumber);
+
+	if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+		sprintf(responseBuffer+strlen(responseBuffer), "communication_mode = Wifi\\n");
+	else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+		sprintf(responseBuffer+strlen(responseBuffer), "communication_mode = LTE\\n");
+
+	if(storage_Get_Standalone() == 0)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_setting = system\\n");
+	else if(storage_Get_Standalone() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_setting = standalone\\n");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", storage_Get_StandaloneCurrent());
+
+	if(storage_Get_NetworkType() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_1\\n");
+	else if(storage_Get_NetworkType() == 2)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_3\\n");
+	else if(storage_Get_NetworkType() == 3)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_1\\n");
+	else if(storage_Get_NetworkType() == 4)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_3\\n");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
+	sprintf(responseBuffer+strlen(responseBuffer), "hmi_brightness = %f\\n\n", storage_Get_HmiBrightness());
+
+	sprintf(responseBuffer+strlen(responseBuffer), "[Wifi_Parameters]\\nname =  %s\\npassword = <masked>\\n\n", " ");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "[BLE_Parameters]\\nconnect-pin = %s\\n\n", i2cGetLoadedDeviceInfo().Pin);
+
+	if(storage_Get_PermanentLock() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "[Cable]\\npermanent_lock = true\\n\n\"");
+	else
+		sprintf(responseBuffer+strlen(responseBuffer), "[Cable]\\npermanent_lock = false\\n\n\"");
+
+}
+
+
+
 static int ridNr = 4199;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
@@ -238,12 +421,18 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
-        char devicebound_topic[128];
-        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
+        //char devicebound_topic[128];
+        //sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
+        //sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
-        esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 1);
+        // Cloud-to-device
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
+        //esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
+
+        // Device twin
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
+
 
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
@@ -278,8 +467,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
         printf("rDATA=%.*s\r\n", event->data_len, event->data);
 
+        if(strstr(event->topic, "iothub/twin/PATCH/properties/desired/"))
+		{
+        	ParseCloudSettingsFromCloud(event->data, event->data_len);
+        	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
+        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
 
-
+		}
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
 
@@ -307,7 +501,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         	if(event->data_len > 10)
         	{
-        		ParseParameterFromCloud(event->data, event->data_len);
+        		ParseLocalSettingsFromCloud(event->data, event->data_len);
         	}
 
         	//Build LocalSettings-response
@@ -319,10 +513,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
-			char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+			//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
 
-			//BuildLocalSettingsResponse();
-			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
+			char responseBuffer[500]={0};
+			BuildLocalSettingsResponse(responseBuffer);
+			ESP_LOGD(TAG, "responseStringLength: %d", strlen(responseBuffer));
+
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
 
 
         	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);

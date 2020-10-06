@@ -515,7 +515,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
 		}
 
-		//TODO add for 4G
+		//TODO add for LTE
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -580,11 +580,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			rsp->attr_value.len = 4;
 			ESP_LOGI(TAG, "Read Wifi");
 		}
-		else if (storage_Get_CommunicationMode() == eCONNECTION_4G)
+		else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
 		{
-			memcpy(COMMUNICATION_MODE_val, "4G",2);
+			memcpy(COMMUNICATION_MODE_val, "LTE",3);//TODO: Change to LTE?
 			memcpy(rsp->attr_value.value, COMMUNICATION_MODE_val, sizeof(COMMUNICATION_MODE_val));
-			rsp->attr_value.len = 2;
+			rsp->attr_value.len = 3;
 			ESP_LOGI(TAG, "Read 4G");
 		}
 		else
@@ -898,10 +898,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			ESP_LOGI(TAG, "Set Wifi");
 
 		}
-		else if(strncmp("4G", (char*)COMMUNICATION_MODE_val, 2) == 0)
+		else if(strncmp("LTE", (char*)COMMUNICATION_MODE_val, 3) == 0)
 		{
-			interface = eCONNECTION_4G;
-			ESP_LOGI(TAG, "Set 4G");
+			interface = eCONNECTION_LTE;
+			ESP_LOGI(TAG, "Set LTE");
 		}
 		else
 		{
