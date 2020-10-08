@@ -23,8 +23,7 @@ char * GetSoftwareVersionBLE();
 //static uint8_t GetEEPROMFormatVersion() { return 1;}
 //static char softwareVersion[] = "2.8.0.2";
 
-#define DEFAULT_STR_SIZE 33
-#define DEFAULT_UUID_SIZE 37
+#define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 
 enum ConnectionInterface
 {
@@ -49,7 +48,7 @@ struct Configuration
 	float defaultOfflineCurrent;
 	uint8_t isEnabled;
 	//Standalone
-    char installationId[DEFAULT_UUID_SIZE];
+    char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];
     char chargerName[DEFAULT_STR_SIZE];
     uint32_t diagnosticsMode;

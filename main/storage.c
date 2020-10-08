@@ -74,7 +74,7 @@ void storage_Init_Configuration()
 	configurationStruct.defaultOfflineCurrent	= 6.0;
 	configurationStruct.isEnabled				= 1;
 
-	memset(configurationStruct.installationId, 0, sizeof(DEFAULT_UUID_SIZE));
+	memset(configurationStruct.installationId, 0, sizeof(DEFAULT_STR_SIZE));
 	memset(configurationStruct.routingId, 0, sizeof(DEFAULT_STR_SIZE));
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 

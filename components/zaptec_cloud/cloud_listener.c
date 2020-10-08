@@ -132,58 +132,162 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 	stringPart = strtok(recvString, separator);
 
 	bool doSave = false;
+	int nrOfParameters = 0;
 
 	while(stringPart != NULL)
 	{
+		nrOfParameters++;
+
 		char * pos = strstr(stringPart, " 120 : ");
 		if(pos != NULL)
 		{
-
 			int useAuthorization = 0;
 			sscanf(pos+strlen(" 120 : "),"%d", &useAuthorization);
-			ESP_LOGI(TAG, "120 useAuthorization: %u \n", useAuthorization);
+			ESP_LOGI(TAG, "120 useAuthorization: %d \n", useAuthorization);
 			storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
 			doSave = true;
+			//continue;
 		}
 
+		pos = strstr(stringPart, " 510 : ");
+		if(pos != NULL)
+		{
+
+			float currentInMaximum = 0.0;
+			sscanf(pos+strlen(" 510 : "),"%f", &currentInMaximum);
+			ESP_LOGI(TAG, "510 currentInMaximum: %f \n", currentInMaximum);
+			storage_Set_CurrentInMaximum(currentInMaximum);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 511 : ");
+		if(pos != NULL)
+		{
+
+			float currentInMinimum = 0.0;
+			sscanf(pos+strlen(" 511 : "),"%f", &currentInMinimum);
+			ESP_LOGI(TAG, "511 currentInMinimum: %f \n", currentInMinimum);
+			storage_Set_CurrentInMinimum(currentInMinimum);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 520 : ");
+		if(pos != NULL)
+		{
+			int maxPhases = 0;
+			sscanf(pos+strlen(" 520 : "),"%d", &maxPhases);
+			ESP_LOGI(TAG, "520 maxPhases: %d \n", maxPhases);
+			storage_Set_MaxPhases((uint8_t)maxPhases);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 522 : ");
+		if(pos != NULL)
+		{
+			int defaultOfflinePhase = 0;
+			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
+			ESP_LOGI(TAG, "522 defaultOfflinePhase: %d \n", defaultOfflinePhase);
+			storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 523 : ");
+		if(pos != NULL)
+		{
+			float defaultOfflineCurrent = 0.0;
+			sscanf(pos+strlen(" 523 : "),"%f", &defaultOfflineCurrent);
+			ESP_LOGI(TAG, "523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+			storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
+			doSave = true;
+			//continue;
+		}
 
 		pos = strstr(stringPart, " 711 : ");
 		if(pos != NULL)
 		{
-
 			int isEnabled = 0;
 			sscanf(pos+strlen(" 711 : "),"%d", &isEnabled);
 			ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
 			storage_Set_IsEnabled((uint8_t)isEnabled);
 			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 712 : ");
+		if(pos != NULL)
+		{
+			int standalone = 0;
+			sscanf(pos+strlen(" 712 : "),"%d", &standalone);
+			ESP_LOGI(TAG, "712 standalone: %d \n", standalone);
+			storage_Set_Standalone((uint8_t)standalone);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 800 : ");
+		if(pos != NULL)
+		{
+
+			char installationId[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 800 : "),"%36s", installationId);//Read Max 32 characters
+			ESP_LOGI(TAG, "800 installationId: %s \n", installationId);
+			storage_Set_InstallationId(installationId);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 801 : ");
+		if(pos != NULL)
+		{
+
+			char routingId[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 801 : "),"%36s", routingId);//Read Max 32 characters
+			ESP_LOGI(TAG, "801 routingId: %s \n", routingId);
+			storage_Set_RoutingId(routingId);
+			doSave = true;
+			//continue;
 		}
 
 		pos = strstr(stringPart, " 802 : ");
 		if(pos != NULL)
 		{
 
-			char chargerName[33] = {0};
-			sscanf(pos+strlen(" 802 : "),"%32s", chargerName);//Read Max 32 characters
+			char chargerName[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 802 : "),"%36s", chargerName);//Read Max 32 characters
 			ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
 			storage_Set_ChargerName(chargerName);
 			doSave = true;
+			//continue;
 		}
 
-		//			if(strstr(stringPart, "standalone_setting") != NULL)
-		//			{
-		//				stringPart = strtok(NULL, separator);
-		//			}
-
+		pos = strstr(stringPart, " 805 : ");
+		if(pos != NULL)
+		{
+			uint32_t diagnosticsMode = 0;
+			sscanf(pos+strlen(" 805 : "),"%d", &diagnosticsMode);
+			ESP_LOGI(TAG, "805 diagnosticsMode: %u \n", diagnosticsMode);
+			storage_Set_DiagnosticsMode(diagnosticsMode);
+			doSave = true;
+			//continue;
+		}
 
 		stringPart = strtok(NULL, separator);
-		ESP_LOGI(TAG, "Str: %s \n", stringPart);
+		if(stringPart != NULL)
+			ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
 	}
+
+
         	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
         	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
 
 			//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=3
 			//rDATA={"Settings":{"802":"Apollo16","711":"1","120":"1","520":"1"},"$version":3}
+	ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
 
 	if(doSave == true)
 	{
@@ -539,30 +643,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         if(strstr(event->topic, "iothub/twin/PATCH/properties/desired/"))
 		{
         	ParseCloudSettingsFromCloud(event->data, event->data_len);
-        	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
         	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
 
 		}
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
-
-        	//char devicetwin_topic[64];
-
-			//volatile char ridString[event->topic_len];
-
-			//strncpy(ridString, event->topic, event->topic_len);
-			//volatile char * ridSubString = strstr(ridString, "$rid=");
-			//char *strPart;
-			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
-			//sprintf(devicetwin_topic, "$iothub/twin/res/200/?rid=%d", ridNr);//ridSubString);
-			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
-
-        	//TOPIC=$iothub/twin/res/200/?$rid=
+        	ParseCloudSettingsFromCloud(event->data, event->data_len);
         	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
-
-        	//publish_debug_telemetry_observation_cloud_settings();
-        	//esp_mqtt_client_publish(mqtt_client, event->topic, NULL, 0, 0, 0);
-        	//ESP_LOGD(TAG, "RESPONDED?");
         }
 
         if(strstr(event->topic, "iothub/methods/POST/300/"))
