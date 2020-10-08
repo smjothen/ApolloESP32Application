@@ -10,6 +10,7 @@ void audioInit();
 
 void audio_play_nfc_card_accepted();
 void audio_play_nfc_card_accepted_debug();
+void audio_play_nfc_card_denied();
 
 
 #ifdef __cplusplus

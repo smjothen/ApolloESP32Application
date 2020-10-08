@@ -15,6 +15,8 @@
 #include "driver/ledc.h"
 #include <string.h>
 #include "i2cDevices.h"
+#include "../authentication/authentication.h"
+#include "../../main/storage.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -186,16 +188,45 @@ static void i2cDevice_task(void *pvParameters)
 
 	audioInit();
 
-	NFCInit();
+	bool NFCInitialized = false;
+
+
 
 	int i2cCount = 0;
 	int nfcCardDetected = 0;
 
+	bool isAuthenticated = false;
+
 	while (true)
 	{
-		nfcCardDetected = NFCReadTag();
-		if(nfcCardDetected > 0)
-			audio_play_nfc_card_accepted_debug();
+		storage_Set_AuthenticationRequired(1);
+
+		//Without authentication, don't initalize the NFC
+		//If active at boot, or activated later, initialize the NFC antenna once
+		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == false))
+		{
+			NFCInit();
+			NFCInitialized = true;
+		}
+
+		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == true))
+		{
+			nfcCardDetected = NFCReadTag();
+
+			if(nfcCardDetected > 0)
+			{
+				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
+
+				if(isAuthenticated == true)
+				{
+					//audio_play_nfc_card_accepted_debug();
+				}
+				else
+				{
+					//audio_play_nfc_card_denied();
+				}
+			}
+		}
 
 		i2cCount++;
 		if(i2cCount >= 6)

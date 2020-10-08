@@ -61,12 +61,10 @@ struct Configuration
 	uint8_t communicationMode;
 	float hmiBrightness;
 	uint8_t permanentLock;
-
 	uint8_t standalone;
 	uint8_t standalonePhase;
 	float standaloneCurrent;
 	float maxInstallationCurrentConfig;
-
 	uint8_t phaseRotation;
 	uint8_t networkType;
 
