@@ -108,24 +108,93 @@ int publish_iothub_event(const char *payload){
 }
 
 
-void ParseCloudSettingsFromCloud(char message, int message_len)
+void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
-//	if ((message[0] != '{') || (message[message_len-1] != '}'))
-//			return;
-//
-//	char recvString[message_len];
-//	strncpy(recvString, message+1, message_len-2);
-//	recvString[message_len-2] = '\0';
-//
-//	//Replace apostrophe with space for sscanf() to work
-//	for (int i = 0; i < message_len; i++)
-//	{
-//		if(recvString[i] == '"')
-//			recvString[i] = ' ';
-//	}
+	if ((message[0] != '{') || (message[message_len-1] != '}'))
+		return;
 
+	char recvString[message_len];
+	strncpy(recvString, message+1, message_len-2);
+	recvString[message_len-2] = '\0';
+
+	//Replace apostrophe with space for sscanf() to work
+	for (int i = 0; i < message_len; i++)
+	{
+		if(recvString[i] == '"')
+			recvString[i] = ' ';
+	}
+
+	char * messageStart = strchr(recvString,'{');
+
+	char const separator[2] = ",";
+	char * stringPart;
+
+	stringPart = strtok(recvString, separator);
+
+	bool doSave = false;
+
+	while(stringPart != NULL)
+	{
+		char * pos = strstr(stringPart, " 120 : ");
+		if(pos != NULL)
+		{
+
+			int useAuthorization = 0;
+			sscanf(pos+strlen(" 120 : "),"%d", &useAuthorization);
+			ESP_LOGI(TAG, "120 useAuthorization: %u \n", useAuthorization);
+			storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
+			doSave = true;
+		}
+
+
+		pos = strstr(stringPart, " 711 : ");
+		if(pos != NULL)
+		{
+
+			int isEnabled = 0;
+			sscanf(pos+strlen(" 711 : "),"%d", &isEnabled);
+			ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
+			storage_Set_IsEnabled((uint8_t)isEnabled);
+			doSave = true;
+		}
+
+		pos = strstr(stringPart, " 802 : ");
+		if(pos != NULL)
+		{
+
+			char chargerName[33] = {0};
+			sscanf(pos+strlen(" 802 : "),"%32s", chargerName);//Read Max 32 characters
+			ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
+			storage_Set_ChargerName(chargerName);
+			doSave = true;
+		}
+
+		//			if(strstr(stringPart, "standalone_setting") != NULL)
+		//			{
+		//				stringPart = strtok(NULL, separator);
+		//			}
+
+
+		stringPart = strtok(NULL, separator);
+		ESP_LOGI(TAG, "Str: %s \n", stringPart);
+
+	}
         	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
         	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
+
+			//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=3
+			//rDATA={"Settings":{"802":"Apollo16","711":"1","120":"1","520":"1"},"$version":3}
+
+	if(doSave == true)
+	{
+		esp_err_t err = storage_SaveConfiguration();
+		ESP_LOGI(TAG, "Saved CloudSettings: %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+	}
+	else
+	{
+		ESP_LOGI(TAG, "CloudSettings: Nothing to save");
+	}
+
 }
 
 void ParseLocalSettingsFromCloud(char * message, int message_len)

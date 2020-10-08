@@ -23,6 +23,9 @@ char * GetSoftwareVersionBLE();
 //static uint8_t GetEEPROMFormatVersion() { return 1;}
 //static char softwareVersion[] = "2.8.0.2";
 
+#define DEFAULT_STR_SIZE 33
+#define DEFAULT_UUID_SIZE 37
+
 enum ConnectionInterface
 {
 	eCONNECTION_NONE 		 = 0,
@@ -35,9 +38,26 @@ struct Configuration
 {
 	uint32_t saveCounter;
 
-	uint8_t authenticationRequired;
+	// Cloud settings
+
+	uint8_t authenticationRequired; //
+	//LockCableWhenConnected		//
+	float currentInMaximum;
+	float currentInMinimum;
+	uint8_t maxPhases;
+	uint8_t defaultOfflinePhase;
+	float defaultOfflineCurrent;
+	uint8_t isEnabled;
+	//Standalone
+    char installationId[DEFAULT_UUID_SIZE];
+    char routingId[DEFAULT_STR_SIZE];
+    char chargerName[DEFAULT_STR_SIZE];
+    uint32_t diagnosticsMode;
 	uint32_t transmitInterval;
 	float transmitChangeLevel;
+
+
+	// Local settings
 
 	uint8_t communicationMode;
 	float hmiBrightness;
@@ -47,9 +67,10 @@ struct Configuration
 	uint8_t standalonePhase;
 	float standaloneCurrent;
 	float maxInstallationCurrentConfig;
-	uint8_t maxPhases;
+
 	uint8_t phaseRotation;
 	uint8_t networkType;
+
 };
 
 #endif /* DEVICEINFO_H_ */
