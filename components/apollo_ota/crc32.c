@@ -88,6 +88,10 @@ static uint32_t crc32_tab[] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
+/* WARNING
+This Crc implementation takes every 4th byte as 0, to match the behaviour of the 24-bit dsPIC flash
+*/
+
 uint32_t
 crc32(uint32_t crc, const void *buf, size_t size)
 {
@@ -96,8 +100,13 @@ crc32(uint32_t crc, const void *buf, size_t size)
     p = buf;
     crc = crc ^ ~(uint32_t)0U;
 
-    while (size--)
-        crc = crc32_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+	for(int i = 0; i<size; i++){
+		uint8_t buffer_element = p[i];
+		if((i%4)==3){
+			buffer_element = 0;
+		}
+		crc = crc32_tab[(crc ^ buffer_element) & 0xFF] ^ (crc >> 8);
+	}
 
     return crc ^ ~(uint32_t)0U;
 }

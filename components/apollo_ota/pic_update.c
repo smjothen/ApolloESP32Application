@@ -14,7 +14,7 @@
 
 #define TAG "pic_update"
 
-static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*30;
+static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*50;
 static EventGroupHandle_t event_group;
 static const int DSPIC_COMMS_ERROR = BIT0;
 static const int DSPIC_UPDATE_COMPLETE = BIT1;
@@ -108,7 +108,7 @@ static void update_dspic_task(void *pvParameters){
             ESP_LOGW(TAG, "failure in enter bootloader comand");
             goto err_bootloader_enter;
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(1000));
 
         if(is_bootloader(&bootloader_detected)<0){
             ESP_LOGW(TAG, "failed to check for bootloader after command");
@@ -381,7 +381,10 @@ int set_dspic_header(void){
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
     uint8_t message_type = rxMsg.type;
-    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
+    uint8_t error_code = 1;
+    if(rxMsg.length > 0){
+        error_code = rxMsg.data[0];
+    }
 
     freeZapMessageReply();
 
@@ -428,7 +431,7 @@ int is_bootloader(bool *result){
 
 
 int get_application_header(uint32_t *crc, uint32_t *length){
-    ESP_LOGI(TAG, "reading applicaiton header");
+    ESP_LOGI(TAG, "reading application header");
 
     txMsg.type = MsgFirmware;
     txMsg.identifier = 0; // ignored on bootloader?
@@ -438,6 +441,11 @@ int get_application_header(uint32_t *crc, uint32_t *length){
     );
 
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    if(rxMsg.length < 6){
+        ESP_LOGW(TAG, "invalid app header reply, data length %d, type %d", rxMsg.length, rxMsg.type);
+        return -2;
+    }
 
     uint8_t message_type = rxMsg.type;
     uint8_t error_code = rxMsg.data[0];
@@ -481,8 +489,8 @@ int enter_bootloader(void){
     
     freeZapMessageReply();
 
-    if((message_type != MsgReadAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
+    if((message_type != MsgCommandAck) || (error_code != 0)){
+        ESP_LOGW(TAG, "failed start bootloader on dspic (type %d, error: %d)",
             message_type, error_code
         );
         return -1;
