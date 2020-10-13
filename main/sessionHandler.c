@@ -202,13 +202,15 @@ static void sessionHandler_task()
 			else
 				dataInterval = 600;
 
-			//Test-mode overrides default
-			if(dataTestInterval != 0)
-				dataInterval = dataTestInterval;
+
 
 			signalInterval = 300;
 		}
 
+
+		//Test-mode overrides default
+		if(dataTestInterval != 0)
+			dataInterval = dataTestInterval;
 
 		if(dataCounter >= dataInterval)
 		{
@@ -297,6 +299,22 @@ static void sessionHandler_task()
 			}
 
 			statusCounter = 0;
+		}
+
+
+
+		if(CloudSettingsAreUpdated() == true)
+		{
+			int published = publish_debug_telemetry_observation_cloud_settings();
+			if (published == 0)
+			{
+				ClearCloudSettingsAreUpdated();
+				ESP_LOGW(TAG,"Cloud settings flag cleared");
+			}
+			else
+			{
+				ESP_LOGW(TAG,"Cloud settings flag NOT cleared");
+			}
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(1000));

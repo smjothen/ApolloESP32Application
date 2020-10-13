@@ -44,10 +44,11 @@ int resetCounter = 0;
 
 const char event_topic[128];
 const char event_topic_hold[128];
-
 static struct DeviceInfo cloudDeviceInfo;
 
 bool mqttConnected = false;
+bool cloudSettingsAreUpdated = false;
+
 
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
@@ -107,6 +108,16 @@ int publish_iothub_event(const char *payload){
     return -2;
 }
 
+
+bool CloudSettingsAreUpdated()
+{
+	return cloudSettingsAreUpdated;
+}
+
+void ClearCloudSettingsAreUpdated()
+{
+	cloudSettingsAreUpdated = false;
+}
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -293,6 +304,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 	{
 		esp_err_t err = storage_SaveConfiguration();
 		ESP_LOGI(TAG, "Saved CloudSettings: %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+		cloudSettingsAreUpdated = true;
 	}
 	else
 	{
@@ -303,6 +315,9 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 void ParseLocalSettingsFromCloud(char * message, int message_len)
 {
+	if(message_len < 1)
+		return;
+
 	if ((message[0] != '[') || (message[message_len-1] != ']'))
 		return;
 
@@ -531,6 +546,50 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		ESP_LOGI(TAG, "Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
 		responseStatus = 200;
 	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/504/"))
+	{
+		//rTOPIC=$iothub/methods/POST/504/?$rid=1
+		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
+
+		if(commandEvent->data_len < 40)
+		{
+
+			if(strncmp(commandEvent->data, "[null]",commandEvent->data_len) == 0)
+			{
+				ESP_LOGE(TAG, "Session cleared");
+				return 200;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Too short SessionId received from cloud");
+				return -1;
+			}
+		}
+
+		if ((commandEvent->data[0] != '[') || (commandEvent->data[commandEvent->data_len-1] != ']'))
+			return -2;
+
+		char recvString[commandEvent->data_len];
+		strncpy(recvString, commandEvent->data+2, commandEvent->data_len-4);
+		recvString[commandEvent->data_len-4] = '\0';
+
+		ESP_LOGI(TAG, "SessionId: %s , len: %d\n", recvString, strlen(recvString));
+		responseStatus = 200;
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
+	{
+		ESP_LOGI(TAG, "Charging granted!");
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
+	{
+		ESP_LOGI(TAG, "Charging denied!");
+		responseStatus = 200;
+	}
+
+
 
 
 	return responseStatus;

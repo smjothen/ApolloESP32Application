@@ -254,10 +254,10 @@ void app_main(void)
 //		start_cloud_listener_task(devInfo);
 //	}
 
-	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
-	{
-		SetDataInterval(10);
-	}
+//	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
+//	{
+//		SetDataInterval(10);
+//	}
 
 	ble_interface_init();
 

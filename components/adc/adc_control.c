@@ -130,8 +130,8 @@ static void adc_task()
 //		hwIdVoltageLevel = voltage6;
 
 		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
-		//ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
-		vTaskDelay(pdMS_TO_TICKS(100));
+		ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
+		vTaskDelay(pdMS_TO_TICKS(3000));
 	}
 
 }

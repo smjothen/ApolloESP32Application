@@ -12,6 +12,7 @@
 #include "../components/ntp/zntp.h"
 #include "i2cDevices.h"
 #include "../components/cellular_modem/include/ppp_task.h"
+#include "sessionHandler.h"
 
 static const char *TAG = "CONNECTIVITY: ";
 
@@ -53,7 +54,7 @@ static void connectivity_task()
 		staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
-	else if(switchState == eConfig_4G)
+	else if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
 		staticNewInterface = eCONNECTION_LTE;
 
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
@@ -159,6 +160,12 @@ static void connectivity_task()
 
 
 		cloud_listener_check_cmd();
+
+
+		if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
+		{
+			SetDataInterval(10);
+		}
 
 		//ESP_LOGI(TAG, "**** Connectivity ****");
 		vTaskDelay(pdMS_TO_TICKS(1000));
