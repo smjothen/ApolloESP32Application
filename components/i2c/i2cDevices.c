@@ -219,11 +219,11 @@ static void i2cDevice_task(void *pvParameters)
 
 				if(isAuthenticated == true)
 				{
-					//audio_play_nfc_card_accepted_debug();
+					audio_play_nfc_card_accepted_debug();
 				}
 				else
 				{
-					//audio_play_nfc_card_denied();
+					audio_play_nfc_card_denied();
 				}
 			}
 		}

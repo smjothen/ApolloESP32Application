@@ -126,6 +126,12 @@
 		SwitchPosition = 730,
 		DebugCounter = 731,
 
+		ParamStandalonePhase = 740,
+		ParamStandaloneCurrent = 741,
+
+	    NewChargeCard = 750,
+	    AuthenticationListVersion = 751,
+
         ParamHmiBrightness = 800,
         ParamAveraging = 801,
 

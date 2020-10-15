@@ -1,9 +1,13 @@
 #ifndef PROTOCOL_TASK_H
 #define PROTOCOL_TASK_H
 
+#include "zaptec_protocol_serialisation.h"
 void zaptecProtocolStart();
-void MCU_SendParameter(uint16_t paramIdentifier, float data);
-//void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length);
+
+MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
+MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);
+MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);
+MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 
 int MCU_GetSwitchState();
 

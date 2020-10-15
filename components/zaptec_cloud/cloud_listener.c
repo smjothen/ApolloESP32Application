@@ -135,8 +135,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			recvString[i] = ' ';
 	}
 
-	char * messageStart = strchr(recvString,'{');
-
 	char const separator[2] = ",";
 	char * stringPart;
 
@@ -155,21 +153,53 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			int useAuthorization = 0;
 			sscanf(pos+strlen(" 120 : "),"%d", &useAuthorization);
 			ESP_LOGI(TAG, "120 useAuthorization: %d \n", useAuthorization);
-			storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
-			doSave = true;
-			//continue;
+
+			if((useAuthorization == 0) || (useAuthorization == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, (uint8_t)useAuthorization);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
+					ESP_LOGI(TAG, "DoSave AuthenticationRequired=%d", useAuthorization);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU useAuthorization parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid useAuthorization: %d \n", useAuthorization);
+			}
+
 		}
 
 		pos = strstr(stringPart, " 510 : ");
 		if(pos != NULL)
 		{
-
 			float currentInMaximum = 0.0;
 			sscanf(pos+strlen(" 510 : "),"%f", &currentInMaximum);
-			ESP_LOGI(TAG, "510 currentInMaximum: %f \n", currentInMaximum);
-			storage_Set_CurrentInMaximum(currentInMaximum);
-			doSave = true;
-			//continue;
+
+			if((32.0 >= currentInMaximum) && (currentInMaximum >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_CurrentInMaximum(currentInMaximum);
+					ESP_LOGI(TAG, "DoSave 510 currentInMaximum: %f \n", currentInMaximum);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU currentInMaximum parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid currentInMaximum: %f \n", currentInMaximum);
+			}
+
 		}
 
 		pos = strstr(stringPart, " 511 : ");
@@ -178,10 +208,25 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 			float currentInMinimum = 0.0;
 			sscanf(pos+strlen(" 511 : "),"%f", &currentInMinimum);
-			ESP_LOGI(TAG, "511 currentInMinimum: %f \n", currentInMinimum);
-			storage_Set_CurrentInMinimum(currentInMinimum);
-			doSave = true;
-			//continue;
+
+			if((32.0 >= currentInMinimum) && (currentInMinimum >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, currentInMinimum);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_CurrentInMinimum(currentInMinimum);
+					ESP_LOGI(TAG, "DoSave 511 currentInMinimum: %f \n", currentInMinimum);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU currentInMinimum parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid currentInMinimum: %f \n", currentInMinimum);
+			}
 		}
 
 		pos = strstr(stringPart, " 520 : ");
@@ -189,10 +234,25 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 			int maxPhases = 0;
 			sscanf(pos+strlen(" 520 : "),"%d", &maxPhases);
-			ESP_LOGI(TAG, "520 maxPhases: %d \n", maxPhases);
-			storage_Set_MaxPhases((uint8_t)maxPhases);
-			doSave = true;
-			//continue;
+
+			if((3 >= maxPhases) && (maxPhases > 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(MaxPhases, (uint8_t)maxPhases);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_MaxPhases((uint8_t)maxPhases);
+					ESP_LOGI(TAG, "DoSave 520 maxPhases=%d\n", maxPhases);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU maxPhases parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid maxPhases: %d \n", maxPhases);
+			}
 		}
 
 		pos = strstr(stringPart, " 522 : ");
@@ -200,10 +260,25 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 			int defaultOfflinePhase = 0;
 			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
-			ESP_LOGI(TAG, "522 defaultOfflinePhase: %d \n", defaultOfflinePhase);
-			storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
-			doSave = true;
-			//continue;
+
+			if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
+					ESP_LOGI(TAG, "DoSave 522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU defaultOfflinePhase parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid defaultOfflinePhase: %d \n", defaultOfflinePhase);
+			}
 		}
 
 		pos = strstr(stringPart, " 523 : ");
@@ -211,10 +286,25 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 			float defaultOfflineCurrent = 0.0;
 			sscanf(pos+strlen(" 523 : "),"%f", &defaultOfflineCurrent);
-			ESP_LOGI(TAG, "523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
-			storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
-			doSave = true;
-			//continue;
+
+			if((32.0 >= defaultOfflineCurrent) && (defaultOfflineCurrent >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ChargerOfflineCurrent, defaultOfflineCurrent);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
+					ESP_LOGI(TAG, "DoSave 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU defaultOfflineCurrent parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+			}
 		}
 
 		pos = strstr(stringPart, " 711 : ");
@@ -223,9 +313,25 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			int isEnabled = 0;
 			sscanf(pos+strlen(" 711 : "),"%d", &isEnabled);
 			ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
-			storage_Set_IsEnabled((uint8_t)isEnabled);
-			doSave = true;
-			//continue;
+
+			if((isEnabled == 0) || (isEnabled == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, (uint8_t)isEnabled);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_IsEnabled((uint8_t)isEnabled);
+					ESP_LOGI(TAG, "DoSave 711 isEnabled=%d\n", isEnabled);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU isEnabled parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid isEnabled: %d \n", isEnabled);
+			}
 		}
 
 		pos = strstr(stringPart, " 712 : ");
@@ -234,9 +340,26 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			int standalone = 0;
 			sscanf(pos+strlen(" 712 : "),"%d", &standalone);
 			ESP_LOGI(TAG, "712 standalone: %d \n", standalone);
-			storage_Set_Standalone((uint8_t)standalone);
-			doSave = true;
-			//continue;
+
+
+			if((standalone == 0) || (standalone == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_Standalone((uint8_t)standalone);
+					ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU standalone parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid standalone: %d \n", standalone);
+			}
 		}
 
 		pos = strstr(stringPart, " 800 : ");
@@ -345,18 +468,26 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
 
-				if(strstr(stringPart, "system"))
-				{
-					storage_Set_Standalone(0);
-					esp_err_t err = storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Saved SYSTEM, %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+				uint8_t standalone = 0xff;
 
-				}
+				if(strstr(stringPart, "system"))
+					standalone = 0;
 				else if(strstr(stringPart, "standalone"))
+					standalone = 1;
+
+				if((standalone == 0) || (standalone == 1))
 				{
-					storage_Set_Standalone(0);
-					esp_err_t err = storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Saved STANDALONE, %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_Standalone(standalone);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone parameter error");
+					}
 				}
 			}
 
@@ -371,9 +502,17 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
 				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
 				{
-					storage_Set_StandalonePhase(standalonePhase);
-					esp_err_t err = storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
+					MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_StandalonePhase(standalonePhase);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone Phase parameter error");
+					}
 				}
 				else
 				{
@@ -389,15 +528,25 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				stringPart[stringValueLen-1] = '\0';
 				float maxStandaloneCurrent = atof(stringPart+1);
 
-				storage_Set_StandaloneCurrent(maxStandaloneCurrent);
-				esp_err_t err = storage_SaveConfiguration();
-				ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
-
-
-				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
-				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+				if((32.0 >= maxStandaloneCurrent) && (maxStandaloneCurrent >= 0.0))
+				{
+					MessageType ret = MCU_SendFloatParameter(ParamStandaloneCurrent, maxStandaloneCurrent);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_StandaloneCurrent(maxStandaloneCurrent);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone current parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid standaloneCurrent: %f \n", maxStandaloneCurrent);
+				}
 			}
-
 
 			else if(strstr(stringPart, "network_type"))
 			{
@@ -417,16 +566,22 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if(networkType != 0)
 				{
-					storage_Set_NetworkType(networkType);
-					esp_err_t err = storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
+					MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_NetworkType(networkType);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU NetworkType parameter error");
+					}
 				}
 				else
 				{
 					ESP_LOGI(TAG, "Invalid NetworkType: %d \n", networkType);
 				}
-
-				ESP_LOGI(TAG, "Network type: %d\n", networkType);
 			}
 
 			else if(strstr(stringPart, "hmi_brightness"))
@@ -436,14 +591,26 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
 				volatile float hmiBrightness = atof(stringPart+1);
-				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
 
-				storage_Set_StandaloneCurrent(hmiBrightness);
-				esp_err_t err = storage_SaveConfiguration();
-				ESP_LOGI(TAG, "Saved HMI_BRIGHTNESS=%f, %s=%d\n", hmiBrightness, (err == 0 ? "OK" : "FAIL"), err);
+				if((1.0 >= hmiBrightness) && (hmiBrightness >= 0.0))
+				{
+					MessageType ret = MCU_SendFloatParameter(ParamHmiBrightness, hmiBrightness);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_HmiBrightness(hmiBrightness);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved HMI_BRIGHTNESS=%f, %s=%d\n", hmiBrightness, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU HmiBrightness parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid HmiBrightness: %f \n", hmiBrightness);
+				}
 
-				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
-				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
 			}
 		}
 		else if(strstr(stringPart, "Cable"))
@@ -457,7 +624,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
 
-				uint8_t lockValue = 0;
+				uint8_t lockValue = 0xFF;
 				if(strstr(stringPart,"true") || strstr(stringPart,"True"))
 				{
 					lockValue = 1;
@@ -467,19 +634,29 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					lockValue = 0;
 				}
 
-				storage_Set_PermanentLock(lockValue);
-				esp_err_t err = storage_SaveConfiguration();
-				ESP_LOGI(TAG, "Saved PermanentLock=%d, %s=%d\n", lockValue, (err == 0 ? "OK" : "FAIL"), err);
+				if((lockValue == 0) || (lockValue == 1))
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamPermanentCableLock, lockValue);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_PermanentLock(lockValue);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved PermanentLock=%d, %s=%d\n", lockValue, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU ParamPermanentCableLock parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid lockValue: %d \n", lockValue);
+				}
 
 			}
 
-
-			//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
-			//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
 		}
-
 	}
-
 }
 
 static bool restartCmdReceived = false;
@@ -589,9 +766,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		responseStatus = 200;
 	}
 
-
-
-
 	return responseStatus;
 }
 
@@ -599,11 +773,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 static void BuildLocalSettingsResponse(char * responseBuffer)
 {
 	//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
-	char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\n"
-			"communication_mode = Wifi\\n"
-			"standalone_setting = standalone\\n"
-			"max_standalone_current = 16.00\\n"
-			"network_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+//	char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\n"
+//			"communication_mode = Wifi\\n"
+//			"standalone_setting = standalone\\n"
+//			"max_standalone_current = 16.00\\n"
+//			"network_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
 
 	sprintf(responseBuffer, "\"[Device_Parameters]\\nserial = %s\\nmid = %s\\n", i2cGetLoadedDeviceInfo().serialNumber, i2cGetLoadedDeviceInfo().serialNumber);
 
@@ -731,9 +905,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
 			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
 
-			char responseBuffer[500]={0};
+			char responseBuffer[500]={0};//TODO: check length
 			BuildLocalSettingsResponse(responseBuffer);
-			ESP_LOGD(TAG, "responseStringLength: %d", strlen(responseBuffer));
+			ESP_LOGW(TAG, "responseStringLength: %d, responseBuffer: %s", strlen(responseBuffer), responseBuffer);
 
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
 

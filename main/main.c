@@ -95,6 +95,19 @@ void app_main(void)
     	switchState = MCU_GetSwitchState();
     }
 
+
+    if(storage_ReadConfiguration() != ESP_OK)
+	{
+		storage_Init_Configuration();
+		storage_SaveConfiguration();
+		ESP_LOGE(TAG, "##### Reinitialized configuration! ########");
+	}
+    else
+    {
+    	ESP_LOGE(TAG, "Loaded configuration");
+    }
+
+
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
 		char WifiSSID[32]= {0};
