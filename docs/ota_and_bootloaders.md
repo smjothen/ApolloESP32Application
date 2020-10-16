@@ -1,7 +1,7 @@
 # OTA
 
 The OTA feature of the Apollo project provides the possibility to update the firmware in the devices. There are two primary design concerns:
-- We are running code on two different micro controllers. We need to update both, with appropriate preconditions, postconditions and synchronization of update stagebetween the to controllers.
+- We are running code on two different micro controllers. We need to update both, with appropriate preconditions, postconditions and synchronization of update stages between the to controllers.
 - Since the products are updated remotely we need a resilient system that does not brick the device, and makes sure future updates can be installed.
 
 This document details some of the design considerations for the system in its current state. A pre-implementation spec exists at https://zapzone.zaptec.com/display/AP/Apollo+software+Over-The-Air%28OTA%29+upgrade+procedure . While there is some overlap between these documents, this documents describes the implementation as built, with the limitations and design choices made during the implementation.
@@ -25,7 +25,7 @@ This ensures that the dsPIC always run the expected FW.
 
 ## ESP32 bootloader and OTA client
 
-The ESP32 downloads and installs the new image as part of its application code. Then the SDK provided bootloader selects which partition to boot, and keeps track of the need for firmware validation etc. The OTA process is based on https://dcs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_https_ota.html , which is a simplified API built on top of a lower level OTA library also included in the SDK.
+The ESP32 downloads and installs the new image as part of its application code. Then the SDK-provided bootloader selects which partition to boot, and keeps track of the need for firmware validation etc. The OTA process is based on https://dcs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_https_ota.html , which is a simplified API built on top of a lower level OTA library also included in the SDK.
 
 ### Improvements
 - Improve ota client of image, to better endure flaky internet connections. E.g. by:
@@ -68,7 +68,7 @@ After flashing the application, the ESP32 sends:
 
 These values are stored if the received CRC matches the CRC calculated from the flash. The stored values are used for:
 - Validating the integrity of the application on normal boot.
-- Validating the integrity of the application before starting it when the ESP32 commandes it to do so.
+- Validating the integrity of the application before starting it when the ESP32 commanded it to do so.
 - Defining the currently installed application; the CRC is returned when the ESP32 asks for the version of the current image.
 ### Flash layout
 The flash layout, the constants defining it, and the alignments should probably be cleaned up some. The current layout is as follows:
@@ -80,7 +80,22 @@ The flash layout, the constants defining it, and the alignments should probably 
 |     0x3800   |  | Start of region erased by bootloader  | the flash erase page size is quite large, at 2048 bytes|
 |     0x3800 |  0x2 | application image header | |
 |     0x3c00 |  0x330 | `j_ivt` as described above | |
-|     0x4000 |  0x1FC | start of application program | |
+|     0x4000 |  0x27800 | start of application program | |
+|     0x2b800|  0x700 | persisted data | not defined in linker script, reserved by setting app size |
+
+
+### Shrinking the app size
+The application size can be reduced by making these changes:
+- reduce length in the linker script
+- set corresponding range in the `hex2bin.py` command
+
+The build system places data at both ends of the area for the application. I.e. it does not put all the program data in a continuous region. Since the steps above reduces the memory regions that are available to the linker, it has the effect of making a more compact application.
+
+A shrunken app has the following benefits:
+- less data to transfer on the cellular network
+- faster transfer of application from ESP to dsPIC
+- smaller chance of CRC check failure du to errors in unused memory area
+
  
 ### Building and image creation
 The linker script for the bootloader is at `ApolloMCUApplication/mccbootloader/mccbootlader.X/p33CK256MP506.gld`. When building a "bootloadable" version of the app the linker script at `/home/arnt/zaptec/ApolloMCUApplication/smart/smart/p33CK256MP506_offset_3c00.gld` must be used. Together they ensure the flash layout described in the table above.
@@ -88,13 +103,12 @@ The linker script for the bootloader is at `ApolloMCUApplication/mccbootloader/m
 After building with the linker script, there will be a `.hex` file describing the full flash at `/smart/smart/dist/AppWithBootloader/production/smart.production.hex`. Some slight modifications needs to be done to this file. Use this command:
 
 ```
-python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0x1AFFF --pad=00  ../smart/smart/dist/AppWithBootloader/production/smart.production.hex  | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
+python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0x56fff ../smart/smart/dist/AppWithBootloader/production/smart.production.hex  | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
 ```
 
 This changes the file in the following ways:
 - `hex2bin` go from lines with addresses and data in hex to pure binary stuff
-- `--range=0x3c00:0x1AFFF` skip the start of the flash, this is required if running without bootloader for development, but is not part of what is updated with the OTA image.
-- `--pad=00` put 0x00 in the areas with not data. Since the file format is 32 bit, but the flash is 24 bit, and it returns 0x00 for the non existent 4th byte when reading, this simplifies the CRC check.
+- `--range=0x3c00:0x56fff` skip the start of the flash, this data is required if running without bootloader for development, but is not part of what is updated with the OTA image. `(0x56fff+0x1)÷0x2==0x2b800` This range works, but it seems the start address is word-indexed and the second is byte-indexed. Results obtained by trial and error ;)
 - `tail -c +15361` hex2bin pads the beginning of the file, here we remove that (0x3c00 +0x1 == 15361)
 
 The file located at `ApolloESP32Application/bin/dspic.bin` is automatically built in to the ESP32 image, using this strategy: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html#embedding-binary-data
@@ -105,11 +119,18 @@ The file located at `ApolloESP32Application/bin/dspic.bin` is automatically buil
 - https://python-intelhex.readthedocs.io/en/latest/part3-1.html
 
 
+### Configuration bits
+The system only has a single set of config bits, and the design assumes them to be unchangeable, since we don't update the bootloader. The bits are defined by the bootloader-project in normal operation, but the application-project defines them during application development, in any case the config should match to provide constant behavior.
+
+Check for config bits with these commands:
+```
+grep '#pragma config' ../ApolloMCUApplication/smart/smart/ -r
+grep '#pragma config' ../ApolloMCUApplication/mccbootloader/ -r
+```
+
+The config bits appear in `.hex` files with addresses in the range `0x2bf00 - ~0x2bfff`. They can also be read back with MPLAB X IDE.
+
 ### Flashing for development
-If the application is flashed after building with the offset linker script, it will still work. 
+The current build/flash configurations can be run in any order to place the bootloader and application on the flash.
 
-The bootloader can be flashed with a "app_preserving" configuration. If the app is flashed first the resulting config will be a device that can go through the full boot process (either flash a header, or disable the check).
-
-
-
-
+**To disable the crc check and waiting in the bootloader edit `../ApolloMCUApplication/mccbootloader/mccbootlader.X/bootloader_conf.h`**
