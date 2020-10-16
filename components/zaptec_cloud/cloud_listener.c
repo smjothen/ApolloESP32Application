@@ -659,6 +659,63 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 	}
 }
 
+struct RFIDTokens{
+	char *Tag;//[37];
+	int Action;
+	char *ExpiryDate;//[37];
+};
+
+
+
+void ParseOfflineAuthenticationList(char * message, int message_len)
+{
+
+	cJSON *root2 = cJSON_Parse("{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}");
+
+	int version = cJSON_GetObjectItem(root2,"Version")->valueint;
+	int package = cJSON_GetObjectItem(root2,"Package")->valueint;
+	int packageCount = cJSON_GetObjectItem(root2,"PackageCount")->valueint;
+	int type = cJSON_GetObjectItem(root2,"Type")->valueint;
+
+
+
+	ESP_LOGI(TAG, "version=%d",version);
+	ESP_LOGI(TAG, "package=%d",package);
+	ESP_LOGI(TAG, "packageCount=%d",packageCount);
+	ESP_LOGI(TAG, "type=%d",type);
+
+	cJSON *tokens = cJSON_GetObjectItem(root2,"Tokens");
+	//ESP_LOGI(TAG, "resolutions2->type=%s", JSON_Types(tokens->type));
+	int token_array_size = cJSON_GetArraySize(tokens);
+
+	struct RFIDTokens rfidTokens[token_array_size];
+	memset(rfidTokens,0,sizeof(rfidTokens));
+
+	ESP_LOGI(TAG, "token_array_size=%d", token_array_size);
+	for (int i=0;i<token_array_size;i++) {
+		cJSON *array = cJSON_GetArrayItem(tokens,i);
+		//ESP_LOGI(TAG, "array->type=%s", JSON_Types(array->type));
+		rfidTokens[i].Tag = cJSON_GetObjectItem(array,"Tag")->valuestring;
+		rfidTokens[i].Action = cJSON_GetObjectItem(array,"Action")->valueint;
+
+		if(cJSON_GetObjectItem(array,"ExpiryDate")->valuestring != NULL)
+			rfidTokens[i].ExpiryDate = cJSON_GetObjectItem(array,"ExpiryDate")->valuestring;
+		//else
+			//strcpy(rfidTokens[i].ExpiryDate," ");
+
+		ESP_LOGI(TAG, "rfidTokens[%d].Tag=%s",i, rfidTokens[i].Tag);
+		ESP_LOGI(TAG, "rfidTokens[%d].Action=%d",i, rfidTokens[i].Action);
+		if(rfidTokens[i].ExpiryDate != NULL)
+			ESP_LOGI(TAG, "rfidTokens[%d].ExpiryDate=%s", i, rfidTokens[i].ExpiryDate);
+		ESP_LOGI(TAG, "");
+	}
+
+
+	cJSON_Delete(root2);
+
+}
+
+
 static bool restartCmdReceived = false;
 
 void cloud_listener_check_cmd()
@@ -900,10 +957,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			ridString[event->topic_len] = '\0';
 			volatile char * ridSubString = strstr(ridString, "$rid=");
 
-			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
-			//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
-			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
 
 			char responseBuffer[500]={0};//TODO: check length
 			BuildLocalSettingsResponse(responseBuffer);
@@ -911,13 +965,35 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
 
+        }
+        //Handle incomming offline AuthenticationList
+        if(strstr(event->topic, "iothub/methods/POST/751/"))
+        {
 
-        	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
-        	//publish_debug_telemetry_observation_local_settings();
+        	if(event->data_len > 10)
+        	{
+        		ParseOfflineAuthenticationList(event->data, event->data_len);
+        	}
+
+        	//Build LocalSettings-response
+			char devicetwin_topic[64];
+			volatile char ridString[event->topic_len+1];
+			strncpy(ridString, event->topic, event->topic_len);
+			ridString[event->topic_len] = '\0';
+			volatile char * ridSubString = strstr(ridString, "$rid=");
+
+
+			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
+
+			char responseBuffer[500]={0};//TODO: check length
+			BuildLocalSettingsResponse(responseBuffer);
+			ESP_LOGW(TAG, "responseStringLength: %d, responseBuffer: %s", strlen(responseBuffer), responseBuffer);
+
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
         }
 
         //Handle incoming commands
-        if(strstr(event->topic, "iothub/methods/POST/"))
+        else if(strstr(event->topic, "iothub/methods/POST/"))
         {
         	int responseStatus = ParseCommandFromCloud(event);
 

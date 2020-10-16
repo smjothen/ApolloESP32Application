@@ -33,7 +33,7 @@ static const char *TAG = "MAIN     ";
 #define GPIO_OUTPUT_WRITE_PROTECT    4
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_WRITE_PROTECT)
 
-char softwareVersion[] = "0.0.0.2";
+char softwareVersion[] = "2.8.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -71,7 +71,7 @@ void app_main(void)
 
 	InitGPIOs();
 
-	ESP_LOGE(TAG, "Apollo multi-mode");
+	ESP_LOGE(TAG, "My1 Apollo multi-mode %s - %s", softwareVersion, GetSoftwareVersion());
 
 	storage_Init();
 
