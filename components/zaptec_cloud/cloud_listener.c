@@ -659,23 +659,18 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 	}
 }
 
-struct RFIDTokens{
-	char *Tag;//[37];
-	int Action;
-	char *ExpiryDate;//[37];
-};
 
 
 
 void ParseOfflineAuthenticationList(char * message, int message_len)
 {
 
-	cJSON *root2 = cJSON_Parse("{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}");
+	cJSON *tagPackage = cJSON_Parse("{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}");
 
-	int version = cJSON_GetObjectItem(root2,"Version")->valueint;
-	int package = cJSON_GetObjectItem(root2,"Package")->valueint;
-	int packageCount = cJSON_GetObjectItem(root2,"PackageCount")->valueint;
-	int type = cJSON_GetObjectItem(root2,"Type")->valueint;
+	int version = cJSON_GetObjectItem(tagPackage,"Version")->valueint;
+	int package = cJSON_GetObjectItem(tagPackage,"Package")->valueint;
+	int packageCount = cJSON_GetObjectItem(tagPackage,"PackageCount")->valueint;
+	int type = cJSON_GetObjectItem(tagPackage,"Type")->valueint;
 
 
 
@@ -684,7 +679,7 @@ void ParseOfflineAuthenticationList(char * message, int message_len)
 	ESP_LOGI(TAG, "packageCount=%d",packageCount);
 	ESP_LOGI(TAG, "type=%d",type);
 
-	cJSON *tokens = cJSON_GetObjectItem(root2,"Tokens");
+	cJSON *tokens = cJSON_GetObjectItem(tagPackage,"Tokens");
 	//ESP_LOGI(TAG, "resolutions2->type=%s", JSON_Types(tokens->type));
 	int token_array_size = cJSON_GetArraySize(tokens);
 
@@ -692,26 +687,28 @@ void ParseOfflineAuthenticationList(char * message, int message_len)
 	memset(rfidTokens,0,sizeof(rfidTokens));
 
 	ESP_LOGI(TAG, "token_array_size=%d", token_array_size);
+
+	if(token_array_size > 20)
+		token_array_size = 20;
+
 	for (int i=0;i<token_array_size;i++) {
 		cJSON *array = cJSON_GetArrayItem(tokens,i);
-		//ESP_LOGI(TAG, "array->type=%s", JSON_Types(array->type));
+
 		rfidTokens[i].Tag = cJSON_GetObjectItem(array,"Tag")->valuestring;
 		rfidTokens[i].Action = cJSON_GetObjectItem(array,"Action")->valueint;
-
-		if(cJSON_GetObjectItem(array,"ExpiryDate")->valuestring != NULL)
-			rfidTokens[i].ExpiryDate = cJSON_GetObjectItem(array,"ExpiryDate")->valuestring;
-		//else
-			//strcpy(rfidTokens[i].ExpiryDate," ");
+		//Ignore expiry date used by OCPP for now
 
 		ESP_LOGI(TAG, "rfidTokens[%d].Tag=%s",i, rfidTokens[i].Tag);
 		ESP_LOGI(TAG, "rfidTokens[%d].Action=%d",i, rfidTokens[i].Action);
-		if(rfidTokens[i].ExpiryDate != NULL)
-			ESP_LOGI(TAG, "rfidTokens[%d].ExpiryDate=%s", i, rfidTokens[i].ExpiryDate);
+		//Ignore expiry date used by OCPP for now
+
 		ESP_LOGI(TAG, "");
 	}
 
 
-	cJSON_Delete(root2);
+
+	cJSON_Delete(tokens);
+	cJSON_Delete(tagPackage);
 
 }
 

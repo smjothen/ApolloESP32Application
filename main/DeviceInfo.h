@@ -20,6 +20,15 @@ uint8_t GetEEPROMFormatVersion();// { return 1;}
 char * GetSoftwareVersion();//char softwareVersion[8];// = "2.8.0.2";
 char * GetSoftwareVersionBLE();
 
+
+#define MAX_NR_OF_RFID_TAGS 20
+
+struct RFIDTokens{
+	char *Tag;//[37];
+	int Action;
+	char *ExpiryDate;//[37];
+};
+
 //static uint8_t GetEEPROMFormatVersion() { return 1;}
 //static char softwareVersion[] = "2.8.0.2";
 

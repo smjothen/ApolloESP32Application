@@ -9,20 +9,20 @@
 #include "nvs.h"
 
 #include "zaptec_protocol_serialisation.h"
+#include "DeviceInfo.h"
 
 static const char *TAG = "STORAGE:";
 
 #define CONFIG_FILE "CONFIG_FILE"
 nvs_handle configuration_handle;
 
-// "factory"
-nvs_handle factory_handle;
-
 // "wifi"
 nvs_handle wifi_handle;
 
 #define CS_RESET_FILE "CS_RESET_FILE"
 nvs_handle session_reset_handle;
+
+nvs_handle rfid_tag_handle;
 
 esp_err_t err;
 
@@ -507,28 +507,179 @@ esp_err_t storage_clearSessionResetInfo()
 }
 
 
-esp_err_t storage_SaveFactoryTestState(uint8_t testOk)
+esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t nrOfTokens)
 {
-	err = nvs_open("factory", NVS_READWRITE, &factory_handle);
-	err += nvs_set_u8(factory_handle, "TestOk", testOk);
-	err = nvs_commit(factory_handle);
-	nvs_close(factory_handle);
+	//Add(action = 0) to empty list or add to existing list up to MAX_NR_OF_RFID_TAGS.
+	//Remove(action = 1) from list
+
+	//Read existing nr of tags
+	//If fewer than MAX_NR_OF_RFID_TAGS, then add.
+
+	err = nvs_open("RFIDTags", NVS_READWRITE, &rfid_tag_handle);
+
+	//Read nr of tags
+	uint32_t nrOfTagsOnFile = 0;
+	err += nvs_get_u32(configuration_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+
+	if(err != ESP_OK)
+		nrOfTagsOnFile = 0;
+
+	//Only try to remove tags if there are any stored
+	if(nrOfTagsOnFile > 0)
+	{
+		//First check for tags to remove. Doing this first is most space optimal.
+		for (int tagNr = 0; tagNr < nrOfTokens; tagNr++)
+		{
+			//Check if this tag should be removed
+			if(rfidTokens[tagNr].Action == 1)
+			{
+				size_t readSize;
+				char keyName[15] = {0};
+				sprintf(keyName, "TagNr%d", tagNr);
+
+				//err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
+				err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
+
+				//Don't allow excessive lengths
+				if(readSize > 50)
+					continue;
+
+				char tagId[readSize];
+				err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
+
+				//If match - remove
+				if(strcmp(tagId, rfidTokens[tagNr].Tag) == 0)
+				{
+					err += nvs_erase_key(rfid_tag_handle, keyName);
+					if(nrOfTagsOnFile >= 1)
+						nrOfTagsOnFile--;
+					ESP_LOGI(TAG, "Removed %s: %s, TagsOnFile: %d", keyName, rfidTokens[tagNr].Tag, nrOfTagsOnFile);
+				}
+			}
+		}
+	}
+
+	int nrOfTagsOnFileInit = nrOfTagsOnFile;
+
+	//Add tags to list if not already there
+	for (int tagNr = 0; tagNr < nrOfTokens; tagNr++)
+	{
+		//Check if this tag should be added
+		if(rfidTokens[tagNr].Action == 0)
+		{
+			bool tagDuplicate = false;
+
+			//Check if tag is already in saved list
+			for (int tagOnFile = 0; tagOnFile < nrOfTagsOnFileInit; tagOnFile++)
+			{
+				size_t readSize;
+				char keyName[15] = {0};
+				sprintf(keyName, "TagNr%d", tagOnFile);
+
+				err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
+
+				//Don't allow excessive lengths
+				if(readSize > 50)
+					continue;
+
+				char tagId[readSize];
+				err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
+
+				//If match - flag as duplicate
+				if(strcmp(tagId, rfidTokens[tagNr].Tag) == 0)
+				{
+					tagDuplicate = true;
+					break;
+				}
+			}
+
+			//If we have found a duplicate, don't write, just continue with next tag
+			if(tagDuplicate == true)
+				continue;
+
+			if(nrOfTagsOnFile < MAX_NR_OF_RFID_TAGS)
+			{
+				char keyName[15] = {0};
+				sprintf(keyName, "TagNr%d", nrOfTagsOnFile);//Key name continuing from flash numbering
+				err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
+			}
+			else
+			{
+				//Error more than MAX_NR_OF_RFID_TAGS //TODO: Communicate to Cloud and app
+				ESP_LOGE(TAG, "Saved %d new RFID", nrOfTokens);
+			}
+		}
+	}
+
+	//Update nr of NrOfTagsSaved
+	err += nvs_set_u32(rfid_tag_handle, "NrOfTagsSaved", nrOfTagsOnFile);
+
+	err = nvs_commit(rfid_tag_handle);
+	nvs_close(rfid_tag_handle);
 
 	if(err == ESP_OK)
-		ESP_LOGI(TAG, "Saved: testOk: %d", testOk);
+		ESP_LOGI(TAG, "Saved %d new RFID", nrOfTokens);
 	else
-		ESP_LOGI(TAG, "ERROR %d when saving: testOk: %d",err, testOk);
+		ESP_LOGI(TAG, "ERROR %d when saving %d new rfidTags",err, nrOfTokens);
 
 	return err;
 }
 
 
-esp_err_t storage_readFactoryTestState(uint8_t *pTestOk)
-{
-	err = nvs_open("factory", NVS_READONLY, &factory_handle);
-	err += nvs_get_u8(factory_handle, "TestOk", pTestOk);
 
-	nvs_close(factory_handle);
+esp_err_t storage_lookupRFIDTagInList(struct RFIDTokens rfidToken, uint8_t *match)
+{
+	err = nvs_open("RFIDTags", NVS_READONLY, &rfid_tag_handle);
+
+	//Read nr of tags
+	uint32_t nrOfTagsOnFile = 0;
+	err += nvs_get_u32(configuration_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+
+	if(err != ESP_OK)
+		nrOfTagsOnFile = 0;
+
+	//Only try to lookup if there are any stored
+	if(nrOfTagsOnFile > 0)
+	{
+		//Look for tag
+		for (int tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
+		{
+			//Make key to search
+			size_t readSize;
+			char keyName[15] = {0};
+			sprintf(keyName, "TagNr%d", tagNr);
+
+			//Get tagId string length
+			err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
+
+			//Don't allow excessive lengths
+			if(readSize > 50)
+				continue;
+
+			//Read tagId string
+			char tagId[readSize];
+			err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
+
+			//If match set return value
+			if(strcmp(tagId, rfidToken.Tag) == 0)
+			{
+				*match = 1;
+				ESP_LOGI(TAG, "Found match %s == %s, TagsOnFile: %d", keyName, rfidToken.Tag, nrOfTagsOnFile);
+			}
+
+		}
+		if(*match == 0)
+		{
+			ESP_LOGI(TAG, "No match with %d TagsOnFile",  nrOfTagsOnFile);
+		}
+
+	}
+	else
+	{
+		ESP_LOGI(TAG, "Nothing to search, %d TagsOnFile",  nrOfTagsOnFile);
+	}
+
+	nvs_close(rfid_tag_handle);
 	return err;
 }
 
