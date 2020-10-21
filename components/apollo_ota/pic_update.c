@@ -433,6 +433,8 @@ int is_bootloader(bool *result){
 int get_application_header(uint32_t *crc, uint32_t *length){
     ESP_LOGI(TAG, "reading application header");
 
+    int result = 0;
+
     txMsg.type = MsgFirmware;
     txMsg.identifier = 0; // ignored on bootloader?
 
@@ -442,9 +444,16 @@ int get_application_header(uint32_t *crc, uint32_t *length){
 
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
+    if(rxMsg.type == 0){
+        ESP_LOGW(TAG, "error when communicating with dsPIC");
+        result = -3;
+        goto finnish;
+    }
+
     if(rxMsg.length < 6){
         ESP_LOGW(TAG, "invalid app header reply, data length %d, type %d", rxMsg.length, rxMsg.type);
-        return -2;
+        result = -2;
+        goto finnish;
     }
 
     uint8_t message_type = rxMsg.type;
@@ -453,15 +462,19 @@ int get_application_header(uint32_t *crc, uint32_t *length){
     *length = ZDecodeUint32(&(rxMsg.data[1]));
     *crc = ZDecodeUint32(&(rxMsg.data[5]));
 
-    freeZapMessageReply();
-
     if((message_type != MsgReadAck) || (error_code != 0)){
         ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
             message_type, error_code
         );
-        return -1;
+        result = -1;
+        goto finnish;
     }
-    return 0;
+
+    finnish:
+        freeZapMessageReply();
+        return result;
+
+
 }
 
 int enter_bootloader(void){

@@ -54,7 +54,10 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
     	uart_flush(uart_num);
         xQueueReset(uart_recv_message_queue);
 
-        uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
+        int sent_bytes = uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
+		if(sent_bytes<length){
+			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
+		}
 
         ZapMessage rxMsg = {0};
         xQueueReceive( 
@@ -67,6 +70,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
         return rxMsg;
     }
     //configASSERT(false);
+	ESP_LOGE(TAG, "failed to obtain uart_write_lock");
     ZapMessage dummmy_reply = {0};
     return dummmy_reply;
 }
