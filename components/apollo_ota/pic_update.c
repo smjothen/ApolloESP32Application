@@ -222,6 +222,8 @@ int update_dspic(void){
         }
 
         vTaskDelete(taskHandle);
+        // we can not be certain the task released the rx message before it was terminated, lets make sure we dont lock up the system
+        freeZapMessageReply();
 
         ESP_LOGD(TAG, "task handle deleted");
 
@@ -233,6 +235,25 @@ int update_dspic(void){
 
     if(update_success == false){
         return -1;
+    }
+
+    return 0;
+}
+
+int validate_dspic_reply(ZapMessage rxMsg, int type, int length, uint8_t error_code){
+    if(rxMsg.type != type){
+        ESP_LOGW(TAG, "unexpected rx message type (%d)", rxMsg.type);
+        return -1;
+    }
+
+    if(rxMsg.length != length){
+        ESP_LOGW(TAG, "unexpected rx message length (%d)", rxMsg.length);
+        return -2;
+    }
+
+    if(rxMsg.data[0] != error_code){
+        ESP_LOGW(TAG, "unexpected error code in rx message (error: %d)", rxMsg.data[0]);
+        return -3;
     }
 
     return 0;
@@ -282,18 +303,14 @@ int transfer_dspic_fw(void){
         // }
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-        uint8_t message_type = rxMsg.type;
-        uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-
-        freeZapMessageReply();
-
-        if((message_type != MsgFirmwareAck) || (error_code != 0)){
-            ESP_LOGW(TAG, "error in dspic response when writing FW (error: %d)", error_code);
+        
+        if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+            ESP_LOGW(TAG, "error in dspic response when writing FW");
+            freeZapMessageReply();
             return -1;
         }
 
-        
+        freeZapMessageReply(); 
     }
 
     return 0;
@@ -313,16 +330,13 @@ int boot_dspic_app(void){
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-
-    freeZapMessageReply();
-
-    if((message_type != MsgFirmwareAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "error in dspic response when giving boot command (error: %d)", error_code);
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+        ESP_LOGW(TAG, "error in dspic response when giving boot command");
+        freeZapMessageReply();
         return -1;
     }
 
+    freeZapMessageReply();
     return 0;
 }
 
@@ -340,16 +354,13 @@ int delete_dspic_fw(void){
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-
-    freeZapMessageReply();
-
-    if((message_type != MsgFirmwareAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "error in dspic response when deleteing app (error: %d)", error_code);
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+        ESP_LOGW(TAG, "error in dspic response when deleteing app");
+        freeZapMessageReply();
         return -1;
     }
 
+    freeZapMessageReply();
     return 0;
     
 }
@@ -380,21 +391,15 @@ int set_dspic_header(void){
     ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
     
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = 1;
-    if(rxMsg.length > 0){
-        error_code = rxMsg.data[0];
-    }
 
-    freeZapMessageReply();
-
-    if((message_type != MsgFirmwareAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "error in dspic response when writing header (error: %d)", error_code);
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+        ESP_LOGW(TAG, "error in dspic response when writing header");
+        freeZapMessageReply();
         return -1;
-    }else{
-        ESP_LOGI(TAG, "dsPIC flashed, and header updated");
     }
-
+    
+    freeZapMessageReply();
+    ESP_LOGI(TAG, "dsPIC flashed, and header updated");
     return 0;
 
 }
@@ -411,21 +416,18 @@ int is_bootloader(bool *result){
 
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = rxMsg.data[0];
-    uint8_t bootloader_version = rxMsg.data[1];
-
-    freeZapMessageReply();
-
-    if((message_type != MsgReadAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "detected communication with dsPIC app (type %d, error: %d)",
-            message_type, error_code
-        );
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 99)==0){
+        ESP_LOGW(TAG, "detected communication with dsPIC app");
         *result = false;
-        return 0;
+    }else if(validate_dspic_reply(rxMsg, MsgReadAck, 2, 0)==0){
+        ESP_LOGI(TAG, "detected bootloader");
+        *result = true;
+    }else{
+        ESP_LOGW(TAG, "inconclusive bootloader test, assuming false");
+        *result = false;
     }
 
-    *result = true;
+    freeZapMessageReply();
     return 0;
 }
 
@@ -444,31 +446,14 @@ int get_application_header(uint32_t *crc, uint32_t *length){
 
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
-    if(rxMsg.type == 0){
-        ESP_LOGW(TAG, "error when communicating with dsPIC");
-        result = -3;
-        goto finnish;
-    }
-
-    if(rxMsg.length < 6){
-        ESP_LOGW(TAG, "invalid app header reply, data length %d, type %d", rxMsg.length, rxMsg.type);
+    if(validate_dspic_reply(rxMsg, MsgReadAck, 9, 0)<0){
+        ESP_LOGW(TAG, "invalid app header reply");
         result = -2;
         goto finnish;
     }
 
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = rxMsg.data[0];
-
     *length = ZDecodeUint32(&(rxMsg.data[1]));
     *crc = ZDecodeUint32(&(rxMsg.data[5]));
-
-    if((message_type != MsgReadAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "failed to read app header from dspic (type %d, error: %d)",
-            message_type, error_code
-        );
-        result = -1;
-        goto finnish;
-    }
 
     finnish:
         freeZapMessageReply();
@@ -482,11 +467,6 @@ int enter_bootloader(void){
 
     txMsg.type = MsgCommand;
     txMsg.identifier = CommandUpgradeMcuFirmware;
-    //txMsg.length = 0;
-
-    //uint8_t* ptr = txBuf;
-    //ptr += ZEncodeMessageHeader(&txMsg, txBuf);
-    //uint encoded_length = ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
 
     uint encoded_length = ZEncodeMessageHeaderAndOneByte(
         &txMsg, 42, txBuf, encodedTxBuf
@@ -494,19 +474,12 @@ int enter_bootloader(void){
 
     ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 
-    uint8_t message_type = rxMsg.type;
-    uint8_t error_code = 1;
-    if(rxMsg.length > 0){
-        error_code = rxMsg.data[0];
-    }
-    
-    freeZapMessageReply();
-
-    if((message_type != MsgCommandAck) || (error_code != 0)){
-        ESP_LOGW(TAG, "failed start bootloader on dspic (type %d, error: %d)",
-            message_type, error_code
-        );
+    if(validate_dspic_reply(rxMsg, MsgCommandAck, 1, 0)<0){
+        ESP_LOGW(TAG, "failed start bootloader on dspic");
+        freeZapMessageReply();
         return -1;
     }
+
+    freeZapMessageReply();
     return 0;
 }

@@ -88,10 +88,11 @@ void validate_booted_image(void){
     int dspic_update_success = update_dspic();
 
     if(dspic_update_success<0){
-            ESP_LOGE(TAG, "FAILED to update dsPIC");
+            ESP_LOGE(TAG, "FAILED to update dsPIC, restarting now...");
             // We failed to bring the dsPIC app to the version embedded in this code
             // On next reboot we will roll back, and the old dsPIC app will be flashed
             // TODO: should we restart now?
+            esp_restart();
     }
 
     esp_ota_img_states_t ota_state;
