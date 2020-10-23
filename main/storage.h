@@ -71,9 +71,10 @@ uint8_t storage_Get_NetworkType();
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();
 
-
-esp_err_t storage_SaveFactoryTestState(uint8_t testOk);
-esp_err_t storage_readFactoryTestState(uint8_t *pTestOk);
+esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens);
+esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match);
+esp_err_t storage_printRFIDTagsOnFile();
+esp_err_t storage_clearAllRFIDTagsOnFile();
 
 void storage_SaveWifiParameters(char *SSID, char *PSK);
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK);
@@ -85,6 +86,7 @@ esp_err_t storage_clearSessionResetInfo();
 esp_err_t storage_clearWifiParameters();
 esp_err_t storage_clearRegistrationParameters();
 
+void storage_GetStats();
 
 #ifdef __cplusplus
 }

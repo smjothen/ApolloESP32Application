@@ -14,6 +14,8 @@
 #define TAG __FILE__
 
 #define RX_TIMEOUT  (3000 / (portTICK_PERIOD_MS))
+#define SEMAPHORE_TIMEOUT  (10000 / (portTICK_PERIOD_MS))
+
 
 void uartSendTask(void *pvParameters);
 void uartRecvTask(void *pvParameters);
@@ -49,7 +51,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length)
 {
 	ZapMessage rxMsg = {0};
 
-	if( xSemaphoreTake( uart_write_lock, RX_TIMEOUT ) == pdTRUE )
+	if( xSemaphoreTake( uart_write_lock, SEMAPHORE_TIMEOUT ) == pdTRUE )
 	    {
 
 	    	uart_flush(uart_num);
@@ -315,6 +317,7 @@ void uartSendTask(void *pvParameters){
 
         //ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+        freeZapMessageReply();
         //printf("frame type: %d \n\r", rxMsg.type);
         //printf("frame identifier: %d \n\r", rxMsg.identifier);
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
@@ -388,7 +391,7 @@ void uartSendTask(void *pvParameters){
         	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
         	printf("frame error code: %d\n\r", error_code);
         }*/
-        freeZapMessageReply();
+
 
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }

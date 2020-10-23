@@ -4,7 +4,7 @@
 #include "authentication.h"
 #include "../i2c/include/CLRC661.h"
 #include "string.h"
-
+#include "../../main/storage.h"
 
 static const char *TAG = "AUTH     ";
 
@@ -22,31 +22,39 @@ void authentication_Init()
 
 bool authentication_CheckId(struct TagInfo tagInfo)
 {
-	tagList[0].indexUsed = true;
-	uint32_t exTag = 0x3BAB3752;
-	memcpy(tagList[0].tagId, &exTag, 4);
-	//tagList[0].tagId = 0x5237AB3B;
-//	tagList[0]->tagId[1] = 0x37;
-//	tagList[0]->tagId[2] = 0xAB;
-//	tagList[0]->tagId[3] = 0x3B;
+	bool match = false;
 
-	tagList[0].tagIdLength = 4;
 
-	for (int i = 0; i < MAX_NR_OF_TAGS; i++)
-	{
-		if(tagList[i].indexUsed == true)
+	storage_lookupRFIDTagInList(tagInfo.idAsString, &match);
 
-			if(memcmp(tagList[i].tagId ,&tagInfo.id, tagInfo.idLength)  == 0)
-			{
-				ESP_LOGI(TAG, "Id match!");
-				return true;
-			}
-
-	}
+//	tagList[0].indexUsed = true;
+//	uint32_t exTag = 0x3BAB3752;
+//	memcpy(tagList[0].tagId, &exTag, 4);
+//	//tagList[0].tagId = 0x5237AB3B;
+////	tagList[0]->tagId[1] = 0x37;
+////	tagList[0]->tagId[2] = 0xAB;
+////	tagList[0]->tagId[3] = 0x3B;
+//
+//	tagList[0].tagIdLength = 4;
+//
+//	for (int i = 0; i < MAX_NR_OF_TAGS; i++)
+//	{
+//		if(tagList[i].indexUsed == true)
+//
+//			if(memcmp(tagList[i].tagId ,&tagInfo.id, tagInfo.idLength)  == 0)
+//			{
+//				ESP_LOGI(TAG, "Id match!");
+//				return true;
+//			}
+//
+//	}
 	
-	ESP_LOGI(TAG, "No matching NFC-tag found");
+	if(match == true)
+		ESP_LOGI(TAG, "Tag match in lookup table!");
+	else
+		ESP_LOGI(TAG, "No matching tag found");
 
-	return false;
+	return match;
 }
 
 

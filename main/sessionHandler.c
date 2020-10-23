@@ -197,14 +197,14 @@ static void sessionHandler_task()
 
 		if (onTime > 600)
 		{
-			if (MCU_GetchargeMode() != 12)
-				dataInterval = 60;
-			else
-				dataInterval = 600;
+//			if (MCU_GetchargeMode() != 12)
+//				dataInterval = 60;
+//			else
+				//dataInterval = 600;
+				dataInterval = 3600;
 
-
-
-			signalInterval = 300;
+			//signalInterval = 300;
+			signalInterval = 3600;
 		}
 
 
@@ -266,7 +266,8 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		if(pulseCounter >= 60)
+		//if(pulseCounter >= 60)
+		if(pulseCounter >= 90)
 		{
 			if (isMqttConnected() == true)
 			{

@@ -487,7 +487,7 @@ esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t
 		err += nvs_get_zfloat(session_reset_handle, "csEnergy", &csEnergy);
 
 		err += nvs_get_str(session_reset_handle, "csAuthCode", NULL, &readSize);
-		err += nvs_get_str(session_reset_handle, "csAuthCode", &csAuthCode, &readSize);
+		err += nvs_get_str(session_reset_handle, "csAuthCode", csAuthCode, &readSize);
 	}
 
 	nvs_close(session_reset_handle);
@@ -507,7 +507,7 @@ esp_err_t storage_clearSessionResetInfo()
 }
 
 
-esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t nrOfTokens)
+esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens)
 {
 	//Add(action = 0) to empty list or add to existing list up to MAX_NR_OF_RFID_TAGS.
 	//Remove(action = 1) from list
@@ -519,10 +519,14 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 
 	//Read nr of tags
 	uint32_t nrOfTagsOnFile = 0;
-	err += nvs_get_u32(configuration_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+	err += nvs_get_u32(rfid_tag_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
 
 	if(err != ESP_OK)
 		nrOfTagsOnFile = 0;
+
+	int removed = 0;
+	int moved = 0;
+	int actuallySaved = 0;
 
 	//Only try to remove tags if there are any stored
 	if(nrOfTagsOnFile > 0)
@@ -534,26 +538,46 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 			if(rfidTokens[tagNr].Action == 1)
 			{
 				size_t readSize;
-				char keyName[15] = {0};
-				sprintf(keyName, "TagNr%d", tagNr);
+				char keyErasePosName[15] = {0};
+				sprintf(keyErasePosName, "TagNr%d", tagNr);
 
 				//err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
-				err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
+				err += nvs_get_str(rfid_tag_handle, keyErasePosName, NULL, &readSize);
 
 				//Don't allow excessive lengths
 				if(readSize > 50)
 					continue;
 
 				char tagId[readSize];
-				err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
+				err += nvs_get_str(rfid_tag_handle, keyErasePosName, tagId, &readSize);
 
 				//If match - remove
 				if(strcmp(tagId, rfidTokens[tagNr].Tag) == 0)
 				{
-					err += nvs_erase_key(rfid_tag_handle, keyName);
+					err += nvs_erase_key(rfid_tag_handle, keyErasePosName);
+					removed++;
 					if(nrOfTagsOnFile >= 1)
 						nrOfTagsOnFile--;
-					ESP_LOGI(TAG, "Removed %s: %s, TagsOnFile: %d", keyName, rfidTokens[tagNr].Tag, nrOfTagsOnFile);
+					ESP_LOGI(TAG, "Removed %s: %s, TagsOnFile: %d", keyErasePosName, rfidTokens[tagNr].Tag, nrOfTagsOnFile);
+
+					//If there are more tags on file, move last item up to removed item.
+					if((tagNr+1) < nrOfTagsOnFile)
+					{
+						//Read the key to move
+						char keyToMoveName[15] = {0};
+						sprintf(keyToMoveName, "TagNr%d", nrOfTagsOnFile);
+						err += nvs_get_str(rfid_tag_handle, keyToMoveName, NULL, &readSize);
+						err += nvs_get_str(rfid_tag_handle, keyToMoveName, tagId, &readSize);
+
+						//Write the key to move
+						err += nvs_set_str(rfid_tag_handle, keyErasePosName, tagId);
+
+						//Erase the moved keys previous position
+						err += nvs_erase_key(rfid_tag_handle, keyToMoveName);
+
+						ESP_LOGI(TAG, "Moved %s -> %s", keyToMoveName, keyErasePosName);
+						moved++;
+					}
 				}
 			}
 		}
@@ -564,6 +588,8 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 	//Add tags to list if not already there
 	for (int tagNr = 0; tagNr < nrOfTokens; tagNr++)
 	{
+		ESP_LOGI(TAG, "Action: %d",rfidTokens[tagNr].Action);
+
 		//Check if this tag should be added
 		if(rfidTokens[tagNr].Action == 0)
 		{
@@ -588,6 +614,7 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 				//If match - flag as duplicate
 				if(strcmp(tagId, rfidTokens[tagNr].Tag) == 0)
 				{
+					ESP_LOGE(TAG, "%s duplicate!",keyName);
 					tagDuplicate = true;
 					break;
 				}
@@ -602,11 +629,13 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 				char keyName[15] = {0};
 				sprintf(keyName, "TagNr%d", nrOfTagsOnFile);//Key name continuing from flash numbering
 				err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
+				actuallySaved++;
+				nrOfTagsOnFile++;
 			}
 			else
 			{
 				//Error more than MAX_NR_OF_RFID_TAGS //TODO: Communicate to Cloud and app
-				ESP_LOGE(TAG, "Saved %d new RFID", nrOfTokens);
+				ESP_LOGE(TAG, "More tokens than allowed: %d", nrOfTagsOnFile);
 			}
 		}
 	}
@@ -618,7 +647,7 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 	nvs_close(rfid_tag_handle);
 
 	if(err == ESP_OK)
-		ESP_LOGI(TAG, "Saved %d new RFID", nrOfTokens);
+		ESP_LOGI(TAG, "Removed: %d/%d, Saved: %d/%d, Moved: %d. On file: %d.", removed, nrOfTokens, actuallySaved, nrOfTokens, moved, nrOfTagsOnFile);
 	else
 		ESP_LOGI(TAG, "ERROR %d when saving %d new rfidTags",err, nrOfTokens);
 
@@ -627,13 +656,13 @@ esp_err_t storage_updateRFIDTagsToList(struct RFIDTokens rfidTokens[], uint32_t 
 
 
 
-esp_err_t storage_lookupRFIDTagInList(struct RFIDTokens rfidToken, uint8_t *match)
+esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match)
 {
 	err = nvs_open("RFIDTags", NVS_READONLY, &rfid_tag_handle);
 
 	//Read nr of tags
 	uint32_t nrOfTagsOnFile = 0;
-	err += nvs_get_u32(configuration_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+	err += nvs_get_u32(rfid_tag_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
 
 	if(err != ESP_OK)
 		nrOfTagsOnFile = 0;
@@ -661,10 +690,10 @@ esp_err_t storage_lookupRFIDTagInList(struct RFIDTokens rfidToken, uint8_t *matc
 			err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
 
 			//If match set return value
-			if(strcmp(tagId, rfidToken.Tag) == 0)
+			if(strcmp(tagId, tag) == 0)
 			{
 				*match = 1;
-				ESP_LOGI(TAG, "Found match %s == %s, TagsOnFile: %d", keyName, rfidToken.Tag, nrOfTagsOnFile);
+				ESP_LOGI(TAG, "Found match %s == %s, TagsOnFile: %d", keyName, tag, nrOfTagsOnFile);
 			}
 
 		}
@@ -684,6 +713,62 @@ esp_err_t storage_lookupRFIDTagInList(struct RFIDTokens rfidToken, uint8_t *matc
 }
 
 
+esp_err_t storage_printRFIDTagsOnFile()
+{
+	err = nvs_open("RFIDTags", NVS_READONLY, &rfid_tag_handle);
+
+	//Read nr of tags
+	uint32_t nrOfTagsOnFile = 0;
+	err += nvs_get_u32(rfid_tag_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+
+	if(err != ESP_OK)
+		nrOfTagsOnFile = 0;
+
+	//Only try to lookup if there are any stored
+	if(nrOfTagsOnFile > 0)
+	{
+		//Look for tag
+		for (int tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
+		{
+			//Make key to search
+			size_t readSize;
+			char keyName[15] = {0};
+			sprintf(keyName, "TagNr%d", tagNr);
+
+			//Get tagId string length
+			err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
+
+			//Don't allow excessive lengths
+			if(readSize > 50)
+				continue;
+
+			//Read tagId string
+			char tagId[readSize];
+			err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
+
+			ESP_LOGI(TAG, "%d/%d: %s -> %s", tagNr+1, nrOfTagsOnFile, keyName, tagId);
+		}
+	}
+	else
+	{
+		ESP_LOGI(TAG, "No tags on file: tagsOnFile: %d ", nrOfTagsOnFile);
+	}
+
+	nvs_close(rfid_tag_handle);
+	return err;
+}
+
+
+
+esp_err_t storage_clearAllRFIDTagsOnFile()
+{
+	err = nvs_open("RFIDTags", NVS_READWRITE, &rfid_tag_handle);
+	err += nvs_erase_all(rfid_tag_handle);
+	err += nvs_commit(rfid_tag_handle);
+	nvs_close(rfid_tag_handle);
+
+	return err;
+}
 
 
 
@@ -739,4 +824,9 @@ esp_err_t storage_clearWifiParameters()
 }
 
 
-
+void storage_GetStats()
+{
+	nvs_stats_t nvs_stats;
+	nvs_get_stats(NULL, &nvs_stats);
+	ESP_LOGI(TAG, "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)\n", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
+}

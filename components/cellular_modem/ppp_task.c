@@ -17,6 +17,7 @@
 static const char *TAG = "PPP_TASK";
 
 #define GPIO_OUTPUT_PWRKEY		21
+#define GPIO_OUTPUT_DTR			27
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
@@ -30,7 +31,8 @@ static const char *TAG = "PPP_TASK";
 #define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
 
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
@@ -66,17 +68,40 @@ void hard_reset_cellular(void){
 	gpio_config(&io_conf);
 
     ESP_LOGI(TAG, "BG reset start");
-	gpio_set_level(GPIO_OUTPUT_RESET, 1);
+
+    // NOTE: Pins are connected through transistors
+    // causing output level to be inverted!!!
+    gpio_set_level(GPIO_OUTPUT_DTR, 1);
+
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+    gpio_set_level(GPIO_OUTPUT_RESET, 1);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 0);
+
+    //High >= 30 ms
+	gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    //Low >= 500 ms
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    //Keep high
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+	/*gpio_set_level(GPIO_OUTPUT_RESET, 1);
 	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 	vTaskDelay(2000 / portTICK_PERIOD_MS);
 	gpio_set_level(GPIO_OUTPUT_RESET, 0);
 	vTaskDelay(10 / portTICK_PERIOD_MS);
-    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-	vTaskDelay(200 / portTICK_PERIOD_MS);
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);*/
+
+	/*vTaskDelay(200 / portTICK_PERIOD_MS);
 	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 	gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-	vTaskDelay(1000 / portTICK_PERIOD_MS);
+	vTaskDelay(1000 / portTICK_PERIOD_MS);*/
 
     ESP_LOGI(TAG, "BG reset done");
 }
@@ -122,7 +147,7 @@ static void configure_uart(void){
 
 static void update_line_buffer(uint8_t* event_data,size_t size){
     event_data[size] = 0;
-    ESP_LOGI(TAG, "got uart data[%s]", event_data);
+    //ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
     if(size+line_buffer_end+1> LINE_BUFFER_SIZE){
         ESP_LOGE(TAG, "no space in line buffer! dropping data");
@@ -139,7 +164,7 @@ static void update_line_buffer(uint8_t* event_data,size_t size){
                 // ESP_LOGD(TAG, "line finished");
                 xQueueSend( line_queue, line_buffer, portMAX_DELAY);
                 line_buffer_end = 0;
-                ESP_LOGI(TAG, "Got line {%s}", line_buffer);
+                //ESP_LOGI(TAG, "Got line {%s}", line_buffer);
             }
             
         }else{
@@ -193,14 +218,14 @@ static void uart_event_task(void *pvParameters)
         //Waiting for UART event.
         if(xQueueReceive(uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
             memset(dtmp, 0, RD_BUF_SIZE);
-            ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
+            //ESP_LOGI(TAG, "uart[%d] event:", UART_NUM_1);
             switch(event.type) {
                 //Event of UART receving data
                 /*We'd better handler data event fast, there would be much more data events than
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
                 case UART_DATA:
-                    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+                    //ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                     uart_read_bytes(UART_NUM_1, dtmp, event.size, portMAX_DELAY);
                     on_uart_data(dtmp, event.size);
                     // uart_write_bytes(UART_NUM_1, (const char*) dtmp, event.size);
@@ -251,8 +276,8 @@ int configure_modem_for_ppp(void){
     bool startup_confirmed = false;
     char at_buffer[LINE_BUFFER_SIZE];
     
-    for(int i = 0; i<10; i++){
-        if( await_line(at_buffer, pdMS_TO_TICKS(1000))) {
+    for(int i = 0; i<20; i++){
+        if( await_line(at_buffer, pdMS_TO_TICKS(2000))) {
             ESP_LOGI(TAG, "checking line %s", at_buffer);
             if(strstr(at_buffer, "APP RDY")){
                 ESP_LOGI(TAG, "BG startup confirmed");
@@ -267,11 +292,15 @@ int configure_modem_for_ppp(void){
     configASSERT(startup_confirmed == true);
     vTaskDelay(pdMS_TO_TICKS(100));
     int at_result = at_command_at();
-    if(at_result < 0){
+    while(at_result < 0){
         ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
-        at_command_at();
-        vTaskDelay(pdMS_TO_TICKS(20000));
+        at_result = at_command_at();
+        //vTaskDelay(pdMS_TO_TICKS(20000));
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
+
+    ESP_LOGE(TAG, "AT result %d ", at_result);
+
     at_command_echo_set(false);
 
     if(at_command_flow_ctrl_enable()<0){

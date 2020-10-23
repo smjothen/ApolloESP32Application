@@ -71,7 +71,7 @@ void app_main(void)
 
 	InitGPIOs();
 
-	ESP_LOGE(TAG, "My1 Apollo multi-mode %s - %s", softwareVersion, GetSoftwareVersion());
+	ESP_LOGE(TAG, "Apollo new multi-mode %s - %s", softwareVersion, GetSoftwareVersion());
 
 	storage_Init();
 

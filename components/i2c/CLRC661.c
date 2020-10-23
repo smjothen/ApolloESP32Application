@@ -337,11 +337,12 @@ int NFCReadTag()
 		memcpy(tagInfo.id, uid, tagInfo.idLength);
 
 		int i = 0;
+		sprintf(tagInfo.idAsString,"nfc-");
+
 		for (i = 0; i < tagInfo.idLength; i++)
 		{
-			sprintf(tagInfo.idAsString+(i*2),"%02X ", tagInfo.id[i] );
+			sprintf(tagInfo.idAsString+4+(i*2),"%02X", tagInfo.id[i] );
 		}
-
 	}
 	else if (uidLength == 7)
 	{
@@ -514,9 +515,11 @@ int NFCReadTag()
 	memcpy(tagInfo.id, uid, tagInfo.idLength);
 
 	int i = 0;
+	sprintf(tagInfo.idAsString,"nfc-");
+
 	for (i = 0; i < tagInfo.idLength; i++)
 	{
-		sprintf(tagInfo.idAsString+(i*2),"%02X ", tagInfo.id[i] );
+		sprintf(tagInfo.idAsString+4+(i*2),"%02X", tagInfo.id[i] );
 	}
 
 	validId = true;
