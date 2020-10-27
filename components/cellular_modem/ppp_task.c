@@ -71,6 +71,28 @@ void hard_reset_cellular(void){
 
     // NOTE: Pins are connected through transistors
     // causing output level to be inverted!!!
+
+    //BG95 power on sequence
+    gpio_set_level(GPIO_OUTPUT_DTR, 1);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low - Ensure off
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//High >= 30 ms
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low 1000 > x > 500 ms
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+    vTaskDelay(750 / portTICK_PERIOD_MS);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 0); 	//Keep high = ON
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+
+    /*
+    //BG96(!) power on sequence
     gpio_set_level(GPIO_OUTPUT_DTR, 1);
 
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
@@ -89,8 +111,12 @@ void hard_reset_cellular(void){
 
     //Keep high
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+    */
 
-	/*gpio_set_level(GPIO_OUTPUT_RESET, 1);
+
+	/*
+	//Old working sequence
+	gpio_set_level(GPIO_OUTPUT_RESET, 1);
 	gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
 	vTaskDelay(2000 / portTICK_PERIOD_MS);
 	gpio_set_level(GPIO_OUTPUT_RESET, 0);

@@ -34,6 +34,9 @@ typedef enum {
     cloud_event_level_warning = 20
 } cloud_event_level;
 
+
+int publish_uint32_observation(int observationId, uint32_t value);
+int publish_double_observation(int observationId, double value);
 int publish_diagnostics_observation(char *message);
 int publish_debug_message_event(char *message, cloud_event_level level);
 int publish_cloud_pulse(void);

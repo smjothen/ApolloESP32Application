@@ -4,6 +4,7 @@
 #include "zaptec_protocol_serialisation.h"
 void zaptecProtocolStart();
 
+MessageType MCU_SendCommandId(uint16_t paramIdentifier);
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
 MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);
 MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);

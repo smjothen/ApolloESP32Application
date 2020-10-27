@@ -7,8 +7,8 @@
 
 #define TAG "OTA_LOCATION"
 
-#define MAX_HTTP_RECV_BUFFER 512
-#define MAX_HTTP_OUTPUT_BUFFER 2048
+#define MAX_HTTP_RECV_BUFFER 1536//512
+//#define MAX_HTTP_OUTPUT_BUFFER 2048
 
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 
@@ -87,21 +87,26 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 int get_image_location(char * location, int buffersize){
     ESP_LOGI(TAG, "getting ota image location");
 
-    char local_response_buffer[MAX_HTTP_OUTPUT_BUFFER] = {0};
+    char local_response_buffer[MAX_HTTP_RECV_BUFFER] = {0};
     esp_http_client_config_t config = {
-        .host = "httpbin.org",
-        .path = "/get",
-        .query = "esp",
+    	.url = "https://api.zaptec.com/api/firmware/ZAP000018/current",
+        //.host = "httpbin.org",
+        //.path = "/get",
+        //.query = "esp",
         .event_handler = _http_event_handler,
         .user_data = local_response_buffer,
         .cert_pem = (char *)server_cert_pem_start,
+		.timeout_ms = 20000,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
     // POST
-    const char *post_data = "{\"psk\":\"ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=\"}";
-    esp_http_client_set_url(client, "https://api.zaptec.com/api/firmware/ZAP000001/current");
+    //const char *post_data = "{\"psk\":\"ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=\"}";
+    const char *post_data = "{\"psk\":\"NusI1QY66Hfnag1TE97gDmCepQVlD+4aYBZjRztzDIs=\"}";
+    //const char *url = "https://api.zaptec.com/api/firmware/ZAP000018/current";
+    //esp_http_client_set_url(client, "https://api.zaptec.com/api/firmware/ZAP000018/current");
+    //esp_http_client_set_url(client, url);
     esp_http_client_set_method(client, HTTP_METHOD_POST);
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_post_field(client, post_data, strlen(post_data));
@@ -121,13 +126,16 @@ int get_image_location(char * location, int buffersize){
             }else{
                 ESP_LOGW(TAG, "bad json");
             }
-            free(body);
+            //free(body);
+            cJSON_Delete(body);
         }else{
             ESP_LOGW(TAG, "bad body");
         }
     } else {
         ESP_LOGE(TAG, "HTTP POST request failed: %s", esp_err_to_name(err));
     }
+
+
 
     return 0;
 }

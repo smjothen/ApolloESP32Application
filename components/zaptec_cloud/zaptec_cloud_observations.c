@@ -277,6 +277,14 @@ int publish_debug_telemetry_observation_all(
 }
 
 
+int publish_uint32_observation(int observationId, uint32_t value){
+    return publish_json(create_uint32_t_observation(observationId, value));
+}
+
+int publish_double_observation(int observationId, double value){
+    return publish_json(create_double_observation(observationId, value));
+}
+
 int publish_diagnostics_observation(char *message){
     return publish_json(create_observation(808, message));
 }

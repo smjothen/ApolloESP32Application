@@ -85,7 +85,7 @@ void storage_Init_Configuration()
 	//Local settings
 
 	configurationStruct.communicationMode 		= eCONNECTION_WIFI;//eCONNECTION_NONE;//TODO set default
-	configurationStruct.hmiBrightness 			= 0.1;	//0.0-0.1
+	configurationStruct.hmiBrightness 			= 0.2;	//0.0-0.1
 	configurationStruct.permanentLock 			= 0;	//0/1
 
 	configurationStruct.standalone 				= 1;	//0/1
@@ -671,11 +671,11 @@ esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match)
 	if(nrOfTagsOnFile > 0)
 	{
 		//Look for tag
-		for (int tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
+		for (uint8_t tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
 		{
 			//Make key to search
 			size_t readSize;
-			char keyName[15] = {0};
+			char keyName[17] = {0};
 			sprintf(keyName, "TagNr%d", tagNr);
 
 			//Get tagId string length
@@ -728,11 +728,11 @@ esp_err_t storage_printRFIDTagsOnFile()
 	if(nrOfTagsOnFile > 0)
 	{
 		//Look for tag
-		for (int tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
+		for (uint8_t tagNr = 0; tagNr < nrOfTagsOnFile; tagNr++)
 		{
 			//Make key to search
 			size_t readSize;
-			char keyName[15] = {0};
+			char keyName[17] = {0};
 			sprintf(keyName, "TagNr%d", tagNr);
 
 			//Get tagId string length

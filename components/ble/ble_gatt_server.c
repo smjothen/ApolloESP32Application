@@ -357,19 +357,19 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
 					esp_ble_gatts_start_service(devinfo_handle_table[DEVINFO_SERV]);
 				}
             }*/
-            else if(param->add_attr_tab.svc_uuid.uuid.uuid16 == WIFI_SERV_uuid2)
-			{
-				if(param->add_attr_tab.num_handle != WIFI_NB)
-				{
-					ESP_LOGE(TAG,"create attribute table 2 abnormally, num_handle (%d) isn't equal to INFO_NB(%d)", param->add_attr_tab.num_handle, WIFI_NB);
-				}
-				else
-				{
-					ESP_LOGI(TAG,"create attribute table 2 successfully, the number handle = %d\n",param->add_attr_tab.num_handle);
-					memcpy(wifi_handle_table, param->add_attr_tab.handles, sizeof(wifi_handle_table));
-					esp_ble_gatts_start_service(wifi_handle_table[WIFI_SERV_CHAR]);
-				}
-			}
+//            else if(param->add_attr_tab.svc_uuid.uuid.uuid16 == WIFI_SERV_uuid2)
+//			{
+//				if(param->add_attr_tab.num_handle != WIFI_NB)
+//				{
+//					ESP_LOGE(TAG,"create attribute table 2 abnormally, num_handle (%d) isn't equal to INFO_NB(%d)", param->add_attr_tab.num_handle, WIFI_NB);
+//				}
+//				else
+//				{
+//					ESP_LOGI(TAG,"create attribute table 2 successfully, the number handle = %d\n",param->add_attr_tab.num_handle);
+//					memcpy(wifi_handle_table, param->add_attr_tab.handles, sizeof(wifi_handle_table));
+//					esp_ble_gatts_start_service(wifi_handle_table[WIFI_SERV_CHAR]);
+//				}
+//			}
 
             //memcpy(param->add_attr_tab.svc_uuid.uuid.uuid128, DeviceMID_uid128, sizeof(DeviceMID_uid128));
             else if(param->add_attr_tab.svc_uuid.uuid.uuid16 == WIFI_SERV_uuid)

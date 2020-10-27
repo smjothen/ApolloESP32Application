@@ -57,6 +57,11 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length)
 	    	uart_flush(uart_num);
 	        xQueueReset(uart_recv_message_queue);
 
+//	        printf("tx: ");
+//	        for (int i = 0; i < length; i++)
+//	        	printf("%X ", encodedTxBuf[i]);
+//	        printf("\n");
+
 	        uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 
 	        xQueueReceive(uart_recv_message_queue, &( rxMsg ),RX_TIMEOUT); //portMAX_DELAY
@@ -212,6 +217,9 @@ void uartSendTask(void *pvParameters){
     while (true)
     {
     	//count++;
+
+    	//vTaskDelay(1000 / portTICK_PERIOD_MS);
+    	//continue;
 
         ZapMessage txMsg;
 
@@ -407,6 +415,20 @@ int MCU_GetSwitchState()
 
 
 
+MessageType MCU_SendCommandId(uint16_t paramIdentifier)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgCommand;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
 
 
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)

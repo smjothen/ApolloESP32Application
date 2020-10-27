@@ -17,10 +17,11 @@ struct TagItem
 };
 
 void authentication_Init();
-bool authentication_CheckId(struct TagInfo tagInfo);
+uint8_t authentication_CheckId(struct TagInfo tagInfo);
 void authentication_AddTag(struct TagItem tagItem);
 void authentication_DeleteTag(struct TagItem tagItem);
 int authentication_GetNrOfFreeTags();
+int authentication_ParseOfflineList(char * message, int message_len);
 
 #ifdef __cplusplus
 }

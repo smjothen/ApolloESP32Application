@@ -197,14 +197,14 @@ static void sessionHandler_task()
 
 		if (onTime > 600)
 		{
-//			if (MCU_GetchargeMode() != 12)
-//				dataInterval = 60;
-//			else
-				//dataInterval = 600;
-				dataInterval = 3600;
+			if (MCU_GetchargeMode() != 12)
+				dataInterval = 60;
+			else
+				dataInterval = 600;
+				//dataInterval = 3600;
 
-			//signalInterval = 300;
-			signalInterval = 3600;
+			signalInterval = 300;
+			//signalInterval = 3600;
 		}
 
 
@@ -243,7 +243,7 @@ static void sessionHandler_task()
 			}
 			else
 			{
-				ESP_LOGE(TAG, "No network DISCONNECTED");
+				ESP_LOGE(TAG, "MQTT not connected");
 			}
 
 			dataCounter = 0;

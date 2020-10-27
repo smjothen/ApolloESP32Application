@@ -17,6 +17,8 @@
 #include "i2cDevices.h"
 #include "../authentication/authentication.h"
 #include "../../main/storage.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/protocol_task.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -195,7 +197,7 @@ static void i2cDevice_task(void *pvParameters)
 	int i2cCount = 0;
 	int nfcCardDetected = 0;
 
-	bool isAuthenticated = false;
+	uint8_t isAuthenticated = 0;
 
 	while (true)
 	{
@@ -217,15 +219,26 @@ static void i2cDevice_task(void *pvParameters)
 			{
 				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 
-				if(isAuthenticated == true)
+				if(isAuthenticated == 1)
 				{
-					//audio_play_nfc_card_accepted_debug();
-					ESP_LOGI(TAG, "NFC ACCEPTED!");
+					audio_play_nfc_card_accepted_debug();
+					ESP_LOGI(TAG, "EPS32: NFC ACCEPTED!");
+					MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
+					}
 				}
 				else
 				{
-					//audio_play_nfc_card_denied();
-					ESP_LOGE(TAG, "NFC DENIED!");
+
+					audio_play_nfc_card_denied();
+					ESP_LOGE(TAG, "ESP32: NFC DENIED!");
+					MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU: NFC DENIED!");
+					}
 				}
 			}
 		}

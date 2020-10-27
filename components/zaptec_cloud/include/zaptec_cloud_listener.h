@@ -3,6 +3,7 @@
 
 #include "../../main/DeviceInfo.h"
 
+void MqttSetDisconnected();
 bool isMqttConnected();
 void cloud_listener_check_cmd();
 void start_cloud_listener_task(struct DeviceInfo deviceInfo);

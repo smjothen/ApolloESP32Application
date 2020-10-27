@@ -14,15 +14,11 @@
 #include "../lib/include/mqtt_msg.h"
 #include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
+#include "../authentication/authentication.h"
 
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-//const char device_id[15];
-//const char device_id[] = "ZAP000005";
-//const char device_id[] = "ZAP000007";
-//const char device_id[] = "ZAP000008";
-//#define DEVICE_ID device_id
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
@@ -38,7 +34,6 @@
 					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
 				   : "");*/
 
-bool doNewAck = false;
 
 int resetCounter = 0;
 
@@ -73,6 +68,12 @@ const char cert[] =
 "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\r\n"
 "-----END CERTIFICATE-----\r\n"
 ;
+
+
+void MqttSetDisconnected()
+{
+	mqttConnected = false;
+}
 
 bool isMqttConnected()
 {
@@ -235,7 +236,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			int maxPhases = 0;
 			sscanf(pos+strlen(" 520 : "),"%d", &maxPhases);
 
-			if((3 >= maxPhases) && (maxPhases > 1))
+			if((3 >= maxPhases) && (maxPhases >= 1))
 			{
 				MessageType ret = MCU_SendUint8Parameter(MaxPhases, (uint8_t)maxPhases);
 				if(ret == MsgWriteAck)
@@ -652,119 +653,11 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				{
 					ESP_LOGI(TAG, "Invalid lockValue: %d \n", lockValue);
 				}
-
 			}
-
 		}
 	}
 }
 
-
-
-
-void ParseOfflineAuthenticationList(char * message, int message_len)
-{
-	//strcpy(message,"[\"{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}\"]");
-	//message_len = strlen(message);
-
-	if((message[0] == '[') && (message[message_len-1] == ']'))
-	{
-		message += 2;
-		message[message_len - 4] = '\0';
-	}
-	else
-		return;
-
-	ESP_LOGI(TAG, "message=%s",message);
-
-	CJSON_PUBLIC(char *) cJSON_PrintUnformatted(const cJSON *item);
-	cJSON *tagPackage = cJSON_Parse(message);//"{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}");
-
-	int version = cJSON_GetObjectItem(tagPackage,"Version")->valueint;
-	int package = cJSON_GetObjectItem(tagPackage,"Package")->valueint;
-	int packageCount = cJSON_GetObjectItem(tagPackage,"PackageCount")->valueint;
-	int type = cJSON_GetObjectItem(tagPackage,"Type")->valueint;
-
-	ESP_LOGI(TAG, "version=%d",version);
-	ESP_LOGI(TAG, "package=%d",package);
-	ESP_LOGI(TAG, "packageCount=%d",packageCount);
-	ESP_LOGI(TAG, "type=%d",type);
-
-	cJSON *tokens = cJSON_GetObjectItem(tagPackage,"Tokens");
-	//ESP_LOGI(TAG, "resolutions2->type=%s", JSON_Types(tokens->type));
-	int token_array_size = cJSON_GetArraySize(tokens);
-
-	volatile struct RFIDTokens rfidTokens[token_array_size];
-	memset(rfidTokens,0,sizeof(rfidTokens));
-
-	ESP_LOGI(TAG, "token_array_size=%d", token_array_size);
-
-	if(token_array_size > 20)
-		token_array_size = 20;
-
-	bool emptyList = false;
-
-	if(token_array_size > 0)
-	{
-		cJSON *array = NULL;
-		for (int i=0;i<token_array_size;i++) {
-			array = cJSON_GetArrayItem(tokens,i);
-
-			rfidTokens[i].Tag = cJSON_GetObjectItem(array,"Tag")->valuestring;
-
-			//Check for clear message
-			if((strcmp(rfidTokens[i].Tag, "*") == 0) && (token_array_size == 1))
-			{
-				esp_err_t err = storage_clearAllRFIDTagsOnFile();
-				if(err == ESP_OK)
-					ESP_LOGW(TAG, "Erase OK: %d ", err);
-				else
-					ESP_LOGE(TAG, "Erase ERROR: %d when erasing all tags", err);
-
-				emptyList = true;
-
-				break;
-			}
-
-			rfidTokens[i].Action = cJSON_GetObjectItem(array,"Action")->valueint;
-			//Ignore expiry date used by OCPP for now
-
-			ESP_LOGI(TAG, "rfidTokens[%d].Tag=%s",i, rfidTokens[i].Tag);
-			ESP_LOGI(TAG, "rfidTokens[%d].Action=%d",i, rfidTokens[i].Action);
-			//Ignore expiry date used by OCPP for now
-
-			//cJSON_Delete(array);
-
-			ESP_LOGI(TAG, "");
-		}
-
-		if(!emptyList)
-		{
-			storage_printRFIDTagsOnFile();
-			storage_updateRFIDTagsToFile(rfidTokens, token_array_size);
-			storage_printRFIDTagsOnFile();
-		}
-	}
-//	if(token_array_size == 0)
-//	{
-//		esp_err_t err = storage_clearAllRFIDTagsOnFile();
-//		if(err == ESP_OK)
-//			ESP_LOGW(TAG, "Erase OK: %d ", err);
-//		else
-//			ESP_LOGE(TAG, "Erase ERROR: %d when erasing all tags", err);
-//	}
-
-	//if(array != NULL)
-		//cJSON_Delete(array);
-
-	if(tokens != NULL)
-		ESP_LOGI(TAG, "tokens: ");
-		//cJSON_Delete(tokens);
-
-	if(tagPackage != NULL)
-		cJSON_Delete(tagPackage);
-
-}
 
 
 static bool restartCmdReceived = false;
@@ -828,8 +721,52 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		int phaseFromCloud = 0;
 		sscanf(commandString,"%*s%f%*s%d%*s", &currentFromCloud, &phaseFromCloud);
 
-		ESP_LOGI(TAG, "Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
-		responseStatus = 200;
+		if((32 >= currentFromCloud) && (currentFromCloud >= 0))
+		{
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentFromCloud);
+			if(ret == MsgWriteAck)
+			{
+				responseStatus = 200;
+				ESP_LOGI(TAG, "MCU Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
+				MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(ret == MsgCommandAck)
+				{
+					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU Start command OK");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU Start command FAILED");
+				}
+			}
+			else
+			{
+				responseStatus = 400;
+				ESP_LOGE(TAG, "MCU Start command FAILED");
+			}
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGE(TAG, "Start command with invalid current");
+		}
+	}
+	//Stop charging command
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/502/"))
+	{
+		//rDATA=null
+		MessageType ret = MCU_SendCommandId(CommandStopCharging);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Stop command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGE(TAG, "MCU Stop command FAILED");
+		}
 	}
 
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/504/"))
@@ -1020,7 +957,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //Handle incomming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
-
         	if(event->data_len > 10)
         	{
         		//Remove '\\' escape character due to uint8_t->char conversion
@@ -1035,7 +971,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         			}
         		}
         		rfidList[nextChar] = '\0';
-        		ParseOfflineAuthenticationList(rfidList, strlen(rfidList));
+
+        		int version = authentication_ParseOfflineList(rfidList, strlen(rfidList));
+
+        		if(version > 0)
+        		{
+        			int ret = publish_uint32_observation(AuthenticationListVersion, version);
+        			ESP_LOGI(TAG, "***** AuthenticationListVersion ret: %d *****", ret);
+        		}
 
 //        		char * messageZer = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}";
 //

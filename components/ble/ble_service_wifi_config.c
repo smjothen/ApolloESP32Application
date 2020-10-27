@@ -22,7 +22,7 @@
 static const char *TAG = "BLE SERVICE";
 
 const uint16_t WIFI_SERV_uuid 				        = 0x00FF;
-const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
+//const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
 
 static bool wasValid = false;
 static int nrOfWifiSegments = 0;

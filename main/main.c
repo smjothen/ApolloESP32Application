@@ -25,6 +25,7 @@
 #include "../components/ble/ble_interface.h"
 #include "connectivity.h"
 #include "apollo_ota.h"
+#include "../components/zaptec_cloud/include/zaptec_cloud_listener.h"
 
 static const char *TAG = "MAIN     ";
 
@@ -71,7 +72,7 @@ void app_main(void)
 
 	InitGPIOs();
 
-	ESP_LOGE(TAG, "Apollo new multi-mode %s - %s", softwareVersion, GetSoftwareVersion());
+	ESP_LOGE(TAG, "Apollo 3 multi-mode %s - %s", softwareVersion, GetSoftwareVersion());
 
 	storage_Init();
 
@@ -94,7 +95,6 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     	switchState = MCU_GetSwitchState();
     }
-
 
     if(storage_ReadConfiguration() != ESP_OK)
 	{
@@ -161,6 +161,15 @@ void app_main(void)
     // Read connection mode from flash and start interface
     connectivity_init(switchState);
 
+//    while(network_WifiIsConnected() == false)
+//    {
+//    	ESP_LOGI(TAG, "Waiting for network before OTA");
+//    	vTaskDelay(pdMS_TO_TICKS(1000));
+//    }
+//
+//    start_ota_task();
+
+    //vTaskDelay(pdMS_TO_TICKS(180000));
 
 //    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
 //    {
@@ -272,7 +281,7 @@ void app_main(void)
 //		SetDataInterval(10);
 //	}
 
-	ble_interface_init();
+	//ble_interface_init();
 
 	uint32_t ledState = 0;
 
@@ -304,8 +313,8 @@ void app_main(void)
 
     	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	if(counter % 10 == 0)
-    	{
+    	//if(counter % 10 == 0)
+    	//{
     		days = counter / 86400;
     		secleft = counter % 86400;
 
@@ -316,9 +325,13 @@ void app_main(void)
     		secleft = secleft % 60;
 
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+    		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
-    	}
+    		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
+    		//printf("%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i, Sw: %i\r\n", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, switchState);
+    	//}
 
     	//Until BLE driver error is resolved, disable ble after 1 hour.
 //    	if(counter == 60)//3600)
@@ -326,6 +339,22 @@ void app_main(void)
 //    		ESP_LOGW(TAG,"Deinitializing BLE");
 //    		ble_interface_deinit();
 //    	}
+    	if(counter == 20)
+    	{
+    		//ESP_LOGW(TAG, "Stopping BLE task");
+    		ESP_LOGW(TAG, "Starting BLE task");
+    		ble_interface_init();
+    		//stop_cloud_listener_task();
+    		//MqttSetDisconnected();
+    		//ble_interface_deinit();
+    	}
+
+
+    	if(counter == 25)
+    	{
+    		ESP_LOGW(TAG, "Starting OTA task");
+    		//start_ota_task();
+    	}
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
