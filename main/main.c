@@ -281,7 +281,7 @@ void app_main(void)
 //		SetDataInterval(10);
 //	}
 
-	//ble_interface_init();
+	ble_interface_init();
 
 	uint32_t ledState = 0;
 
@@ -313,8 +313,8 @@ void app_main(void)
 
     	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	//if(counter % 10 == 0)
-    	//{
+    	if(counter % 10 == 0)
+    	{
     		days = counter / 86400;
     		secleft = counter % 86400;
 
@@ -331,7 +331,7 @@ void app_main(void)
 
     		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
     		//printf("%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i, Sw: %i\r\n", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, switchState);
-    	//}
+    	}
 
     	//Until BLE driver error is resolved, disable ble after 1 hour.
 //    	if(counter == 60)//3600)
@@ -343,7 +343,7 @@ void app_main(void)
     	{
     		//ESP_LOGW(TAG, "Stopping BLE task");
     		ESP_LOGW(TAG, "Starting BLE task");
-    		ble_interface_init();
+    		//ble_interface_init();
     		//stop_cloud_listener_task();
     		//MqttSetDisconnected();
     		//ble_interface_deinit();
