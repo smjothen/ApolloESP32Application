@@ -126,8 +126,19 @@
 		SwitchPosition = 730,
 		DebugCounter = 731,
 
+		ParamStandalonePhase = 740,
+		ParamStandaloneCurrent = 741,
+
+	    NewChargeCard = 750,
+	    AuthenticationListVersion = 751,
+
         ParamHmiBrightness = 800,
         ParamAveraging = 801,
+
+        InstallationId = 800, // String / Guid
+        RoutingId = 801, // Int
+        ChargePointName = 802, // String
+
         //...
         ParamWarnings = 804,
         ParamWarningValue = 805,

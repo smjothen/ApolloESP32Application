@@ -14,6 +14,7 @@
 
 static const char *TAG = "ADC     ";
 
+static TaskHandle_t adcTaskHandle = NULL;
 static esp_adc_cal_characteristics_t *adc_chars;
 static const adc_channel_t channel6 = ADC_CHANNEL_6;     //HW_ID	//GPIO34 if ADC1, GPIO14 if ADC2
 static const adc_channel_t channel3 = ADC_CHANNEL_3;	 //PWR_MEAS	//ADC_CHANNEL_7;     //GPIO34 if ADC1, GPIO14 if ADC2
@@ -120,18 +121,8 @@ static void adc_task()
 		voltage6HWid = esp_adc_cal_raw_to_voltage(adc_reading6, adc_chars) * 0.001;
 		voltage3PwrMeas = esp_adc_cal_raw_to_voltage(adc_reading3, adc_chars) * 0.001;
 
-		//int8_t percentage0 = (int8_t)(((voltage0 * voltage0)-(1.6 * 1.6)) / 4.6 * 100);
-//		if(percentage0>100)
-//			percentage0 = 100;
-//		else if(percentage0<0)
-//			percentage0 = 0;
-//
-//		HANEnergyLevel = percentage0;
-//		hwIdVoltageLevel = voltage6;
-
-		//ESP_LOGI(TAG, "Raw6: %d\tVoltage6: %.2fV \t Raw0: %d\tVoltage0: %.2fV \t %d%%", adc_reading6, voltage6, adc_reading0, voltage0, percentage0);
-		//ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
-		vTaskDelay(pdMS_TO_TICKS(100));
+		ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
+		vTaskDelay(pdMS_TO_TICKS(3000));
 	}
 
 }
@@ -146,12 +137,21 @@ float GetPowerMeas()
 	return voltage3PwrMeas;
 }
 
+
+int adcGetStackWatermark()
+{
+	if(adcTaskHandle != NULL)
+		return uxTaskGetStackHighWaterMark(adcTaskHandle);
+	else
+		return -1;
+}
+
 void adc_init(){
 
 #ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_INFO);
 #endif
 
-	xTaskCreate(adc_task, "adc_task", 4096, NULL, 2, NULL);
+    xTaskCreate(adc_task, "adc_task", 2048, NULL, 2, &adcTaskHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

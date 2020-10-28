@@ -12,15 +12,13 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 
 #include "../lib/include/mqtt_msg.h"
+#include "../../main/storage.h"
+#include "../i2c/include/i2cDevices.h"
+#include "../authentication/authentication.h"
 
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-//const char device_id[15];
-//const char device_id[] = "ZAP000005";
-//const char device_id[] = "ZAP000007";
-//const char device_id[] = "ZAP000008";
-//#define DEVICE_ID device_id
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
@@ -36,16 +34,16 @@
 					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
 				   : "");*/
 
-bool doNewAck = false;
 
 int resetCounter = 0;
 
 const char event_topic[128];
 const char event_topic_hold[128];
-
 static struct DeviceInfo cloudDeviceInfo;
 
 bool mqttConnected = false;
+bool cloudSettingsAreUpdated = false;
+
 
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
@@ -70,6 +68,12 @@ const char cert[] =
 "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\r\n"
 "-----END CERTIFICATE-----\r\n"
 ;
+
+
+void MqttSetDisconnected()
+{
+	mqttConnected = false;
+}
 
 bool isMqttConnected()
 {
@@ -106,9 +110,338 @@ int publish_iothub_event(const char *payload){
 }
 
 
-
-void ParseParameterFromCloud(char * message, int message_len)
+bool CloudSettingsAreUpdated()
 {
+	return cloudSettingsAreUpdated;
+}
+
+void ClearCloudSettingsAreUpdated()
+{
+	cloudSettingsAreUpdated = false;
+}
+
+void ParseCloudSettingsFromCloud(char * message, int message_len)
+{
+	if ((message[0] != '{') || (message[message_len-1] != '}'))
+		return;
+
+	char recvString[message_len];
+	strncpy(recvString, message+1, message_len-2);
+	recvString[message_len-2] = '\0';
+
+	//Replace apostrophe with space for sscanf() to work
+	for (int i = 0; i < message_len; i++)
+	{
+		if(recvString[i] == '"')
+			recvString[i] = ' ';
+	}
+
+	char const separator[2] = ",";
+	char * stringPart;
+
+	stringPart = strtok(recvString, separator);
+
+	bool doSave = false;
+	int nrOfParameters = 0;
+
+	while(stringPart != NULL)
+	{
+		nrOfParameters++;
+
+		char * pos = strstr(stringPart, " 120 : ");
+		if(pos != NULL)
+		{
+			int useAuthorization = 0;
+			sscanf(pos+strlen(" 120 : "),"%d", &useAuthorization);
+			ESP_LOGI(TAG, "120 useAuthorization: %d \n", useAuthorization);
+
+			if((useAuthorization == 0) || (useAuthorization == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, (uint8_t)useAuthorization);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
+					ESP_LOGI(TAG, "DoSave AuthenticationRequired=%d", useAuthorization);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU useAuthorization parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid useAuthorization: %d \n", useAuthorization);
+			}
+
+		}
+
+		pos = strstr(stringPart, " 510 : ");
+		if(pos != NULL)
+		{
+			float currentInMaximum = 0.0;
+			sscanf(pos+strlen(" 510 : "),"%f", &currentInMaximum);
+
+			if((32.0 >= currentInMaximum) && (currentInMaximum >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_CurrentInMaximum(currentInMaximum);
+					ESP_LOGI(TAG, "DoSave 510 currentInMaximum: %f \n", currentInMaximum);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU currentInMaximum parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid currentInMaximum: %f \n", currentInMaximum);
+			}
+
+		}
+
+		pos = strstr(stringPart, " 511 : ");
+		if(pos != NULL)
+		{
+
+			float currentInMinimum = 0.0;
+			sscanf(pos+strlen(" 511 : "),"%f", &currentInMinimum);
+
+			if((32.0 >= currentInMinimum) && (currentInMinimum >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, currentInMinimum);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_CurrentInMinimum(currentInMinimum);
+					ESP_LOGI(TAG, "DoSave 511 currentInMinimum: %f \n", currentInMinimum);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU currentInMinimum parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid currentInMinimum: %f \n", currentInMinimum);
+			}
+		}
+
+		pos = strstr(stringPart, " 520 : ");
+		if(pos != NULL)
+		{
+			int maxPhases = 0;
+			sscanf(pos+strlen(" 520 : "),"%d", &maxPhases);
+
+			if((3 >= maxPhases) && (maxPhases >= 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(MaxPhases, (uint8_t)maxPhases);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_MaxPhases((uint8_t)maxPhases);
+					ESP_LOGI(TAG, "DoSave 520 maxPhases=%d\n", maxPhases);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU maxPhases parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid maxPhases: %d \n", maxPhases);
+			}
+		}
+
+		pos = strstr(stringPart, " 522 : ");
+		if(pos != NULL)
+		{
+			int defaultOfflinePhase = 0;
+			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
+
+			if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
+					ESP_LOGI(TAG, "DoSave 522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU defaultOfflinePhase parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid defaultOfflinePhase: %d \n", defaultOfflinePhase);
+			}
+		}
+
+		pos = strstr(stringPart, " 523 : ");
+		if(pos != NULL)
+		{
+			float defaultOfflineCurrent = 0.0;
+			sscanf(pos+strlen(" 523 : "),"%f", &defaultOfflineCurrent);
+
+			if((32.0 >= defaultOfflineCurrent) && (defaultOfflineCurrent >= 0.0))
+			{
+				MessageType ret = MCU_SendFloatParameter(ChargerOfflineCurrent, defaultOfflineCurrent);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
+					ESP_LOGI(TAG, "DoSave 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU defaultOfflineCurrent parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+			}
+		}
+
+		pos = strstr(stringPart, " 711 : ");
+		if(pos != NULL)
+		{
+			int isEnabled = 0;
+			sscanf(pos+strlen(" 711 : "),"%d", &isEnabled);
+			ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
+
+			if((isEnabled == 0) || (isEnabled == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, (uint8_t)isEnabled);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_IsEnabled((uint8_t)isEnabled);
+					ESP_LOGI(TAG, "DoSave 711 isEnabled=%d\n", isEnabled);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU isEnabled parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid isEnabled: %d \n", isEnabled);
+			}
+		}
+
+		pos = strstr(stringPart, " 712 : ");
+		if(pos != NULL)
+		{
+			int standalone = 0;
+			sscanf(pos+strlen(" 712 : "),"%d", &standalone);
+			ESP_LOGI(TAG, "712 standalone: %d \n", standalone);
+
+
+			if((standalone == 0) || (standalone == 1))
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+				if(ret == MsgWriteAck)
+				{
+					storage_Set_Standalone((uint8_t)standalone);
+					ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU standalone parameter error");
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Invalid standalone: %d \n", standalone);
+			}
+		}
+
+		pos = strstr(stringPart, " 800 : ");
+		if(pos != NULL)
+		{
+
+			char installationId[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 800 : "),"%36s", installationId);//Read Max 32 characters
+			ESP_LOGI(TAG, "800 installationId: %s \n", installationId);
+			storage_Set_InstallationId(installationId);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 801 : ");
+		if(pos != NULL)
+		{
+
+			char routingId[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 801 : "),"%36s", routingId);//Read Max 32 characters
+			ESP_LOGI(TAG, "801 routingId: %s \n", routingId);
+			storage_Set_RoutingId(routingId);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 802 : ");
+		if(pos != NULL)
+		{
+
+			char chargerName[DEFAULT_STR_SIZE] = {0};
+			sscanf(pos+strlen(" 802 : "),"%36s", chargerName);//Read Max 32 characters
+			ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
+			storage_Set_ChargerName(chargerName);
+			doSave = true;
+			//continue;
+		}
+
+		pos = strstr(stringPart, " 805 : ");
+		if(pos != NULL)
+		{
+			uint32_t diagnosticsMode = 0;
+			sscanf(pos+strlen(" 805 : "),"%d", &diagnosticsMode);
+			ESP_LOGI(TAG, "805 diagnosticsMode: %u \n", diagnosticsMode);
+			storage_Set_DiagnosticsMode(diagnosticsMode);
+			doSave = true;
+			//continue;
+		}
+
+		stringPart = strtok(NULL, separator);
+		if(stringPart != NULL)
+			ESP_LOGI(TAG, "Str: %s \n", stringPart);
+
+	}
+
+
+        	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
+        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
+
+			//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=3
+			//rDATA={"Settings":{"802":"Apollo16","711":"1","120":"1","520":"1"},"$version":3}
+	ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
+
+	if(doSave == true)
+	{
+		esp_err_t err = storage_SaveConfiguration();
+		ESP_LOGI(TAG, "Saved CloudSettings: %s=%d\n", (err == 0 ? "OK" : "FAIL"), err);
+		cloudSettingsAreUpdated = true;
+	}
+	else
+	{
+		ESP_LOGI(TAG, "CloudSettings: Nothing to save");
+	}
+
+}
+
+void ParseLocalSettingsFromCloud(char * message, int message_len)
+{
+	if(message_len < 1)
+		return;
+
 	if ((message[0] != '[') || (message[message_len-1] != ']'))
 		return;
 
@@ -120,6 +453,7 @@ void ParseParameterFromCloud(char * message, int message_len)
 	char * stringPart;
 
 	stringPart = strtok(recvString, separator);
+
 	if(stringPart != NULL)
 	{
 		ESP_LOGI(TAG, "Str: %s \n", stringPart);
@@ -128,36 +462,404 @@ void ParseParameterFromCloud(char * message, int message_len)
 			stringPart = strtok(NULL, separator);
 			ESP_LOGI(TAG, "Str: %s \n", stringPart);
 
-			if(strstr(stringPart, "hmi_brightness") != NULL)
+			if(strstr(stringPart, "standalone_setting") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+
+				uint8_t standalone = 0xff;
+
+				if(strstr(stringPart, "system"))
+					standalone = 0;
+				else if(strstr(stringPart, "standalone"))
+					standalone = 1;
+
+				if((standalone == 0) || (standalone == 1))
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_Standalone(standalone);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone parameter error");
+					}
+				}
+			}
+
+			else if(strstr(stringPart, "standalone_phase") != NULL)
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				uint8_t standalonePhase = atoi(stringPart+1);
+
+				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
+				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_StandalonePhase(standalonePhase);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone Phase parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid standalonePhase: %d \n", standalonePhase);
+				}
+			}
+
+			else if(strstr(stringPart, "max_standalone_current"))
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				float maxStandaloneCurrent = atof(stringPart+1);
+
+				if((32.0 >= maxStandaloneCurrent) && (maxStandaloneCurrent >= 0.0))
+				{
+					MessageType ret = MCU_SendFloatParameter(ParamStandaloneCurrent, maxStandaloneCurrent);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_StandaloneCurrent(maxStandaloneCurrent);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone current parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid standaloneCurrent: %f \n", maxStandaloneCurrent);
+				}
+			}
+
+			else if(strstr(stringPart, "network_type"))
+			{
+				stringPart = strtok(NULL, separator);
+				ESP_LOGI(TAG, "Str: %s \n", stringPart);
+				int stringValueLen = strlen(stringPart);
+				stringPart[stringValueLen-1] = '\0';
+				int networkType = 0;
+				if(strstr(stringPart, "IT_1"))
+					networkType = 1;
+				else if(strstr(stringPart, "IT_3"))
+					networkType = 2;
+				else if(strstr(stringPart, "TN_1"))
+					networkType = 3;
+				else if(strstr(stringPart, "TN_3"))
+					networkType = 4;
+
+				if(networkType != 0)
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_NetworkType(networkType);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU NetworkType parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid NetworkType: %d \n", networkType);
+				}
+			}
+
+			else if(strstr(stringPart, "hmi_brightness"))
 			{
 				stringPart = strtok(NULL, separator);
 				ESP_LOGI(TAG, "Str: %s \n", stringPart);
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
 				volatile float hmiBrightness = atof(stringPart+1);
-				ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
-				//MCU_SendParameter(ParamHmiBrightness, &hmiBrightness, sizeof(float));
-				//MCU_SendParameter(ParamHmiBrightness, hmiBrightness);
+
+				if((1.0 >= hmiBrightness) && (hmiBrightness >= 0.0))
+				{
+					MessageType ret = MCU_SendFloatParameter(ParamHmiBrightness, hmiBrightness);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_HmiBrightness(hmiBrightness);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved HMI_BRIGHTNESS=%f, %s=%d\n", hmiBrightness, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU HmiBrightness parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid HmiBrightness: %f \n", hmiBrightness);
+				}
+
 			}
-			else if(strstr(stringPart, "network_type") != NULL)
+		}
+		else if(strstr(stringPart, "Cable"))
+		{
+			stringPart = strtok(NULL, separator);
+
+			if(strstr(stringPart, "permanent_lock"))
 			{
 				stringPart = strtok(NULL, separator);
 				ESP_LOGI(TAG, "Str: %s \n", stringPart);
 				int stringValueLen = strlen(stringPart);
 				stringPart[stringValueLen-1] = '\0';
-				//volatile float hmiBrightness = atof(stringPart+1);
-				//ESP_LOGI(TAG, "Float: %f \n", hmiBrightness);
+
+				uint8_t lockValue = 0xFF;
+				if(strstr(stringPart,"true") || strstr(stringPart,"True"))
+				{
+					lockValue = 1;
+				}
+				else if(strstr(stringPart,"false") || strstr(stringPart,"False"))
+				{
+					lockValue = 0;
+				}
+
+				if((lockValue == 0) || (lockValue == 1))
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamPermanentCableLock, lockValue);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_PermanentLock(lockValue);
+						esp_err_t err = storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Saved PermanentLock=%d, %s=%d\n", lockValue, (err == 0 ? "OK" : "FAIL"), err);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU ParamPermanentCableLock parameter error");
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Invalid lockValue: %d \n", lockValue);
+				}
 			}
 		}
 	}
-	//while(stringPart != NULL)
-	//{
-		//ESP_LOGI(TAG, "Str: %s \n", stringPart);
-
-		//stringPart = strtok(NULL, separator);
-	//}
 }
 
+
+
+static bool restartCmdReceived = false;
+
+void cloud_listener_check_cmd()
+{
+	if(restartCmdReceived == true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		esp_restart();
+	}
+}
+
+
+int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
+{
+	int responseStatus = 0;
+
+	//Don't spend time in this function, must return from mqtt-event. May need separate process
+	if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
+	{
+		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
+		//Execute delayed in another thread to allow command ack to be sent to cloud
+		restartCmdReceived = true;
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
+	{
+		ESP_LOGI(TAG, "Received \"Restart MCU\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	{
+		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 400;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	{
+		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
+		ESP_LOGI(TAG, "TODO: Implement");
+		responseStatus = 400;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
+	{
+		//rDATA=["16","4"]
+		char commandString[commandEvent->data_len+1];
+		//char commandString[20] = {0};
+		commandString[commandEvent->data_len] = '\0';
+		strncpy(commandString, commandEvent->data, commandEvent->data_len);
+
+		//Replace apostrophe with space for sscanf() to work
+		for (int i = 0; i < commandEvent->data_len; i++)
+		{
+			if(commandString[i] == '"')
+				commandString[i] = ' ';
+		}
+
+		float currentFromCloud = 0;
+		int phaseFromCloud = 0;
+		sscanf(commandString,"%*s%f%*s%d%*s", &currentFromCloud, &phaseFromCloud);
+
+		if((32 >= currentFromCloud) && (currentFromCloud >= 0))
+		{
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentFromCloud);
+			if(ret == MsgWriteAck)
+			{
+				responseStatus = 200;
+				ESP_LOGI(TAG, "MCU Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
+				MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(ret == MsgCommandAck)
+				{
+					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU Start command OK");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU Start command FAILED");
+				}
+			}
+			else
+			{
+				responseStatus = 400;
+				ESP_LOGE(TAG, "MCU Start command FAILED");
+			}
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGE(TAG, "Start command with invalid current");
+		}
+	}
+	//Stop charging command
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/502/"))
+	{
+		//rDATA=null
+		MessageType ret = MCU_SendCommandId(CommandStopCharging);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Stop command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGE(TAG, "MCU Stop command FAILED");
+		}
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/504/"))
+	{
+		//rTOPIC=$iothub/methods/POST/504/?$rid=1
+		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
+
+		if(commandEvent->data_len < 40)
+		{
+
+			if(strncmp(commandEvent->data, "[null]",commandEvent->data_len) == 0)
+			{
+				ESP_LOGE(TAG, "Session cleared");
+				return 200;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Too short SessionId received from cloud");
+				return -1;
+			}
+		}
+
+		if ((commandEvent->data[0] != '[') || (commandEvent->data[commandEvent->data_len-1] != ']'))
+			return -2;
+
+		char recvString[commandEvent->data_len];
+		strncpy(recvString, commandEvent->data+2, commandEvent->data_len-4);
+		recvString[commandEvent->data_len-4] = '\0';
+
+		ESP_LOGI(TAG, "SessionId: %s , len: %d\n", recvString, strlen(recvString));
+		responseStatus = 200;
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
+	{
+		ESP_LOGI(TAG, "Charging granted!");
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
+	{
+		ESP_LOGI(TAG, "Charging denied!");
+		responseStatus = 200;
+	}
+
+	return responseStatus;
+}
+
+
+static void BuildLocalSettingsResponse(char * responseBuffer)
+{
+	//char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+//	char * data = "\"[Device_Parameters]\\nserial = ZAP000014\\nmid = ZAP000014\\n"
+//			"communication_mode = Wifi\\n"
+//			"standalone_setting = standalone\\n"
+//			"max_standalone_current = 16.00\\n"
+//			"network_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
+
+	sprintf(responseBuffer, "\"[Device_Parameters]\\nserial = %s\\nmid = %s\\n", i2cGetLoadedDeviceInfo().serialNumber, i2cGetLoadedDeviceInfo().serialNumber);
+
+	if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+		sprintf(responseBuffer+strlen(responseBuffer), "communication_mode = Wifi\\n");
+	else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+		sprintf(responseBuffer+strlen(responseBuffer), "communication_mode = LTE\\n");
+
+	if(storage_Get_Standalone() == 0)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_setting = system\\n");
+	else if(storage_Get_Standalone() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_setting = standalone\\n");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", storage_Get_StandaloneCurrent());
+
+	if(storage_Get_NetworkType() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_1\\n");
+	else if(storage_Get_NetworkType() == 2)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_3\\n");
+	else if(storage_Get_NetworkType() == 3)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_1\\n");
+	else if(storage_Get_NetworkType() == 4)
+		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_3\\n");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
+	sprintf(responseBuffer+strlen(responseBuffer), "hmi_brightness = %f\\n\n", storage_Get_HmiBrightness());
+
+	sprintf(responseBuffer+strlen(responseBuffer), "[Wifi_Parameters]\\nname =  %s\\npassword = <masked>\\n\n", " ");
+
+	sprintf(responseBuffer+strlen(responseBuffer), "[BLE_Parameters]\\nconnect-pin = %s\\n\n", i2cGetLoadedDeviceInfo().Pin);
+
+	if(storage_Get_PermanentLock() == 1)
+		sprintf(responseBuffer+strlen(responseBuffer), "[Cable]\\npermanent_lock = true\\n\n\"");
+	else
+		sprintf(responseBuffer+strlen(responseBuffer), "[Cable]\\npermanent_lock = false\\n\n\"");
+
+}
 
 
 
@@ -170,12 +872,18 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
-        char devicebound_topic[128];
-        sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
+        //char devicebound_topic[128];
+        //sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
+        //sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 1);
-        esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 1);
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 1);
+        // Cloud-to-device
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
+        //esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
+
+        // Device twin
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
+        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
+
 
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
@@ -210,28 +918,16 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
         printf("rDATA=%.*s\r\n", event->data_len, event->data);
 
+        if(strstr(event->topic, "iothub/twin/PATCH/properties/desired/"))
+		{
+        	ParseCloudSettingsFromCloud(event->data, event->data_len);
+        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
 
-
+		}
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
-
-        	//char devicetwin_topic[64];
-
-			//volatile char ridString[event->topic_len];
-
-			//strncpy(ridString, event->topic, event->topic_len);
-			//volatile char * ridSubString = strstr(ridString, "$rid=");
-			//char *strPart;
-			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
-			//sprintf(devicetwin_topic, "$iothub/twin/res/200/?rid=%d", ridNr);//ridSubString);
-			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
-
-        	//TOPIC=$iothub/twin/res/200/?$rid=
+        	ParseCloudSettingsFromCloud(event->data, event->data_len);
         	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
-
-        	//publish_debug_telemetry_observation_cloud_settings();
-        	//esp_mqtt_client_publish(mqtt_client, event->topic, NULL, 0, 0, 0);
-        	//ESP_LOGD(TAG, "RESPONDED?");
         }
 
         if(strstr(event->topic, "iothub/methods/POST/300/"))
@@ -239,42 +935,111 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         	if(event->data_len > 10)
         	{
-        		ParseParameterFromCloud(event->data, event->data_len);
+        		ParseLocalSettingsFromCloud(event->data, event->data_len);
         	}
 
+        	//Build LocalSettings-response
 			char devicetwin_topic[64];
-
 			volatile char ridString[event->topic_len+1];
-
 			strncpy(ridString, event->topic, event->topic_len);
 			ridString[event->topic_len] = '\0';
 			volatile char * ridSubString = strstr(ridString, "$rid=");
-			//char *strPart;
-			//volatile int rid = (int)strtol(ridSubString+5, &strPart, 10);
+
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
-			char * data = "\"[Device_Parameters]\\nserial = ZAP000005\\nmid = ZAP000005\\ncommunication_mode = Wifi\\nstandalone_setting = standalone\\nmax_standalone_current = 16.00\\nnetwork_type = TN_3\\nstandalone_phase = 4\\nhmi_brightness = 0.4\\n\\n[Wifi_Parameters]\\nname = xxx\\npassword = <masked>\\n\\n[BLE_Parameters]\\nconnect-pin = 0000\\n\\n[Cable]\\npermanent_lock = False\\n\\n\"";
-			//esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
-			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
-//			}
-//        	else
-//        	{
-//        		ParseParameterFromCloud(event->data, event->data_len);
+
+			char responseBuffer[500]={0};//TODO: check length
+			BuildLocalSettingsResponse(responseBuffer);
+			ESP_LOGW(TAG, "responseStringLength: %d, responseBuffer: %s", strlen(responseBuffer), responseBuffer);
+
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
+
+        }
+        //Handle incomming offline AuthenticationList
+        if(strstr(event->topic, "iothub/methods/POST/751/"))
+        {
+        	if(event->data_len > 10)
+        	{
+        		//Remove '\\' escape character due to uint8_t->char conversion
+        		char rfidList[event->data_len];
+        		int nextChar = 0;
+        		for (int i = 0; i < event->data_len; i++)
+        		{
+        			if(event->data[i] != '\\')
+        			{
+        				rfidList[nextChar] = event->data[i];
+        				nextChar++;
+        			}
+        		}
+        		rfidList[nextChar] = '\0';
+
+        		int version = authentication_ParseOfflineList(rfidList, strlen(rfidList));
+
+        		if(version > 0)
+        		{
+        			int ret = publish_uint32_observation(AuthenticationListVersion, version);
+        			ESP_LOGI(TAG, "***** AuthenticationListVersion ret: %d *****", ret);
+        		}
+
+//        		char * messageZer = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}";
 //
-//        	}
+//        		//Add 6
+//        		char * messageOne = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}";
+//        		//Remove 1 and 6  - 4 middle left
+//        		char * messageTwo = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":1,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":1,\"ExpiryDate\":null}]}";
+//
+//        		//Add 1 a bit different (add) and tag 6 back(add), tag 5 not in, multiple duplicate - 6 in total
+//        		char * messageThr = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-ffffffff-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}";
+//
+//        		ESP_LOGI(TAG, "***** 0 *****");
+//        		ParseOfflineAuthenticationList(messageZer, strlen(messageOne));
+//
+//        		ESP_LOGI(TAG, "***** 1 *****");
+//        		ParseOfflineAuthenticationList(messageOne, strlen(messageOne));
+//
+//        		ESP_LOGI(TAG, "***** 2 *****");
+//        		ParseOfflineAuthenticationList(messageTwo, strlen(messageTwo));
+//
+//        		ESP_LOGI(TAG, "***** 3 *****");
+//        		ParseOfflineAuthenticationList(messageThr, strlen(messageThr));
 
-            //messageId:2458,topic:$iothub/methods/res/200/?$rid=e)
-        	//memcpy(event_topic_hold, event->topic, 128);
-        	//strcpy(event_topic_hold,"$iothub/methods/res/?$rid=1");
-        	//doNewAck = true;
-        	//publish_iothub_ack("", event->topic);
+        		storage_GetStats();
 
-        	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
-        	//publish_debug_telemetry_observation_local_settings();
+        	}
+
+        	//Build LocalSettings-response
+			char devicetwin_topic[64];
+			volatile char ridString[event->topic_len+1];
+			strncpy(ridString, event->topic, event->topic_len);
+			ridString[event->topic_len] = '\0';
+			volatile char * ridSubString = strstr(ridString, "$rid=");
+
+
+			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
+
+			char responseBuffer[500]={0};//TODO: check length
+			BuildLocalSettingsResponse(responseBuffer);
+			ESP_LOGW(TAG, "responseStringLength: %d, responseBuffer: %s", strlen(responseBuffer), responseBuffer);
+
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
         }
 
-
-        if(strstr(event->topic, "iothub/methods/POST/102/"))
+        //Handle incoming commands
+        else if(strstr(event->topic, "iothub/methods/POST/"))
         {
+        	int responseStatus = ParseCommandFromCloud(event);
+
+    		char devicetwin_topic[64];
+
+    		volatile char ridString[event->topic_len+1];
+
+    		strncpy(ridString, event->topic, event->topic_len);
+    		ridString[event->topic_len] = '\0';
+    		volatile char * ridSubString = strstr(ridString, "$rid=");
+
+    		sprintf(devicetwin_topic, "$iothub/methods/res/%d/?%s", responseStatus, ridSubString);//200 = OK, 400 = FAIL
+
+    		char * data = NULL;
+    		esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
 
         }
 

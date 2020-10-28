@@ -18,13 +18,14 @@ static int handle_cable_lock(const cJSON *payload){
 }
 
 static void route_method_call(const char *method_name, const cJSON *parsed_payload){
-    if(strcmp(method_name, "300")==0){
-        handle_cable_lock(parsed_payload);
-    }else if(strcmp(method_name, "200")==0){
-        on_ota_command();
-    }else{
-        ESP_LOGW(TAG, "method not implemented");
-    }
+
+	if(strcmp(method_name, "300")==0){
+		handle_cable_lock(parsed_payload);
+	}else if(strcmp(method_name, "200")==0){
+		on_ota_command();
+	}else{
+		ESP_LOGW(TAG, "method not implemented");
+	}
 }
 
 
@@ -36,8 +37,8 @@ int on_method_call(char* topic, char* payload){
     char reply_topic[256];
     strncpy(mutable_topic, topic, 256);
     const char delimiter[] = "/";
-    char* method_name;
-    char* result_key;
+    char* method_name = '\0';
+    char* result_key = '\0';
 
     char* token = strtok(mutable_topic, delimiter);
 
@@ -73,9 +74,12 @@ int on_method_call(char* topic, char* payload){
         ESP_LOGW(TAG, "no payload for method call");
     }
 
-    snprintf(reply_topic, 256, "$iothub/methods/res/200/%s", result_key); 
-    ESP_LOGI(TAG, "replying on %s", reply_topic);
-    publish_to_iothub(NULL, reply_topic);
+    if(result_key[0] != '\0')
+    {
+		snprintf(reply_topic, 256, "$iothub/methods/res/200/%s", result_key);
+		ESP_LOGI(TAG, "replying on %s", reply_topic);
+		publish_to_iothub(NULL, reply_topic);
+    }
 
     return 0;
 }

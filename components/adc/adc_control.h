@@ -10,6 +10,7 @@ float hwIdVoltageLevel;
 float GetHardwareId();
 float GetPowerMeas();
 void adc_init();
+int adcGetStackWatermark();
 
 
 

@@ -15,7 +15,12 @@
 #include "driver/ledc.h"
 #include <string.h>
 #include "i2cDevices.h"
+#include "../authentication/authentication.h"
+#include "../../main/storage.h"
+#include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
+#include "../zaptec_protocol/include/protocol_task.h"
 
+static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
 
 static float temperature = 0.0;
@@ -185,19 +190,61 @@ static void i2cDevice_task(void *pvParameters)
 
 	audioInit();
 
-	NFCInit();
+	bool NFCInitialized = false;
+
+
 
 	int i2cCount = 0;
 	int nfcCardDetected = 0;
 
+	uint8_t isAuthenticated = 0;
+
 	while (true)
 	{
-		nfcCardDetected = NFCReadTag();
-		if(nfcCardDetected > 0)
-			audio_play_nfc_card_accepted_debug();
+		storage_Set_AuthenticationRequired(1);
+
+		//Without authentication, don't initalize the NFC
+		//If active at boot, or activated later, initialize the NFC antenna once
+		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == false))
+		{
+			NFCInit();
+			NFCInitialized = true;
+		}
+
+		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == true))
+		{
+			nfcCardDetected = NFCReadTag();
+
+			if(nfcCardDetected > 0)
+			{
+				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
+
+				if(isAuthenticated == 1)
+				{
+					audio_play_nfc_card_accepted_debug();
+					ESP_LOGI(TAG, "EPS32: NFC ACCEPTED!");
+					MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
+					}
+				}
+				else
+				{
+
+					audio_play_nfc_card_denied();
+					ESP_LOGE(TAG, "ESP32: NFC DENIED!");
+					MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU: NFC DENIED!");
+					}
+				}
+			}
+		}
 
 		i2cCount++;
-		if(i2cCount >= 2)
+		if(i2cCount >= 6)
 		{
 			i2cCount = 0;
 
@@ -205,11 +252,11 @@ static void i2cDevice_task(void *pvParameters)
 			humidity = SHT30ReadHumidity();
 
 			//Debug
-			//struct tm readTime = {0};
-			//readTime = RTCReadTime();
-			//char timebuf[30];
-			//strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-			//ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+			struct tm readTime = {0};
+			readTime = RTCReadTime();
+			char timebuf[30];
+			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
+			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
 		}
 
 		//Read from NFC at 2Hz for user to not notice delay
@@ -217,11 +264,20 @@ static void i2cDevice_task(void *pvParameters)
 	}
 }
 
+static TaskHandle_t taskI2CHandle = NULL;
+int I2CGetStackWatermark()
+{
+	if(taskI2CHandle != NULL)
+		return uxTaskGetStackHighWaterMark(taskI2CHandle);
+	else
+		return -1;
+}
+
 
 void I2CDevicesStartTask()
 {
 	static uint8_t ucParameterToPass = {0};
-	TaskHandle_t taskHandle = NULL;
-	xTaskCreate( i2cDevice_task, "ocppTask", 4096, &ucParameterToPass, 5, &taskHandle );
+
+	xTaskCreate( i2cDevice_task, "ocppTask", 3072, &ucParameterToPass, 5, &taskI2CHandle );
 
 }

@@ -12,6 +12,7 @@
 #include "../components/ntp/zntp.h"
 #include "i2cDevices.h"
 #include "../components/cellular_modem/include/ppp_task.h"
+#include "sessionHandler.h"
 
 static const char *TAG = "CONNECTIVITY: ";
 
@@ -30,7 +31,7 @@ bool connectivity_GetSNTPInitialized()
 	return sntpInitialized;
 }
 
-void connectivityActivateInterface(enum ConnectionInterface selectedInterface)
+void connectivity_ActivateInterface(enum ConnectionInterface selectedInterface)
 {
 	staticNewInterface = selectedInterface;
 }
@@ -53,8 +54,8 @@ static void connectivity_task()
 		staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
-	else if(switchState == eConfig_4G_bridge)
-		staticNewInterface = eCONNECTION_4G;
+	else if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
+		staticNewInterface = eCONNECTION_LTE;
 
 	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
 
@@ -87,9 +88,9 @@ static void connectivity_task()
 
 				vTaskDelay(pdMS_TO_TICKS(3000));
 			}
-			else if(activeInterface == eCONNECTION_4G)
+			else if(activeInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG, "Deinit 4G interface");
+				ESP_LOGI(TAG, "Deinit LTE interface");
 			}
 		}
 
@@ -107,9 +108,9 @@ static void connectivity_task()
 				network_connect_wifi();
 				interfaceChange = false;
 			}
-			else if(localNewInterface == eCONNECTION_4G)
+			else if(localNewInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG, "4G interface activating");
+				ESP_LOGI(TAG, "LTE interface activating");
 				ppp_task_start();
 				interfaceChange = false;
 			}
@@ -158,6 +159,14 @@ static void connectivity_task()
 		}
 
 
+		cloud_listener_check_cmd();
+
+
+		if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
+		{
+			SetDataInterval(10);
+		}
+
 		//ESP_LOGI(TAG, "**** Connectivity ****");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
@@ -165,10 +174,19 @@ static void connectivity_task()
 }
 
 
+static TaskHandle_t taskConnHandle = NULL;
+int connectivity_GetStackWatermark()
+{
+	if(taskConnHandle != NULL)
+		return uxTaskGetStackHighWaterMark(taskConnHandle);
+	else
+		return -1;
+}
+
 void connectivity_init(int inputSwitchState)
 {
 	switchState = inputSwitchState;
 
-	xTaskCreate(connectivity_task, "connectivity_task", 4096, NULL, 2, NULL);
+	xTaskCreate(connectivity_task, "connectivity_task", 3076, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

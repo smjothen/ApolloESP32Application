@@ -14,45 +14,67 @@ extern "C" {
 void storage_Init();
 void storage_Init_Configuration();
 
+//Set Cloud settings
 void storage_Set_AuthenticationRequired(uint8_t newValue);
+void storage_Set_CurrentInMaximum(float newValue);
+void storage_Set_CurrentInMinimum(float newValue);
+void storage_Set_MaxPhases(uint8_t newValue);
+void storage_Set_DefaultOfflinePhase(uint8_t newValue);
+void storage_Set_DefaultOfflineCurrent(float newValue);
+void storage_Set_IsEnabled(uint8_t newValue);
+void storage_Set_InstallationId(char * newValue);
+void storage_Set_RoutingId(char * newValue);
+void storage_Set_ChargerName(char * newValue);
+void storage_Set_DiagnosticsMode(uint32_t newValue);
 void storage_Set_TransmitInterval(uint32_t newValue);
+void storage_Set_TransmitChangeLevel(float newValue);
 
-void storage_Set_HmiBrightness(float newValue);
+//Set Local settings
 void storage_Set_CommunicationMode(uint8_t newValue);
+void storage_Set_HmiBrightness(float newValue);
 void storage_Set_PermanentLock(uint8_t newValue);
-
 void storage_Set_Standalone(uint8_t newValue);
 void storage_Set_StandalonePhase(uint8_t newValue);
 void storage_Set_StandaloneCurrent(float newValue);
 void storage_Set_MaxInstallationCurrentConfig(float newValue);
-
-void storage_Set_MaxPhases(uint8_t newValue);
 void storage_Set_PhaseRotation(uint8_t newValue);
+void storage_Set_NetworkType(uint8_t newValue);
 
 
+//Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
+float storage_Get_CurrentInMaximum();
+float storage_Get_CurrentInMinimum();
+uint8_t storage_Get_MaxPhases();
+uint8_t storage_Get_DefaultOfflinePhase();
+float storage_Get_DefaultOfflineCurrent();
+uint8_t storage_Get_IsEnabled();
+char * storage_Get_InstallationId();
+char * storage_Get_RoutingId();
+char * storage_Get_ChargerName();
+uint32_t storage_Get_DiagnosticsMode();
 uint32_t storage_Get_TransmitInterval();
 float storage_Get_TransmitChangeLevel();
 
-float storage_Get_HmiBrightness();
+
+//Get Local settings
 uint8_t storage_Get_CommunicationMode();
+float storage_Get_HmiBrightness();
 uint8_t storage_Get_PermanentLock();
-
-
 uint8_t storage_Get_Standalone();
 uint8_t storage_Get_StandalonePhase();
 float storage_Get_StandaloneCurrent();
 float storage_Get_MaxInstallationCurrentConfig();
-
-uint8_t storage_Get_MaxPhases();
 uint8_t storage_Get_PhaseRotation();
+uint8_t storage_Get_NetworkType();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();
 
-
-esp_err_t storage_SaveFactoryTestState(uint8_t testOk);
-esp_err_t storage_readFactoryTestState(uint8_t *pTestOk);
+esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens);
+esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match);
+esp_err_t storage_printRFIDTagsOnFile();
+esp_err_t storage_clearAllRFIDTagsOnFile();
 
 void storage_SaveWifiParameters(char *SSID, char *PSK);
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK);
@@ -64,6 +86,7 @@ esp_err_t storage_clearSessionResetInfo();
 esp_err_t storage_clearWifiParameters();
 esp_err_t storage_clearRegistrationParameters();
 
+void storage_GetStats();
 
 #ifdef __cplusplus
 }

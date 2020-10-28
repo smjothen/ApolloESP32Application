@@ -22,7 +22,7 @@
 static const char *TAG = "BLE SERVICE";
 
 const uint16_t WIFI_SERV_uuid 				        = 0x00FF;
-const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
+//const uint16_t WIFI_SERV_uuid2 				        = 0x00FE;
 
 static bool wasValid = false;
 static int nrOfWifiSegments = 0;
@@ -35,6 +35,7 @@ uint16_t maxAp = 10;
 wifi_ap_record_t ap_records[10];
 
 
+//#define USE_PIN
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -157,7 +158,7 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
     //[WIFI_PSK_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(WIFI_SERV_CHAR_config_ccc), (uint8_t *)WIFI_SERV_CHAR_config_ccc}},
 
 	[CHARGER_DEVICE_MID_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
-	[CHARGER_DEVICE_MID_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	[CHARGER_DEVICE_MID_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &DeviceMID_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},//TODO remove write?
 	[CHARGER_DEVICE_MID_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 	//[CHARGER_DEVICE_MID_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(CHARGER_SERV_CHAR_config_ccc), (uint8_t *)CHARGER_SERV_CHAR_config_ccc}},
 
@@ -291,12 +292,15 @@ static char nrTostr[8];
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
+
+#ifdef USE_PIN
 	//Check authentication before allowing reads
-//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_DEVICE_MID_UUID))
-//	{
-//		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
-//		return;
-//	}
+	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_DEVICE_MID_UUID))
+	{
+		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
+		return;
+	}
+#endif
 
 	char *jsonString;
 	//char jsonString[] = "{\"wifi\":{\"ip\":\"10.0.0.1\",\"link\":-54},\"online\":true}";//"{'{', '"', 'o', 'n', 'l', 'i', 'n', 'e', '"', '=', 't', 'r', 'u', 'e', '}', '\0'};
@@ -515,7 +519,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
 		}
 
-		//TODO add for 4G
+		//TODO add for LTE
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -580,11 +584,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			rsp->attr_value.len = 4;
 			ESP_LOGI(TAG, "Read Wifi");
 		}
-		else if (storage_Get_CommunicationMode() == eCONNECTION_4G)
+		else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
 		{
-			memcpy(COMMUNICATION_MODE_val, "4G",2);
+			memcpy(COMMUNICATION_MODE_val, "LTE",3);//TODO: Change to LTE?
 			memcpy(rsp->attr_value.value, COMMUNICATION_MODE_val, sizeof(COMMUNICATION_MODE_val));
-			rsp->attr_value.len = 2;
+			rsp->attr_value.len = 3;
 			ESP_LOGI(TAG, "Read 4G");
 		}
 		else
@@ -809,12 +813,15 @@ static bool saveConfiguration = false;
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
+
+#ifdef USE_PIN
 	//Check authentication before allowing writes
-//	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_AUTH_UUID))
-//	{
-//		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
-//		return;
-//	}
+	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_AUTH_UUID))
+	{
+		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
+		return;
+	}
+#endif
 
     switch( attrIndex )
     {
@@ -898,10 +905,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			ESP_LOGI(TAG, "Set Wifi");
 
 		}
-		else if(strncmp("4G", (char*)COMMUNICATION_MODE_val, 2) == 0)
+		else if(strncmp("LTE", (char*)COMMUNICATION_MODE_val, 3) == 0)
 		{
-			interface = eCONNECTION_4G;
-			ESP_LOGI(TAG, "Set 4G");
+			interface = eCONNECTION_LTE;
+			ESP_LOGI(TAG, "Set LTE");
 		}
 		else
 		{
@@ -910,7 +917,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		}
 
 		storage_Set_CommunicationMode(interface);
-		connectivityActivateInterface(interface);
+		connectivity_ActivateInterface(interface);
 
 		saveConfiguration = true;
 
@@ -977,18 +984,32 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	ESP_LOGI(TAG, "Permanent lock written %02x", param->write.value[0]);
 
+    	uint8_t lockValue = 0xFF;
+
     	if(param->write.value[0] == '0')
-    	{
-    		storage_Set_PermanentLock(0);
-    		ESP_LOGI(TAG, "Set Permanent Lock: 0");
-    		saveConfiguration = true;
-    	}
+    		lockValue = 0;
     	else if (param->write.value[0] == '1')
-    	{
-    		storage_Set_PermanentLock(1);
-    		ESP_LOGI(TAG, "Set Permanent Lock: 1");
-    		saveConfiguration = true;
-    	}
+    		lockValue = 1;
+
+    	if((lockValue == 0) || (lockValue == 1))
+		{
+			MessageType ret = MCU_SendUint8Parameter(ParamPermanentCableLock, lockValue);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_PermanentLock(lockValue);
+
+				ESP_LOGI(TAG, "BLE ToBeSaved PermanentLock=%d", lockValue);
+				saveConfiguration = true;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "BLE->MCU ParamPermanentCableLock parameter error");
+			}
+		}
+		else
+		{
+			ESP_LOGI(TAG, "BLE Invalid lockValue: %d \n", lockValue);
+		}
 
    		break;
 
@@ -1059,7 +1080,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			}
 		}
 
+	#ifndef USE_PIN
 		AUTH_SERV_CHAR_val[0] = '1'; //TODO remove to force PIN
+	#endif
 		ESP_LOGI(TAG, "Auth value %s", AUTH_SERV_CHAR_val);
 
 		break;

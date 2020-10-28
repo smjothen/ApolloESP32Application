@@ -201,14 +201,16 @@ static void sessionHandler_task()
 				dataInterval = 60;
 			else
 				dataInterval = 600;
-
-			//Test-mode overrides default
-			if(dataTestInterval != 0)
-				dataInterval = dataTestInterval;
+				//dataInterval = 3600;
 
 			signalInterval = 300;
+			//signalInterval = 3600;
 		}
 
+
+		//Test-mode overrides default
+		if(dataTestInterval != 0)
+			dataInterval = dataTestInterval;
 
 		if(dataCounter >= dataInterval)
 		{
@@ -241,7 +243,7 @@ static void sessionHandler_task()
 			}
 			else
 			{
-				ESP_LOGE(TAG, "No network DISCONNECTED");
+				ESP_LOGE(TAG, "MQTT not connected");
 			}
 
 			dataCounter = 0;
@@ -264,7 +266,8 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		if(pulseCounter >= 60)
+		//if(pulseCounter >= 60)
+		if(pulseCounter >= 90)
 		{
 			if (isMqttConnected() == true)
 			{
@@ -299,12 +302,36 @@ static void sessionHandler_task()
 			statusCounter = 0;
 		}
 
+
+
+		if(CloudSettingsAreUpdated() == true)
+		{
+			int published = publish_debug_telemetry_observation_cloud_settings();
+			if (published == 0)
+			{
+				ClearCloudSettingsAreUpdated();
+				ESP_LOGW(TAG,"Cloud settings flag cleared");
+			}
+			else
+			{
+				ESP_LOGW(TAG,"Cloud settings flag NOT cleared");
+			}
+		}
+
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
 
+static TaskHandle_t taskSessionHandle = NULL;
+int sessionHandler_GetStackWatermark()
+{
+	if(taskSessionHandle != NULL)
+		return uxTaskGetStackHighWaterMark(taskSessionHandle);
+	else
+		return -1;
+}
 
 void sessionHandler_init(){
 
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 4096, NULL, 3, NULL);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 4096, NULL, 3, &taskSessionHandle);
 }

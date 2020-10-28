@@ -2,6 +2,7 @@
 #define PPP_TASK_H
 #include "freertos/FreeRTOS.h"
 
+int pppGetStackWatermark();
 void ppp_task_start(void);
 void hard_reset_cellular(void);
 

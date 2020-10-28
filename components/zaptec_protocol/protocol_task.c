@@ -14,8 +14,10 @@
 #define TAG __FILE__
 
 #define RX_TIMEOUT  (3000 / (portTICK_PERIOD_MS))
+#define SEMAPHORE_TIMEOUT  (10000 / (portTICK_PERIOD_MS))
 
-void uartCommsTask(void *pvParameters);
+
+void uartSendTask(void *pvParameters);
 void uartRecvTask(void *pvParameters);
 void configureUart();
 void onCharRx(char c);
@@ -27,32 +29,38 @@ uint32_t mcuCommunicationError = 0;
 uint8_t receivedSwitchState = 0;
 uint8_t previousSwitchState = 0xFF;
 
+static TaskHandle_t uartRecvTaskHandle = NULL;
+static TaskHandle_t sendTaskHandle = NULL;
+
 const int uart_num = UART_NUM_2;
 
 void zaptecProtocolStart(){
     ESP_LOGI(TAG, "starting protocol task");
     static uint8_t ucParameterToPass = {0};
-    TaskHandle_t uartRecvTaskHandle = NULL;
-    int stack_size = 8192;//4096;
+    int stack_size = 3072;//8192;//4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
     configASSERT(uartRecvTaskHandle);
 }
 
 void dspic_periodic_poll_start(){
     static uint8_t ucParameterToPass = {0};
-    TaskHandle_t taskHandle = NULL;
-    int stack_size = 8192;//4096;
-    xTaskCreate( uartCommsTask, "UARTCommsTask", stack_size, &ucParameterToPass, 5, &taskHandle );
-    configASSERT( taskHandle );
+    int stack_size = 4096; //8192;
+    xTaskCreate( uartSendTask, "UARTSendTask", stack_size, &ucParameterToPass, 5, &sendTaskHandle );
+    configASSERT( sendTaskHandle );
 }
 
 ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 
-    if( xSemaphoreTake( uart_write_lock, RX_TIMEOUT ) == pdTRUE )
+    if( xSemaphoreTake( uart_write_lock, SEMAPHORE_TIMEOUT ) == pdTRUE )
     {
     
     	uart_flush(uart_num);
         xQueueReset(uart_recv_message_queue);
+
+//	        printf("tx: ");
+//	        for (int i = 0; i < length; i++)
+//	        	printf("%X ", encodedTxBuf[i]);
+//	        printf("\n");
 
         int sent_bytes = uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 		if(sent_bytes<length){
@@ -181,9 +189,24 @@ float GetUint32_t(uint8_t * input)
 	return tmp;
 }
 
+int MCURxGetStackWatermark()
+{
+	if(uartRecvTaskHandle != NULL)
+		return uxTaskGetStackHighWaterMark(uartRecvTaskHandle);
+	else
+		return -1;
+}
+
+int MCUTxGetStackWatermark()
+{
+	if(sendTaskHandle != NULL)
+		return uxTaskGetStackHighWaterMark(sendTaskHandle);
+	else
+		return -1;
+}
 
 
-void uartCommsTask(void *pvParameters){
+void uartSendTask(void *pvParameters){
     ESP_LOGI(TAG, "configuring uart");
 
     //Provide application time to initialize before sending to MCU
@@ -193,6 +216,9 @@ void uartCommsTask(void *pvParameters){
     while (true)
     {
     	//count++;
+
+    	//vTaskDelay(1000 / portTICK_PERIOD_MS);
+    	//continue;
 
         ZapMessage txMsg;
 
@@ -295,6 +321,7 @@ void uartCommsTask(void *pvParameters){
         //ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
         
         ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+        freeZapMessageReply();
         //printf("frame type: %d \n\r", rxMsg.type);
         //printf("frame identifier: %d \n\r", rxMsg.identifier);
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
@@ -368,7 +395,7 @@ void uartCommsTask(void *pvParameters){
         	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
         	printf("frame error code: %d\n\r", error_code);
         }*/
-        freeZapMessageReply();
+
 
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -382,29 +409,87 @@ int MCU_GetSwitchState()
 	return receivedSwitchState;
 }
 
-//void MCU_SendParameter(uint16_t paramIdentifier, uint8_t * data, uint16_t length)
-void MCU_SendParameter(uint16_t paramIdentifier, float data)
+MessageType MCU_SendCommandId(uint16_t paramIdentifier)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgCommand;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
+
+
+MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)
 {
 	ZapMessage txMsg;
 	txMsg.type = MsgWrite;
 	txMsg.identifier = paramIdentifier;
-	//txMsg.data = data;
-	//txMsg.length = length;
 
 	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
 	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneByte(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
 
-	uint16_t encoded_length = ZEncodeMessageHeaderAndOneFloat(&txMsg, data, txBuf, encodedTxBuf);
-
-//	uint encoded_length = ZEncodeMessageHeaderOnly(
-//			   &txMsg, txBuf, encodedTxBuf
-//		   );
-
-   ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-   runRequest(encodedTxBuf, encoded_length);
-   freeZapMessageReply();
-
+	return rxMsg.type;
 }
+
+
+MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneUInt16(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
+
+
+MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneUInt32(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
+
+
+
+MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneFloat(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
+
+
 
 float MCU_GetEmeterTemperature(uint8_t phase)
 {

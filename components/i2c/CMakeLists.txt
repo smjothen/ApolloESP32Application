@@ -1,4 +1,5 @@
-set(COMPONENT_REQUIRES "audioBuzzer")
+set(COMPONENT_REQUIRES "audioBuzzer"
+					   "authentication")
 
 set(COMPONENT_SRCS  "i2cDevices.c"
 					"i2cInterface.c"

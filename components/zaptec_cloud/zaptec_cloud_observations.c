@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include "stdio.h"
 #include "esp_system.h"
+#include "../../main/storage.h"
 
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
@@ -130,25 +131,34 @@ int publish_debug_telemetry_observation_power(
 }
 
 
-int publish_debug_telemetry_observation_cloud_settings(
-){
+int publish_debug_telemetry_observation_cloud_settings()
+{
     ESP_LOGD(TAG, "sending cloud settings");
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
-    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, storage_Get_AuthenticationRequired()));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentInMaximum, storage_Get_CurrentInMaximum()));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentInMinimum, storage_Get_CurrentInMinimum()));
 
-    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, (uint32_t)storage_Get_DefaultOfflinePhase()));
+    add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
+    add_observation_to_collection(observations, create_observation(InstallationId, storage_Get_InstallationId()));
+    add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
+    add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamFlags, storage_Get_DiagnosticsMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
     return publish_json(observations);
 }
 
 
-int publish_debug_telemetry_observation_local_settings(
-){
+int publish_debug_telemetry_observation_local_settings()
+{
     ESP_LOGD(TAG, "sending local settings");
 
     cJSON *observations = create_observation_collection();
@@ -266,6 +276,14 @@ int publish_debug_telemetry_observation_all(
     return ret;//publish_json(observations);
 }
 
+
+int publish_uint32_observation(int observationId, uint32_t value){
+    return publish_json(create_uint32_t_observation(observationId, value));
+}
+
+int publish_double_observation(int observationId, double value){
+    return publish_json(create_double_observation(observationId, value));
+}
 
 int publish_diagnostics_observation(char *message){
     return publish_json(create_observation(808, message));

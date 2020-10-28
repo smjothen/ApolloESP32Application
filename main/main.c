@@ -32,7 +32,7 @@ static const char *TAG = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
-char softwareVersion[] = "0.0.0.2";
+char softwareVersion[] = "2.8.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -79,8 +79,8 @@ void app_main(void)
 
     zaptecProtocolStart();
 
-    start_ota_task();
-	validate_booted_image();
+    //start_ota_task();
+	//validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start(); 
 
@@ -90,7 +90,7 @@ void app_main(void)
 #define DEV
 #ifdef DEV
     int switchState = MCU_GetSwitchState();
-	switchState = eConfig_Wifi_Zaptec;
+	//switchState = eConfig_Wifi_Zaptec;
 
     while(switchState == 0)
     {
@@ -296,8 +296,14 @@ void app_main(void)
     		secleft = secleft % 60;
 
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+    		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
+    		ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
+
+    		ESP_LOGW(TAG, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+    		//ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
     	}
 
     	//Until BLE driver error is resolved, disable ble after 1 hour.

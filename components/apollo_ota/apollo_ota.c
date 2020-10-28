@@ -49,20 +49,26 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 static void ota_task(void *pvParameters){
 
-    char image_location[256] = {0};
+    char image_location[1024] = {0};
     esp_http_client_config_t config = {
         .url = image_location,
         .cert_pem = (char *)server_cert_pem_start,
         // .use_global_ca_store = true,
         .event_handler = _http_event_handler,
+		.timeout_ms = 20000,
+		//.buffer_size = 1536,
     };
 
     // config.skip_cert_common_name_check = true;
 
     while (true)
     {
+    	size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
+
         ESP_LOGI(TAG, "waiting for ota event");
-        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
 
         get_image_location(image_location,sizeof(image_location));
@@ -70,14 +76,24 @@ static void ota_task(void *pvParameters){
         // strcpy( image_location,"https://api.zaptec.com/api/firmware/ZAP000001/current");
         ESP_LOGI(TAG, "image location to use: %s", image_location);
 
+
+    	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+		ESP_LOGE(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
+
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK) {
+        	ESP_LOGE(TAG, "******* Firmware upgrade OK ************");
             esp_restart();
         } else {
-            ESP_LOGE(TAG, "Firmware upgrade failed");
+            ESP_LOGE(TAG, "******* Firmware upgrade FAILED ********** ");
         }
 
-        vTaskDelay(3000 / portTICK_RATE_MS);
+    	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+		ESP_LOGE(TAG, "MEM3: DRAM: %i Lo: %i", free_dram, low_dram);
+
+        vTaskDelay(30000 / portTICK_RATE_MS);
     }
 }
 
@@ -138,7 +154,7 @@ void start_ota_task(void){
     int stack_size = 4096*2;
     xTaskCreate( 
         ota_task, "otatask", stack_size, 
-        &ucParameterToPass, 5, &taskHandle
+        &ucParameterToPass, 7, &taskHandle
     );
     ESP_LOGD(TAG, "...");
 }

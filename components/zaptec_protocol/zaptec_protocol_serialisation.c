@@ -298,7 +298,7 @@ uint16_t ZEncodeMessageHeaderOnly(ZapMessage* msg, uint8_t* txBuf, uint8_t* enco
 {
     uint8_t* ptr = txBuf;
 
-    msg->length = 4;
+    msg->length = 0;
     ptr += ZEncodeMessageHeader(msg, txBuf);
     //ptr += ZEncodeFloat(val, ptr);
     return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);

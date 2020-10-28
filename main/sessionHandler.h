@@ -6,9 +6,9 @@ extern "C" {
 #endif
 
 
-uint32_t GetTemplate();
 void sessionHandler_init();
 void SetDataInterval(int newDataInterval);
+int sessionHandler_GetStackWatermark();
 
 #ifdef __cplusplus
 }

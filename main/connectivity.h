@@ -9,8 +9,8 @@ extern "C" {
 
 bool connectivity_GetSNTPInitialized();
 void connectivity_init(int switchState);
-void connectivityActivateInterface(enum ConnectionInterface selectedInterface);
-
+void connectivity_ActivateInterface(enum ConnectionInterface selectedInterface);
+int connectivity_GetStackWatermark();
 
 #ifdef __cplusplus
 }
