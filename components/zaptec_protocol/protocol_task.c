@@ -303,7 +303,7 @@ void uartSendTask(void *pvParameters){
 
         count++;
 
-        if(count >= 19)
+        if(count >= 20)
         {
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
