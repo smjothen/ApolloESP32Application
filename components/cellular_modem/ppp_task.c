@@ -144,7 +144,7 @@ int send_line(char * line){
     return 0;
 }
 
-static void configure_uart(void){
+void configure_uart(void){
 
     ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
     line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );
@@ -511,7 +511,7 @@ void ppp_task_start(void){
     ESP_LOGI(TAG, "Configuring BG9x");
     xEventGroupSetBits(event_group, UART_TO_LINES);
     hard_reset_cellular();
-    configure_uart();
+    //configure_uart();
     ESP_LOGI(TAG, "uart configured");
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
     //xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 7, eventTaskHandle);

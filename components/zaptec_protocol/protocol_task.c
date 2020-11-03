@@ -11,10 +11,11 @@
 #include "zaptec_protocol_serialisation.h"
 #include "mcu_communication.h"
 
-#define TAG __FILE__
+//#define TAG MCU
+const char *TAG_MCU = "MCU     ";
 
-#define RX_TIMEOUT  (3000 / (portTICK_PERIOD_MS))
-#define SEMAPHORE_TIMEOUT  (10000 / (portTICK_PERIOD_MS))
+#define RX_TIMEOUT  (2000 / (portTICK_PERIOD_MS))
+#define SEMAPHORE_TIMEOUT  (20000 / (portTICK_PERIOD_MS))
 
 
 void uartSendTask(void *pvParameters);
@@ -35,7 +36,7 @@ static TaskHandle_t sendTaskHandle = NULL;
 const int uart_num = UART_NUM_2;
 
 void zaptecProtocolStart(){
-    ESP_LOGI(TAG, "starting protocol task");
+    ESP_LOGI(TAG_MCU, "starting protocol task");
     static uint8_t ucParameterToPass = {0};
     int stack_size = 3072;//8192;//4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
@@ -49,22 +50,48 @@ void dspic_periodic_poll_start(){
     configASSERT( sendTaskHandle );
 }
 
+
+void protocol_task_ctrl_debug(int state)
+{
+	if(state == 0)
+		esp_log_level_set(TAG_MCU, ESP_LOG_NONE);
+	else
+		esp_log_level_set(TAG_MCU, ESP_LOG_INFO);
+}
+
+
+//For testing: insert junk data to test robustness
+//int junkTrig = 0;
+//uint8_t junkCount = 0;
+//char junkVal[2] = {0};
+
 ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 
     if( xSemaphoreTake( uart_write_lock, SEMAPHORE_TIMEOUT ) == pdTRUE )
     {
-    
     	uart_flush(uart_num);
         xQueueReset(uart_recv_message_queue);
 
-//	        printf("tx: ");
-//	        for (int i = 0; i < length; i++)
-//	        	printf("%X ", encodedTxBuf[i]);
-//	        printf("\n");
+//		printf("tx: ");
+//		for (int i = 0; i < length; i++)
+//			printf("%X ", encodedTxBuf[i]);
+//		printf("\n");
 
-        int sent_bytes = uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
+	    int sent_bytes = 0;
+
+	    //For testing: insert junk data to test robustness
+//	    junkTrig++;
+//	    if(junkTrig % 20 == 0)
+//	    {
+//	    	junkVal[0] = junkCount;
+//	    	sent_bytes = uart_write_bytes(uart_num, (char *)junkVal, 1);
+//	    	ESP_LOGW(TAG, "\nAdded junk value %d", junkVal[0]);
+//	    	junkCount++;
+//	    }
+
+        sent_bytes = uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 		if(sent_bytes<length){
-			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
+			ESP_LOGE(TAG_MCU, "Failed to send all bytes (%d/%d)", sent_bytes, length);
 		}
 
         ZapMessage rxMsg = {0};
@@ -78,7 +105,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
         return rxMsg;
     }
     //configASSERT(false);
-	ESP_LOGE(TAG, "failed to obtain uart_write_lock");
+	ESP_LOGE(TAG_MCU, "failed to obtain uart_write_lock");
     ZapMessage dummmy_reply = {0};
     return dummmy_reply;
 }
@@ -207,12 +234,13 @@ int MCUTxGetStackWatermark()
 
 
 void uartSendTask(void *pvParameters){
-    ESP_LOGI(TAG, "configuring uart");
+    ESP_LOGI(TAG_MCU, "configuring uart");
 
     //Provide application time to initialize before sending to MCU
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    int count = 0;
+    uint32_t count = 0;
+    uint32_t offsetCount = 0;
     while (true)
     {
     	//count++;
@@ -301,14 +329,7 @@ void uartSendTask(void *pvParameters){
         		break;*/
         }
 
-        count++;
 
-        if(count >= 20)
-        {
-        	vTaskDelay(1000 / portTICK_PERIOD_MS);
-        	count = 0;
-        	continue;
-        }
 
 
         txMsg.type = MsgRead;//MsgWrite;
@@ -327,6 +348,12 @@ void uartSendTask(void *pvParameters){
 //        printf("frame timeId: %d \n\r", rxMsg.timeId);
 
 
+        if(txMsg.identifier != rxMsg.identifier)
+        {
+        	ESP_LOGE(TAG_MCU, "**** DIFF: %d != %d ******\n\r", txMsg.identifier, rxMsg.identifier);
+        	offsetCount++;
+        }
+
         if(rxMsg.identifier == SwitchPosition)
         {
         	receivedSwitchState = rxMsg.data[0];
@@ -337,7 +364,7 @@ void uartSendTask(void *pvParameters){
         	{
         		if(receivedSwitchState != previousSwitchState)
         		{
-        			ESP_LOGW(TAG, "**** Switch reset ****");
+        			ESP_LOGW(TAG_MCU, "**** Switch reset ****");
         			esp_restart();
         		}
         	}
@@ -376,11 +403,11 @@ void uartSendTask(void *pvParameters){
 	    else if(rxMsg.identifier == ParamChargeOperationMode)
         {
 	    	chargeOperationMode = rxMsg.data[0];
-	    	ESP_LOGW(TAG, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError);
+	    	ESP_LOGW(TAG_MCU, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount);
         }
 	    else if(rxMsg.identifier == ParamHmiBrightness)
 	    {
-	    	ESP_LOGW(TAG, "**** Received HMI brightness ACK ****");
+	    	ESP_LOGW(TAG_MCU, "**** Received HMI brightness ACK ****");
 	    }
 	    else if(rxMsg.identifier == DebugCounter)
 	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
@@ -396,6 +423,22 @@ void uartSendTask(void *pvParameters){
         	printf("frame error code: %d\n\r", error_code);
         }*/
 
+        if (txMsg.identifier == rxMsg.identifier)
+        {
+        	count++;
+        }
+        else
+        {
+        	//Delay before retrying on the same parameter identifier
+        	vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
+
+        if(count >= 20)
+        {
+        	vTaskDelay(1000 / portTICK_PERIOD_MS);
+        	count = 0;
+        	continue;
+        }
 
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -405,7 +448,7 @@ void uartSendTask(void *pvParameters){
 
 int MCU_GetSwitchState()
 {
-	ESP_LOGW(TAG, "**** Switch used: %d ****", receivedSwitchState);
+	ESP_LOGW(TAG_MCU, "**** Switch used: %d ****", receivedSwitchState);
 	return receivedSwitchState;
 }
 

@@ -5,6 +5,8 @@
 
 void zaptecProtocolStart();
 void dspic_periodic_poll_start();
+void protocol_task_ctrl_debug(int state);
+
 MessageType MCU_SendCommandId(uint16_t paramIdentifier);
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
 MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);

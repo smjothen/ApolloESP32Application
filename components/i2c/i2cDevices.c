@@ -34,6 +34,20 @@ void I2CDevicesInit()
 	do_i2cdetect_cmd();
 }
 
+void i2c_ctrl_debug(int state)
+{
+	if(state == 0)
+	{
+		esp_log_level_set(TAG, ESP_LOG_NONE);
+		esp_log_level_set(TAG_EEPROM, ESP_LOG_NONE);
+	}
+	else
+	{
+		esp_log_level_set(TAG_MCU, ESP_LOG_INFO);
+		esp_log_level_set(TAG_EEPROM, ESP_LOG_INFO);
+	}
+}
+
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
 	return deviceInfo;

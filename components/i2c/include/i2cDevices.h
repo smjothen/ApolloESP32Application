@@ -8,6 +8,7 @@ extern "C" {
 #include "esp_err.h"
 #include "../../main/DeviceInfo.h"
 
+void i2c_ctrl_debug(int state);
 struct DeviceInfo i2cGetLoadedDeviceInfo();
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo);
 bool i2CDeviceInfoIsLoaded();
