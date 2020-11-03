@@ -6,6 +6,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
+#include "device_methods.h"
 
 #include "esp_transport_ssl.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
@@ -89,23 +90,26 @@ int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     return 0;
 }
 
-int publish_iothub_event(const char *payload){
+int publish_to_iothub(const char* payload, const char* topic){
     if(mqtt_client == NULL){
         return -1;
     }
 
     int message_id = esp_mqtt_client_publish(
-            mqtt_client, event_topic,
+            mqtt_client, topic,
             payload, 0, 1, 0
     );
 
     if(message_id>0){
         return 0;
     }
+    ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
 }
 
-
+int publish_iothub_event(const char *payload){
+    return publish_to_iothub(payload, event_topic);
+}
 
 void ParseParameterFromCloud(char * message, int message_len)
 {
@@ -270,12 +274,20 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         	//esp_mqtt_client_publish(event->client, event->topic, "", 0, 0, 0);
         	//publish_debug_telemetry_observation_local_settings();
-        }
-
-
-        if(strstr(event->topic, "iothub/methods/POST/102/"))
+        }else if(strstr(event->topic, "iothub/methods/POST/"))
         {
+            char* topic = malloc(event->topic_len+1);
+            char* data = malloc(event->data_len+1);
 
+            strncpy(topic, event->topic, event->topic_len);
+            strncpy(data, event->data, event->data_len);
+            topic[event->topic_len] = 0;
+            data[event->data_len] = 0;
+
+            on_method_call(topic, data);
+
+            free(topic);
+            free(data);
         }
 
         // ESP_LOGD(TAG, "publishing %s", payloadstring);
