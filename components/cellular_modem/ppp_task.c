@@ -31,8 +31,8 @@ static const char *TAG = "PPP_TASK";
 #define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
-//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
 
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
@@ -67,21 +67,64 @@ void hard_reset_cellular(void){
 	io_conf.pull_up_en = 0;
 	gpio_config(&io_conf);
 
-    ESP_LOGI(TAG, "BG reset start");
+    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+}
+
+void cellularPinsOn()
+{
+	  //BG95 power on sequence
+	    //gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
+		ESP_LOGI(TAG, "BG ON...");
+
+	    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
+	    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+	    vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+	//    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//High >= 30 ms
+	//    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+	//    vTaskDelay(200 / portTICK_PERIOD_MS);
+
+	    gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low 1000 > x > 500 ms
+	    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+	    vTaskDelay(750 / portTICK_PERIOD_MS);
+
+	    gpio_set_level(GPIO_OUTPUT_RESET, 0); 	//Keep high = ON
+	    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+	    vTaskDelay(5000 / portTICK_PERIOD_MS); //Delay to ensure it is ready
+}
+
+void cellularPinsOff()
+{
+	ESP_LOGI(TAG, "BG OFF...");
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low 1500 > x > 650 ms
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    gpio_set_level(GPIO_OUTPUT_RESET, 0); 	//Keep high = OFF
+    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+}
+
+void hard_reset_cellular(void){
+
+
+    ESP_LOGI(TAG, "BG reset start 1");
 
     // NOTE: Pins are connected through transistors
     // causing output level to be inverted!!!
 
     //BG95 power on sequence
-    gpio_set_level(GPIO_OUTPUT_DTR, 1);
+    //gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
 
-    gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low - Ensure off
-    gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//High >= 30 ms
+    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
-    vTaskDelay(200 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+//    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//High >= 30 ms
+//    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+//    vTaskDelay(200 / portTICK_PERIOD_MS);
 
     gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low 1000 > x > 500 ms
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
@@ -326,10 +369,13 @@ int configure_modem_for_ppp(void){
             ESP_LOGW(TAG, "Failed to get line: %d", timeout);
         }
 
-        if(timeout == 5)
+        if(timeout == 3)
         {
         	ESP_LOGW(TAG, "Resetting BG due to timeout");
-        	hard_reset_cellular();
+        	//hard_reset_cellular();
+        	//cellularPinsOff();
+        	//vTaskDelay(pdMS_TO_TICKS(3000));
+        	cellularPinsOn();
         	timeout = 0;
         }
         timeout++;
@@ -353,6 +399,10 @@ int configure_modem_for_ppp(void){
 
     if(at_command_flow_ctrl_enable()<0){
         ESP_LOGE(TAG, "Failed to enable flow control on cellular UART");
+    }
+    else
+    {
+    	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
     char name[20];
@@ -510,11 +560,14 @@ void ppp_task_start(void){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
     xEventGroupSetBits(event_group, UART_TO_LINES);
-    hard_reset_cellular();
+    //hard_reset_cellular();
     //configure_uart();
     ESP_LOGI(TAG, "uart configured");
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
     //xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 7, eventTaskHandle);
+
+    xEventGroupClearBits(event_group, UART_TO_PPP);
+    xEventGroupSetBits(event_group, UART_TO_LINES);
 
     configure_modem_for_ppp(); // TODO rename
 

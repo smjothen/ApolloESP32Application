@@ -5,6 +5,11 @@
 void configure_uart(void);
 int pppGetStackWatermark();
 void ppp_task_start(void);
+
+void cellularPinsInit();
+void cellularPinsOn();
+void cellularPinsOff();
+
 void hard_reset_cellular(void);
 
 #define LINE_BUFFER_SIZE 256

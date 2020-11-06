@@ -43,7 +43,7 @@ void i2c_ctrl_debug(int state)
 	}
 	else
 	{
-		esp_log_level_set(TAG_MCU, ESP_LOG_INFO);
+		esp_log_level_set(TAG, ESP_LOG_INFO);
 		esp_log_level_set(TAG_EEPROM, ESP_LOG_INFO);
 	}
 }

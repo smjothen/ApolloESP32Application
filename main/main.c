@@ -62,6 +62,7 @@ void InitGPIOs()
 	output_conf.pull_down_en = 0;
 	output_conf.pull_up_en = 0;
 	gpio_config(&output_conf);
+	
 }
 
 
@@ -90,7 +91,7 @@ void HandleCommands()
 	uint8_t uart_data_size = 10;
 	uint8_t uart_data[uart_data_size];
 
-	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 1000);
+	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 100);
 	if(length > 0)
 	{
 		memcpy(commandBuffer+strlen(commandBuffer), uart_data, length);
@@ -114,7 +115,7 @@ void HandleCommands()
 				esp_log_level_set(TAG_MAIN, ESP_LOG_ERROR);
 		}
 
-		if(strncmp("i2c", commandBuffer, 3) == 0)
+		else if(strncmp("i2c", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
 				i2c_ctrl_debug(0);
@@ -122,8 +123,14 @@ void HandleCommands()
 				i2c_ctrl_debug(1);
 		}
 
-		else if(strncmp("r4", commandBuffer, 2) == 0)
-			hard_reset_cellular();
+		else if(strncmp("m1", commandBuffer, 2) == 0)
+			cellularPinsOn();
+
+		else if(strncmp("m0", commandBuffer, 2) == 0)
+			cellularPinsOff();
+
+		else if(strncmp("r", commandBuffer, 1) == 0)
+			esp_restart();
 
 		memset(commandBuffer, 0, 10);
 	}
@@ -137,7 +144,8 @@ void app_main(void)
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
-	InitGPIOs();
+	//InitGPIOs();
+	cellularPinsInit();
 
 	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
 
@@ -146,7 +154,7 @@ void app_main(void)
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
-	configure_console();
+	//configure_console();
 	configure_uart();
     zaptecProtocolStart();
 
@@ -355,7 +363,7 @@ void app_main(void)
 
     	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	if(counter % 10 == 0)
+    	if(counter % 5 == 0)
     	{
     		days = counter / 86400;
     		secleft = counter % 86400;
@@ -384,7 +392,7 @@ void app_main(void)
 //    		ble_interface_deinit();
 //    	}
 
-    	HandleCommands();
+    	//HandleCommands();
 
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);

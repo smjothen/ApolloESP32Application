@@ -55,7 +55,7 @@ static esp_err_t i2c_master_driver_initialize(void)
 
 
 //#define ESP_SLAVE_ADDR 0x2A	//NFC-A
-#define ESP_SLAVE_ADDR 0x2B	//NFC-B
+//#define ESP_SLAVE_ADDR 0x2B	//NFC-B
 //#define ESP_SLAVE_ADDR 0x44	//SHT-30
 //#define ESP_SLAVE_ADDR 0x51		//RTC
 //#define ESP_SLAVE_ADDR 0x56		//EEPROM-CAT24C04
