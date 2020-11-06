@@ -58,7 +58,7 @@ typedef enum {
     ESP_MODEM_EVENT_UNKNOWN   = 4        /*!< ESP Modem Unknown Response */
 } esp_modem_event_t;
 
-void hard_reset_cellular(void){
+void cellularPinsInit(void){
     gpio_config_t io_conf; 
 	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
 	io_conf.mode = GPIO_MODE_OUTPUT;
