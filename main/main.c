@@ -32,6 +32,9 @@ static const char *TAG = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
+#define GPIO_OUTPUT_EPROM_WP    4
+#define GPIO_OUTPUT_EPROM_WP_SEL (1ULL<<GPIO_OUTPUT_EPROM_WP)
+
 char softwareVersion[] = "0.0.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
@@ -56,10 +59,12 @@ void InitGPIOs()
     gpio_config_t output_conf;
 	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
 	output_conf.mode = GPIO_MODE_OUTPUT;
-	output_conf.pin_bit_mask = GPIO_OUTPUT_DEBUG_PIN_SEL;
+	output_conf.pin_bit_mask = GPIO_OUTPUT_EPROM_WP_SEL;
 	output_conf.pull_down_en = 0;
 	output_conf.pull_up_en = 0;
 	gpio_config(&output_conf);
+
+	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
 }
 
 
@@ -166,8 +171,8 @@ void app_main(void)
 
 
 
-//#define WriteThisDeviceInfo
-//#define Erase
+#define WriteThisDeviceInfo
+#define Erase
 
 #ifdef Erase
 	EEPROM_Erase();
@@ -197,6 +202,10 @@ void app_main(void)
 //	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
 //	strcpy(writeDevInfo.Pin, "6695");
 
+	strcpy(writeDevInfo.serialNumber, "ZAP000022");
+	strcpy(writeDevInfo.PSK, "SSuUTcIkWJFJ0wqbXUcQ/6KG5Nom6yQd4L7NFqbN+lc=");
+	strcpy(writeDevInfo.Pin, "9451");
+
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
@@ -223,9 +232,9 @@ void app_main(void)
 	else
 	{
 		//Wroom32 ID - BLE - (no EEPROM)
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
+		//strcpy(devInfo.serialNumber, "ZAP000011");
+		//strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+		//strcpy(devInfo.Pin, "7053");
 
 		//Wroom32 ID - BLE - (no EEPROM)
 //		strcpy(devInfo.serialNumber, "ZAP000012");
