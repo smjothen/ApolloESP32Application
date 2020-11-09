@@ -32,7 +32,9 @@ const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
+#define GPIO_OUTPUT_EEPROM_WP    4
+#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
+//#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 char softwareVersion[] = "2.8.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
@@ -144,8 +146,10 @@ void app_main(void)
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
-	//InitGPIOs();
+	InitGPIOs();
 	cellularPinsInit();
+
+	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 
 	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
 
@@ -272,9 +276,9 @@ void app_main(void)
 	// strcpy(writeDevInfo.PSK, "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=");
 	// strcpy(writeDevInfo.Pin, "7833");
 
-//	strcpy(writeDevInfo.serialNumber, "ZAP000010");
-//	strcpy(writeDevInfo.PSK, "rvop1J1GQMsR91puAZLuUs3nTMzf02UvNA83WDWMuz0=");
-//	strcpy(writeDevInfo.Pin, "6695");
+	strcpy(writeDevInfo.serialNumber, "ZAP000020");
+	strcpy(writeDevInfo.PSK, "z4J8JqxPu51JlP8ewyD2KyMbxLUrXYg8PneWBtgEct8=");
+	strcpy(writeDevInfo.Pin, "6557");
 
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
@@ -285,8 +289,11 @@ void app_main(void)
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
+			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
 			//Invalid EEPROM content
 			prodtest_getNewId();
+
+			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 
 			devInfo = i2cReadDeviceInfoFromEEPROM();
 		}

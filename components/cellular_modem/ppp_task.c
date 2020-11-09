@@ -483,7 +483,7 @@ static esp_err_t send_ppp_bytes_to_uart(void *h, void *buffer, size_t len){
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "sending ppp data to modem");
+    //ESP_LOGI(TAG, "sending ppp data to modem");
     int sent_bytes = uart_write_bytes(UART_NUM_1, buffer, len);
     if(sent_bytes == len){
         return ESP_OK;
