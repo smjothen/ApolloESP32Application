@@ -10,6 +10,8 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo);
 void stop_cloud_listener_task();
 bool CloudSettingsAreUpdated();
 void ClearCloudSettingsAreUpdated();
+bool LocalSettingsAreUpdated();
+void ClearLocalSettingsAreUpdated();
 
 int publish_iothub_event(const char *payload);
 int publish_to_iothub(const char* payload, const char* topic);

@@ -124,7 +124,7 @@ static void sessionHandler_task()
     uint32_t pulseCounter = 30;
 
     uint32_t dataCounter = 50;
-    uint32_t dataInterval = 60;
+    uint32_t dataInterval = 120;//60;
 
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 10;
@@ -186,6 +186,10 @@ static void sessionHandler_task()
 
 			int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
 
+			//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
 
 			NFCClearTag();
 		}
@@ -200,11 +204,11 @@ static void sessionHandler_task()
 			if (MCU_GetchargeMode() != 12)
 				dataInterval = 120;//60;
 			else
-				//dataInterval = 600;
-				dataInterval = 3600;
+				dataInterval = 600;
+				//dataInterval = 3600;
 
-			//signalInterval = 300;
-			signalInterval = 3600;
+			signalInterval = 300;
+			//signalInterval = 3600;
 		}
 
 
@@ -314,9 +318,30 @@ static void sessionHandler_task()
 			}
 			else
 			{
-				ESP_LOGW(TAG,"Cloud settings flag NOT cleared");
+				ESP_LOGE(TAG,"Cloud settings flag NOT cleared");
 			}
 		}
+
+
+		if(LocalSettingsAreUpdated() == true)
+		{
+			//Give some time to ensure all values are set
+			vTaskDelay(pdMS_TO_TICKS(1000));
+
+			int published = publish_debug_telemetry_observation_local_settings();
+			if (published == 0)
+			{
+				ClearLocalSettingsAreUpdated();
+				ESP_LOGW(TAG,"Local settings flag cleared");
+			}
+			else
+			{
+				ESP_LOGE(TAG,"Local settings flag NOT cleared");
+			}
+		}
+
+
+		//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}

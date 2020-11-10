@@ -150,7 +150,7 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
     add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamFlags, storage_Get_DiagnosticsMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, storage_Get_DiagnosticsMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
     return publish_json(observations);
@@ -163,11 +163,16 @@ int publish_debug_telemetry_observation_local_settings()
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, 4));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
-    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflineCurrent, 10));
-    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, 1));
+    if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+    	add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
+    else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
+    	add_observation_to_collection(observations, create_observation(CommunicationMode, "LTE"));
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, storage_Get_NetworkType()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, storage_Get_Standalone()));
+    add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, storage_Get_DefaultOfflinePhase()));
+    add_observation_to_collection(observations, create_double_observation(HmiBrightness, storage_Get_HmiBrightness()));
 
     return publish_json(observations);
 }
@@ -202,15 +207,15 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, 0));
-	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, 3));
-	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, 1));
+    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
+	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
 
     //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
-	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, 1));
+	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
     add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource,  0));
+    add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
 
     return publish_json(observations);
@@ -257,7 +262,7 @@ int publish_debug_telemetry_observation_all(
 
 	if(startupMessage == true)
 	{
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamResetSource, (uint32_t)MCU_GetResetSource()));
+		add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource, (uint32_t)MCU_GetResetSource()));
 		add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource, (uint32_t)esp_reset_reason()));
 
 		startupMessage = false;

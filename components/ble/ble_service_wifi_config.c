@@ -993,7 +993,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	if((lockValue == 0) || (lockValue == 1))
 		{
-			MessageType ret = MCU_SendUint8Parameter(ParamPermanentCableLock, lockValue);
+			MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, lockValue);
 			if(ret == MsgWriteAck)
 			{
 				storage_Set_PermanentLock(lockValue);

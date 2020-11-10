@@ -10,7 +10,7 @@
 #include "DeviceInfo.h"
 #include "i2cDevices.h"
 //#include "storage.h"
-//#include "network.h"
+#include "network.h"
 
 //#include "adc_control.h"
 
@@ -62,17 +62,15 @@ void prodtest_getNewId()
 	//if(connected == false)
 		//connected = network_init(true);
 
-//	if (connected == false)
-//	{
-//		ESP_LOGE(TAG, "No wifi");
-//		return;
-//	}
-
-	//vTaskDelay(pdMS_TO_TICKS(3000));
+	while (network_WifiIsConnected() == false)
+	{
+		ESP_LOGE(TAG, "Waiting for IP...");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
 
 	esp_http_client_config_t config = {
 		//.url = "http://10.0.1.4:8585/get/mac",//Used at WestControl
-		.url = "http://10.253.73.233:8585/get/mac",//Used at Internal
+		.url = "http://10.253.73.97:8585/get/mac",//Used at Internal
 
 		.method = HTTP_METHOD_GET,
 		.event_handler = _http_event_handler,

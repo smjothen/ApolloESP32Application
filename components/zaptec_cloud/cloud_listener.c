@@ -43,6 +43,7 @@ static struct DeviceInfo cloudDeviceInfo;
 
 bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
+bool localSettingsAreUpdated = false;
 
 
 const char cert[] =
@@ -118,6 +119,17 @@ bool CloudSettingsAreUpdated()
 void ClearCloudSettingsAreUpdated()
 {
 	cloudSettingsAreUpdated = false;
+}
+
+
+bool LocalSettingsAreUpdated()
+{
+	return localSettingsAreUpdated;
+}
+
+void ClearLocalSettingsAreUpdated()
+{
+	localSettingsAreUpdated = false;
 }
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
@@ -261,8 +273,9 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 			int defaultOfflinePhase = 0;
 			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
-
-			if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			ESP_LOGE(TAG, "522 defaultOfflinePhase=%d  - Not used\n", defaultOfflinePhase);
+			//if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			if((9 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
 			{
 				MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
 				if(ret == MsgWriteAck)
@@ -484,6 +497,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						storage_Set_Standalone(standalone);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{
@@ -509,6 +523,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						storage_Set_StandalonePhase(standalonePhase);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{
@@ -537,6 +552,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						storage_Set_StandaloneCurrent(maxStandaloneCurrent);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{
@@ -573,6 +589,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						storage_Set_NetworkType(networkType);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{
@@ -595,12 +612,13 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((1.0 >= hmiBrightness) && (hmiBrightness >= 0.0))
 				{
-					MessageType ret = MCU_SendFloatParameter(ParamHmiBrightness, hmiBrightness);
+					MessageType ret = MCU_SendFloatParameter(HmiBrightness, hmiBrightness);
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_HmiBrightness(hmiBrightness);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved HMI_BRIGHTNESS=%f, %s=%d\n", hmiBrightness, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{
@@ -637,12 +655,13 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((lockValue == 0) || (lockValue == 1))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamPermanentCableLock, lockValue);
+					MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, lockValue);
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_PermanentLock(lockValue);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved PermanentLock=%d, %s=%d\n", lockValue, (err == 0 ? "OK" : "FAIL"), err);
+						localSettingsAreUpdated = true;
 					}
 					else
 					{

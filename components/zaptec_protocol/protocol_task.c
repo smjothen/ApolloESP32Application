@@ -317,7 +317,7 @@ void uartSendTask(void *pvParameters){
 				txMsg.identifier = DebugCounter;
 				break;
 			case 17:
-				txMsg.identifier = ParamResetSource;
+				txMsg.identifier = MCUResetSource;
 				break;
 			case 18:
 				txMsg.identifier = ParamWarnings;
@@ -405,13 +405,13 @@ void uartSendTask(void *pvParameters){
 	    	chargeOperationMode = rxMsg.data[0];
 	    	ESP_LOGW(TAG_MCU, "Dataset: T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount);
         }
-	    else if(rxMsg.identifier == ParamHmiBrightness)
+	    else if(rxMsg.identifier == HmiBrightness)
 	    {
 	    	ESP_LOGW(TAG_MCU, "**** Received HMI brightness ACK ****");
 	    }
 	    else if(rxMsg.identifier == DebugCounter)
 	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
-		else if(rxMsg.identifier == ParamResetSource)
+		else if(rxMsg.identifier == MCUResetSource)
 			mcuResetSource = rxMsg.data[0];
 		else if(rxMsg.identifier == ParamWarnings)
 			mcuWarnings = GetUint32_t(rxMsg.data);

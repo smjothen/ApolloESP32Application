@@ -13,9 +13,13 @@
     
     typedef enum
     {
-        ParamMode = 0,
+        IsOcppConnected = -3,
+        IsOnline = -2,
+        Pulse = -1,
+        Unknown = 0,
+
+        OfflineMode = 1,
                 
-        ParamProductCode = 99,
         ParamSerialNumber = 100,
                 
         ParamRunTest = 101,
@@ -27,8 +31,6 @@
         ParamTestDataPilotF = 107,
 
 		AuthenticationRequired = 120,
-
-        ParamLinuxStatus = 125,
 
 		// Local settings
 
@@ -50,12 +52,6 @@
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
-                
-        ParamGridDetectionResult = 400,
-        ParamGridDetectionStart = 401,
-                
-        ParamEmeterVoltageSnapshotSlot = 499,
-        ParamEmeterVoltageSnapshot = 500,
 
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
@@ -86,10 +82,6 @@
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
                 
-        ParamRelayState = 530,
-        ParamSoftStartDuration = 531,
-        ParamRelayStep = 532,
-
         ParamTotalChargePowerSession = 553,
         
         ParamSessionEnergyCountActive = 560,
@@ -103,7 +95,7 @@
         ParamChargePilotLevelAverage = 704,
         ParamProximityAnalogValue = 705,
         ParamPilotVsProximityTime = 706,
-        //...
+		ChargeCurrentInstallationMaxLimit = 707,
         ParamChargeCurrentUserMax = 708,
         ParamSimplifiedModeMaxCurrent = 709,
         //...
@@ -112,13 +104,11 @@
         ParamIsStandalone = 712,
         ParamCableType = 714,
         ParamNetworkType = 715,
-        ParamPermanentCableLock = 716,
-        ParamLockCableWhenConnected = 717,
-        ParamSoftStartDisabled = 718,
-        ParamAllowedNeutralCurrent = 719,
+		DetectedCar = 716,
+		GridTestResult = 717,
+		FinalStopActive = 718,
                 
-        ParamSessionChargeCycle = 720,
-        ParamMaxSessionRestart = 721,
+		SessionIdentifier = 721,
 
         ChargerCurrentUserUuid = 722,
         CompletedSession = 723,
@@ -131,29 +121,40 @@
 
 	    NewChargeCard = 750,
 	    AuthenticationListVersion = 751,
-
-        ParamHmiBrightness = 800,
-        ParamAveraging = 801,
+		EnabledNfcTechnologies = 752,
+		LteRoamingDisabled = 753,
 
         InstallationId = 800, // String / Guid
         RoutingId = 801, // Int
         ChargePointName = 802, // String
 
         //...
+		Notifications = 803,
         ParamWarnings = 804,
-        ParamWarningValue = 805,
-        ParamClearWarning = 806,
-        ParamFlags = 807,
+		DiagnosticsMode = 805,
+		InternalDiagnosticsLog = 807,
         //..
         ParamDiagnosticsString = 808,
 		CommunicationSignalStrength = 809,
+		CloudConnectionStatus = 810,
         //..
-        ParamResetSource = 811,
-        ParamRxErrors = 812,
-        ParamPacketErrors = 813,
+        MCUResetSource = 811,
+        MCURxErrors = 812,
+		McuToESPPacketErrors  = 813,
         ESPToMcuPacketErrors = 814,
 		ESPResetSource = 815,
+		UptimeVariscite = 820,
+		UptimeMCU = 821,
         //..
+        CarSessionLog = 850,
+        CommunicationModeConfigurationInconsistency = 851,
+        RawPilotMonitor = 852,
+        IT3PhaseDiagnosticsLog = 853,
+        PilotTestResults = 854,
+		//..
+
+        ProductionTestResults = 900,
+        PostProductionTestResults = 901,
 
 		ParamSmartMainboardAppSwVersion = 908,
 		ParamSmartMainboardBootSwVersion = 909,
@@ -163,8 +164,16 @@
 		ParamSmartComputerFwLoaderVersion = 912,
 		ParamSmartComputerImageVersion = 913,
 
-		ParamSmartFpgaVersion = 914,
-        ParamSmartFpgaVersionAndHash = 915,
+		//ParamSmartFpgaVersion = 914,
+		//ParamSmartFpgaVersionAndHash = 915,
+
+        MacMain = 950,
+        MacWiFi = 952,
+
+        LteImsi = 960,
+        LteMsisdn = 961,
+        LteIccid = 962,
+        LteImei = 963,
 
     } ParamNo;
 
