@@ -171,7 +171,7 @@ void app_main(void)
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
-	//configure_console();
+	configure_console();
 	configure_uart();
     zaptecProtocolStart();
 
@@ -412,8 +412,7 @@ void app_main(void)
 //    		ble_interface_deinit();
 //    	}
 
-    	//HandleCommands();
-
+    	HandleCommands();
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

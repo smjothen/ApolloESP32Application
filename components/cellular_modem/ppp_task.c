@@ -27,8 +27,8 @@ static const char *TAG = "PPP_TASK";
 #define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
-//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
 
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
@@ -76,7 +76,7 @@ void cellularPinsInit(void){
 void cellularPinsOn()
 {
 	  //BG95 power on sequence
-	    gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
+	    //gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
 		ESP_LOGI(TAG, "BG ON...");
 
 	    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
@@ -377,58 +377,79 @@ int GetNumberAsString(char * inputString, char * outputString, int maxLength)
 int configure_modem_for_ppp(void){
 
     bool startup_confirmed = false;
+    bool active_confirmed = false;
     char at_buffer[LINE_BUFFER_SIZE] = {0};
     
     //gpio_set_level(GPIO_OUTPUT_DTR, 1);
-    vTaskDelay(pdMS_TO_TICKS(400));
+
 
     enter_command_mode();
-    at_command_echo_set(true);
-    at_command_at();
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
-    //volatile bool ret = at_command_with_ok_ack("AT&D1", 1000);
+    at_command_at();
 
     await_line(at_buffer, pdMS_TO_TICKS(1000));
     int timeout = 0;
-    while(!strstr(at_buffer, "APP RDY") && !strstr(at_buffer, "OK") )
+    while((startup_confirmed == false) && (active_confirmed == false))
     {
-    	//if (timeout == 0)
-    		//at_command_echo_set(true);
+    	if(strstr(at_buffer, "APP RDY"))
+    	{
+    		startup_confirmed = true;
+    		ESP_LOGI(TAG, "BG startup confirmed");
 
-    	await_line(at_buffer, pdMS_TO_TICKS(1000));
-		ESP_LOGI(TAG, "checking line %s", at_buffer);
-		if(strstr(at_buffer, "APP RDY") || strstr(at_buffer, "OK")){
-			ESP_LOGI(TAG, "BG startup confirmed");
+    	    vTaskDelay(pdMS_TO_TICKS(100));
+    	    int at_result = at_command_at();
+    	    while(at_result < 0){
+    	        ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
+    	        at_result = at_command_at();
+    	        vTaskDelay(pdMS_TO_TICKS(1000));
 
-			break;
+    	        ESP_LOGE(TAG, "AT result %d ", at_result);
+    	    }
+    	}
 
-        }else{
-            ESP_LOGW(TAG, "Failed to get line: %d", timeout);
-        }
+    	else if(strstr(at_buffer, "OK"))
+    	{
+    		active_confirmed = true;
+    		ESP_LOGI(TAG, "BG already started");
 
-        if(timeout == 7)
+    	    //Make sure to clear receive buffer before reading device info
+    	    memset(at_buffer,0,LINE_BUFFER_SIZE);
+    	    await_line(at_buffer, pdMS_TO_TICKS(3000));
+    	    ESP_LOGI(TAG, "Clearing line buffer %s", at_buffer);
+    	    while (strlen(at_buffer) > 0)
+    	    {
+    			vTaskDelay(pdMS_TO_TICKS(1000));
+    			memset(at_buffer,0,LINE_BUFFER_SIZE);
+    			await_line(at_buffer, pdMS_TO_TICKS(1000));
+    			ESP_LOGI(TAG, "Clearing line buffer %s", at_buffer);
+    	    }
+    	}
+
+		else
+		{
+			ESP_LOGW(TAG, "Failed to get line: %d", timeout);
+    		ESP_LOGI(TAG, "checking line %s", at_buffer);
+    		memset(at_buffer,0,LINE_BUFFER_SIZE);
+        	await_line(at_buffer, pdMS_TO_TICKS(1000));
+        	ESP_LOGI(TAG, "Checking receive buffer %s", at_buffer);
+
+        	if(strlen(at_buffer) == 0)
+        		timeout++;
+        	else
+        		timeout = 0;
+		}
+
+        if((timeout == 3) && (startup_confirmed == false))
         {
-        	ESP_LOGW(TAG, "Resetting BG due to timeout");
-        	//hard_reset_cellular();
-        	//cellularPinsOff();
-        	//vTaskDelay(pdMS_TO_TICKS(3000));
+        	ESP_LOGW(TAG, "Power toggling BG due to timeout");
+
+        	xEventGroupClearBits(event_group, UART_TO_PPP);
+			xEventGroupSetBits(event_group, UART_TO_LINES);
         	cellularPinsOn();
         	timeout = 0;
         }
-        timeout++;
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    startup_confirmed = true;
-
-    vTaskDelay(pdMS_TO_TICKS(100));
-    int at_result = at_command_at();
-    while(at_result < 0){
-        ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
-        at_result = at_command_at();
-        //vTaskDelay(pdMS_TO_TICKS(20000));
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        ESP_LOGE(TAG, "AT result %d ", at_result);
+        //timeout++;
     }
 
     at_command_echo_set(false);
@@ -441,22 +462,15 @@ int configure_modem_for_ppp(void){
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
-//    static char modemName[20] 		= {0};
-//    static char modemImei[20] 		= {0};
-//    static char modemCcid[30]		= {0};
-//    static char modemImsi[20]		= {0};
-//    static char modemOperator[30]	= {0};
-
     char name[20];
     at_command_get_model_name(name, 20);
-    GetNumberAsString(name, modemName, 20);
+    strcpy(modemName, name);
     ESP_LOGI(TAG, "got name %s", modemName);
 
     char imei[20];
     at_command_get_imei(imei, 20);
     GetNumberAsString(imei, modemImei, 20);
     ESP_LOGI(TAG, "got imei %s", modemImei);
-
 
     char ccid[30];
 	at_command_get_ccid(ccid, 30);
@@ -472,6 +486,13 @@ int configure_modem_for_ppp(void){
     at_command_get_operator(op, 30);
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
+
+    if(active_confirmed == true)
+    {
+	    enter_data_mode();
+	    //hasLTEConnection = true;
+	    return 1;
+    }
 
     return 0;
 }
@@ -574,6 +595,8 @@ int enter_command_mode(void){
         clear_lines();// clear any extra ppp data from the modem
         xEventGroupSetBits(event_group, UART_TO_LINES);
 
+        at_command_echo_set(true);
+
         ESP_LOGD(TAG, "checking if ppp exit succeeded");
         at_result = at_command_at();
 
@@ -614,14 +637,16 @@ void ppp_task_start(void){
     xEventGroupSetBits(event_group, UART_TO_LINES);
     //hard_reset_cellular();
     //configure_uart();
-    ESP_LOGI(TAG, "uart configured");
+    //ESP_LOGI(TAG, "uart configured");
+    //configure_modem_for_ppp(); // TODO rename
+
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
     //xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 7, eventTaskHandle);
 
     xEventGroupClearBits(event_group, UART_TO_PPP);
     xEventGroupSetBits(event_group, UART_TO_LINES);
 
-    configure_modem_for_ppp(); // TODO rename
+    int connectionStatus = configure_modem_for_ppp(); // TODO rename
 
     esp_netif_init();
     esp_event_loop_create_default();
@@ -633,10 +658,15 @@ void ppp_task_start(void){
     ppp_netif = esp_netif_new(&cfg);
     assert(ppp_netif);
 
-    ESP_LOGI(TAG, "Running at_command_pdp_define");
-    at_command_pdp_define();
-    ESP_LOGI(TAG, "dialing");
-    at_command_dial();
+    if(connectionStatus == 0)
+    {
+    	//Must make new connection
+    	ESP_LOGI(TAG, "Running at_command_pdp_define");
+
+    	at_command_pdp_define();
+    	ESP_LOGI(TAG, "dialing");
+    	at_command_dial();
+    }
 
     esp_netif_driver_base_t *base_driver = calloc(1, sizeof(esp_netif_driver_base_t));
     base_driver->post_attach = &post_attach_cb;
