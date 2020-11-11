@@ -28,7 +28,7 @@ static int at_command_with_ack_and_lines(char * command, char * success_key, uin
     return -1;
 }
 
-static int at_command_with_ok_ack(char * command, uint32_t timeout_ms){
+int at_command_with_ok_ack(char * command, uint32_t timeout_ms){
     return at_command_with_ack_and_lines(command, "OK", timeout_ms, 1);
 }
 
@@ -77,6 +77,10 @@ int at_command_get_model_name(char *name, int buff_len){
 
 int at_command_get_imei(char *imei, int buff_len){
     return at_command_two_line_response("AT+CGSN", imei, buff_len, 300, 300);
+}
+
+int at_command_get_ccid(char *ccid, int buff_len){
+    return at_command_two_line_response("AT+QCCID", ccid, buff_len, 300, 300);
 }
 
 int at_command_get_imsi(char *imsi, int buff_len){

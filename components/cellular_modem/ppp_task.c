@@ -16,10 +16,6 @@
 
 static const char *TAG = "PPP_TASK";
 
-#define GPIO_OUTPUT_PWRKEY		21
-#define GPIO_OUTPUT_DTR			27
-#define GPIO_OUTPUT_RESET		33
-#define GPIO_OUTPUT_DEBUG_LED    0
 
 #define CELLULAR_RX_SIZE 256 * 4 * 3
 #define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
@@ -31,8 +27,8 @@ static const char *TAG = "PPP_TASK";
 #define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
-//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
+//#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
 
 static QueueHandle_t uart_queue;
 static QueueHandle_t line_queue;
@@ -50,6 +46,12 @@ esp_netif_t *ppp_netif = NULL;
 // esp_event_loop_handle_t ppp_netif_management_event_loop;
 
 static bool hasLTEConnection = false;
+
+static char modemName[10] 		= {0};
+static char modemImei[17] 		= {0};
+static char modemCcid[21]		= {0};
+static char modemImsi[17]		= {0};
+static char modemOperator[17]	= {0};
 
 ESP_EVENT_DEFINE_BASE(ESP_MODEM_EVENT);
 typedef enum {
@@ -74,7 +76,7 @@ void cellularPinsInit(void){
 void cellularPinsOn()
 {
 	  //BG95 power on sequence
-	    //gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
+	    gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
 		ESP_LOGI(TAG, "BG ON...");
 
 	    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
@@ -92,7 +94,7 @@ void cellularPinsOn()
 	    gpio_set_level(GPIO_OUTPUT_RESET, 0); 	//Keep high = ON
 	    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
 
-	    vTaskDelay(5000 / portTICK_PERIOD_MS); //Delay to ensure it is ready
+	    vTaskDelay(3000 / portTICK_PERIOD_MS); //Delay to ensure it is ready
 }
 
 void cellularPinsOff()
@@ -349,27 +351,62 @@ static void uart_event_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+int GetNumberAsString(char * inputString, char * outputString, int maxLength)
+{
+	int i;
+	volatile int index = 0;
+	int inLength = strlen(inputString);
+
+	for (int i = 0; i < inLength; i++)
+	{
+		if((0x39 >= inputString[i]) && (inputString[i] >= 0x30))
+		{
+			if(index > maxLength-2) //Stop before \0
+			{
+				ESP_LOGE(TAG, "Too long string");
+				return -1;
+			}
+
+			outputString[index] = inputString[i];
+			index++;
+		}
+	}
+	return 0;
+}
+
 int configure_modem_for_ppp(void){
 
     bool startup_confirmed = false;
-    char at_buffer[LINE_BUFFER_SIZE];
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
     
-    await_line(at_buffer, pdMS_TO_TICKS(2000));
+    //gpio_set_level(GPIO_OUTPUT_DTR, 1);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    enter_command_mode();
+    at_command_echo_set(true);
+    at_command_at();
+
+    //volatile bool ret = at_command_with_ok_ack("AT&D1", 1000);
+
+    await_line(at_buffer, pdMS_TO_TICKS(1000));
     int timeout = 0;
-    while(!strstr(at_buffer, "APP RDY"))
+    while(!strstr(at_buffer, "APP RDY") && !strstr(at_buffer, "OK") )
     {
-		 await_line(at_buffer, pdMS_TO_TICKS(2000));
-		 ESP_LOGI(TAG, "checking line %s", at_buffer);
-		 if(strstr(at_buffer, "APP RDY")){
+    	//if (timeout == 0)
+    		//at_command_echo_set(true);
+
+    	await_line(at_buffer, pdMS_TO_TICKS(1000));
+		ESP_LOGI(TAG, "checking line %s", at_buffer);
+		if(strstr(at_buffer, "APP RDY") || strstr(at_buffer, "OK")){
 			ESP_LOGI(TAG, "BG startup confirmed");
-			startup_confirmed = true;
+
 			break;
 
         }else{
             ESP_LOGW(TAG, "Failed to get line: %d", timeout);
         }
 
-        if(timeout == 3)
+        if(timeout == 7)
         {
         	ESP_LOGW(TAG, "Resetting BG due to timeout");
         	//hard_reset_cellular();
@@ -382,8 +419,8 @@ int configure_modem_for_ppp(void){
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
+    startup_confirmed = true;
 
-    configASSERT(startup_confirmed == true);
     vTaskDelay(pdMS_TO_TICKS(100));
     int at_result = at_command_at();
     while(at_result < 0){
@@ -391,9 +428,8 @@ int configure_modem_for_ppp(void){
         at_result = at_command_at();
         //vTaskDelay(pdMS_TO_TICKS(20000));
         vTaskDelay(pdMS_TO_TICKS(3000));
+        ESP_LOGE(TAG, "AT result %d ", at_result);
     }
-
-    ESP_LOGE(TAG, "AT result %d ", at_result);
 
     at_command_echo_set(false);
 
@@ -405,21 +441,37 @@ int configure_modem_for_ppp(void){
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
+//    static char modemName[20] 		= {0};
+//    static char modemImei[20] 		= {0};
+//    static char modemCcid[30]		= {0};
+//    static char modemImsi[20]		= {0};
+//    static char modemOperator[30]	= {0};
+
     char name[20];
     at_command_get_model_name(name, 20);
-    ESP_LOGI(TAG, "got name %s", name);
+    GetNumberAsString(name, modemName, 20);
+    ESP_LOGI(TAG, "got name %s", modemName);
 
     char imei[20];
     at_command_get_imei(imei, 20);
-    ESP_LOGI(TAG, "got imei %s", imei);
+    GetNumberAsString(imei, modemImei, 20);
+    ESP_LOGI(TAG, "got imei %s", modemImei);
+
+
+    char ccid[30];
+	at_command_get_ccid(ccid, 30);
+	GetNumberAsString(ccid, modemCcid, 30);
+	ESP_LOGI(TAG, "got ccid %s", modemCcid);
 
     char imsi[20];
     at_command_get_imsi(imsi, 20);
-    ESP_LOGI(TAG, "got imsi %s", imsi);
+    GetNumberAsString(imsi, modemImsi, 20);
+    ESP_LOGI(TAG, "got imsi %s", modemImsi);
 
-    char op[40];
-    at_command_get_operator(op, 40);
-    ESP_LOGI(TAG, "got operator %s", op);
+    char op[30];
+    at_command_get_operator(op, 30);
+    strcpy(modemOperator, op);
+    ESP_LOGI(TAG, "got operator %s", modemOperator);
 
     return 0;
 }

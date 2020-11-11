@@ -33,8 +33,8 @@ const char *TAG_MAIN = "MAIN     ";
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_EEPROM_WP    4
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
-//#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
+//#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
+#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
 char softwareVersion[] = "2.8.0.2";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
@@ -87,11 +87,13 @@ void configure_console(void)
 
 char commandBuffer[10] = {0};
 
+#include "at_commands.h"
 void HandleCommands()
 {
 	//Simple commands
 	uint8_t uart_data_size = 10;
 	uint8_t uart_data[uart_data_size];
+	volatile int ret = 0;
 
 	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 100);
 	if(length > 0)
@@ -133,6 +135,12 @@ void HandleCommands()
 
 		else if(strncmp("r", commandBuffer, 1) == 0)
 			esp_restart();
+		else if(strncmp("dtr0", commandBuffer, 4) == 0)
+			gpio_set_level(GPIO_OUTPUT_DTR, 0);
+		else if(strncmp("dtr1", commandBuffer, 4) == 0)
+			gpio_set_level(GPIO_OUTPUT_DTR, 1);
+		else if(strncmp("sdtr", commandBuffer, 4) == 0)
+			ret = at_command_with_ok_ack("AT&D1", 1000);
 
 		memset(commandBuffer, 0, 10);
 	}
@@ -149,7 +157,12 @@ void app_main(void)
 	InitGPIOs();
 	cellularPinsInit();
 
+//	volatile char inputString[] = "+QCCID: 89470060200213074802";
+//	volatile char outputString[21] = {0};
+//	volatile int ret = GetNumberAsString(inputString, outputString, 20);
+
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
 
 	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
 
@@ -368,7 +381,7 @@ void app_main(void)
     	else
     		ledState = 0;
 
-    	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
+    	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     	if(counter % 5 == 0)
     	{

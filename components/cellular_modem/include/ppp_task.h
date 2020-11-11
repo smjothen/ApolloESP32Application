@@ -2,6 +2,11 @@
 #define PPP_TASK_H
 #include "freertos/FreeRTOS.h"
 
+#define GPIO_OUTPUT_PWRKEY		21
+#define GPIO_OUTPUT_DTR			27
+#define GPIO_OUTPUT_RESET		33
+#define GPIO_OUTPUT_DEBUG_LED    0
+
 void configure_uart(void);
 int pppGetStackWatermark();
 void ppp_task_start(void);
@@ -21,5 +26,6 @@ int enter_command_mode(void);
 int enter_data_mode(void);
 
 bool LteIsConnected();
+int GetNumberAsString(char * inputString, char * outputString, int maxLength);
 
 #endif /* PPP_TASK_H */
