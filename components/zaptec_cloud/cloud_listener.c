@@ -515,7 +515,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				uint8_t standalonePhase = atoi(stringPart+1);
 
 				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
-				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
+				/*if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
 				{
 					MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
 					if(ret == MsgWriteAck)
@@ -533,7 +533,8 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				else
 				{
 					ESP_LOGI(TAG, "Invalid standalonePhase: %d \n", standalonePhase);
-				}
+				}*/
+				ESP_LOGE(TAG, "Parameter standalonePhase: %d Not defined for Apollo\n", standalonePhase);
 			}
 
 			else if(strstr(stringPart, "max_standalone_current"))
@@ -546,7 +547,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((32.0 >= maxStandaloneCurrent) && (maxStandaloneCurrent >= 0.0))
 				{
-					MessageType ret = MCU_SendFloatParameter(ParamStandaloneCurrent, maxStandaloneCurrent);
+					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, maxStandaloneCurrent);
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_StandaloneCurrent(maxStandaloneCurrent);
@@ -883,6 +884,7 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 
 
 static int ridNr = 4199;
+static bool isFirstConnection = false;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
@@ -906,12 +908,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
-        // request twin data
-        ridNr++;
-        char devicetwin_topic[64];
-        sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
-        esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
-
+        // Request twin data on every startup, but not on every following reconnect
+        if(isFirstConnection == true)
+        {
+			ridNr++;
+			char devicetwin_topic[64];
+			sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+			isFirstConnection = false;
+        }
         resetCounter = 0;
 
         mqttConnected = true;

@@ -81,7 +81,12 @@
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
-                
+
+		SwitchPosition = 545,
+		ChargeCurrentInstallationMaxLimit = 546,
+		StandAloneCurrent = 547,
+		PhaseRotation = 548,
+
         ParamTotalChargePowerSession = 553,
         
         ParamSessionEnergyCountActive = 560,
@@ -95,7 +100,7 @@
         ParamChargePilotLevelAverage = 704,
         ParamProximityAnalogValue = 705,
         ParamPilotVsProximityTime = 706,
-		ChargeCurrentInstallationMaxLimit = 707,
+		//ChargeCurrentInstallationMaxLimit = 707,
         ParamChargeCurrentUserMax = 708,
         ParamSimplifiedModeMaxCurrent = 709,
         //...
@@ -113,11 +118,7 @@
         ChargerCurrentUserUuid = 722,
         CompletedSession = 723,
 
-		SwitchPosition = 730,
 		DebugCounter = 731,
-
-		ParamStandalonePhase = 740,
-		ParamStandaloneCurrent = 741,
 
 	    NewChargeCard = 750,
 	    AuthenticationListVersion = 751,

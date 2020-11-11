@@ -204,11 +204,11 @@ static void sessionHandler_task()
 			if (MCU_GetchargeMode() != 12)
 				dataInterval = 120;//60;
 			else
-				//dataInterval = 600;
-				dataInterval = 3600;
+				dataInterval = 600;
+				//dataInterval = 3600;
 
-			//signalInterval = 300;
-			signalInterval = 3600;
+			signalInterval = 300;
+			//signalInterval = 3600;
 		}
 
 
