@@ -4,6 +4,7 @@
 #include "esp_log.h"
 
 #include "apollo_ota.h"
+#include "ble_interface.h"
 
 #define TAG "ota_command"
 
@@ -20,12 +21,14 @@ int before_ota(void){
     // stop i2c
     // dissable new charging sessions
     // ...
+
+	ble_interface_deinit();
     return 0;
 }
 
 
 int _on_ota_command(bool forced){
-    if((forced==true)&&(ota_is_allowed()==true)){
+    if((forced==true)||(ota_is_allowed()==true)){
         ESP_LOGD(TAG, "Preparing system for OTA");
         if(before_ota()==0){
             ESP_LOGD(TAG, "Starting OTA client");

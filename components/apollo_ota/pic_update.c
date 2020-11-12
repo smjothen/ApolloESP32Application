@@ -66,7 +66,7 @@ static void update_dspic_task(void *pvParameters){
         goto err_header_read;
     }
 
-    ESP_LOGI(TAG, "header crc: %x, header app len: %x", crc, app_length);
+    ESP_LOGI(TAG, "header crc: %x, header app len: %x (target: %x)", crc, app_length, target_crc);
 
     if(crc==target_crc){
         ESP_LOGI(TAG, "Correct application found in dspic");

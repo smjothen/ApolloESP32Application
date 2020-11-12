@@ -9,6 +9,6 @@ set(COMPONENT_SRCS "ble_common.c"
 				   "ble_service_wifi_config.c"
 				   )
 
-set(COMPONENT_ADD_INCLUDEDIRS "")
+set(COMPONENT_ADD_INCLUDEDIRS "./")
 
 register_component()

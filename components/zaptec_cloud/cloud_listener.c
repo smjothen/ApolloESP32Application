@@ -6,6 +6,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "zaptec_cloud_observations.h"
+#include "device_methods.h"
 
 #include "esp_transport_ssl.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
@@ -15,6 +16,7 @@
 #include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
 #include "../authentication/authentication.h"
+#include "ota_command.h"
 
 #define TAG "Cloud Listener"
 
@@ -93,22 +95,26 @@ int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     return 0;
 }
 
-int publish_iothub_event(const char *payload){
+int publish_to_iothub(const char* payload, const char* topic){
     if(mqtt_client == NULL){
         return -1;
     }
 
     int message_id = esp_mqtt_client_publish(
-            mqtt_client, event_topic,
+            mqtt_client, topic,
             payload, 0, 1, 0
     );
 
     if(message_id>0){
         return 0;
     }
+    ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
 }
 
+int publish_iothub_event(const char *payload){
+    return publish_to_iothub(payload, event_topic);
+}
 
 bool CloudSettingsAreUpdated()
 {
@@ -693,14 +699,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		int ota_err = on_ota_command();
+		responseStatus = (ota_err>=0) ? 200:400;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		int ota_err = on_forced_ota_command();
+		responseStatus = (ota_err>=0) ? 200:400;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
@@ -1040,7 +1046,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		char * data = NULL;
     		esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
-
         }
 
         // ESP_LOGD(TAG, "publishing %s", payloadstring);
