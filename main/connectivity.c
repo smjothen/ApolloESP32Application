@@ -17,9 +17,9 @@
 static const char *TAG = "CONNECTIVITY: ";
 
 
-enum ConnectionInterface activeInterface = eCONNECTION_NONE;
-static enum ConnectionInterface staticNewInterface = eCONNECTION_NONE;
-static enum ConnectionInterface previousInterface = eCONNECTION_NONE;
+enum CommunicationMode activeInterface = eCONNECTION_NONE;
+static enum CommunicationMode staticNewInterface = eCONNECTION_NONE;
+static enum CommunicationMode previousInterface = eCONNECTION_NONE;
 
 static bool sntpInitialized = false;
 static bool mqttInitialized = false;
@@ -31,9 +31,14 @@ bool connectivity_GetSNTPInitialized()
 	return sntpInitialized;
 }
 
-void connectivity_ActivateInterface(enum ConnectionInterface selectedInterface)
+void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
 {
 	staticNewInterface = selectedInterface;
+}
+
+enum CommunicationMode connectivity_GetActivateInterface()
+{
+	return activeInterface;
 }
 
 /*
@@ -51,13 +56,19 @@ static void connectivity_task()
 
 	//Read from Flash. If no interface is configured, use none and wait for setting
 	if(switchState == eConfig_NVS)
-		staticNewInterface = (enum ConnectionInterface)storage_Get_CommunicationMode();
+		staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
 	else if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
 		staticNewInterface = eCONNECTION_LTE;
 
-	enum ConnectionInterface localNewInterface = eCONNECTION_NONE;
+	//For developement
+	/*if(staticNewInterface == eCONNECTION_WIFI)
+		SetNetworkType(eWifi);
+	else if(staticNewInterface == eCONNECTION_LTE)
+			SetNetworkType(e4G);
+*/
+	enum CommunicationMode localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
 	bool zntpIsRunning = false;

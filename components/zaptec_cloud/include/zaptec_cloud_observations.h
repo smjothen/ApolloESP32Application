@@ -20,6 +20,10 @@ int publish_debug_telemetry_observation_CompletedSession(char * CompletedSession
 
 int publish_debug_telemetry_observation_StartUpParameters();
 
+int publish_debug_telemetry_observation_WifiParameters();
+
+int publish_debug_telemetry_observation_LteParameters();
+
 int publish_debug_telemetry_observation_all(
 	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
 	double temperature_TM, double temperature_TM2,

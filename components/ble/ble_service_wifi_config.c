@@ -897,7 +897,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
 
-		enum ConnectionInterface interface;
+		enum CommunicationMode interface = eCONNECTION_NONE;
 
 		if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
 		{

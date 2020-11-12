@@ -8,8 +8,9 @@ extern "C" {
 #include "DeviceInfo.h"
 
 bool connectivity_GetSNTPInitialized();
+enum CommunicationMode connectivity_GetActivateInterface();
 void connectivity_init(int switchState);
-void connectivity_ActivateInterface(enum ConnectionInterface selectedInterface);
+void connectivity_ActivateInterface(enum CommunicationMode selectedInterface);
 int connectivity_GetStackWatermark();
 
 #ifdef __cplusplus

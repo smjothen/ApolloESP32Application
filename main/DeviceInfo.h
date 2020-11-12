@@ -34,12 +34,13 @@ struct RFIDTokens{
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 
-enum ConnectionInterface
+//Numbers should match Pro
+enum CommunicationMode
 {
 	eCONNECTION_NONE 		 = 0,
 	eCONNECTION_WIFI		 = 1,
-	eCONNECTION_LTE			 = 2,
-	eCONNECTION_LTE_TO_WIFI	 = 3
+	eCONNECTION_LTE			 = 5,
+	eCONNECTION_LTE_TO_WIFI	 = 7
 };
 
 struct Configuration

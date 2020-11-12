@@ -4,14 +4,14 @@
 #include <sys/time.h>
 #include "stdio.h"
 #include "esp_system.h"
-#include "../../main/storage.h"
 
+#include "../../main/storage.h"
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
-//#include "C:/gitHub/Apollo/goEsp32/ApolloESP32Application/components/zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../i2c/include/i2cDevices.h"
 #include "../zaptec_protocol/include/protocol_task.h"
+#include "../cellular_modem/include/ppp_task.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -221,6 +221,37 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     return publish_json(observations);
 }
+
+
+int publish_debug_telemetry_observation_WifiParameters()
+{
+    ESP_LOGD(TAG, "sending LTE telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    char wifiMAC[18] = {0};
+    esp_read_mac((uint8_t*)wifiMAC, 0); //0=Wifi station
+    sprintf(wifiMAC, "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
+
+    add_observation_to_collection(observations, create_observation(MacWiFi, wifiMAC));
+
+    return publish_json(observations);
+}
+
+int publish_debug_telemetry_observation_LteParameters()
+{
+    ESP_LOGD(TAG, "sending LTE telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(LteImsi, LTEGetImsi()));
+    add_observation_to_collection(observations, create_observation(LteMsisdn, "0"));
+    add_observation_to_collection(observations, create_observation(LteIccid, LTEGetIccid()));
+    add_observation_to_collection(observations, create_observation(LteImei, LTEGetImei()));
+
+    return publish_json(observations);
+}
+
 
 
 static uint32_t txCnt = 0;

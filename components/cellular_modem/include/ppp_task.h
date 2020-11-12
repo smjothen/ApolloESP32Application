@@ -27,5 +27,8 @@ int enter_data_mode(void);
 
 bool LteIsConnected();
 int GetNumberAsString(char * inputString, char * outputString, int maxLength);
+const char* LTEGetImei();
+const char* LTEGetIccid();
+const char* LTEGetImsi();
 
 #endif /* PPP_TASK_H */

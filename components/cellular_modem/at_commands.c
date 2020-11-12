@@ -7,14 +7,14 @@
 #define TAG "AT COMMAND"
 
 static int at_command_with_ack_and_lines(char * command, char * success_key, uint32_t timeout_ms, uint32_t line_count){
-    char at_buffer[LINE_BUFFER_SIZE];
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
     ESP_LOGD(TAG, "Sending {%s}", command);
     send_line(command); 
 
     for(int line = 0; line<line_count; line ++){
         int result = await_line(at_buffer, pdMS_TO_TICKS(timeout_ms));
         if(pdPASS==result){
-            ESP_LOGD(TAG, "AT result: %s", at_buffer);
+            ESP_LOGI(TAG, "AT result: %s", at_buffer);
             if(strstr(at_buffer, success_key)){
                 return 0;
             }
@@ -47,7 +47,7 @@ int at_command_echo_set(bool on){
 
 static int at_command_two_line_response(char* command, char * result_buff, int buff_len,
                                        int first_timeout_ms, int second_timeout_ms){
-    char at_buffer[LINE_BUFFER_SIZE];
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
 
     ESP_LOGD(TAG, "Sending {%s}2", command);
     send_line(command);

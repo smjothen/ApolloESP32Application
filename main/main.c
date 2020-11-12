@@ -147,7 +147,7 @@ void HandleCommands()
 
 
 }
-
+//#define useConsole
 
 void app_main(void)
 {
@@ -170,8 +170,9 @@ void app_main(void)
 
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
-
-	//configure_console();
+#ifdef useConsole
+	configure_console();
+#endif
 	configure_uart();
     zaptecProtocolStart();
 
@@ -411,8 +412,9 @@ void app_main(void)
 //    		ESP_LOGW(TAG,"Deinitializing BLE");
 //    		ble_interface_deinit();
 //    	}
-
-    	//HandleCommands();
+	#ifdef useConsole
+    	HandleCommands();
+	#endif
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

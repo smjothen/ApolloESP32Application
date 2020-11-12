@@ -47,11 +47,11 @@ esp_netif_t *ppp_netif = NULL;
 
 static bool hasLTEConnection = false;
 
-static char modemName[10] 		= {0};
-static char modemImei[17] 		= {0};
-static char modemCcid[21]		= {0};
-static char modemImsi[17]		= {0};
-static char modemOperator[17]	= {0};
+static char modemName[20] 		= {0};
+static char modemImei[20] 		= {0};
+static char modemIccid[30]		= {0};
+static char modemImsi[20]		= {0};
+static char modemOperator[30]	= {0};
 
 ESP_EVENT_DEFINE_BASE(ESP_MODEM_EVENT);
 typedef enum {
@@ -384,6 +384,7 @@ int configure_modem_for_ppp(void){
 
 
     enter_command_mode();
+    at_command_echo_set(true);
     vTaskDelay(pdMS_TO_TICKS(2000));
 
     at_command_at();
@@ -472,10 +473,10 @@ int configure_modem_for_ppp(void){
     GetNumberAsString(imei, modemImei, 20);
     ESP_LOGI(TAG, "got imei %s", modemImei);
 
-    char ccid[30];
-	at_command_get_ccid(ccid, 30);
-	GetNumberAsString(ccid, modemCcid, 30);
-	ESP_LOGI(TAG, "got ccid %s", modemCcid);
+    char Iccid[30];
+	at_command_get_ccid(Iccid, 30);
+	GetNumberAsString(Iccid, modemIccid, 30);
+	ESP_LOGI(TAG, "got Iccid %s", modemIccid);
 
     char imsi[20];
     at_command_get_imsi(imsi, 20);
@@ -595,7 +596,7 @@ int enter_command_mode(void){
         clear_lines();// clear any extra ppp data from the modem
         xEventGroupSetBits(event_group, UART_TO_LINES);
 
-        at_command_echo_set(true);
+        at_command_echo_set(false);
 
         ESP_LOGD(TAG, "checking if ppp exit succeeded");
         at_result = at_command_at();
@@ -606,7 +607,7 @@ int enter_command_mode(void){
                 at_result, retry
             );
         }else{
-            ESP_LOGI(TAG, "PPP mode confirmed");
+            ESP_LOGI(TAG, "Command mode confirmed");
             return 0;
         }
 
@@ -691,4 +692,18 @@ void ppp_task_start(void){
     // esp_netif_action_stop
     // esp_netif_action_connected
     // esp_netif_action_disconnected
+}
+
+
+const char* LTEGetImei()
+{
+	return modemImei;
+}
+const char* LTEGetIccid()
+{
+	return modemIccid;
+}
+const char* LTEGetImsi()
+{
+	return modemImsi;
 }

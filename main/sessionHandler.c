@@ -14,22 +14,11 @@
 #include "DeviceInfo.h"
 #include "chargeSession.h"
 #include "storage.h"
+#include "connectivity.h"
 
 static const char *TAG = "SESSION    ";
 
-static int networkType = 0;
 static uint32_t dataTestInterval = 0;
-
-enum eNetworkType
-{
-	eWifi = 0,
-	e4G = 1
-};
-
-void SetNetworkType(int network_type)
-{
-	networkType = network_type;
-}
 
 
 void SetDataInterval(int newDataInterval)
@@ -38,18 +27,16 @@ void SetDataInterval(int newDataInterval)
 }
 
 bool authorizationRequired = true;
-static int rssi2 = 0;
+static int rssiLTE = 0;
 
-void log_cellular_quality(void){
-	#ifndef USE_CELLULAR_CONNECTION
-	return;
-	#endif
+int log_cellular_quality(void){
+
 	int enter_command_mode_result = enter_command_mode();
 
 	if(enter_command_mode_result<0){
 		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
 		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
-		return;
+		return 0;
 	}
 
 	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
@@ -58,18 +45,20 @@ void log_cellular_quality(void){
 	char signal_string[256];
 	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
 	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
-	publish_diagnostics_observation(signal_string);
+	//publish_diagnostics_observation(signal_string);
 
 	//int rssi2;
 	int ber;
 	char quality_string[256];
-	at_command_signal_quality(&rssi2, &ber);
-	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssi2, ber);
+	at_command_signal_quality(&rssiLTE, &ber);
+	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssiLTE, ber);
 	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
-	publish_diagnostics_observation(quality_string);
+	//publish_diagnostics_observation(quality_string);
 
 	int enter_data_mode_result = enter_data_mode();
 	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+
+	return rssiLTE;
 }
 
 
@@ -129,7 +118,7 @@ static void sessionHandler_task()
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 10;
 
-    uint32_t signalInterval = 120;
+    uint32_t signalInterval = 30;
 
     uint32_t signalCounter = 0;
     bool startupSent = false;
@@ -137,8 +126,12 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
+    enum CommunicationMode networkInterface = eCONNECTION_NONE;
+
 	while (1)
 	{
+		networkInterface = connectivity_GetActivateInterface();
+
 		currentCarChargeMode = MCU_GetchargeMode();
 
 		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
@@ -184,12 +177,7 @@ static void sessionHandler_task()
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
 
-			int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-
-			//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-
-			//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-
+			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
 
 			NFCClearTag();
 		}
@@ -201,14 +189,24 @@ static void sessionHandler_task()
 
 		if (onTime > 600)
 		{
-			if (MCU_GetchargeMode() != 12)
-				dataInterval = 120;//60;
-			else
-				dataInterval = 600;
-				//dataInterval = 3600;
+			if (networkInterface == eCONNECTION_WIFI)
+			{
+				if (MCU_GetchargeMode() == 12)
+					dataInterval = 600;	//When car is disconnected
+				else
+					dataInterval = 60;	//When car connected
 
-			signalInterval = 300;
-			//signalInterval = 3600;
+			}
+			else if (networkInterface == eCONNECTION_LTE)
+			{
+				if (MCU_GetchargeMode() == 12)
+					dataInterval = 1800;	//When car is disconnected
+				else
+					dataInterval = 600;	//When car connected
+
+				//LTE SignalQuality internal update interval
+				signalInterval = 1800;
+			}
 		}
 
 
@@ -218,29 +216,19 @@ static void sessionHandler_task()
 
 		if(dataCounter >= dataInterval)
 		{
-			if (esp_wifi_sta_get_ap_info(&wifidata)==0){
-				rssi = wifidata.rssi;
-			}
-			else
-				rssi = 0;
-
-			if (networkType == e4G)
-			{
-				rssi = rssi2;
-			}
 
 			if (isMqttConnected() == true)
 			{
-				if (startupSent == false)
+				if (networkInterface == eCONNECTION_WIFI)
 				{
-					if (networkType == e4G)
-					{
-						log_task_info();
-						log_cellular_quality();
-					}
-
-					publish_debug_telemetry_observation_StartUpParameters();
-					startupSent = true;
+					if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+						rssi = wifidata.rssi;
+					else
+						rssi = 0;
+				}
+				else if (networkInterface == eCONNECTION_LTE)
+				{
+					rssi = 2*rssiLTE - 113;//Convert to dB
 				}
 
 				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
@@ -254,15 +242,15 @@ static void sessionHandler_task()
 		}
 
 
-		if (networkType == e4G)
+		if (networkInterface == eCONNECTION_LTE)
 		{
 			signalCounter++;
 			if(signalCounter >= signalInterval)
 			{
 				if (isMqttConnected() == true)
 				{
-					//log_task_info();
-					log_cellular_quality();
+				//log_task_info();
+					rssiLTE = log_cellular_quality();
 				}
 
 				signalCounter = 0;
@@ -285,63 +273,79 @@ static void sessionHandler_task()
 		if(statusCounter >= statusInterval)
 		{
 
-			if (networkType == e4G)
+			if (networkInterface == eCONNECTION_LTE)
 			{
-				int dBm = 2*rssi2 - 113;
-				ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssi2, dBm, dataInterval);
+				int dBm = 2*rssiLTE - 113;
+				ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssiLTE, dBm, dataInterval);
 			}
-			else
-			{
-
-				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
-				{
-					rssi = wifidata.rssi;
-				}
-				else
-					rssi = 0;
-
-				//ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
-			}
+//			else
+//			{
+//				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+//					rssi = wifidata.rssi;
+//				else
+//					rssi = 0;
+//
+//				//ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
+//			}
 
 			statusCounter = 0;
 		}
 
 
-
-		if(CloudSettingsAreUpdated() == true)
+		if (isMqttConnected() == true)
 		{
-			int published = publish_debug_telemetry_observation_cloud_settings();
-			if (published == 0)
+			if (startupSent == false)
 			{
-				ClearCloudSettingsAreUpdated();
-				ESP_LOGW(TAG,"Cloud settings flag cleared");
+				if((networkInterface == eCONNECTION_WIFI))
+				{
+					publish_debug_telemetry_observation_WifiParameters();
+				}
+				if (networkInterface == eCONNECTION_LTE)
+				{
+					//log_task_info();
+					//log_cellular_quality();
+					publish_debug_telemetry_observation_LteParameters();
+				}
+
+				publish_debug_telemetry_observation_StartUpParameters();
+
+				startupSent = true;
 			}
-			else
+
+
+			if(CloudSettingsAreUpdated() == true)
 			{
-				ESP_LOGE(TAG,"Cloud settings flag NOT cleared");
+				int published = publish_debug_telemetry_observation_cloud_settings();
+				if (published == 0)
+				{
+					ClearCloudSettingsAreUpdated();
+					ESP_LOGW(TAG,"Cloud settings flag cleared");
+				}
+				else
+				{
+					ESP_LOGE(TAG,"Cloud settings flag NOT cleared");
+				}
 			}
+
+
+			if(LocalSettingsAreUpdated() == true)
+			{
+				//Give some time to ensure all values are set
+				vTaskDelay(pdMS_TO_TICKS(1000));
+
+				int published = publish_debug_telemetry_observation_local_settings();
+				if (published == 0)
+				{
+					ClearLocalSettingsAreUpdated();
+					ESP_LOGW(TAG,"Local settings flag cleared");
+				}
+				else
+				{
+					ESP_LOGE(TAG,"Local settings flag NOT cleared");
+				}
+			}
+
 		}
-
-
-		if(LocalSettingsAreUpdated() == true)
-		{
-			//Give some time to ensure all values are set
-			vTaskDelay(pdMS_TO_TICKS(1000));
-
-			int published = publish_debug_telemetry_observation_local_settings();
-			if (published == 0)
-			{
-				ClearLocalSettingsAreUpdated();
-				ESP_LOGW(TAG,"Local settings flag cleared");
-			}
-			else
-			{
-				ESP_LOGE(TAG,"Local settings flag NOT cleared");
-			}
-		}
-
-
-		//ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
