@@ -136,8 +136,15 @@ static void sessionHandler_task()
 
 		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
-			esp_err_t clearErr = storage_clearSessionResetInfo();
-			ESP_LOGI(TAG, "Clearing csResetSession file due to eCAR_DISCONNECTED at start: %d", clearErr);
+			if(storage_CheckSessionResetFile() > 0)
+			{
+				esp_err_t clearErr = storage_clearSessionResetInfo();
+				ESP_LOGI(TAG, "Clearing csResetSession file due to eCAR_DISCONNECTED at start: %d", clearErr);
+			}
+			else
+			{
+				ESP_LOGI(TAG, "No session in csResetSession file");
+			}
 		}
 
 		// Check if car connecting -> start a new session

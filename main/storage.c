@@ -469,7 +469,7 @@ esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t
 
 esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
 {
-	size_t readSize;
+	size_t readSize = 0;
 
 	esp_err_t err;
 	err = nvs_open(CS_RESET_FILE, NVS_READONLY, &session_reset_handle);
@@ -493,6 +493,19 @@ esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t
 	nvs_close(session_reset_handle);
 
 	return err;
+}
+
+
+
+size_t storage_CheckSessionResetFile()
+{
+	size_t readSize = 0;
+
+	err = nvs_open(CS_RESET_FILE, NVS_READONLY, &session_reset_handle);
+	err += nvs_get_str(session_reset_handle, "csId", NULL, &readSize);
+	nvs_close(session_reset_handle);
+
+	return readSize;
 }
 
 

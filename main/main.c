@@ -168,6 +168,15 @@ void app_main(void)
 
 	storage_Init();
 
+	if(storage_ReadConfiguration() != ESP_OK)
+	{
+		ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
+
+		storage_Init_Configuration();
+		storage_Set_CommunicationMode(eCONNECTION_WIFI);
+		storage_SaveConfiguration();
+	}
+
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 #ifdef useConsole
@@ -213,6 +222,8 @@ void app_main(void)
 				strcpy(WifiPSK, "LuckyJack#003");
 				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
 				storage_SaveWifiParameters(WifiSSID, WifiPSK);
+				storage_Set_CommunicationMode(eCONNECTION_WIFI);
+				storage_SaveConfiguration();
 
 			}
 
@@ -225,6 +236,8 @@ void app_main(void)
 					//strcpy(WifiSSID, "BVb");
 					//strcpy(WifiPSK, "tk51mo79");
 					storage_SaveWifiParameters(WifiSSID, WifiPSK);
+					storage_Set_CommunicationMode(eCONNECTION_WIFI);
+					storage_SaveConfiguration();
 				}
 			}
 			else if(switchState == 4) //Applica - EMC config
@@ -232,35 +245,38 @@ void app_main(void)
 				strcpy(WifiSSID, "APPLICA-GJEST");
 				strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
 				storage_SaveWifiParameters(WifiSSID, WifiPSK);
-			}
-
-			if(storage_ReadConfiguration() != ESP_OK)
-			{
-				storage_Init_Configuration();
 				storage_Set_CommunicationMode(eCONNECTION_WIFI);
 				storage_SaveConfiguration();
+
 			}
+
+//			if(storage_ReadConfiguration() != ESP_OK)
+//			{
+//				ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
+//
+//				storage_Init_Configuration();
+//				storage_Set_CommunicationMode(eCONNECTION_WIFI);
+//				storage_SaveConfiguration();
+//			}
 
 		}
     }
 #endif
 
-    // Read connection mode from flash and start interface
-    connectivity_init(switchState);
 
-
-//    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
-//    {
-//    	ppp_task_start();
-//    }
+    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
+    {
+    	storage_Set_CommunicationMode(eCONNECTION_LTE);
+		storage_SaveConfiguration();
+    }
 
     if(switchState == eConfig_4G_bridge)
 	{
 		hard_reset_cellular();
 	}
 
-	//vTaskDelay(pdMS_TO_TICKS(3000));
-
+    // Read connection mode from flash and start interface
+    connectivity_init(switchState);
 
 
 //#define WriteThisDeviceInfo
@@ -336,16 +352,7 @@ void app_main(void)
 		i2cSetDebugDeviceInfoToMemory(devInfo);
 	}
 
-
 	vTaskDelay(500 / portTICK_PERIOD_MS);
-
-//	if((switchState == eConfig_Wifi_NVS) ||
-//	   (switchState == eConfig_Wifi_Zaptec) ||
-//	   (switchState == eConfig_Wifi_EMC) ||
-//	   (switchState == eConfig_4G))
-//	{
-//		start_cloud_listener_task(devInfo);
-//	}
 
 	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
 	{
