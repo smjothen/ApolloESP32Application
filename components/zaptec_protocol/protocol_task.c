@@ -53,26 +53,23 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 
     if( xSemaphoreTake( uart_write_lock, SEMAPHORE_TIMEOUT ) == pdTRUE )
     {
-    
-    	uart_flush(uart_num);
+    	uart_flush_input(uart_num);
         xQueueReset(uart_recv_message_queue);
-
-//	        printf("tx: ");
-//	        for (int i = 0; i < length; i++)
-//	        	printf("%X ", encodedTxBuf[i]);
-//	        printf("\n");
 
         int sent_bytes = uart_write_bytes(uart_num, (char *)encodedTxBuf, length);
 		if(sent_bytes<length){
 			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
 		}
+		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, portMAX_DELAY)); // tx flush
 
         ZapMessage rxMsg = {0};
-        xQueueReceive( 
-            uart_recv_message_queue,
-            &( rxMsg ),
-			RX_TIMEOUT//portMAX_DELAY
-        );
+        if( xQueueReceive( 
+				uart_recv_message_queue,
+				&( rxMsg ),
+				RX_TIMEOUT) == pdFALSE){
+					ESP_LOGE(TAG, "timeout in response to runRequest()");
+		}
+        
 
         // dont release uart_write_lock, let caller use freeZapMessageReply()
         return rxMsg;
@@ -134,12 +131,18 @@ void uartRecvTask(void *pvParameters){
                 if(ZParseFrame(rxByte, &rxMsg))
                 {   
                     uart_flush(uart_num);
-                    configASSERT(xQueueSend(
+                    if(xQueueSend(
                         uart_recv_message_queue,                        
                         ( void * ) &rxMsg,
-                        portMAX_DELAY
-                    ))
-                    //printf("handling frame\n\r");
+						// do not block the task if the queue is not ready. It will cause
+						// the queue to be unable to xQueueReset properly, since the task itself will
+						// also hold a message
+                        0 
+                    )){
+						// message sent immediately
+					}else{
+						ESP_LOGW(TAG, "there is already a ZapMessage in the queue, this indicates a syncronization issue");
+					}
                 }
             }
         }

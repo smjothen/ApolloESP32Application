@@ -184,12 +184,14 @@ int update_dspic(void){
     event_group = xEventGroupCreate();
     bool update_success = false;
 
-    for(int retry=0; retry<5; retry++){
+    for(int retry=0; retry<10; retry++){
 
         if(retry == 0){
             ESP_LOGI(TAG, "starting dspic update task");
         }else{
-            ESP_LOGI(TAG, "retrying dspic update task (attempt: %d)", retry+1);
+            int delay = 1000 * retry; 
+            vTaskDelay(pdMS_TO_TICKS(delay));
+            ESP_LOGI(TAG, "retrying dspic update task (attempt: %d, delay: %d ms)", retry+1, delay);
         }
 
         xEventGroupClearBits(event_group,
@@ -407,6 +409,8 @@ int set_dspic_header(void){
 int is_bootloader(bool *result){
     ESP_LOGI(TAG, "reading bootloader version");
 
+    int err = 0;
+
     txMsg.type = MsgFirmware;
     txMsg.identifier = 0; // ignored on bootloader?
 
@@ -423,12 +427,13 @@ int is_bootloader(bool *result){
         ESP_LOGI(TAG, "detected bootloader");
         *result = true;
     }else{
-        ESP_LOGW(TAG, "inconclusive bootloader test, assuming false");
+        ESP_LOGE(TAG, "inconclusive bootloader test, assuming false");
         *result = false;
+        err = -1;
     }
 
     freeZapMessageReply();
-    return 0;
+    return err;
 }
 
 
