@@ -68,7 +68,7 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
 
         get_image_location(image_location,sizeof(image_location));

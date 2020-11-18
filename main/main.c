@@ -33,11 +33,10 @@ const char *TAG_MAIN = "MAIN     ";
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_EEPROM_WP    4
-//#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
+#define GPIO_OUTPUT_EEPROM_WP_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "2.8.0.2";
-char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
+char softwareVersion[] = " 0.0.0.4 ";
+char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to fake ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -60,7 +59,7 @@ void InitGPIOs()
     gpio_config_t output_conf;
 	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
 	output_conf.mode = GPIO_MODE_OUTPUT;
-	output_conf.pin_bit_mask = GPIO_OUTPUT_DEBUG_PIN_SEL;
+	output_conf.pin_bit_mask = GPIO_OUTPUT_EEPROM_WP_SEL;
 	output_conf.pull_down_en = 0;
 	output_conf.pull_up_en = 0;
 	gpio_config(&output_conf);
@@ -185,8 +184,8 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-    //start_ota_task();
-	//validate_booted_image();
+    start_ota_task();
+	validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start(); 
 
@@ -279,8 +278,8 @@ void app_main(void)
     connectivity_init(switchState);
 
 
-//#define WriteThisDeviceInfo
-//#define Erase
+// #define WriteThisDeviceInfo
+// #define Erase
 
 #ifdef Erase
 	EEPROM_Erase();
@@ -309,6 +308,10 @@ void app_main(void)
 	strcpy(writeDevInfo.serialNumber, "ZAP000020");
 	strcpy(writeDevInfo.PSK, "z4J8JqxPu51JlP8ewyD2KyMbxLUrXYg8PneWBtgEct8=");
 	strcpy(writeDevInfo.Pin, "6557");
+
+	// strcpy(writeDevInfo.serialNumber, "ZAP000022");
+	// strcpy(writeDevInfo.PSK, "SSuUTcIkWJFJ0wqbXUcQ/6KG5Nom6yQd4L7NFqbN+lc=");
+	// strcpy(writeDevInfo.Pin, "9451");
 
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
@@ -339,9 +342,9 @@ void app_main(void)
 	else
 	{
 		//Wroom32 ID - BLE - (no EEPROM)
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
+		//strcpy(devInfo.serialNumber, "ZAP000011");
+		//strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+		//strcpy(devInfo.Pin, "7053");
 
 		//Wroom32 ID - BLE - (no EEPROM)
 //		strcpy(devInfo.serialNumber, "ZAP000012");

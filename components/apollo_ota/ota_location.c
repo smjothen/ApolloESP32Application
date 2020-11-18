@@ -1,3 +1,5 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "ota_location.h"
 #include <string.h>
 // #include "esp_tls.h"
@@ -83,8 +85,83 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+#include "esp_heap_task_info.h"
 
-int get_image_location(char * location, int buffersize){
+#define MAX_TASK_NUM 30                         // Max number of per tasks info that it can store
+#define MAX_BLOCK_NUM 30                        // Max number of per block info that it can store
+
+static size_t s_prepopulated_num = 0;
+static heap_task_totals_t s_totals_arr[MAX_TASK_NUM];
+static heap_task_block_t s_block_arr[MAX_BLOCK_NUM];
+
+static void esp_dump_per_task_heap_info(void)
+{
+    heap_task_info_params_t heap_info = {0};
+    heap_info.caps[0] = MALLOC_CAP_8BIT;        // Gets heap with CAP_8BIT capabilities
+    heap_info.mask[0] = MALLOC_CAP_8BIT;
+    heap_info.caps[1] = MALLOC_CAP_32BIT;       // Gets heap info with CAP_32BIT capabilities
+    heap_info.mask[1] = MALLOC_CAP_32BIT;
+    heap_info.tasks = NULL;                     // Passing NULL captures heap info for all tasks
+    heap_info.num_tasks = 0;
+    heap_info.totals = s_totals_arr;            // Gets task wise allocation details
+    heap_info.num_totals = &s_prepopulated_num;
+    heap_info.max_totals = MAX_TASK_NUM;        // Maximum length of "s_totals_arr"
+    heap_info.blocks = s_block_arr;             // Gets block wise allocation details. For each block, gets owner task, address and size
+    heap_info.max_blocks = MAX_BLOCK_NUM;       // Maximum length of "s_block_arr"
+
+    heap_caps_get_per_task_info(&heap_info);
+
+    for (int i = 0 ; i < *heap_info.num_totals; i++) {
+        printf("Task: %s -> CAP_8BIT: %d CAP_32BIT: %d\n",
+                heap_info.totals[i].task ? pcTaskGetTaskName(heap_info.totals[i].task) : "Pre-Scheduler allocs" ,
+                heap_info.totals[i].size[0],    // Heap size with CAP_8BIT capabilities
+                heap_info.totals[i].size[1]);   // Heap size with CAP32_BIT capabilities
+    }
+
+    printf("\n\n");
+}
+
+static void log_task_info(void)
+{
+    char task_info[40 * 15];
+
+    // https://www.freertos.org/a00021.html#vTaskList
+    vTaskList(task_info);
+    ESP_LOGD(TAG, "[vTaskList:]\n\r"
+                  "name\t\tstate\tpri\tstack\tnum\tcoreid"
+                  "\n\r%s\n",
+             task_info);
+
+    vTaskGetRunTimeStats(task_info);
+    ESP_LOGD(TAG, "[vTaskGetRunTimeStats:]\n\r"
+                  "\rname\t\tabsT\t\trelT\trelT"
+                  "\n\r%s\n",
+             task_info);
+
+    size_t total_size = heap_caps_get_total_size(MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "available heap size: %d", total_size);
+
+    // memory info as extracted in the HAN adapter project:
+    size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
+    // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
+    char formated_memory_use[256];
+    snprintf(formated_memory_use, 256,
+             "[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d, heap_caps_get_free_size: %d)",
+             xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size);
+    ESP_LOGD(TAG, "freertos api result:\n\r%s", formated_memory_use);
+
+    // heap_caps_print_heap_info(MALLOC_CAP_EXEC|MALLOC_CAP_32BIT|MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DEFAULT|MALLOC_CAP_IRAM_8BIT);
+    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+
+    ESP_LOGD(TAG, "\n---------------------------\n");
+    heap_caps_print_heap_info(MALLOC_CAP_8BIT);
+
+    ESP_LOGD(TAG, "log_task_info done");
+}
+
+int get_image_location(char *location, int buffersize)
+{
     ESP_LOGI(TAG, "getting ota image location");
 
     char local_response_buffer[MAX_HTTP_RECV_BUFFER] = {0};
@@ -110,6 +187,10 @@ int get_image_location(char * location, int buffersize){
     esp_http_client_set_method(client, HTTP_METHOD_POST);
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+    esp_dump_per_task_heap_info();
+    log_task_info();
+
     esp_err_t err = esp_http_client_perform(client);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
@@ -134,7 +215,8 @@ int get_image_location(char * location, int buffersize){
         ESP_LOGE(TAG, "HTTP POST request failed: %s", esp_err_to_name(err));
     }
 
-
+    esp_http_client_cleanup(client);
+    log_task_info();
 
     return 0;
 }
