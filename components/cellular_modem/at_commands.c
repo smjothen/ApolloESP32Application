@@ -24,7 +24,7 @@ static int at_command_with_ack_and_lines(char * command, char * success_key, uin
         }
     }
 
-    ESP_LOGI(TAG, "command [%s] not ok. last we got was [%s]", command, at_buffer);
+    ESP_LOGW(TAG, "command [%s] not ok. last we got was [%s]", command, at_buffer);
     return -1;
 }
 
@@ -159,4 +159,9 @@ int at_command_signal_quality(int *rssi, int *ber){
 
 int at_command_flow_ctrl_enable(void){
     return at_command_with_ok_ack("AT+IFC=2,2", 600);
+}
+
+int at_command_network_registration_status(){
+    char reply[20];
+    return at_command_two_line_response("AT+CREG?", reply, 20, 300, 100);
 }

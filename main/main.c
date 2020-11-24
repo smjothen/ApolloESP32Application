@@ -173,7 +173,8 @@ void app_main(void)
 
 		storage_Init_Configuration();
 		storage_Set_CommunicationMode(eCONNECTION_WIFI);
-		storage_SaveConfiguration();
+		int errors = storage_SaveConfiguration();
+		ESP_LOGI(TAG_MAIN, "storage initial save, errors: %d", errors);
 	}
 
 	//Init to read device ID from EEPROM

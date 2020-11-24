@@ -108,7 +108,7 @@ python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --rang
 
 This changes the file in the following ways:
 - `hex2bin` go from lines with addresses and data in hex to pure binary stuff
-- `--range=0x3c00:0x56fff` skip the start of the flash, this data is required if running without bootloader for development, but is not part of what is updated with the OTA image. `(0x56fff+0x1)÷0x2==0x2b800` This range works, but it seems the start address is word-indexed and the second is byte-indexed. Results obtained by trial and error ;)
+- `--range=0x3c00:0x56fff` skip the start of the flash, this data is required if running without bootloader for development, but is not part of what is updated with the OTA image. `(0x56fff+0x1)÷0x2==0x2b800` This range works, but it seems the start address is word-indexed and the second is byte-indexed. Results obtained by trial and error ;) (update: seems --range cuts the file, and tail could/should be removed)
 - `tail -c +15361` hex2bin pads the beginning of the file, here we remove that (0x3c00 +0x1 == 15361)
 
 The file located at `ApolloESP32Application/bin/dspic.bin` is automatically built in to the ESP32 image, using this strategy: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html#embedding-binary-data

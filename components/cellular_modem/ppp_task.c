@@ -488,6 +488,9 @@ int configure_modem_for_ppp(void){
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
 
+    ESP_LOGD(TAG, "checking CREG");
+    at_command_network_registration_status();
+    
     if(active_confirmed == true)
     {
 	    enter_data_mode();

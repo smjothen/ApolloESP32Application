@@ -19,4 +19,6 @@ int at_command_signal_quality(int *rssi, int *ber);
 
 int at_command_flow_ctrl_enable(void);
 
+int at_command_network_registration_status();
+
 #endif /* AT_COMMANDS_H */
