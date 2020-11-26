@@ -96,13 +96,6 @@ void log_task_info(void){
 	ESP_LOGD(TAG, "log_task_info done");
 }
 
-enum CarChargeMode
-{
-	eCAR_UNINITIALIZED = 0xFF,
-	eCAR_DISCONNECTED = 12,
-	eCAR_CONNECTED = 9,
-	eCAR_CHARGING = 6,
-};
 
 static void sessionHandler_task()
 {
@@ -118,7 +111,7 @@ static void sessionHandler_task()
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 10;
 
-    uint32_t signalInterval = 30;
+    uint32_t signalInterval = 120;
 
     uint32_t signalCounter = 0;
     bool startupSent = false;
@@ -126,11 +119,41 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
+    enum ChargerOperatingMode currentChargeOperationMode = eUNKNOWN;
+    enum ChargerOperatingMode previousChargeOperationMode = eUNKNOWN;
+
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
+
+    bool isOnline = false;
 
 	while (1)
 	{
+		isOnline = isMqttConnected();
+
+		if(!isOnline)
+		{
+			ESP_LOGI(TAG, "Waiting to become online...");
+			vTaskDelay(pdMS_TO_TICKS(2000));
+			continue;
+		}
+
 		networkInterface = connectivity_GetActivateInterface();
+
+		currentChargeOperationMode = MCU_GetChargeOperatingMode();
+
+		if((currentChargeOperationMode != previousChargeOperationMode) || (currentCarChargeMode != previousCarChargeMode))
+		{
+			publish_uint32_observation(ParamChargeMode, (uint32_t)currentCarChargeMode);
+			publish_uint32_observation(ParamChargeOperationMode, (uint32_t)currentChargeOperationMode);
+		}
+		previousChargeOperationMode = currentChargeOperationMode;
+
+		if(chargeSession_HasNewSessionId() == true)
+		{
+			int ret = publish_string_observation(SessionIdentifier, chargeSession_GetSessionId());
+			if(ret == 0)
+				chargeSession_ClearHasNewSession();
+		}
 
 		currentCarChargeMode = MCU_GetchargeMode();
 
@@ -148,7 +171,7 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED) && isOnline == false)
 			chargeSession_Start();
 
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
@@ -180,11 +203,13 @@ static void sessionHandler_task()
 			//Make sure to get the final energy reading
 			MCU_GetEnergy();
 
-			chargeSession_End();
+			chargeSession_Finalize();
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
 
 			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			chargeSession_Clear();
 
 			NFCClearTag();
 		}

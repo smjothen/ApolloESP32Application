@@ -17,6 +17,7 @@ static const char *TAG = "CHARGESESSION:     ";
 
 static struct ChargeSession chargeSession = {0};
 
+static bool hasNewSessionId = false;
 
 static void ChargeSession_Set_GUID()
 {
@@ -30,9 +31,39 @@ static void ChargeSession_Set_GUID()
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
 	
 	sprintf(chargeSession.SessionId, "%08x-%04x-%04x-%04x-%04x%08x", GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
-	ESP_LOGW(TAG, "GUID: %s", chargeSession.SessionId);
+	hasNewSessionId = true;
+	ESP_LOGI(TAG, "GUID: %s", chargeSession.SessionId);
 
 }
+
+char * chargeSession_GetSessionId()
+{
+	return chargeSession.SessionId;
+}
+
+bool chargeSession_HasNewSessionId()
+{
+	return hasNewSessionId;
+}
+
+void chargeSession_ClearHasNewSession()
+{
+	hasNewSessionId = false;
+}
+
+
+void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
+{
+	if(strlen(chargeSession.SessionId) > 0)
+	{
+		ESP_LOGE(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
+	}
+
+	strcpy(chargeSession.SessionId, sessionIdFromCloud);
+	hasNewSessionId = true;
+	ESP_LOGI(TAG, "SessionId: %s , len: %d\n", chargeSession.SessionId, strlen(chargeSession.SessionId));
+}
+
 
 void GetUTCTimeString(char * timeString)
 {
@@ -104,12 +135,16 @@ void chargeSession_Start()
 }
 
 
-void chargeSession_End()
+void chargeSession_Finalize()
 {
 	GetUTCTimeString(chargeSession.EndTime);
 
 	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);
+}
 
+
+void chargeSession_Clear()
+{
 	esp_err_t clearErr = storage_clearSessionResetInfo();
 	ESP_LOGI(TAG, "Clearing csResetSession file");
 
@@ -117,8 +152,12 @@ void chargeSession_End()
 	{
 		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
 	}
-}
 
+	memset(&chargeSession, 0, sizeof(chargeSession));
+	ESP_LOGI(TAG, "Clearing csResetSession file");
+
+	hasNewSessionId = false;
+}
 
 
 void chargeSession_SetAuthenticationCode(char * idAsString)

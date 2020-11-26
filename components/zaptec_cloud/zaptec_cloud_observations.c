@@ -322,6 +322,10 @@ int publish_double_observation(int observationId, double value){
     return publish_json(create_double_observation(observationId, value));
 }
 
+int publish_string_observation(int observationId, char *message){
+    return publish_json(create_observation(observationId, message));
+}
+
 int publish_diagnostics_observation(char *message){
     return publish_json(create_observation(808, message));
 }

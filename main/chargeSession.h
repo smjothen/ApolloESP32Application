@@ -18,8 +18,15 @@ struct ChargeSession
 	uint32_t unixStartTime;
 };
 
+
+char* chargeSession_GetSessionId();
+bool chargeSession_HasNewSessionId();
+void chargeSession_ClearHasNewSession();
+
 void chargeSession_Start();
-void chargeSession_End();
+void chargeSession_Finalize();
+void chargeSession_Clear();
+void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
 void chargeSession_SetEnergy(float energy);
 

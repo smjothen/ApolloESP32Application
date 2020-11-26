@@ -36,7 +36,7 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "2.8.0.2";
+char softwareVersion[] = "3.2.0.0";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -182,6 +182,7 @@ void app_main(void)
 #ifdef useConsole
 	configure_console();
 #endif
+
 	configure_uart();
     zaptecProtocolStart();
 
@@ -272,7 +273,8 @@ void app_main(void)
 
     if(switchState == eConfig_4G_bridge)
 	{
-		hard_reset_cellular();
+		//hard_reset_cellular();
+		cellularPinsOn();
 	}
 
     // Read connection mode from flash and start interface

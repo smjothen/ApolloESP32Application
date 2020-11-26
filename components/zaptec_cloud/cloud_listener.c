@@ -15,6 +15,7 @@
 #include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
 #include "../authentication/authentication.h"
+#include "../../main/chargeSession.h"
 
 #define TAG "Cloud Listener"
 
@@ -812,22 +813,47 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if ((commandEvent->data[0] != '[') || (commandEvent->data[commandEvent->data_len-1] != ']'))
 			return -2;
 
-		char recvString[commandEvent->data_len];
-		strncpy(recvString, commandEvent->data+2, commandEvent->data_len-4);
-		recvString[commandEvent->data_len-4] = '\0';
+		char sessionIdString[commandEvent->data_len];
+		strncpy(sessionIdString, commandEvent->data+2, commandEvent->data_len-4);
+		sessionIdString[commandEvent->data_len-4] = '\0';
 
-		ESP_LOGI(TAG, "SessionId: %s , len: %d\n", recvString, strlen(recvString));
+		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
+		chargeSession_SetSessionIdFromCloud(sessionIdString);
 		responseStatus = 200;
 	}
 
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
 	{
-		ESP_LOGI(TAG, "Charging granted!");
+		//ESP_LOGI(TAG, "Charging granted!");
+
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Granted command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Granted command FAILED");
+		}
+
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
 	{
-		ESP_LOGI(TAG, "Charging denied!");
+		//ESP_LOGI(TAG, "Charging denied!");
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Granted command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Granted command FAILED");
+		}
 		responseStatus = 200;
 	}
 
@@ -978,6 +1004,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
 
         }
+
         //Handle incomming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
