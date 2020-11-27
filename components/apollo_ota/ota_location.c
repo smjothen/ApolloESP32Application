@@ -6,6 +6,8 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "i2cDevices.h"
+#include "string.h"
 
 #define TAG "OTA_LOCATION"
 
@@ -162,11 +164,14 @@ static void log_task_info(void)
 
 int get_image_location(char *location, int buffersize)
 {
-    ESP_LOGI(TAG, "getting ota image location");
+    char url [100];
+    snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+
+    ESP_LOGI(TAG, "getting ota image location from %s", url);
 
     char local_response_buffer[MAX_HTTP_RECV_BUFFER] = {0};
     esp_http_client_config_t config = {
-    	.url = "https://api.zaptec.com/api/firmware/ZAP000018/current",
+    	.url = url,
         //.host = "httpbin.org",
         //.path = "/get",
         //.query = "esp",
@@ -180,7 +185,8 @@ int get_image_location(char *location, int buffersize)
 
     // POST
     //const char *post_data = "{\"psk\":\"ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=\"}";
-    const char *post_data = "{\"psk\":\"NusI1QY66Hfnag1TE97gDmCepQVlD+4aYBZjRztzDIs=\"}";
+    char post_data [61];
+    snprintf(post_data, 61,"{\"psk\":\"%s\"}", i2cGetLoadedDeviceInfo().PSK );
     //const char *url = "https://api.zaptec.com/api/firmware/ZAP000018/current";
     //esp_http_client_set_url(client, "https://api.zaptec.com/api/firmware/ZAP000018/current");
     //esp_http_client_set_url(client, url);
