@@ -4,6 +4,7 @@
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 #include "freertos/event_groups.h"
+#include "string.h"
 
 #include "apollo_ota.h"
 #include "ota_location.h"
@@ -25,7 +26,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
         break;
     case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED, setting debug header");
+        esp_http_client_set_header(evt->client, "Zaptec-Debug-Info", "apollo/ota/arnt/1");
         break;
     case HTTP_EVENT_HEADER_SENT:
         ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");

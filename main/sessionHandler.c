@@ -257,7 +257,7 @@ static void sessionHandler_task()
 				if (isMqttConnected() == true)
 				{
 				//log_task_info();
-					rssiLTE = log_cellular_quality();
+					//rssiLTE = log_cellular_quality(); // check if OTA is in progress before calling this
 				}
 
 				signalCounter = 0;

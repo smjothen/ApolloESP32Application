@@ -165,3 +165,7 @@ int at_command_network_registration_status(){
     char reply[20];
     return at_command_two_line_response("AT+CREG?", reply, 20, 300, 100);
 }
+
+int at_command_set_baud_high(void){
+    return at_command_with_ok_ack("AT+IPR=921600", 300);
+}
