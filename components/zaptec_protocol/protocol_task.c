@@ -147,7 +147,10 @@ void uartRecvTask(void *pvParameters){
                 {   
                     uart_flush(uart_num);
                     if(xQueueSend(
-                        uart_recv_message_queue,                        
+                        uart_recv_message_queue,
+
+						//rxMsg is copied, so that consumers of the queue may edit the data, 
+						// they can also be certain it will not be changed by other tasks                        
                         ( void * ) &rxMsg,
 						// do not block the task if the queue is not ready. It will cause
 						// the queue to be unable to xQueueReset properly, since the task itself will
