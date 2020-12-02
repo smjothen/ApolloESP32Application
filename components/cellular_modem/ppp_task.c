@@ -21,8 +21,8 @@ static const char *TAG = "PPP_TASK";
 #define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
 #define CELLULAR_TX_SIZE 1024
 #define CELLULAR_QUEUE_SIZE 40
-#define ECHO_TEST_TXD1  (GPIO_NUM_17)
-#define ECHO_TEST_RXD1  (GPIO_NUM_16)
+#define ECHO_TEST_TXD1  (GPIO_NUM_5)//(GPIO_NUM_17)
+#define ECHO_TEST_RXD1  (GPIO_NUM_36)//(GPIO_NUM_16)
 #define ECHO_TEST_RTS1  (GPIO_NUM_32)
 #define ECHO_TEST_CTS1  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
@@ -218,7 +218,7 @@ void configure_uart(void){
 
 static void update_line_buffer(uint8_t* event_data,size_t size){
     event_data[size] = 0;
-    //ESP_LOGI(TAG, "got uart data[%s]", event_data);
+    ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
     if(size+line_buffer_end+1> LINE_BUFFER_SIZE){
         ESP_LOGE(TAG, "no space in line buffer! dropping data");

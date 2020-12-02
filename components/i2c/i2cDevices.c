@@ -200,7 +200,7 @@ static void i2cDevice_task(void *pvParameters)
 
 	RTCchecked = true;
 
-	SHT30Init();
+	//SHT30Init();
 
 	audioInit();
 
