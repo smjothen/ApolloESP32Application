@@ -882,9 +882,13 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		if((1.0 >= hmiBrightness) && (hmiBrightness >= 0.0 ))
 		{
-			storage_Set_HmiBrightness(hmiBrightness);
-			ESP_LOGI(TAG, "Set hmiBrightness: %f", hmiBrightness);
-			saveConfiguration = true;
+			MessageType ret = MCU_SendFloatParameter(HmiBrightness, hmiBrightness);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_HmiBrightness(hmiBrightness);
+				ESP_LOGI(TAG, "Set hmiBrightness: %f", hmiBrightness);
+				saveConfiguration = true;
+			}
 		}
 
    		break;

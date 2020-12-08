@@ -29,31 +29,18 @@
 #include "../../main/storage.h"
 
 
-//#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ-guest"
-//#define CONFIG_EXAMPLE_WIFI_PASSWORD "Ilovezaptec"
-
-//#define CONFIG_EXAMPLE_WIFI_SSID "BVb"
-//#define CONFIG_EXAMPLE_WIFI_PASSWORD "tk51mo79"
-
-char WifiSSID[32]= {0};// = "BVb";
-char WifiPSK[64] = {0};//"tk51mo79";
+char WifiSSID[32]= {0};
+char WifiPSK[64] = {0};
 
 static char previousWifiSSID[32] = {0};
-static char previousWifiPSK[32] = {0};
+static char previousWifiPSK[64] = {0};
 
-//int switchState = 0;
 char ip4Address[16] = {0};
 char ip6Address;
 static bool wifiScan = false;
 static bool wifiIsValid = false;
 static bool firstTime = true;
 static bool connecting = false;
-
-//#define CONFIG_EXAMPLE_WIFI_SSID "ZaptecHQ"
-//#define CONFIG_EXAMPLE_WIFI_PASSWORD "LuckyJack#003"
-
-//#define CONFIG_EXAMPLE_WIFI_SSID "Zaptec Garage âš¡ï¸�"
-//#define CONFIG_EXAMPLE_WIFI_PASSWORD "ZaptecSmart2017"
 
 #define GOT_IPV4_BIT BIT(0)
 #define GOT_IPV6_BIT BIT(1)
@@ -128,11 +115,10 @@ static void on_got_ipv6(void *arg, esp_event_base_t event_base,
 
 esp_err_t network_connect_wifi(void)
 {
-	ESP_ERROR_CHECK(esp_netif_init());
+
 	if(firstTime == true)
 	{
-		//ESP_ERROR_CHECK( nvs_flash_init() );
-		//ESP_ERROR_CHECK(esp_netif_init());
+		ESP_ERROR_CHECK(esp_netif_init());
 	    ESP_ERROR_CHECK( esp_event_loop_create_default() );
 	}
 
@@ -145,7 +131,7 @@ esp_err_t network_connect_wifi(void)
     	ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to %s", WifiSSID);//s_connection_name);
+    ESP_LOGI(TAG, "Connected to %s", WifiSSID);
     ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
@@ -224,40 +210,13 @@ static void start(void)
         },
     };
 
-
     network_CheckWifiParameters();
-//    if(switchState == eConfig_Wifi_NVS)
-//	{
-//    	network_CheckWifiParameters();
-//	}
-//
-//    if(switchState == eConfig_Wifi_Zaptec)
-//	{
-//		strcpy(WifiSSID, "ZaptecHQ");
-//		strcpy(WifiPSK, "LuckyJack#003");
-//		//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
-//	}
-//
-//    else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
-//    {
-//    	strcpy(WifiSSID, "BVb");
-//    	strcpy(WifiPSK, "tk51mo79");
-//	}
-//    else if(switchState == 4) //Applica - EMC config
-//    {
-//       	strcpy(WifiSSID, "APPLICA-GJEST");
-//       	strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
-//   	}
 
     memset(wifi_config.sta.ssid, 0, 32);
     memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
 
 	memset(wifi_config.sta.password, 0, 64);
 	memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
-
-
-
-
 
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
@@ -415,21 +374,6 @@ void SetupWifi()
 }
 
 
-void configure_wifi(){
-	//switchState = switchstate;
-	ESP_ERROR_CHECK( nvs_flash_init() );
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK( esp_event_loop_create_default() );
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    ESP_ERROR_CHECK(network_connect_wifi());
-}
-
-
-
 char * network_GetIP4Address()
 {
 	return ip4Address;
@@ -515,7 +459,7 @@ void network_updateWifi()
 
 			//Hold the new values
 			memcpy(previousWifiSSID, WifiSSID, 32);
-			memcpy(previousWifiPSK, WifiPSK, 32);
+			memcpy(previousWifiPSK, WifiPSK, 64);
 		//}
 	}
 }

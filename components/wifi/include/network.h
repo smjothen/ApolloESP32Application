@@ -1,5 +1,5 @@
-#ifndef _CONNECT_H_
-#define _CONNECT_H_
+#ifndef _NETWORK_H_
+#define _NETWORK_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,6 @@ enum sConfig
 esp_err_t network_connect_wifi(void);
 esp_err_t network_disconnect_wifi(void);
 
-void configure_wifi();
 void SetupWifi();
 bool network_WifiIsConnected();
 bool network_CheckWifiParameters();
@@ -43,4 +42,4 @@ void network_updateWifi();
 }
 #endif
 
-#endif  /*_CONNECT_H_*/
+#endif  /*_NETWORK_H_*/
