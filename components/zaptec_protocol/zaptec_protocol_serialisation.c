@@ -83,7 +83,6 @@ uint16_t checksum(uint8_t* data, uint16_t length)
 }
 
 uint8_t frameBuffer[128]; // TODO sun - check with JH, enough?
-ZapMessage msg = { 0, 0, 0, 0, 0 };
 
 /*
 * StuffData byte stuffs "length" bytes of
@@ -236,22 +235,22 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
         }
 
         uint8_t* ptr = frameBuffer;
-        msg.type = *ptr;
+        outMsg->type = *ptr;
         ptr += 1;
-        msg.timeId = ZDecodeUint16(ptr);
+        outMsg->timeId = ZDecodeUint16(ptr);
         ptr += 2;
-        msg.identifier = ZDecodeUint16(ptr);
+        outMsg->identifier = ZDecodeUint16(ptr);
         ptr += 2;
 
-        if (msg.type == MsgReadAck || msg.type == MsgWrite || msg.type == MsgWriteAck || msg.type == MsgCommandAck || msg.type == MsgCommand || msg.type == MsgFirmware)
+        if (outMsg->type == MsgReadAck || outMsg->type == MsgWrite || outMsg->type == MsgWriteAck || outMsg->type == MsgCommandAck || outMsg->type == MsgCommand || outMsg->type == MsgFirmware)
         {
-            msg.length = ZDecodeUint16(ptr);
+            outMsg->length = ZDecodeUint16(ptr);
             ptr += 2;
 
-            msg.data = ptr;
-            ptr += msg.length;
+            memcpy(outMsg->data, ptr, outMsg->length);
+            ptr += outMsg->length;
 
-            if (frameLength < 7 + 2 + msg.length)
+            if (frameLength < 7 + 2 + outMsg->length)
             {
 #ifdef DEBUG_SERIAL_PROTOCOL
             printf("\r\n[SERIAL] Packet length");
@@ -261,10 +260,11 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
                 return false;
             }
         }
-        else if (msg.type == MsgFirmwareAck)
+        else if (outMsg->type == MsgFirmwareAck)
         {
-        	msg.length = 1;
-        	msg.data = ptr++;
+        	outMsg->length = 1;
+            memcpy(outMsg->data, ptr, outMsg->length);
+            ptr++;
         }
         
 
@@ -274,7 +274,6 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
 
         if (receivedChecksum == checkSum)
         {
-            *outMsg = msg;
             encIdx = 0;
             completedPackets++;
 #ifdef DEBUG_SERIAL_PROTOCOL
