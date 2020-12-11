@@ -287,7 +287,7 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 
 
 static float hmiBrightness = 0.0;
-static char nrTostr[8];
+static char nrTostr[11] = {0};
 //static char swVersion[8];
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
@@ -711,15 +711,18 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
   		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-  		ESP_LOGI(TAG, "Read Warning %d ", MCU_GetWarnings());
+  		volatile uint32_t warning = MCU_GetWarnings();
+  		ESP_LOGI(TAG, "Read Warning %d ", warning);
 
-  		memset(nrTostr, 0, sizeof(nrTostr));
-  		//itoa(MCU_GetWarnings(), nrTostr, 10);
+  		warning = 0; //TODO: Remove this line when checked with new app. Old app reports moisure when warning = 0x00000080
 
-  		//memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
-  		uint32_t warning = 0;//MCU_GetWarnings();
-		memcpy(rsp->attr_value.value, &warning, sizeof(warning));
-  		rsp->attr_value.len = 1;//sizeof(warning);
+  		volatile uint32_t warningFlipped = 0;
+  		warningFlipped = ((warning >> 24) & 0xff);
+  		warningFlipped |= ((warning >> 8) & 0xff00);
+  		warningFlipped |= ((warning << 8) & 0xff0000);
+  		warningFlipped |= ((warning << 24) & 0xff000000);
+		memcpy(rsp->attr_value.value, &warningFlipped, sizeof(warningFlipped));
+  		rsp->attr_value.len = 1;//sizeof(warningFlipped); //TODO: Fix this line when checked with new app. Old app reports moisure when warning = 0x00000080
 
   		break;
 
