@@ -129,7 +129,7 @@ static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
 
 //static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
-static char wifiPackage[500] = {0};
+static char wifiPackage[500] = {0}; //TODO: Evaluate size
 
 
 
