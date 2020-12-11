@@ -4,10 +4,12 @@
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 #include "freertos/event_groups.h"
+#include "string.h"
 
 #include "apollo_ota.h"
 #include "ota_location.h"
 #include "pic_update.h"
+#include "ota_log.h"
 
 #define TAG "OTA"
 
@@ -25,7 +27,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
         break;
     case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED, setting debug header");
+        esp_http_client_set_header(evt->client, "Zaptec-Debug-Info", "apollo/ota/arnt/1");
         break;
     case HTTP_EVENT_HEADER_SENT:
         ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
@@ -34,7 +37,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         break;
     case HTTP_EVENT_ON_DATA:
-        // ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len); to much noice
+        ota_log_download_progress_debounced(evt->data_len);
         break;
     case HTTP_EVENT_ON_FINISH:
         ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
@@ -68,8 +71,9 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
+        ota_log_location_fetch();
 
         get_image_location(image_location,sizeof(image_location));
         // strcpy( image_location,"http://api.zaptec.com/api/firmware/6476103f-7ef9-4600-9450-e72a282c192b/download");
@@ -81,12 +85,19 @@ static void ota_task(void *pvParameters){
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
 
+        ota_log_download_start(image_location);
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK) {
-        	ESP_LOGE(TAG, "******* Firmware upgrade OK ************");
+            ota_log_flash_success();
+
+
+            // give the system some time to finnish sending the log message
+            // a better solution would be to detect the message sent event, 
+            // though one must ensure there is a timeout, as the system NEEDS a reboot now
+            vTaskDelay(pdMS_TO_TICKS(3000));
             esp_restart();
         } else {
-            ESP_LOGE(TAG, "******* Firmware upgrade FAILED ********** ");
+            ota_log_lib_error();
         }
 
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);

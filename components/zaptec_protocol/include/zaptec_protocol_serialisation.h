@@ -230,7 +230,7 @@
         uint16_t timeId;
         uint16_t identifier;
         uint16_t length;
-        uint8_t* data;
+        uint8_t data[128];
     } ZapMessage;
 
 

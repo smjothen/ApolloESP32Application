@@ -80,8 +80,9 @@ The flash layout, the constants defining it, and the alignments should probably 
 |     0x3800   |  | Start of region erased by bootloader  | the flash erase page size is quite large, at 2048 bytes|
 |     0x3800 |  0x2 | application image header | |
 |     0x3c00 |  0x330 | `j_ivt` as described above | |
-|     0x4000 |  0x27800 | start of application program | |
-|     0x2b800|  0x700 | persisted data | not defined in linker script, reserved by setting app size |
+|     0x4000 |  0x26000 | application program | |
+|     0x2a000|  0x1800 | persisted data | not defined in linker script, reserved by setting app size |
+|     0x2b800| 0x700 | do not use | see note on dsPIC33CK256MP508 FAMILY data sheet section 30.1
 
 
 ### Shrinking the app size
@@ -103,13 +104,12 @@ The linker script for the bootloader is at `ApolloMCUApplication/mccbootloader/m
 After building with the linker script, there will be a `.hex` file describing the full flash at `/smart/smart/dist/AppWithBootloader/production/smart.production.hex`. Some slight modifications needs to be done to this file. Use this command:
 
 ```
-python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x3c00:0x56fff ../smart/smart/dist/AppWithBootloader/production/smart.production.hex  | tail -c +15361 > ../../ApolloESP32Application/bin/dspic.bin
+python /home/arnt/.local/share/virtualenvs/blhost-jQgB8x88/bin/hex2bin.py --range=0x7800:0x53fff ../smart/smart/dist/AppWithBootloader/production/smart.production.hex > ../../ApolloESP32Application/bin/dspic.bin
 ```
 
 This changes the file in the following ways:
 - `hex2bin` go from lines with addresses and data in hex to pure binary stuff
-- `--range=0x3c00:0x56fff` skip the start of the flash, this data is required if running without bootloader for development, but is not part of what is updated with the OTA image. `(0x56fff+0x1)÷0x2==0x2b800` This range works, but it seems the start address is word-indexed and the second is byte-indexed. Results obtained by trial and error ;)
-- `tail -c +15361` hex2bin pads the beginning of the file, here we remove that (0x3c00 +0x1 == 15361)
+- `--range=0x3c00:0x53fff` skip the start of the flash, this data is required if running without bootloader for development, but is not part of what is updated with the OTA image. Note: `0x7800÷0x2 == 0x3c00` and `(0x53fff+0x1)÷0x2==0x2a0000` 
 
 The file located at `ApolloESP32Application/bin/dspic.bin` is automatically built in to the ESP32 image, using this strategy: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html#embedding-binary-data
 
