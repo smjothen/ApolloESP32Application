@@ -410,8 +410,9 @@ int configure_modem_for_ppp(void){
     	        ESP_LOGE(TAG, "AT result %d ", at_result);
     	    }
 
-            int modem_baud_set_error = at_command_set_baud_high();
-            int baud_set_error =  uart_set_baudrate( UART_NUM_1, 921600);
+            //int modem_baud_set_error = at_command_set_baud_high();
+            //int savedBaud = at_command_save_baud();
+            //int baud_set_error =  uart_set_baudrate( UART_NUM_1, 921600);
             vTaskDelay(pdMS_TO_TICKS(500)); // wait for baud rate to change??
             int fast_at_result = at_command_at();
 
@@ -420,9 +421,9 @@ int configure_modem_for_ppp(void){
                 esp_restart();
             }
 
-            ESP_LOGI(TAG, "modem baud rate upgraded (errors: %d, %d, %d, %d)",
+            /*ESP_LOGI(TAG, "modem baud rate upgraded (errors: %d, %d, %d, %d)",
                      echo_cmd_result, modem_baud_set_error, baud_set_error, fast_at_result
-            );
+            );*/
 
     	}
 
@@ -464,7 +465,7 @@ int configure_modem_for_ppp(void){
 
         	xEventGroupClearBits(event_group, UART_TO_PPP);
 			xEventGroupSetBits(event_group, UART_TO_LINES);
-            int baud_set_error =  uart_set_baudrate( UART_NUM_1, 115200);
+            //int baud_set_error =  uart_set_baudrate( UART_NUM_1, 115200);
         	cellularPinsOn();
         	timeout = 0;
         }
@@ -511,6 +512,8 @@ int configure_modem_for_ppp(void){
     
     if(active_confirmed == true)
     {
+    	ESP_LOGI(TAG, "dialing(?)");
+		at_command_dial();
 	    enter_data_mode();
 	    //hasLTEConnection = true;
 	    return 1;

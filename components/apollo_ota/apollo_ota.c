@@ -59,7 +59,7 @@ static void ota_task(void *pvParameters){
         // .use_global_ca_store = true,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
-		//.buffer_size = 1536,
+		.buffer_size = 1536,
     };
 
     // config.skip_cert_common_name_check = true;

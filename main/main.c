@@ -164,7 +164,7 @@ void app_main(void)
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
 
-	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
+	ESP_LOGE(TAG_MAIN, "Apollo multi-mode 1");
 
 	storage_Init();
 
@@ -183,13 +183,13 @@ void app_main(void)
 	configure_console();
 #endif
 
-	configure_uart();
+	//configure_uart();
     zaptecProtocolStart();
 
     //start_ota_task();
 	//validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
-	dspic_periodic_poll_start(); 
+	dspic_periodic_poll_start();
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
@@ -204,6 +204,9 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     	switchState = MCU_GetSwitchState();
     }
+
+    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
+    	configure_uart();
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
