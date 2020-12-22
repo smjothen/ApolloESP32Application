@@ -16,6 +16,8 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../authentication/authentication.h"
 #include "../../main/chargeSession.h"
+#include "apollo_ota.h"
+#include "ble_interface.h"
 
 #define TAG "Cloud Listener"
 
@@ -714,8 +716,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		ESP_LOGI(TAG, "TODO: Complete testing");
+		ble_interface_deinit();
+		start_ota_task();
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
@@ -1176,7 +1180,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_config.disable_auto_reconnect = false;
     mqtt_config.reconnect_timeout_ms = 10000;
-    mqtt_config.keepalive = 120;
+    mqtt_config.keepalive = 300;//120;
     //mqtt_config.refresh_connection_after_ms = 30000;
 
     mqtt_client = esp_mqtt_client_init(&mqtt_config);

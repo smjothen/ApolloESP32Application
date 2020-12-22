@@ -4,5 +4,6 @@
 void start_ota_task(void);
 int start_ota(void);
 void validate_booted_image(void);
+const char* OTAReadRunningPartition();
 
 #endif /* APOLLO_OTA_H */

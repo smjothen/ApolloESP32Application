@@ -504,20 +504,25 @@ int configure_modem_for_ppp(void){
 
     char op[30];
     at_command_get_operator(op, 30);
+    while (strlen(op) < 12)
+    {
+    	vTaskDelay(pdMS_TO_TICKS(3000));
+    	at_command_get_operator(op, 30);
+    }
+
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
 
     ESP_LOGD(TAG, "checking CREG");
     at_command_network_registration_status();
     
-    if(active_confirmed == true)
-    {
-    	ESP_LOGI(TAG, "dialing(?)");
-		at_command_dial();
-	    enter_data_mode();
-	    //hasLTEConnection = true;
-	    return 1;
-    }
+	ESP_LOGI(TAG, "dialing(?)");
+	at_command_pdp_define();
+	at_command_dial();
+	enter_data_mode();
+	if(active_confirmed == true)
+		return 1;
+
 
     return 0;
 }
@@ -608,7 +613,7 @@ int enter_command_mode(void){
     xEventGroupClearBits(event_group, UART_TO_PPP);
 
     int at_result = -10;
-    int retries = 5;
+    int retries = 3;
 
     for(int retry = 0; retry < retries; retry++){
         vTaskDelay(pdMS_TO_TICKS(1000));

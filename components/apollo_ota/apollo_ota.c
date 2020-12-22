@@ -71,7 +71,7 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
         ota_log_location_fetch();
 
@@ -119,6 +119,7 @@ void validate_booted_image(void){
             // We failed to bring the dsPIC app to the version embedded in this code
             // On next reboot we will roll back, and the old dsPIC app will be flashed
             // TODO: should we restart now?
+            // TODO: send info to Cloud before restart.
             esp_restart();
     }
 
@@ -173,4 +174,13 @@ void start_ota_task(void){
 int start_ota(void){
     xEventGroupSetBits(event_group, OTA_UNBLOCKED);
     return 0;
+}
+
+
+const char* OTAReadRunningPartition()
+{
+	const esp_partition_t * partition = esp_ota_get_running_partition();
+	//ESP_LOGW(TAG, "Partition name: %s", partition->label);
+
+	return partition->label;
 }

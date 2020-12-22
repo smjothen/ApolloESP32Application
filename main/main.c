@@ -36,7 +36,7 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "3.2.0.0";
+char softwareVersion[] = "0.0.0.4";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -157,14 +157,7 @@ void app_main(void)
 	InitGPIOs();
 	cellularPinsInit();
 
-//	volatile char inputString[] = "+QCCID: 89470060200213074802";
-//	volatile char outputString[21] = {0};
-//	volatile int ret = GetNumberAsString(inputString, outputString, 20);
-
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
-	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
-
-	ESP_LOGE(TAG_MAIN, "Apollo multi-mode 1");
 
 	storage_Init();
 
@@ -177,6 +170,8 @@ void app_main(void)
 		storage_SaveConfiguration();
 	}
 
+	ESP_LOGE(TAG_MAIN, "Apollo multi-mode 1: %s", OTAReadRunningPartition());
+
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 #ifdef useConsole
@@ -187,12 +182,11 @@ void app_main(void)
     zaptecProtocolStart();
 
     //start_ota_task();
-	//validate_booted_image();
+	validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
 
     vTaskDelay(pdMS_TO_TICKS(3000));
-
 
 #define DEV
 #ifdef DEV
@@ -237,8 +231,6 @@ void app_main(void)
 				{
 					strcpy(WifiSSID, "ZaptecHQ-guest");
 					strcpy(WifiPSK, "Ilovezaptec");
-					//strcpy(WifiSSID, "BVb");
-					//strcpy(WifiPSK, "tk51mo79");
 					storage_SaveWifiParameters(WifiSSID, WifiPSK);
 					storage_Set_CommunicationMode(eCONNECTION_WIFI);
 					storage_SaveConfiguration();
@@ -253,16 +245,6 @@ void app_main(void)
 				storage_SaveConfiguration();
 
 			}
-
-//			if(storage_ReadConfiguration() != ESP_OK)
-//			{
-//				ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
-//
-//				storage_Init_Configuration();
-//				storage_Set_CommunicationMode(eCONNECTION_WIFI);
-//				storage_SaveConfiguration();
-//			}
-
 		}
     }
 #endif
@@ -276,7 +258,6 @@ void app_main(void)
 
     if(switchState == eConfig_4G_bridge)
 	{
-		//hard_reset_cellular();
 		cellularPinsOn();
 	}
 
@@ -413,17 +394,11 @@ void app_main(void)
     		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
     		ESP_LOGE(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
-
-    		ESP_LOGW(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
-    		//ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
     	}
 
-    	//Until BLE driver error is resolved, disable ble after 1 hour.
-//    	if(counter == 60)//3600)
-//    	{
-//    		ESP_LOGW(TAG,"Deinitializing BLE");
-//    		ble_interface_deinit();
-//    	}
+    	if((counter % 60) == 0)
+    		ESP_LOGW(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+
 	#ifdef useConsole
     	HandleCommands();
 	#endif
@@ -431,7 +406,3 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
-
-
-

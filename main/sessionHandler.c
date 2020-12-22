@@ -171,8 +171,8 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED) && isOnline == false)
-			chargeSession_Start();
+		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+				chargeSession_Start();
 
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
 		{
