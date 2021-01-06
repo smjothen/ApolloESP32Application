@@ -21,10 +21,10 @@ static const char *TAG = "PPP_TASK";
 #define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
 #define CELLULAR_TX_SIZE 1024
 #define CELLULAR_QUEUE_SIZE 40
-#define ECHO_TEST_TXD1  (GPIO_NUM_17)
-#define ECHO_TEST_RXD1  (GPIO_NUM_16)
-#define ECHO_TEST_RTS1  (GPIO_NUM_32)
-#define ECHO_TEST_CTS1  (GPIO_NUM_35)
+#define CELLULAR_PIN_TXD  (GPIO_NUM_5)
+#define CELLULAR_PIN_RXD  (GPIO_NUM_36)
+#define CELLULAR_PIN_RTS  (GPIO_NUM_32)
+#define CELLULAR_PIN_CTS  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
@@ -207,7 +207,7 @@ void configure_uart(void){
         .rx_flow_ctrl_thresh = 120,
     };
     uart_param_config(UART_NUM_1, &uart_config);
-    uart_set_pin(UART_NUM_1, ECHO_TEST_TXD1, ECHO_TEST_RXD1, ECHO_TEST_RTS1, ECHO_TEST_CTS1);
+    uart_set_pin(UART_NUM_1, CELLULAR_PIN_TXD, CELLULAR_PIN_RXD, CELLULAR_PIN_RTS, CELLULAR_PIN_CTS);
     uart_driver_install(
         UART_NUM_1, CELLULAR_RX_SIZE, CELLULAR_TX_SIZE,
         CELLULAR_QUEUE_SIZE, &uart_queue, 0
