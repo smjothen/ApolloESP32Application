@@ -70,7 +70,7 @@ void prodtest_getNewId()
 
 	esp_http_client_config_t config = {
 		//.url = "http://10.0.1.4:8585/get/mac",//Used at WestControl
-		.url = "http://10.253.73.118:8585/get/mac",//Used at Internal
+		.url = "http://10.253.73.100:8585/get/mac",//Used at Internal
 
 		.method = HTTP_METHOD_GET,
 		.event_handler = _http_event_handler,
