@@ -56,6 +56,15 @@ int ota_log_lib_error(){
     return log_message(formated_message);
 }
 
+int ota_log_timeout(){
+    time_t now;
+    time(&now);
+
+    char formated_message [128];
+    snprintf(formated_message, 128, "we timed out OTA after %ld seconds, rebooting", now-last_start_time);
+    return log_message(formated_message);
+}
+
 
 static uint32_t total_bytes = 0;
 static uint32_t bytes_at_last_log = 0;
