@@ -168,11 +168,12 @@ int publish_debug_telemetry_observation_local_settings()
     else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
     	add_observation_to_collection(observations, create_observation(CommunicationMode, "LTE"));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, storage_Get_NetworkType()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, storage_Get_Standalone()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)storage_Get_NetworkType()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
     add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, storage_Get_StandaloneCurrent()));
     add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, storage_Get_DefaultOfflinePhase()));
+    add_observation_to_collection(observations, create_uint32_t_observation(PermanentCableLock, (uint32_t)storage_Get_PermanentLock()));
     add_observation_to_collection(observations, create_double_observation(HmiBrightness, storage_Get_HmiBrightness()));
 
     return publish_json(observations);
