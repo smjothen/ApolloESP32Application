@@ -33,6 +33,7 @@ uint8_t MCU_GetChargeOperatingMode();
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
 uint8_t MCU_GetResetSource();
+char * MCU_GetGridType();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 

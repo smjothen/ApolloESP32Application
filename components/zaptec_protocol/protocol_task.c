@@ -181,6 +181,12 @@ volatile static uint32_t mcuDebugCounter = 0;
 volatile static uint32_t mcuWarnings = 0;
 volatile static uint8_t mcuResetSource = 0;
 
+volatile static uint8_t mcuNetworkType = 0;
+volatile static char networkType[5] = {0};
+volatile static uint8_t mcuCableType = 0;
+volatile static float mcuChargeCurrentUserMax = 0;
+
+
 static float mcuMaxInstallationCurrentSwitch = 20.0;//TODO set to 0;
 
 float GetFloat(uint8_t * input)
@@ -317,6 +323,16 @@ void uartSendTask(void *pvParameters){
 				txMsg.identifier = ParamWarnings;
 				break;
 
+			case 19:
+				txMsg.identifier = ParamNetworkType;
+				break;
+			case 20:
+				txMsg.identifier = ParamCableType;
+				break;
+			case 21:
+				txMsg.identifier = ParamChargeCurrentUserMax;
+				break;
+
         	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
         		continue;
@@ -397,7 +413,7 @@ void uartSendTask(void *pvParameters){
 	    else if(rxMsg.identifier == ParamChargeOperationMode)
         {
 	    	chargeOperationMode = rxMsg.data[0];
-	    	ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount);
+	    	//ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount);
         }
 	    else if(rxMsg.identifier == HmiBrightness)
 	    {
@@ -409,6 +425,28 @@ void uartSendTask(void *pvParameters){
 			mcuResetSource = rxMsg.data[0];
 		else if(rxMsg.identifier == ParamWarnings)
 			mcuWarnings = GetUint32_t(rxMsg.data);
+
+		else if(rxMsg.identifier == ParamNetworkType)
+		{
+			mcuNetworkType = rxMsg.data[0];
+			if(mcuNetworkType == 0)
+				memcpy(networkType, "Non ",4);
+			else if(mcuNetworkType == 1)
+				memcpy(networkType, "IT_1",4);
+			else if(mcuNetworkType == 2)
+				memcpy(networkType, "IT_3",4);
+			else if(mcuNetworkType == 3)
+				memcpy(networkType, "TN_1",4);
+			else if(mcuNetworkType == 4)
+				memcpy(networkType, "TN_3",4);
+		}
+		else if(rxMsg.identifier == ParamCableType)
+			mcuCableType = rxMsg.data[0];
+		else if(rxMsg.identifier == ParamChargeCurrentUserMax)
+		{
+			mcuChargeCurrentUserMax = GetFloat(rxMsg.data);
+			ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, networkType, mcuCableType, mcuChargeCurrentUserMax);
+		}
 
 
         /*else if(rxMsg.type != 0)
@@ -427,7 +465,7 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(count >= 20)
+        if(count >= 23)
         {
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
@@ -591,6 +629,11 @@ uint8_t MCU_GetResetSource()
 float MCU_GetMaxInstallationCurrentSwitch()
 {
 	return mcuMaxInstallationCurrentSwitch;
+}
+
+char * MCU_GetGridType()
+{
+	return networkType;
 }
 
 void configureUart(){

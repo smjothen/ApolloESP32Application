@@ -8,7 +8,7 @@ extern "C" {
 
 enum sConfig
 {
-	eConfig_NVS			  	= 0,
+	eConfig_Unconfigured 	= 0,
 	eConfig_Wifi_NVS	  	= 1,
 	eConfig_Wifi_Zaptec 	= 2,
 	eConfig_Wifi_Home_Wr32	= 3,
@@ -20,7 +20,7 @@ enum sConfig
 	eConfig_4G_bridge 		= 9
 };
 
-esp_err_t network_connect_wifi(void);
+esp_err_t network_connect_wifi(bool productionSetup);
 esp_err_t network_disconnect_wifi(void);
 
 void SetupWifi();
@@ -37,6 +37,7 @@ bool network_wifiIsValid();
 void network_startWifiScan();
 bool network_renewConnection();
 void network_updateWifi();
+bool network_IsWifiStarted();
 
 #ifdef __cplusplus
 }

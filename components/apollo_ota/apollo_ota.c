@@ -49,8 +49,16 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+bool otaRunning = false;
+
+bool otaIsRunning()
+{
+	return otaRunning;
+}
 
 static void ota_task(void *pvParameters){
+
+	otaRunning = true;
 
     char image_location[1024] = {0};
     esp_http_client_config_t config = {

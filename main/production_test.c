@@ -11,6 +11,9 @@
 #include "i2cDevices.h"
 //#include "storage.h"
 #include "network.h"
+#include "EEPROM.h"
+#include "ppp_task.h"
+#include "driver/gpio.h"
 
 //#include "adc_control.h"
 
@@ -57,10 +60,29 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 
+void prodtest_doOnboarding()
+{
+	//Turn on 4G to configure baud-rate and read SSID
+	configure_uart(115200);
+	cellularPinsOn();
+	vTaskDelay(pdMS_TO_TICKS(10000));
+	ppp_set_uart_baud_high();
+
+	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+	//Invalid EEPROM content
+	prodtest_getNewId();
+
+	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+
+}
+
+
 void prodtest_getNewId()
 {
 	//if(connected == false)
 		//connected = network_init(true);
+
+	network_connect_wifi(true);
 
 	while (network_WifiIsConnected() == false)
 	{
@@ -70,7 +92,7 @@ void prodtest_getNewId()
 
 	esp_http_client_config_t config = {
 		//.url = "http://10.0.1.4:8585/get/mac",//Used at WestControl
-		.url = "http://10.253.73.100:8585/get/mac",//Used at Internal
+		.url = "http://10.253.73.117:8585/get/mac",//Used at Internal
 
 		.method = HTTP_METHOD_GET,
 		.event_handler = _http_event_handler,

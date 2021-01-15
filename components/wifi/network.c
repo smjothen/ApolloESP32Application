@@ -62,6 +62,7 @@ static esp_ip6_addr_t s_ipv6_addr;
 
 static const char *TAG = "NETWORK ";
 
+bool isProductionSetup = false;
 bool isConnected = false;
 
 bool network_WifiIsConnected()
@@ -113,8 +114,10 @@ static void on_got_ipv6(void *arg, esp_event_base_t event_base,
 
 #endif // CONFIG_EXAMPLE_CONNECT_IPV6
 
-esp_err_t network_connect_wifi(void)
+esp_err_t network_connect_wifi(bool productionSetup)
 {
+
+	isProductionSetup = productionSetup;
 
 	if(firstTime == true)
 	{
@@ -179,6 +182,13 @@ static void on_wifi_connect(void *esp_netif, esp_event_base_t event_base,
 
 #endif // CONFIG_EXAMPLE_CONNECT_IPV6
 
+bool wifiStarted = false;
+
+bool network_IsWifiStarted()
+{
+	return wifiStarted;
+}
+
 static void start(void)
 {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -210,20 +220,36 @@ static void start(void)
         },
     };
 
-    network_CheckWifiParameters();
+    if(isProductionSetup == true)
+    {
+    	strcpy(WifiSSID, "ZaptecHQ");
+    	strcpy(WifiPSK, "LuckyJack#003");
 
-    memset(wifi_config.sta.ssid, 0, 32);
-    memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+    	memset(wifi_config.sta.ssid, 0, 32);
+		memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
 
-	memset(wifi_config.sta.password, 0, 64);
-	memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+		memset(wifi_config.sta.password, 0, 64);
+		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+    }
+    else
+    {
+		network_CheckWifiParameters();
+
+		memset(wifi_config.sta.ssid, 0, 32);
+		memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+		memset(wifi_config.sta.password, 0, 64);
+		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+    }
 
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
-    s_connection_name = CONFIG_EXAMPLE_WIFI_SSID;
+    s_connection_name = "Wifi";
+
+    wifiStarted = true;
 }
 
 static void stop(void)
@@ -426,7 +452,7 @@ bool network_wifiIsValid()
 void network_updateWifi()
 {
 	network_disconnect_wifi();
-	network_connect_wifi();
+	network_connect_wifi(false);
 	return;
 
 
@@ -482,8 +508,13 @@ void network_startWifiScan()
 {
 	wifiScan = true;
 
-	if(firstTime)
-	{
+	if(network_IsWifiStarted() == false)
+		start();
+	else
+		esp_wifi_disconnect();
+
+	//if(firstTime)
+	//{
 		//initialise_wifi(0);
 		/*tcpip_adapter_init();
 		wifi_event_group = xEventGroupCreate();
@@ -492,8 +523,8 @@ void network_startWifiScan()
 		ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
 		ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM));//WIFI_STORAGE_FLASH ) );
 */
-		firstTime = false;
-	}
+		//firstTime = false;
+	//}
 
     wifi_scan_config_t scanConf = {
         .ssid = NULL,

@@ -15,6 +15,7 @@
 #include "chargeSession.h"
 #include "storage.h"
 #include "connectivity.h"
+#include "apollo_ota.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -27,9 +28,11 @@ void SetDataInterval(int newDataInterval)
 }
 
 bool authorizationRequired = true;
-static int rssiLTE = 0;
+/*static int rssiLTE = 0;
 
 int log_cellular_quality(void){
+
+	int rssiLTE = 0;
 
 	int enter_command_mode_result = enter_command_mode();
 
@@ -59,7 +62,7 @@ int log_cellular_quality(void){
 	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
 
 	return rssiLTE;
-}
+}*/
 
 
 void log_task_info(void){
@@ -260,7 +263,7 @@ static void sessionHandler_task()
 				}
 				else if (networkInterface == eCONNECTION_LTE)
 				{
-					rssi = 2*rssiLTE - 113;//Convert to dB
+					rssi = GetCellularQuality();
 				}
 
 				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
@@ -277,12 +280,12 @@ static void sessionHandler_task()
 		if (networkInterface == eCONNECTION_LTE)
 		{
 			signalCounter++;
-			if(signalCounter >= signalInterval)
+			if((signalCounter >= signalInterval) && (otaIsRunning() == false))
 			{
 				if (isMqttConnected() == true)
 				{
-				//log_task_info();
-					//rssiLTE = log_cellular_quality(); // check if OTA is in progress before calling this
+					//log_task_info();
+					log_cellular_quality(); // check if OTA is in progress before calling this
 				}
 
 				signalCounter = 0;
@@ -307,18 +310,17 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				int dBm = 2*rssiLTE - 113;
-				ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssiLTE, dBm, dataInterval);
+				ESP_LOGW(TAG,"******** LTE: %d dBm  DataInterval: %d *******", GetCellularQuality(), dataInterval);
 			}
-//			else
-//			{
-//				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
-//					rssi = wifidata.rssi;
-//				else
-//					rssi = 0;
-//
-//				//ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
-//			}
+			else if (networkInterface == eCONNECTION_WIFI)
+			{
+				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+					rssi = wifidata.rssi;
+				else
+					rssi = 0;
+
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d *******", rssi, dataInterval);
+			}
 
 			statusCounter = 0;
 		}
@@ -335,7 +337,9 @@ static void sessionHandler_task()
 				if (networkInterface == eCONNECTION_LTE)
 				{
 					//log_task_info();
-					//log_cellular_quality();
+					if(otaIsRunning() == false)
+						log_cellular_quality();
+
 					publish_debug_telemetry_observation_LteParameters();
 				}
 

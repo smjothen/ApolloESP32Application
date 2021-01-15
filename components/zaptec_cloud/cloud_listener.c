@@ -1190,5 +1190,6 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 void stop_cloud_listener_task()
 {
+	esp_mqtt_client_disconnect(mqtt_client);
 	esp_mqtt_client_stop(mqtt_client);
 }

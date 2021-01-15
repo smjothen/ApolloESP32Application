@@ -55,7 +55,7 @@ static void connectivity_task()
 {
 
 	//Read from Flash. If no interface is configured, use none and wait for setting
-	if(switchState == eConfig_NVS)
+	if(switchState == eConfig_Unconfigured)
 		staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 	else if(switchState <= eConfig_Wifi_Post)
 		staticNewInterface = eCONNECTION_WIFI;
@@ -92,16 +92,31 @@ static void connectivity_task()
 			{
 				ESP_LOGI(TAG, "Deinit Wifi interface");
 				// Stop mqtt
-				//stop_cloud_listener_task();
+				stop_cloud_listener_task();
 
 				// Disconnect wifi
 				network_disconnect_wifi();
 
-				vTaskDelay(pdMS_TO_TICKS(3000));
+				// Reset connectivity status
+				//sntpInitialized = false;
+				mqttInitialized = false;
+
+				vTaskDelay(pdMS_TO_TICKS(10000));
 			}
 			else if(activeInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "Deinit LTE interface");
+
+				// Stop mqtt
+				stop_cloud_listener_task();
+
+				ppp_disconnect();
+
+				// Reset connectivity status
+				//sntpInitialized = false;
+				mqttInitialized = false;
+
+				vTaskDelay(pdMS_TO_TICKS(10000));
 			}
 		}
 
@@ -116,13 +131,15 @@ static void connectivity_task()
 			else if(localNewInterface == eCONNECTION_WIFI)
 			{
 				ESP_LOGI(TAG, "Wifi interface activating");
-				network_connect_wifi();
+				network_connect_wifi(false);
 				interfaceChange = false;
 			}
 			else if(localNewInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "LTE interface activating");
+				configure_uart(921600);
 				ppp_task_start();
+				//start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				interfaceChange = false;
 			}
 		}

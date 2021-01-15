@@ -3,6 +3,7 @@
 
 void start_ota_task(void);
 int start_ota(void);
+bool otaIsRunning();
 void validate_booted_image(void);
 const char* OTAReadRunningPartition();
 

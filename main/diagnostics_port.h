@@ -1,5 +1,5 @@
-#ifndef _NETWORK_H_
-#define _NETWORK_H_
+#ifndef _DIAGNOSTICS_PORT_H_
+#define _DIAGNOSTICS_PORT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,4 +14,4 @@ void diagnostics_port_init();
 }
 #endif
 
-#endif  /*_NETWORK_H_*/
+#endif  /*_DIAGNOSTICS_PORT_H_*/

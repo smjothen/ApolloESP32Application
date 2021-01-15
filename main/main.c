@@ -31,12 +31,12 @@
 const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
-#define GPIO_OUTPUT_DEBUG_LED    0
-#define GPIO_OUTPUT_EEPROM_WP    4
+//#define GPIO_OUTPUT_DEBUG_LED    0
+//#define GPIO_OUTPUT_EEPROM_WP    4
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
+//#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "0.0.0.4";
+char softwareVersion[] = "0.0.0.8";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -182,7 +182,7 @@ void app_main(void)
     zaptecProtocolStart();
 
     //start_ota_task();
-	validate_booted_image();
+  validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
 
@@ -193,14 +193,64 @@ void app_main(void)
     int switchState = MCU_GetSwitchState();
 	//switchState = eConfig_Wifi_Zaptec;
 
-    while(switchState == 0)
+    struct DeviceInfo devInfo;
+    devInfo = i2cReadDeviceInfoFromEEPROM();
+
+	while ((switchState == 0) && (devInfo.EEPROMFormatVersion != 0xFF))
     {
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     	switchState = MCU_GetSwitchState();
     }
 
-    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
-    	configure_uart();
+
+
+
+
+
+
+	if((switchState == eConfig_Unconfigured) && (devInfo.EEPROMFormatVersion == 0xFF))
+	{
+
+		prodtest_doOnboarding();
+
+		/*cellularPinsOn();
+
+		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+		//Invalid EEPROM content
+		prodtest_getNewId();
+
+		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);*/
+
+		devInfo = i2cReadDeviceInfoFromEEPROM();
+	}
+		else if(devInfo.EEPROMFormatVersion == 0x0)
+		{
+			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
+
+			vTaskDelay(3000 / portTICK_PERIOD_MS);
+		}
+
+		I2CDevicesStartTask();
+
+	if(switchState == eConfig_Wifi_Home_Wr32)
+	{
+		//Wroom32 ID - BLE - (no EEPROM)
+		strcpy(devInfo.serialNumber, "ZAP000011");
+		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
+		strcpy(devInfo.Pin, "7053");
+
+		//Wroom32 ID - BLE - (no EEPROM)
+//		strcpy(devInfo.serialNumber, "ZAP000012");
+//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
+//		strcpy(devInfo.Pin, "5662");
+
+		devInfo.EEPROMFormatVersion = 1;
+		i2cSetDebugDeviceInfoToMemory(devInfo);
+	}
+
+
+	if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
+    	configure_uart(921600);
 
     if (switchState <= eConfig_Wifi_EMC_TCP)
     {
@@ -215,7 +265,6 @@ void app_main(void)
 		{
 			if(switchState == eConfig_Wifi_Zaptec)
 			{
-
 				strcpy(WifiSSID, "ZaptecHQ");
 				strcpy(WifiPSK, "LuckyJack#003");
 				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
@@ -238,13 +287,28 @@ void app_main(void)
 			}
 			else if(switchState == 4) //Applica - EMC config
 			{
-				strcpy(WifiSSID, "APPLICA-GJEST");
-				strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+				//strcpy(WifiSSID, "APPLICA-GJEST");
+				//strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+				strcpy(WifiSSID, "AndroidAP77BF");
+				strcpy(WifiPSK, "clwu1277");//Used during EMC test. Expires in 2021.
 				storage_SaveWifiParameters(WifiSSID, WifiPSK);
 				storage_Set_CommunicationMode(eCONNECTION_WIFI);
 				storage_SaveConfiguration();
 
 			}
+			else if(switchState == eConfig_Wifi_EMC_TCP) //Applica - EMC config
+			{
+				//strcpy(WifiSSID, "APPLICA-GJEST");
+				//strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
+				//strcpy(WifiSSID, "AndroidAP77BF");
+				//strcpy(WifiPSK, "clwu1277");//Used during EMC test. Expires in 2021.
+				//strcpy(WifiSSID, "BV-One");
+				strcpy(WifiSSID, "CMW-AP");	//Applica Wifi TX test AP without internet connection
+				storage_SaveWifiParameters(WifiSSID, WifiPSK);
+				storage_Set_CommunicationMode(eCONNECTION_WIFI);
+				storage_SaveConfiguration();
+			}
+
 		}
     }
 #endif
@@ -299,44 +363,7 @@ void app_main(void)
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
-	struct DeviceInfo devInfo;
-	if(switchState != eConfig_Wifi_Home_Wr32)
-	{
-		devInfo = i2cReadDeviceInfoFromEEPROM();
-		if(devInfo.EEPROMFormatVersion == 0xFF)
-		{
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
-			//Invalid EEPROM content
-			prodtest_getNewId();
 
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
-
-			devInfo = i2cReadDeviceInfoFromEEPROM();
-		}
-		else if(devInfo.EEPROMFormatVersion == 0x0)
-		{
-			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
-
-			vTaskDelay(3000 / portTICK_PERIOD_MS);
-		}
-
-		I2CDevicesStartTask();
-	}
-	else
-	{
-		//Wroom32 ID - BLE - (no EEPROM)
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
-
-		//Wroom32 ID - BLE - (no EEPROM)
-//		strcpy(devInfo.serialNumber, "ZAP000012");
-//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
-//		strcpy(devInfo.Pin, "5662");
-
-		devInfo.EEPROMFormatVersion = 1;
-		i2cSetDebugDeviceInfoToMemory(devInfo);
-	}
 
 	vTaskDelay(500 / portTICK_PERIOD_MS);
 
@@ -352,7 +379,8 @@ void app_main(void)
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     //if((switchState != eConfig_4G) && (switchState != eConfig_4G_bridge))
-    	//diagnostics_port_init();
+    if(switchState <= eConfig_Wifi_EMC_TCP)
+    	diagnostics_port_init();
 
     if( (switchState != eConfig_4G_bridge))
     	sessionHandler_init();

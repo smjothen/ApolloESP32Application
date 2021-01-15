@@ -18,6 +18,7 @@
 #include "../../main/DeviceInfo.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../../main/connectivity.h"
+#include "../cellular_modem/include/ppp_task.h"
 
 static const char *TAG = "BLE SERVICE";
 
@@ -87,6 +88,11 @@ static uint8_t COMMUNICATION_MODE_val[8]          		= {0x00};
 const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128] = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t FIRMWARE_VERSION_CHAR_descr[]   	= "Firmware Version";
 //static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
+
+
+const uint8_t NetworkType_uid128[ESP_UUID_LEN_128] 		= {0x05, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t NETWORK_TYPE_CHAR_descr[]   		= "Network type";
+//static uint8_t NETWORK_TYPE_val[4]          			= {0x00};
 
 
 const uint8_t Standalone_uid128[ESP_UUID_LEN_128] 		= {0xd9, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -206,7 +212,9 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_FIRMWARE_VERSION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &FirmwareVersion_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
-
+	[CHARGER_NETWORK_TYPE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_NETWORK_TYPE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkType_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_NETWORK_TYPE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 
 	[CHARGER_STANDALONE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
@@ -503,23 +511,29 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		if(storage_Get_CommunicationMode() == eCONNECTION_NONE)
 		{
-			ESP_LOGI(TAG, "BLE IP4 Address: 0.0.0.0");
+			ESP_LOGI(TAG, "IP4 Address: 0.0.0.0");
 			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
 			cJSON_AddStringToObject(wifiObject, "ip", "0.0.0.0");
 			cJSON_AddNumberToObject(wifiObject, "link", 0);
 			cJSON_AddBoolToObject(jsonObject, "online", false);
 
 		}
-		else //Wifi
+		else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
 		{
-			ESP_LOGI(TAG, "BLE IP4 Address: %s", network_GetIP4Address());
+			ESP_LOGI(TAG, "IP4 Address: %s", network_GetIP4Address());
 			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
 			cJSON_AddStringToObject(wifiObject, "ip", network_GetIP4Address());
 			cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
 			cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
 		}
-
-		//TODO add for LTE
+		else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+		{
+			ESP_LOGI(TAG, "IP4 Address: %s", pppGetIp4Address());
+			cJSON_AddItemToObject(jsonObject, "lte", wifiObject=cJSON_CreateObject());
+			cJSON_AddStringToObject(wifiObject, "ip", pppGetIp4Address());
+			cJSON_AddNumberToObject(wifiObject, "link", (int)GetCellularQuality());
+			cJSON_AddBoolToObject(jsonObject, "online", LteIsConnected());
+		}
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -621,6 +635,23 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
  		break;
 
 
+    case CHARGER_NETWORK_TYPE_UUID:
+
+ 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		//memcpy(NETWORK_TYPE_val, MCU_GetGridType(),4);
+		memcpy(rsp->attr_value.value, MCU_GetGridType(), 4);
+		rsp->attr_value.len = 4;
+		ESP_LOGI(TAG, "Read Network type");
+
+ 		break;
+
+    /*case CHARGER_NETWORK_TYPE_DESCR:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		memcpy(rsp->attr_value.value, NETWORK_TYPE_CHAR_descr, sizeof(NETWORK_TYPE_CHAR_descr));
+		rsp->attr_value.len = sizeof(NETWORK_TYPE_CHAR_descr);
+		break;*/
+
     case CHARGER_STANDALONE_UUID:
 
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -629,13 +660,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     	if(storage_Get_Standalone() == 0)
     	{
-			memcpy(rsp->attr_value.value, "0", 1);
-			rsp->attr_value.len = 1;
+			memcpy(rsp->attr_value.value, "system", 6);
+			rsp->attr_value.len = 6;
     	}
     	else if(storage_Get_Standalone() == 1)
     	{
-			memcpy(rsp->attr_value.value, "1", 1);
-			rsp->attr_value.len = 1;
+			memcpy(rsp->attr_value.value, "standalone", 10);
+			rsp->attr_value.len = 10;
     	}
 
 		break;
@@ -712,17 +743,37 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
   		volatile uint32_t warning = MCU_GetWarnings();
-  		ESP_LOGI(TAG, "Read Warning %d ", warning);
+  		ESP_LOGI(TAG, "Read Warning 0x%x ", warning);
 
-  		warning = 0; //TODO: Remove this line when checked with new app. Old app reports moisure when warning = 0x00000080
+  		// Each bit in the warning value is transferred separate bytes
+  		// 0x00000003 -> 0x02 0x01
+  		// Length 0 = No warnings set
 
-  		volatile uint32_t warningFlipped = 0;
+  		uint8_t warningBytes[32] = {0};
+  		int nextBitShift = 0;
+  		int byteNr;
+  		int byteCount = 0;
+  		for (byteNr = 0; byteNr < 32; byteNr++)
+  		{
+  			if((warning >> nextBitShift) & 0x1)
+  			{
+  				warningBytes[byteCount] = byteNr;
+  				byteCount++;
+  			}
+  			nextBitShift++;
+  		}
+
+
+  		//warning = 0; //TODO: Remove this line when checked with new app. Old app reports moisure when warning = 0x00000080
+
+  		/*volatile uint32_t warningFlipped = 0;
   		warningFlipped = ((warning >> 24) & 0xff);
   		warningFlipped |= ((warning >> 8) & 0xff00);
   		warningFlipped |= ((warning << 8) & 0xff0000);
   		warningFlipped |= ((warning << 24) & 0xff000000);
-		memcpy(rsp->attr_value.value, &warningFlipped, sizeof(warningFlipped));
-  		rsp->attr_value.len = 1;//sizeof(warningFlipped); //TODO: Fix this line when checked with new app. Old app reports moisure when warning = 0x00000080
+		memcpy(rsp->attr_value.value, &warningFlipped, sizeof(warningFlipped));*/
+  		memcpy(rsp->attr_value.value, &warningBytes, byteCount);
+  		rsp->attr_value.len = byteCount;//1;//sizeof(warningFlipped); //TODO: Fix this line when checked with new app. Old app reports moisure when warning = 0x00000080
 
   		break;
 

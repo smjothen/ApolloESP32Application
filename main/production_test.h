@@ -7,6 +7,7 @@ extern "C" {
 
 uint8_t prodtest_init();
 uint8_t prodtest_getState();
+void prodtest_doOnboarding();
 void prodtest_perform();
 void prodtest_getNewId();
 

@@ -7,7 +7,8 @@
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-void configure_uart(void);
+void configure_uart(int baudrate);
+void ppp_set_uart_baud_high();
 int pppGetStackWatermark();
 void ppp_task_start(void);
 
@@ -25,8 +26,13 @@ void clear_lines(void);
 int enter_command_mode(void);
 int enter_data_mode(void);
 
+int ppp_disconnect();
+
 bool LteIsConnected();
+char * pppGetIp4Address();
 int GetNumberAsString(char * inputString, char * outputString, int maxLength);
+int log_cellular_quality(void);
+int GetCellularQuality();
 const char* LTEGetImei();
 const char* LTEGetIccid();
 const char* LTEGetImsi();

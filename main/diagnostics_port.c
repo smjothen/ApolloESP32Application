@@ -23,6 +23,7 @@
 #include "../components/adc/adc_control.h"
 #include "driver/uart.h"
 #include "protocol_task.h"
+#include "diagnostics_port.h"
 
 //#include "mdns.h"
 //#include <sys/socket.h>
@@ -152,10 +153,10 @@ int sock;
 
 
 
-#define ECHO_TEST_TXD  (GPIO_NUM_17)
+/*#define ECHO_TEST_TXD  (GPIO_NUM_17)
 #define ECHO_TEST_RXD  (GPIO_NUM_16)
 #define ECHO_TEST_RTS  (UART_PIN_NO_CHANGE)
-#define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)
+#define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)*/
 
 #define BUF_SIZE (1024)
 
