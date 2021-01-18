@@ -154,6 +154,9 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		printf("\n********************************\n\n");
 			ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
 
+		EEPROM_ReadFactroyStage(&deviceInfo.factory_stage);
+		ESP_LOGI(TAG_EEPROM, "Factory stage: %d", deviceInfo.factory_stage);
+
 		EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
 		int len = strlen(deviceInfo.serialNumber);
 

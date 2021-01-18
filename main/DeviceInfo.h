@@ -8,9 +8,12 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
+enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
+
 struct DeviceInfo
 {
 	uint8_t EEPROMFormatVersion;
+	uint8_t factory_stage;
 	char serialNumber[10];
 	char PSK[45];
 	char Pin[5];

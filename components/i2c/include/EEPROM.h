@@ -13,6 +13,9 @@ esp_err_t EEPROM_Write();
 esp_err_t EEPROM_ReadFormatVersion(uint8_t * formatVersionToRead);
 esp_err_t EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite);
 
+esp_err_t EEPROM_ReadFactroyStage(uint8_t *factory_stage);
+esp_err_t EEPROM_WriteFactoryStage(uint8_t stage);
+
 esp_err_t EEPROM_ReadSerialNumber(char * serianNumberToRead);
 esp_err_t EEPROM_WriteSerialNumber(char * serialNumberToWrite);
 

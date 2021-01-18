@@ -9,7 +9,8 @@
       "array": "c",
       "string": "c",
       "string_view": "c",
-      "system_error": "c"
+      "system_error": "c",
+      "*.ipp": "cpp"
     },
     "python.pythonPath": "/home/arnt/.local/share/virtualenvs/ocpp_server-1v0wFJTf/bin/python",
     "cmake.configureOnOpen": false
