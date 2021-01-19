@@ -89,12 +89,12 @@ void storage_Init_Configuration()
 	configurationStruct.permanentLock 			= 0;	//0/1
 
 	configurationStruct.standalone 				= 1;	//0/1
-	configurationStruct.standalonePhase 		= 1;	//Nr
+	configurationStruct.standalonePhase 		= 0;	//Nr
 	configurationStruct.standaloneCurrent		= 10;	//A
 	configurationStruct.maxInstallationCurrentConfig = 0;
 
 
-	configurationStruct.phaseRotation			= 1;
+	configurationStruct.phaseRotation			= 0;
 	configurationStruct.networkType				= 0;
 }
 

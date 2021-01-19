@@ -763,17 +763,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   			nextBitShift++;
   		}
 
-
-  		//warning = 0; //TODO: Remove this line when checked with new app. Old app reports moisure when warning = 0x00000080
-
-  		/*volatile uint32_t warningFlipped = 0;
-  		warningFlipped = ((warning >> 24) & 0xff);
-  		warningFlipped |= ((warning >> 8) & 0xff00);
-  		warningFlipped |= ((warning << 8) & 0xff0000);
-  		warningFlipped |= ((warning << 24) & 0xff000000);
-		memcpy(rsp->attr_value.value, &warningFlipped, sizeof(warningFlipped));*/
   		memcpy(rsp->attr_value.value, &warningBytes, byteCount);
-  		rsp->attr_value.len = byteCount;//1;//sizeof(warningFlipped); //TODO: Fix this line when checked with new app. Old app reports moisure when warning = 0x00000080
+  		rsp->attr_value.len = byteCount;
 
   		break;
 
@@ -822,7 +813,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		rsp->attr_value.len = sizeof(Max_Inst_Current_Switch_descr);
   		break;
 
-
     case CHARGER_MAX_INST_CURRENT_CONFIG_UUID:
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
@@ -845,12 +835,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_PHASE_ROTATION_UUID:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read PhaseRotation %d ", storage_Get_PhaseRotation());
-		memset(nrTostr, 0, sizeof(nrTostr));
-		itoa(storage_Get_PhaseRotation(), nrTostr, 10);
+		uint8_t phaseRotation = storage_Get_PhaseRotation();
+		ESP_LOGI(TAG, "Read PhaseRotation %d ", phaseRotation);
 
-		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
-		rsp->attr_value.len = strlen(nrTostr);
+		memcpy(rsp->attr_value.value, &phaseRotation, sizeof(uint8_t));
+		rsp->attr_value.len = sizeof(uint8_t);
 
 		break;
 
@@ -985,21 +974,36 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	ESP_LOGI(TAG, "Standalone written %02x", param->write.value[0]);
 
-    	if(param->write.value[0] == '0')
-    	{
-    		storage_Set_Standalone(0);
-    		ESP_LOGI(TAG, "Set standalone: 0");
-    		saveConfiguration = true;
-    	}
-    	else if (param->write.value[0] == '1')
-    	{
-    		storage_Set_Standalone(1);
-    		ESP_LOGI(TAG, "Set standalone: 1");
-    		saveConfiguration = true;
-    	}
+    	uint8_t standalone = 0xff;
+    	char * systemStr = "system";
+    	char * standaloneStr = "standalone";
+
+    	if(memcmp(param->write.value, systemStr, 6) == 0)
+    		standalone = 0;
+
+    	else if(memcmp(param->write.value, standaloneStr, 10) == 0)
+    		standalone = 1;
+
+    	if((standalone == 0) || (standalone == 1))
+		{
+			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_Standalone((uint8_t)standalone);
+				ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
+				saveConfiguration = true;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU standalone parameter error");
+			}
+		}
+		else
+		{
+			ESP_LOGI(TAG, "Invalid standalone: %d \n", standalone);
+		}
 
    		break;
-
 
     case CHARGER_STANDALONE_PHASE_UUID:
 
@@ -1092,13 +1096,13 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     case CHARGER_PHASE_ROTATION_UUID:
 
     	ESP_LOGI(TAG, "PhaseRotation written %02x", param->write.value[0]);
-
-    	memset(nrTostr, 0, sizeof(nrTostr));
-    	memcpy(nrTostr, param->write.value, param->write.len);
-    	uint8_t phaseRotation = (uint8_t)atoi(nrTostr);
+    	uint8_t phaseRotation = param->write.value[0];
+    	//memset(nrTostr, 0, sizeof(nrTostr));
+    	//memcpy(nrTostr, param->write.value, param->write.len);
+    	//uint8_t phaseRotation = (uint8_t)atoi(nrTostr);
 
     	//Sanity check
-    	if((3 >= phaseRotation) && (phaseRotation >= 1))
+    	if(18 >= phaseRotation)
     	{
     		storage_Set_PhaseRotation(phaseRotation);
     		ESP_LOGI(TAG, "Set phaseRotation: %d", phaseRotation);

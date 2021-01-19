@@ -27,6 +27,7 @@
 #include "apollo_ota.h"
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
+#include "certificate.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -36,7 +37,7 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "0.0.0.8";
+char softwareVersion[] = "0.0.0.9";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -157,6 +158,8 @@ void app_main(void)
 	InitGPIOs();
 	cellularPinsInit();
 
+	//certificateValidate();
+
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 
 	storage_Init();
@@ -182,7 +185,7 @@ void app_main(void)
     zaptecProtocolStart();
 
     //start_ota_task();
-  validate_booted_image();
+    validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
 
@@ -379,8 +382,8 @@ void app_main(void)
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     //if((switchState != eConfig_4G) && (switchState != eConfig_4G_bridge))
-    if(switchState <= eConfig_Wifi_EMC_TCP)
-    	diagnostics_port_init();
+    //if(switchState <= eConfig_Wifi_EMC_TCP)
+    	//diagnostics_port_init();
 
     if( (switchState != eConfig_4G_bridge))
     	sessionHandler_init();

@@ -32,6 +32,8 @@ int publish_debug_telemetry_observation_all(
 	double rssi
 );
 
+int publish_telemetry_observation_on_change();
+
 typedef enum {
     cloud_event_level_error = 10,
     cloud_event_level_information = 30,

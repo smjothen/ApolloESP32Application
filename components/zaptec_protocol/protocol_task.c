@@ -186,6 +186,8 @@ volatile static char networkType[5] = {0};
 volatile static uint8_t mcuCableType = 0;
 volatile static float mcuChargeCurrentUserMax = 0;
 
+int holdSetPhases = 0;
+
 
 static float mcuMaxInstallationCurrentSwitch = 20.0;//TODO set to 0;
 
@@ -278,8 +280,6 @@ void uartSendTask(void *pvParameters){
         	case 5:
 				txMsg.identifier = ParamInternalTemperatureT2;
 				break;
-
-
 
         	case 6:
 				txMsg.identifier = ParamVoltagePhase1;
@@ -565,6 +565,21 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
 }
 
 
+MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgRead;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
+
 
 float MCU_GetEmeterTemperature(uint8_t phase)
 {
@@ -634,6 +649,20 @@ float MCU_GetMaxInstallationCurrentSwitch()
 char * MCU_GetGridType()
 {
 	return networkType;
+}
+
+float MCU_GetChargeCurrentUserMax()
+{
+	return mcuChargeCurrentUserMax;
+}
+
+void HOLD_SetPhases(int setPhases)
+{
+	holdSetPhases = setPhases;
+}
+int HOLD_GetSetPhases()
+{
+	return holdSetPhases;
 }
 
 void configureUart(){

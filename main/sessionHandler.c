@@ -122,8 +122,8 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
-    enum ChargerOperatingMode currentChargeOperationMode = eUNKNOWN;
-    enum ChargerOperatingMode previousChargeOperationMode = eUNKNOWN;
+    //enum ChargerOperatingMode currentChargeOperationMode = eUNKNOWN;
+    //enum ChargerOperatingMode previousChargeOperationMode = eUNKNOWN;
 
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
@@ -142,14 +142,14 @@ static void sessionHandler_task()
 
 		networkInterface = connectivity_GetActivateInterface();
 
-		currentChargeOperationMode = MCU_GetChargeOperatingMode();
+		//currentChargeOperationMode = MCU_GetChargeOperatingMode();
 
-		if((currentChargeOperationMode != previousChargeOperationMode) || (currentCarChargeMode != previousCarChargeMode))
+		/*if((currentChargeOperationMode != previousChargeOperationMode) || (currentCarChargeMode != previousCarChargeMode))
 		{
 			publish_uint32_observation(ParamChargeMode, (uint32_t)currentCarChargeMode);
 			publish_uint32_observation(ParamChargeOperationMode, (uint32_t)currentChargeOperationMode);
 		}
-		previousChargeOperationMode = currentChargeOperationMode;
+		previousChargeOperationMode = currentChargeOperationMode;*/
 
 		if(chargeSession_HasNewSessionId() == true)
 		{
@@ -200,12 +200,13 @@ static void sessionHandler_task()
 			}
 		}
 
+
+		if(currentCarChargeMode < eCAR_DISCONNECTED)
+			chargeSession_UpdateEnergy();
+
 		// Check if car connecting -> start a new session
 		if((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED))
 		{
-			//Make sure to get the final energy reading
-			MCU_GetEnergy();
-
 			chargeSession_Finalize();
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
@@ -380,6 +381,28 @@ static void sessionHandler_task()
 					ESP_LOGE(TAG,"Local settings flag NOT cleared");
 				}
 			}
+
+			/*if(CloudCommandCurrentUpdated() == true)
+			{
+				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
+				float currentSetToMCU = GetFloat(rxMsg.data);
+
+				//Give some time to ensure all values are set
+
+				int published = publish_debug_telemetry_observation_local_settings();
+				if (published == 0)
+				{
+					ClearCloudCommandCurrentUpdated();
+					ESP_LOGW(TAG,"Command feedback flag cleared");
+				}
+				else
+				{
+					ESP_LOGE(TAG,"Command feedback flag NOT cleared");
+				}
+			}*/
+
+
+			publish_telemetry_observation_on_change();
 
 		}
 

@@ -47,6 +47,7 @@ static struct DeviceInfo cloudDeviceInfo;
 bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
+//bool cloudCommandCurrentUpdated = false;
 
 
 const char cert[] =
@@ -134,6 +135,15 @@ void ClearLocalSettingsAreUpdated()
 {
 	localSettingsAreUpdated = false;
 }
+
+/*void ClearCloudCommandCurrentUpdated()
+{
+	cloudCommandCurrentUpdated = false;
+}
+bool CloudCommandCurrentUpdated()
+{
+	return cloudCommandCurrentUpdated;
+}*/
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -518,25 +528,25 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				uint8_t standalonePhase = atoi(stringPart+1);
 
 				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
-				/*if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
+				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
-					if(ret == MsgWriteAck)
-					{
+					//MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
+					//if(ret == MsgWriteAck)
+					//{
 						storage_Set_StandalonePhase(standalonePhase);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
 						localSettingsAreUpdated = true;
-					}
+					/*}
 					else
 					{
 						ESP_LOGE(TAG, "MCU standalone Phase parameter error");
-					}
+					}*/
 				}
 				else
 				{
 					ESP_LOGI(TAG, "Invalid standalonePhase: %d \n", standalonePhase);
-				}*/
+				}
 				ESP_LOGE(TAG, "Parameter standalonePhase: %d Not defined for Apollo\n", standalonePhase);
 			}
 
@@ -591,6 +601,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_NetworkType(networkType);
+						//storage_Set_StandalonePhase(networkType);//Set same as Network type, (1-relay)
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
 						localSettingsAreUpdated = true;
@@ -758,6 +769,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					responseStatus = 200;
 					ESP_LOGI(TAG, "MCU Start command OK");
+
+					HOLD_SetPhases(phaseFromCloud);
+					//cloudCommandCurrentUpdated = true;
 				}
 				else
 				{
@@ -897,7 +911,8 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 	else if(storage_Get_NetworkType() == 4)
 		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_3\\n");
 
-	sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
+	if(storage_Get_StandalonePhase() != 0)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
 	sprintf(responseBuffer+strlen(responseBuffer), "hmi_brightness = %f\\n\n", storage_Get_HmiBrightness());
 
 	sprintf(responseBuffer+strlen(responseBuffer), "[Wifi_Parameters]\\nname =  %s\\npassword = <masked>\\n\n", " ");

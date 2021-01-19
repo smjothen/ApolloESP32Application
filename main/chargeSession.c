@@ -10,6 +10,7 @@
 #include "connectivity.h"
 #include "cJSON.h"
 #include "storage.h"
+#include "protocol_task.h"
 
 
 
@@ -135,8 +136,16 @@ void chargeSession_Start()
 }
 
 
+
+void chargeSession_UpdateEnergy()
+{
+	if(strlen(chargeSession.SessionId) > 0)
+		chargeSession.Energy = MCU_GetEnergy();
+}
+
 void chargeSession_Finalize()
 {
+	chargeSession.Energy = MCU_GetEnergy();
 	GetUTCTimeString(chargeSession.EndTime);
 
 	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);

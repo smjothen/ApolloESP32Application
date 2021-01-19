@@ -9,7 +9,8 @@ set(COMPONENT_SRCS "main.c"
 				   "storage.c"
 				   "connectivity.c"
 				   "chargeSession.c"
-				   "diagnostics_port.c"
+				   "certificate.c"
+				   #"diagnostics_port.c"
 				   )
 
 set(COMPONENT_ADD_INCLUDEDIRS "")
