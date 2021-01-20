@@ -195,11 +195,13 @@ void app_main(void)
 #ifdef DEV
     int switchState = MCU_GetSwitchState();
 	//switchState = eConfig_Wifi_Zaptec;
+    if(switchState == 0)
+    	switchState = 1;
 
     struct DeviceInfo devInfo;
     devInfo = i2cReadDeviceInfoFromEEPROM();
 
-	while ((switchState == 0) && (devInfo.EEPROMFormatVersion != 0xFF))
+	while ((switchState == 0xFF) && (devInfo.EEPROMFormatVersion != 0xFF))
     {
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     	switchState = MCU_GetSwitchState();

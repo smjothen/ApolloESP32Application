@@ -343,6 +343,10 @@ static uint8_t previousPhaseRotation = 0;
 static uint8_t previousChargeMode = 0;
 static uint8_t previousChargeOperatingMode = 0;
 static uint8_t previousIsStandalone = 0xff;
+static float previousStandaloneCurrent = -1.0;
+static float previousMaxInstallationCurrentConfig = -1.0;
+static uint8_t previousSwitchState = 0xff;
+static uint8_t previousPermanentLock = 0xff;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending change telemetry");
@@ -431,22 +435,44 @@ int publish_telemetry_observation_on_change(){
 	uint8_t isStandalone = storage_Get_Standalone();
 	if((previousIsStandalone != isStandalone) && (isStandalone != 0xff))
 	{
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, isStandalone));
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)isStandalone));
 		previousIsStandalone = isStandalone;
 		isChange = true;
 	}
 
+	float standaloneCurrent = storage_Get_StandaloneCurrent();
+	if((previousStandaloneCurrent != standaloneCurrent))
+	{
+		add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, standaloneCurrent));
+		previousStandaloneCurrent = standaloneCurrent;
+		isChange = true;
+	}
 
-	//add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource, (uint32_t)MCU_GetResetSource()));
-	//add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource, (uint32_t)esp_reset_reason()));
+	float maxInstallationCurrentConfig = storage_Get_MaxInstallationCurrentConfig();
+	if((previousMaxInstallationCurrentConfig != maxInstallationCurrentConfig))
+	{
+		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, maxInstallationCurrentConfig));
+		previousMaxInstallationCurrentConfig = maxInstallationCurrentConfig;
+		isChange = true;
+	}
+
+	uint8_t switchState = MCU_GetSwitchState();
+	if(previousSwitchState != switchState)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(SwitchPosition, (uint32_t)switchState));
+		previousSwitchState = switchState;
+		isChange = true;
+	}
+
+	uint8_t permanentLock = storage_Get_PermanentLock();
+	if(previousPermanentLock != permanentLock)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(PermanentCableLock, (uint32_t)permanentLock));
+		previousPermanentLock = permanentLock;
+		isChange = true;
+	}
 
 
-	/*txCnt++;
-	char buf[256];
-	sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  DBC: %d", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState(), MCU_GetDebugCounter());
-	//sprintf(buf, "#%d SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f ", txCnt, I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3);
-	add_observation_to_collection(observations, create_observation(808, buf));
-*/
     int ret = 0;
 
     if(isChange == true)

@@ -26,7 +26,7 @@ SemaphoreHandle_t uart_write_lock;
 QueueHandle_t uart_recv_message_queue;
 QueueHandle_t uart0_events_queue;
 uint32_t mcuCommunicationError = 0;
-uint8_t receivedSwitchState = 0;
+uint8_t receivedSwitchState = 0xFF;
 uint8_t previousSwitchState = 0xFF;
 
 static TaskHandle_t uartRecvTaskHandle = NULL;

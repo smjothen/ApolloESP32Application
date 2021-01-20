@@ -874,7 +874,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
          */
 
         // This prints the first byte written to the characteristic
-        ESP_LOGI(TAG, "Wifi Info characteristic written with %02x", param->write.value[0]);
+        ESP_LOGI(TAG, "Wifi Info characteristic received with %02x", param->write.value[0]);
 
 
         if(param->write.len <= 64)
@@ -898,7 +898,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
         /*
          *  Handle any writes to Wifi Val char here
          */
-    	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Wifi Val characteristic received with %02x", param->write.value[0]);
     	memset(WIFI_SERV_CHAR_SSID_val,0, sizeof(WIFI_SERV_CHAR_SSID_val));
     	if((32 >= param->write.len) && (param->write.len > 0))
     	{
@@ -915,7 +915,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_HMI_BRIGHTNESS_UUID:
 
-    	ESP_LOGI(TAG, "HMI brightness characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "HMI brightness characteristic received with %02x", param->write.value[0]);
 
     	memset(HMI_BRIGHTNESS_val,0, sizeof(HMI_BRIGHTNESS_val));
 		memcpy(HMI_BRIGHTNESS_val,param->write.value, param->write.len);
@@ -938,7 +938,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_COMMUNICATION_MODE_UUID:
 
-    	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Wifi Val characteristic received with %02x", param->write.value[0]);
 
     	memset(COMMUNICATION_MODE_val,0, sizeof(COMMUNICATION_MODE_val));
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
@@ -972,7 +972,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_STANDALONE_UUID:
 
-    	ESP_LOGI(TAG, "Standalone written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Standalone received %02x", param->write.value[0]);
 
     	uint8_t standalone = 0xff;
     	char * systemStr = "system";
@@ -1007,7 +1007,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_STANDALONE_PHASE_UUID:
 
-    	ESP_LOGI(TAG, "Standalone PHASE written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Standalone PHASE received %02x", param->write.value[0]);
 
     	memset(nrTostr, 0, sizeof(nrTostr));
     	memcpy(nrTostr, param->write.value, param->write.len);
@@ -1030,21 +1030,29 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	memcpy(nrTostr, param->write.value, param->write.len);
     	float standaloneCurrent = atof(nrTostr);
 
-    	ESP_LOGI(TAG, "Standalone CURRENT written %f", standaloneCurrent);
+    	ESP_LOGI(TAG, "Standalone CURRENT received %f", standaloneCurrent);
 
     	//Sanity check
     	if((32.0 >= standaloneCurrent) && (standaloneCurrent >= 6.0))
     	{
-    		storage_Set_StandaloneCurrent(standaloneCurrent);
-    		ESP_LOGI(TAG, "Set standalone Current: %f", standaloneCurrent);
-    		saveConfiguration = true;
+    		MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, standaloneCurrent);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_StandaloneCurrent(standaloneCurrent);
+				ESP_LOGI(TAG, "Set standalone Current to MCU: %f", standaloneCurrent);
+				saveConfiguration = true;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU standalone current parameter error");
+			}
     	}
 
    		break;
 
     case CHARGER_PERMANENT_LOCK_UUID:
 
-    	ESP_LOGI(TAG, "Permanent lock written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Permanent lock received %02x", param->write.value[0]);
 
     	uint8_t lockValue = 0xFF;
 
@@ -1060,7 +1068,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 				storage_Set_PermanentLock(lockValue);
 
-				ESP_LOGI(TAG, "BLE ToBeSaved PermanentLock=%d", lockValue);
+				ESP_LOGI(TAG, "BLE PermanentLock=%d sent to MCU", lockValue);
 				saveConfiguration = true;
 			}
 			else
@@ -1081,21 +1089,25 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	memcpy(nrTostr, param->write.value, param->write.len);
     	float maxInstCurrConfig = atof(nrTostr);
 
-    	ESP_LOGI(TAG, "Max installation current CONFIG written %f", maxInstCurrConfig);
+    	ESP_LOGI(TAG, "Max installation current CONFIG received %f", maxInstCurrConfig);
 
     	//Sanity check
-    	if((63.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
+    	if((40.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
     	{
-    		storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
-    		ESP_LOGI(TAG, "Set standalone Current: %f", maxInstCurrConfig);
-    		saveConfiguration = true;
+    		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrConfig);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
+				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
+				saveConfiguration = true;
+			}
     	}
 
    		break;
 
     case CHARGER_PHASE_ROTATION_UUID:
 
-    	ESP_LOGI(TAG, "PhaseRotation written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "PhaseRotation received %02x", param->write.value[0]);
     	uint8_t phaseRotation = param->write.value[0];
     	//memset(nrTostr, 0, sizeof(nrTostr));
     	//memcpy(nrTostr, param->write.value, param->write.len);
