@@ -165,31 +165,41 @@ void prodtest_getNewId()
 
 static int sock;
 
-void prodtest_send(char *payload, bool doReceive)
+void prodtest_send(char *payload)
 {
-
-	char rx_buffer[30];//[128];
 	int err = send(sock, payload, strlen(payload), 0);
 	if (err < 0) {
 		ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
 		return;
 	}
+}
 
-	if(doReceive == true)
-	{
-		volatile int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-		// Error occurred during receiving
+int await_prodtest_external_step_acceptance(){
+	char rx_buffer[1];
+
+	for (int i = 0; i < 100; i++){
+
+		int len = recv(sock, rx_buffer, sizeof(rx_buffer), MSG_WAITALL);
+
 		if (len < 0) {
+			if(errno == 11){
+				//workaround, this error should never happen on a blocking socket
+				i--;
+				continue;
+			}
 			ESP_LOGE(TAG, "recv failed: errno %d", errno);
-			return;
+		} else {
+			if(rx_buffer[0]=='*'){
+				ESP_LOGI(TAG, "got external acceptance for test step");
+				return 0;
+			}else{
+				ESP_LOGW(TAG, "ignoring unexpected data on socket");
+			}
 		}
-		// Data received
-		else {
-			rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string
-			ESP_LOGI(TAG, "Received %d bytes:", len);
-			ESP_LOGI(TAG, "%s", rx_buffer);
-		}
+
 	}
+
+	return -1;
 }
 
 int run_component_tests();
@@ -201,30 +211,30 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 	char payload[100];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
-	prodtest_send(payload, 1);
+	prodtest_send(payload);
 	sprintf(payload, "0|3|Starting factory test\r\n");
-	prodtest_send(payload, 0);
+	prodtest_send(payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");
 		sprintf(payload, "FAIL\r\n");
-		prodtest_send( payload, 0);
+		prodtest_send( payload);
 
 		goto cleanup;
 	}
 
 	
 	sprintf(payload, "4|3|Factory test completed, all tests passed\r\n");
-	prodtest_send( payload, 0);
+	prodtest_send( payload);
 
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
 	}
 
 	sprintf(payload, "PASS\r\n");
-	prodtest_send( payload, 0);
+	prodtest_send( payload);
 
 	cleanup:
 	shutdown(sock, 0);
@@ -239,24 +249,42 @@ int test_rtc(){
 	struct tm time2 = RTCReadTime();
 
 	if(time1.tm_sec == time2.tm_sec){
-		prodtest_send("0|0|RTC test FAIL\r\n", 0);
+		prodtest_send("0|0|RTC test FAIL\r\n");
 		return -1;
 	}
 
-	prodtest_send("0|0|RTC test PASS\r\n", 0);
+	prodtest_send("0|0|RTC test PASS\r\n");
 	return 0;
 }
 
 int test_bg(){
 	ESP_LOGE(TAG, "BG95 test not implemented");
 
-	prodtest_send("0|0|BG95 test FAIL\r\n", 0);
+	prodtest_send("0|0|BG95 test FAIL\r\n");
 	return -1;
 }
 
+int test_leds(){
+	// led should be on, the dsPIC is already in prodtest mode
+	prodtest_send("0|0|Led test start\r\n");
+
+	int result = await_prodtest_external_step_acceptance();
+	if(result==0){
+		ESP_LOGI(TAG, "led test accepted");
+		prodtest_send("0|0|led test PASS\r\n");
+		return 0;
+	}else{
+		prodtest_send("0|0|led test fail\r\n");
+	}
+	return -1;
+}
 
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
+
+	if(test_leds()<0){
+		goto err;
+	}
 
 	if(test_rtc()<0){
 		goto err;
