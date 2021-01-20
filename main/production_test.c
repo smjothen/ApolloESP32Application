@@ -14,6 +14,8 @@
 //#include "storage.h"
 #include "network.h"
 
+#include "protocol_task.h"
+
 //#include "adc_control.h"
 
 #include "lwip/sockets.h"
@@ -202,6 +204,8 @@ void prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(payload, 1);
 	sprintf(payload, "0|3|Starting factory test\r\n");
 	prodtest_send(payload, 0);
+
+	MCU_SendCommandId(CommandEnterProductionMode);
 
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");

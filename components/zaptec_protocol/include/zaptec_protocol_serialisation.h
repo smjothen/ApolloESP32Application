@@ -209,6 +209,8 @@
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
 
+        CommandEnterProductionMode = 701,
+
     } CommandNo;
 
     typedef enum
