@@ -15,6 +15,7 @@
 #include "network.h"
 
 #include "protocol_task.h"
+#include "audioBuzzer.h"
 
 //#include "adc_control.h"
 
@@ -237,6 +238,7 @@ void prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send( payload);
 
 	cleanup:
+	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
 	shutdown(sock, 0);
 	close(sock);
 
@@ -279,9 +281,28 @@ int test_leds(){
 	return -1;
 }
 
+int test_buzzer(){
+	prodtest_send("0|0|buzzer test start\r\n");
+	audio_play_nfc_card_accepted();
+
+	int result = await_prodtest_external_step_acceptance();
+	if(result==0){
+		ESP_LOGI(TAG, "buzzer test accepted");
+		prodtest_send("0|0|buzzer test PASS\r\n");
+		return 0;
+	}else{
+		prodtest_send("0|0|buzzer test fail\r\n");
+	}
+	return -1;
+}
+
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
 
+	if(test_buzzer()<0){
+		goto err;
+	}
+	
 	if(test_leds()<0){
 		goto err;
 	}
