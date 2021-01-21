@@ -13,6 +13,7 @@
 #include "RTC.h"
 //#include "storage.h"
 #include "network.h"
+#include "eeprom_wp.h"
 
 #include "protocol_task.h"
 #include "audioBuzzer.h"
@@ -127,7 +128,10 @@ void prodtest_getNewId()
 
 			ESP_LOGI(TAG, "v: %d, id: %s, psk: %s, pin: %s", prodDevInfo.EEPROMFormatVersion, prodDevInfo.serialNumber, prodDevInfo.PSK, prodDevInfo.Pin);
 
+			eeprom_wp_disable_nfc_disable();
 			esp_err_t err = i2cWriteDeviceInfoToEEPROM(prodDevInfo);
+			eeprom_wp_enable_nfc_enable();
+
 			if (err != ESP_OK)
 			{
 				while(true)
@@ -230,10 +234,12 @@ void prodtest_perform(struct DeviceInfo device_info)
 	sprintf(payload, "4|3|Factory test completed, all tests passed\r\n");
 	prodtest_send( payload);
 
+	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
 	}
 
+	eeprom_wp_enable_nfc_enable();
 	sprintf(payload, "PASS\r\n");
 	prodtest_send( payload);
 

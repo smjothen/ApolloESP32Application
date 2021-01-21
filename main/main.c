@@ -27,13 +27,13 @@
 #include "apollo_ota.h"
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
+#include "eeprom_wp.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
-#define GPIO_OUTPUT_EEPROM_WP    4
-#define GPIO_OUTPUT_EEPROM_WP_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
+
 
 char softwareVersion[] = " 0.0.0.4 ";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to fake ble version
@@ -51,19 +51,6 @@ char * GetSoftwareVersion()
 char * GetSoftwareVersionBLE()
 {
 	return softwareVersionBLEtemp;
-}
-
-
-void InitGPIOs()
-{
-    gpio_config_t output_conf;
-	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-	output_conf.mode = GPIO_MODE_OUTPUT;
-	output_conf.pin_bit_mask = GPIO_OUTPUT_EEPROM_WP_SEL;
-	output_conf.pull_down_en = 0;
-	output_conf.pull_up_en = 0;
-	gpio_config(&output_conf);
-	
 }
 
 
@@ -153,15 +140,14 @@ void app_main(void)
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
-	InitGPIOs();
+	eeprom_wp_pint_init();
 	cellularPinsInit();
 
 //	volatile char inputString[] = "+QCCID: 89470060200213074802";
 //	volatile char outputString[21] = {0};
 //	volatile int ret = GetNumberAsString(inputString, outputString, 20);
 
-	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
-	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
+	eeprom_wp_enable_nfc_enable();
 
 	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
 
@@ -319,9 +305,9 @@ void app_main(void)
 
 	#define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
-	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+	eeprom_wp_disable_nfc_disable();
 	EEPROM_WriteFactoryStage(FactoryStageUnknown2);
-	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+	eeprom_wp_enable_nfc_enable();
 	#endif
 
 	struct DeviceInfo devInfo;
@@ -330,12 +316,8 @@ void app_main(void)
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
 			//Invalid EEPROM content
 			prodtest_getNewId();
-
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
-
 			devInfo = i2cReadDeviceInfoFromEEPROM();
 		}
 		else if(devInfo.EEPROMFormatVersion == 0x0)
@@ -348,9 +330,7 @@ void app_main(void)
 		I2CDevicesStartTask();
 
 		if(devInfo.factory_stage != FactoryStageFinnished){
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
 			prodtest_perform(devInfo);
-			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 		}
 
 	}
