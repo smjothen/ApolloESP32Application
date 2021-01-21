@@ -4,6 +4,7 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "freertos/event_groups.h"
 
 //#include "https_client.h"
 #include "production_test.h"
@@ -17,6 +18,7 @@
 
 #include "protocol_task.h"
 #include "audioBuzzer.h"
+#include "CLRC661.h"
 
 //#include "adc_control.h"
 
@@ -27,6 +29,11 @@ static const char *TAG = "PROD-TEST :";
 
 //static bool connected = false;
 
+static bool prodtest_running = false;
+
+bool prodtest_active(){
+	return prodtest_running;
+}
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -207,11 +214,25 @@ int await_prodtest_external_step_acceptance(){
 	return -1;
 }
 
+static struct TagInfo latest_tag = {0};
+static EventGroupHandle_t prodtest_eventgroup;
+static const int NFC_READ = BIT0;
+
+int prodtest_on_nfc_read(){
+	ESP_LOGI(TAG, "nfctag submitted to prodtest procedure");
+	latest_tag = NFCGetTagInfo();
+	xEventGroupSetBits( prodtest_eventgroup, NFC_READ);
+	return 0;
+}
+
 int run_component_tests();
 void socket_connect(void);
 
 void prodtest_perform(struct DeviceInfo device_info)
 {
+	prodtest_eventgroup = xEventGroupCreate();
+    xEventGroupClearBits(prodtest_eventgroup, NFC_READ);
+
 	socket_connect();
 
 	char payload[100];
@@ -221,6 +242,14 @@ void prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
+
+	prodtest_running = true;
+	ESP_LOGI(TAG, "waitinf on rfid");
+	prodtest_send("0|0|waiting on rfid");
+	xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
+	
+	sprintf(payload, "0|3|RFID: %s\r\n", latest_tag.idAsString);
+	prodtest_send(payload);
 
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");
@@ -309,7 +338,7 @@ int test_switch(){
 		//the switch must be in pos 0 when it leaves the factory
 		prodtest_send("0|0|switch test PASS\r\n");
 		return 0;
-	}else if(switch_state==0){
+	}else if(switch_state==2){
 		// for testing we will also allow switch to be in temp. wifi config postion
 		prodtest_send("0|0|switch test in dev mode PASS\r\n");
 		return 1;

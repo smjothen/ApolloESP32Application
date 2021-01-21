@@ -10,6 +10,8 @@ extern "C" {
 void prodtest_perform(struct DeviceInfo device_info);
 void prodtest_getNewId();
 
+bool prodtest_active();
+int prodtest_on_nfc_read();
 
 #ifdef __cplusplus
 }

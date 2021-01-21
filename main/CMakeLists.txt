@@ -12,6 +12,6 @@ set(COMPONENT_SRCS "main.c"
 				   "diagnostics_port.c"
 				   )
 
-set(COMPONENT_ADD_INCLUDEDIRS "")
+set(COMPONENT_ADD_INCLUDEDIRS "./")
 
 register_component()

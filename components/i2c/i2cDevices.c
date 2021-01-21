@@ -19,6 +19,7 @@
 #include "../../main/storage.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../zaptec_protocol/include/protocol_task.h"
+#include "production_test.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -232,7 +233,9 @@ static void i2cDevice_task(void *pvParameters)
 		{
 			nfcCardDetected = NFCReadTag();
 
-			if(nfcCardDetected > 0)
+			if(prodtest_active() && (nfcCardDetected > 0)){
+				prodtest_on_nfc_read();
+			}else if(nfcCardDetected > 0)
 			{
 				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 

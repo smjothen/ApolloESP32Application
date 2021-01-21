@@ -1,5 +1,5 @@
 set(COMPONENT_REQUIRES "audioBuzzer"
-					   "authentication")
+					   "authentication" "main")
 
 set(COMPONENT_SRCS  "i2cDevices.c"
 					"i2cInterface.c"
