@@ -296,6 +296,24 @@ int test_buzzer(){
 	return -1;
 }
 
+int test_switch(){
+	int switch_state = MCU_GetSwitchState();
+
+    if(switch_state==0){
+		//the switch must be in pos 0 when it leaves the factory
+		prodtest_send("0|0|switch test PASS\r\n");
+		return 0;
+	}else if(switch_state==0){
+		// for testing we will also allow switch to be in temp. wifi config postion
+		prodtest_send("0|0|switch test in dev mode PASS\r\n");
+		return 1;
+	}else{
+		prodtest_send("0|0|switch test fail\r\n");
+	}
+
+	return -1;
+}
+
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
 
@@ -311,10 +329,13 @@ int run_component_tests(){
 		goto err;
 	}
 		
+	if(test_switch()<0){
+		goto err;
+	}
+		
 	if(test_bg()<0){
 		goto err;
 	}
-
 
 	return 0;
 
