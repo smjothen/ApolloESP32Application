@@ -341,7 +341,7 @@ int test_bg(){
 	return -1;
 }
 
-inttest_leds(){
+int test_leds(){
 	// led should be on, the dsPIC is already in prodtest mode
 	prodtest_send("0|0|Led test start\r\n");
 
