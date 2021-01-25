@@ -19,6 +19,8 @@
 #include "protocol_task.h"
 #include "audioBuzzer.h"
 #include "CLRC661.h"
+#include "at_commands.h"
+#include "ppp_task.h"
 
 //#include "adc_control.h"
 
@@ -295,13 +297,51 @@ int test_rtc(){
 }
 
 int test_bg(){
-	ESP_LOGE(TAG, "BG95 test not implemented");
 
-	prodtest_send("0|0|BG95 test FAIL\r\n");
+	char payload[128];
+
+	configure_modem_for_prodtest();
+	prodtest_send("0|0|BG95 startup PASS\r\n");
+
+	char imei[20];
+    at_command_get_imei(imei, 20);
+	sprintf(payload, "0|3|BG imei: %s\r\n", imei);
+	prodtest_send(payload);
+
+	int activate_result = at_command_activate_pdp_context();
+	if(activate_result<0){
+		goto err;
+	}
+
+	int rssi; int ber;
+	if(at_command_signal_quality(&rssi, &ber)<0){
+		goto err;
+	}
+	sprintf(payload, "0|3|BG rssi: %d\r\n", rssi);
+	prodtest_send(payload);
+
+	int sent; int rcvd; int lost; int min; int max; int avg;
+	int ping_error = at_command_ping_test(&sent, &rcvd, &lost, &min, &max, &avg);
+	if(ping_error<0){
+		goto err;
+	}
+
+	sprintf(payload, "0|3|BG ping avg: %d\r\n", avg);
+	prodtest_send(payload);
+
+	int deactivate_result = at_command_deactivate_pdp_context();
+	if(deactivate_result<0){
+		goto err;
+	}
+
+	prodtest_send("0|0|BG tests pass\r\n");
+	return 0;
+
+	err:
 	return -1;
 }
 
-int test_leds(){
+inttest_leds(){
 	// led should be on, the dsPIC is already in prodtest mode
 	prodtest_send("0|0|Led test start\r\n");
 

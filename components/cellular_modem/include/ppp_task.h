@@ -31,4 +31,6 @@ const char* LTEGetImei();
 const char* LTEGetIccid();
 const char* LTEGetImsi();
 
+int configure_modem_for_prodtest();
+
 #endif /* PPP_TASK_H */

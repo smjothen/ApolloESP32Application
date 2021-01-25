@@ -702,6 +702,45 @@ void ppp_task_start(void){
     // esp_netif_action_disconnected
 }
 
+int configure_modem_for_prodtest(void){
+    event_group = xEventGroupCreate();
+    ESP_LOGI(TAG, "Configuring BG9x for prodtest");
+    xEventGroupSetBits(event_group, UART_TO_LINES);
+    hard_reset_cellular();
+    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
+
+    xEventGroupClearBits(event_group, UART_TO_PPP);
+    xEventGroupSetBits(event_group, UART_TO_LINES);
+
+    char at_buffer[LINE_BUFFER_SIZE];
+
+    while (true)
+    {
+        await_line(at_buffer, pdMS_TO_TICKS(1000));
+        if(strstr(at_buffer, "APP RDY")){
+            break;
+        }
+        else if(strstr(at_buffer, "NORMAL POWER DOWN")){
+            hard_reset_cellular();
+            continue;
+        }
+    }
+
+    ESP_LOGI(TAG, "BG started");
+
+    at_command_echo_set(false);
+    int at_result = at_command_at();
+
+    while(at_result < 0){
+        ESP_LOGE(TAG, "bad response from modem: %d, retrying ", at_result);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        at_result = at_command_at();
+    }
+
+    ESP_LOGI(TAG, "[BG] Go for prodtest");
+    return 0;
+}
+
 
 const char* LTEGetImei()
 {
