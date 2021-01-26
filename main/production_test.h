@@ -1,13 +1,13 @@
 #ifndef _PRODUCTIONTEST_H_
 #define _PRODUCTIONTEST_H_
 
+#include "DeviceInfo.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-uint8_t prodtest_init();
-uint8_t prodtest_getState();
-void prodtest_perform();
+void prodtest_perform(struct DeviceInfo device_info);
 void prodtest_getNewId();
 
 

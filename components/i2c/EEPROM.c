@@ -101,6 +101,7 @@ esp_err_t EEPROM_Write()
 }
 
 #define EEPROM_FORMAT_VERSON       0 // 1 byte  ->  0]
+#define EEPROM_FACTORY_STAGE       1 // 1 byte  ->  1]
 #define EEPROM_ADDR_SERIAL_NUMBER 16 //10 bytes -> 25]
 #define EEPROM_ADDR_PSK_1_3 	  32 //16 bytes -> 47]
 #define EEPROM_ADDR_PSK_2_3 	  48 //16 bytes -> 63]
@@ -113,22 +114,34 @@ esp_err_t EEPROM_ReadFormatVersion(uint8_t *formatVersionToRead)
 	return err;
 }
 
-esp_err_t EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite)
-{
-	i2c_master_write_slave_at_address(slaveAddressEEPROM, EEPROM_FORMAT_VERSON, &formatVersionToWrite, 1);
+esp_err_t EEPROM_ReadFactroyStage(uint8_t *factory_stage){
+	return i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_FACTORY_STAGE, factory_stage, 1);
+}
+
+esp_err_t _eeprom_write_byte(uint8_t byte_to_write, uint16_t address){
+	i2c_master_write_slave_at_address(slaveAddressEEPROM, address, &byte_to_write, 1);
 
 	vTaskDelay(100 / portTICK_PERIOD_MS);
 
-	uint8_t formatVersionToRead = 0;
-	i2c_master_read_slave_at_address(slaveAddressEEPROM, EEPROM_FORMAT_VERSON, &formatVersionToRead, 1);
+	uint8_t readback_byte = 0;
+	i2c_master_read_slave_at_address(slaveAddressEEPROM, address, &readback_byte, 1);
 
-	if(formatVersionToWrite == formatVersionToRead)
+	if(readback_byte == byte_to_write)
 		return ESP_OK;
 	else
 		return ESP_FAIL;
 }
 
+esp_err_t EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite)
+{
+	return _eeprom_write_byte(formatVersionToWrite, EEPROM_FORMAT_VERSON);
+}
 
+
+esp_err_t EEPROM_WriteFactoryStage(uint8_t stage)
+{
+	return _eeprom_write_byte(stage, EEPROM_FACTORY_STAGE);
+}
 
 esp_err_t EEPROM_ReadSerialNumber(char * serianNumberToRead)
 {

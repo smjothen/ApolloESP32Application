@@ -315,6 +315,13 @@ void app_main(void)
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
+	#define FORCE_FACTORY_TEST
+	#ifdef FORCE_FACTORY_TEST
+	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+	EEPROM_WriteFactoryStage(FactoryStageUnknown2);
+	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+	#endif
+
 	struct DeviceInfo devInfo;
 	if(switchState != eConfig_Wifi_Home_Wr32)
 	{
@@ -337,6 +344,13 @@ void app_main(void)
 		}
 
 		I2CDevicesStartTask();
+
+		if(devInfo.factory_stage != FactoryStageFinnished){
+			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+			prodtest_perform(devInfo);
+			gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+		}
+
 	}
 	else
 	{
