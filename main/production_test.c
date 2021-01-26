@@ -21,6 +21,7 @@
 #include "CLRC661.h"
 #include "at_commands.h"
 #include "ppp_task.h"
+#include "protocol_task.h"
 
 //#include "adc_control.h"
 
@@ -228,6 +229,7 @@ int prodtest_on_nfc_read(){
 }
 
 int run_component_tests();
+int charge_cycle_test();
 void socket_connect(void);
 
 void prodtest_perform(struct DeviceInfo device_info)
@@ -244,6 +246,8 @@ void prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
+
+	charge_cycle_test();
 
 	prodtest_running = true;
 	ESP_LOGI(TAG, "waitinf on rfid");
@@ -416,6 +420,31 @@ int run_component_tests(){
 
 	err:
 		return -1;
+}
+
+static const uint8_t eCAR_DISCONNECTED = 12;
+static const uint8_t eCAR_CHARGING = 6;
+
+int charge_cycle_test(){
+	ESP_LOGI(TAG, "waiting for charging start");
+	while(MCU_GetchargeMode()!=eCAR_CHARGING){
+		ESP_LOGI(TAG, "waiting for charging start");
+		vTaskDelay(pdMS_TO_TICKS(1500));
+	}
+
+	ESP_LOGI(TAG, "charging started, sampling data");
+
+	while(MCU_GetchargeMode()!=eCAR_DISCONNECTED){
+		ESP_LOGI(TAG, "Charging data:");
+		ESP_LOGI(TAG, "\teMeter temp: %f, %f, %f", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2));
+		ESP_LOGI(TAG, "\tVoltages: %f, %f, %f", MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2));
+		ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+		ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
+		
+		vTaskDelay(pdMS_TO_TICKS(3000));
+	}
+
+	return 0;
 }
 
 void socket_connect(void){
