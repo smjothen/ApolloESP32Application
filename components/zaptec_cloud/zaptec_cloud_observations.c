@@ -304,8 +304,8 @@ int publish_debug_telemetry_observation_all(
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
 
-    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
-    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
+    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
@@ -336,7 +336,7 @@ int publish_debug_telemetry_observation_all(
 
 
 static uint32_t previousWarnings = 0;
-static uint8_t previousNetworkType = 0;
+static uint8_t previousNetworkType = 0xff;
 static float previousChargeCurrentUserMax = 0.0;
 static int previousSetPhases = 0;
 static uint8_t previousPhaseRotation = 0;
@@ -347,9 +347,12 @@ static float previousStandaloneCurrent = -1.0;
 static float previousMaxInstallationCurrentConfig = -1.0;
 static uint8_t previousSwitchState = 0xff;
 static uint8_t previousPermanentLock = 0xff;
+static uint8_t previousCableType = 0xff;
+static float previousPower = -1.0;
+static float previousEnergy = -1.0;
 
 int publish_telemetry_observation_on_change(){
-    ESP_LOGD(TAG, "sending change telemetry");
+    ESP_LOGD(TAG, "sending on change telemetry");
 
     bool isChange = false;
 
@@ -408,8 +411,8 @@ int publish_telemetry_observation_on_change(){
 		ESP_LOGW(TAG, "CC ACK: User current %.2f, %d", chargeCurrentUserMax, setPhases);
 	}
 
-    uint8_t networkType = storage_Get_NetworkType();
-    if ((previousNetworkType != networkType) && (networkType != 0))
+    uint8_t networkType = MCU_GetGridType();
+    if ((previousNetworkType != networkType))// && (networkType != 0))
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
     	previousNetworkType = networkType;
@@ -472,18 +475,37 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+	uint8_t cableType = MCU_GetCableType();
+	if(previousCableType != cableType)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)cableType));
+		previousCableType = cableType;
+		isChange = true;
+	}
 
+	float power = MCU_GetPower();
+	if((power > previousPower + 100) != (power < (previousPower - 100)))
+	{
+		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
+		previousPower = power;
+		isChange = true;
+	}
+
+	float energy = MCU_GetPower();
+	if((energy > previousEnergy + 0.1) != (energy < (previousEnergy - 0.1)))
+	{
+		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, energy));
+		previousEnergy = energy;
+		isChange = true;
+	}
+
+	//Check ret and retry?
     int ret = 0;
 
     if(isChange == true)
     	ret = publish_json(observations);
     else
     	cJSON_Delete(observations);
-
-	/*if(ret == 0)
-	{
-
-	}*/
 
     return ret;
 }

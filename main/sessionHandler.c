@@ -133,7 +133,7 @@ static void sessionHandler_task()
 	{
 		isOnline = isMqttConnected();
 
-		if(!isOnline)
+		if(!isOnline) // Also the case if CommunicationMode == eNONE.
 		{
 			ESP_LOGI(TAG, "Waiting to become online...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
@@ -159,6 +159,8 @@ static void sessionHandler_task()
 		}
 
 		currentCarChargeMode = MCU_GetchargeMode();
+
+		publish_telemetry_observation_on_change();
 
 		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
@@ -211,7 +213,13 @@ static void sessionHandler_task()
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
 
+			// Delay to space data recorded i cloud.
+			vTaskDelay(pdMS_TO_TICKS(2000));
+
 			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			//char empty[] = "\0";
+			//publish_string_observation(SessionIdentifier, empty);
 
 			chargeSession_Clear();
 
@@ -311,7 +319,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d dBm  DataInterval: %d *******", GetCellularQuality(), dataInterval);
+				ESP_LOGW(TAG,"******** LTE: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", GetCellularQuality(), dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -320,7 +328,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d *******", rssi, dataInterval);
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", rssi, dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
 			}
 
 			statusCounter = 0;
@@ -402,7 +410,7 @@ static void sessionHandler_task()
 			}*/
 
 
-			publish_telemetry_observation_on_change();
+			//publish_telemetry_observation_on_change();
 
 		}
 

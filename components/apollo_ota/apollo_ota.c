@@ -192,3 +192,8 @@ const char* OTAReadRunningPartition()
 
 	return partition->label;
 }
+
+void ota_rollback()
+{
+	esp_ota_mark_app_invalid_rollback_and_reboot();
+}

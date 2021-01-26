@@ -166,25 +166,25 @@ void uartRecvTask(void *pvParameters){
         }
 }
 
-volatile static float temperaturePowerBoardT[2]  = {0.0};
-volatile static float temperatureEmeter[3] = {0.0};
-volatile static float voltages[3] = {0.0};
-volatile static float currents[3] = {0.0};
+static float temperaturePowerBoardT[2]  = {0.0};
+static float temperatureEmeter[3] = {0.0};
+static float voltages[3] = {0.0};
+static float currents[3] = {0.0};
 
-volatile static float totalChargePower = 0.0;
-volatile static float totalChargePowerSession = 0.0;
+static float totalChargePower = 0.0;
+static float totalChargePowerSession = 0.0;
 
-volatile static uint8_t chargeMode = 0;
-volatile static uint8_t chargeOperationMode = 0;
+static uint8_t chargeMode = 0;
+static uint8_t chargeOperationMode = 0;
 
-volatile static uint32_t mcuDebugCounter = 0;
-volatile static uint32_t mcuWarnings = 0;
-volatile static uint8_t mcuResetSource = 0;
+static uint32_t mcuDebugCounter = 0;
+static uint32_t mcuWarnings = 0;
+static uint8_t mcuResetSource = 0;
 
-volatile static uint8_t mcuNetworkType = 0;
-volatile static char networkType[5] = {0};
-volatile static uint8_t mcuCableType = 0;
-volatile static float mcuChargeCurrentUserMax = 0;
+static uint8_t mcuNetworkType = 0;
+static char networkType[5] = {0};
+static uint8_t mcuCableType = 0;
+static float mcuChargeCurrentUserMax = 0;
 
 int holdSetPhases = 0;
 
@@ -445,15 +445,7 @@ void uartSendTask(void *pvParameters){
 		else if(rxMsg.identifier == ParamChargeCurrentUserMax)
 		{
 			mcuChargeCurrentUserMax = GetFloat(rxMsg.data);
-			ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, networkType, mcuCableType, mcuChargeCurrentUserMax);
 		}
-
-
-        /*else if(rxMsg.type != 0)
-        {
-        	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-        	printf("frame error code: %d\n\r", error_code);
-        }*/
 
         if (txMsg.identifier == rxMsg.identifier)
         {
@@ -465,13 +457,17 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(count >= 23)
+        if(count >= 22)
         {
+        	ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, networkType, mcuCableType, mcuChargeCurrentUserMax);
+
+        	//Spacing between reading parameter blocks
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
         }
 
+        //Spacing between individual parameter readings
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
@@ -480,7 +476,7 @@ void uartSendTask(void *pvParameters){
 
 int MCU_GetSwitchState()
 {
-	ESP_LOGW(TAG, "**** Switch used: %d ****", receivedSwitchState);
+	//ESP_LOGW(TAG, "**** Switch used: %d ****", receivedSwitchState);
 	return receivedSwitchState;
 }
 
@@ -609,12 +605,20 @@ float MCU_GetCurrents(uint8_t phase)
 
 float MCU_GetPower()
 {
-	return totalChargePower;
+	// Avoid presenting insignificant small numbers
+	if (totalChargePower < 0.001)
+		return 0.0;
+	else
+		return totalChargePower;
 }
 
 float MCU_GetEnergy()
 {
-	return totalChargePowerSession;
+	// Avoid presenting insignificant small numbers
+	if (totalChargePowerSession < 0.001)
+		return 0.0;
+	else
+		return totalChargePowerSession;
 }
 
 uint8_t MCU_GetchargeMode()
@@ -646,10 +650,16 @@ float MCU_GetMaxInstallationCurrentSwitch()
 	return mcuMaxInstallationCurrentSwitch;
 }
 
-char * MCU_GetGridType()
+char * MCU_GetGridTypeString()
 {
 	return networkType;
 }
+
+uint8_t MCU_GetGridType()
+{
+	return mcuNetworkType;
+}
+
 
 float MCU_GetChargeCurrentUserMax()
 {
@@ -663,6 +673,10 @@ void HOLD_SetPhases(int setPhases)
 int HOLD_GetSetPhases()
 {
 	return holdSetPhases;
+}
+uint8_t MCU_GetCableType()
+{
+	return mcuCableType;
 }
 
 void configureUart(){

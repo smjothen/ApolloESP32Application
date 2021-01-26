@@ -597,7 +597,8 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if(networkType != 0)
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
+					//TODO: Value is measured, handle overwrite from cloud
+					/*MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_NetworkType(networkType);
@@ -609,7 +610,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					else
 					{
 						ESP_LOGE(TAG, "MCU NetworkType parameter error");
-					}
+					}*/
 				}
 				else
 				{
@@ -721,22 +722,39 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart MCU\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 200;
+		MessageType ret = MCU_SendCommandId(CommandReset);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Start command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Start command FAILED");
+		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ESP_LOGI(TAG, "TODO: Complete testing");
 		ble_interface_deinit();
 		start_ota_task();
 		responseStatus = 200;
 	}
-	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		ESP_LOGI(TAG, "TODO: Implement forced");
+		ble_interface_deinit();
+		start_ota_task();
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
+	{
+		ESP_LOGI(TAG, "Received \"OTA rollback\"-command");
+		ESP_LOGE(TAG, "Active partition: %s", OTAReadRunningPartition());
+		ota_rollback(); //TODO perform in separate thread to be able to ack cloud?
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
@@ -862,6 +880,23 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		//ESP_LOGI(TAG, "Charging denied!");
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Granted command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Granted command FAILED");
+		}
+		responseStatus = 200;
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
+	{
+		ESP_LOGI(TAG, "GridTest command");
+		MessageType ret = MCU_SendCommandId(CommandRunGridTest);
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;

@@ -35,10 +35,12 @@ uint8_t MCU_GetChargeOperatingMode();
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
 uint8_t MCU_GetResetSource();
-char * MCU_GetGridType();
+char * MCU_GetGridTypeString();
+uint8_t MCU_GetGridType();
 float MCU_GetChargeCurrentUserMax();
 void HOLD_SetPhases(int setPhases);
 int HOLD_GetSetPhases();
+uint8_t MCU_GetCableType();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 

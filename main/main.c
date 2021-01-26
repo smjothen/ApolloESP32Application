@@ -28,6 +28,7 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "certificate.h"
+#include "fat.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -158,6 +159,8 @@ void app_main(void)
 	InitGPIOs();
 	cellularPinsInit();
 
+	//fat_make();
+	//certificateGetNew();
 	//certificateValidate();
 
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
@@ -185,7 +188,7 @@ void app_main(void)
     zaptecProtocolStart();
 
     //start_ota_task();
-    validate_booted_image();
+    //validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
 
@@ -377,7 +380,7 @@ void app_main(void)
 		SetDataInterval(10);
 	}
 
-	ble_interface_init();
+	///ble_interface_init();
 
 	uint32_t ledState = 0;
 
@@ -398,6 +401,8 @@ void app_main(void)
     int min = 0;
     int hours = 0;
     int days = 0;
+
+    //certificateGetNew();
 
     while (true)
     {

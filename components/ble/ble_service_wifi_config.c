@@ -85,10 +85,13 @@ const uint8_t CommunicationMode_uid128[ESP_UUID_LEN_128] = {0xd2, 0xfc, 0xb5, 0x
 static const uint8_t COMMUNICATION_MODE_CHAR_descr[]   	= "Communication Mode";
 static uint8_t COMMUNICATION_MODE_val[8]          		= {0x00};
 
-const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128] = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128]  = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t FIRMWARE_VERSION_CHAR_descr[]   	= "Firmware Version";
 //static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
 
+const uint8_t PairNFCTag_uid128[ESP_UUID_LEN_128] = 	{0xe4, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t PAIR_NFC_TAG_CHAR_descr[]   		= "Pair NFC Tag";
+static uint8_t PAIR_NFC_TAG_val[32]          			= {0x00};
 
 const uint8_t NetworkType_uid128[ESP_UUID_LEN_128] 		= {0x05, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t NETWORK_TYPE_CHAR_descr[]   		= "Network type";
@@ -132,6 +135,10 @@ const uint8_t Phase_Rotation_uid128[ESP_UUID_LEN_128] 	= {0x08, 0xfe, 0xb5, 0xc0
 static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
 //static uint8_t Phase_Rotation_val[1]          			= {0x0};
 
+
+const uint8_t RunCommand_uid128[ESP_UUID_LEN_128] = 	{0x03, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t RUN_COMMAND_CHAR_descr[]   		= "Run Command";
+static uint8_t COMMAND_val[32]          				= {0x00};
 
 //static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
@@ -210,7 +217,10 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 
 	[CHARGER_FIRMWARE_VERSION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_FIRMWARE_VERSION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &FirmwareVersion_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_PAIR_NFC_TAG_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_PAIR_NFC_TAG_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &PairNFCTag_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 
 	[CHARGER_NETWORK_TYPE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_NETWORK_TYPE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkType_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
@@ -252,6 +262,10 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_PHASE_ROTATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_PHASE_ROTATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_RUN_COMMAND_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_RUN_COMMAND_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &RunCommand_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+
 
 };
 
@@ -640,7 +654,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
 		//memcpy(NETWORK_TYPE_val, MCU_GetGridType(),4);
-		memcpy(rsp->attr_value.value, MCU_GetGridType(), 4);
+		memcpy(rsp->attr_value.value, MCU_GetGridTypeString(), 4);
 		rsp->attr_value.len = 4;
 		ESP_LOGI(TAG, "Read Network type");
 
@@ -970,6 +984,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
    		break;
 
+
+    case CHARGER_PAIR_NFC_TAG_UUID:
+
+    	ESP_LOGI(TAG, "Pair NFC characteristic received with %s", param->write.value);
+    	if(param->write.len >= 32)
+    	{
+    		ESP_LOGE(TAG, "To long NFC tag string");
+    		break;
+    	}
+
+    	memset(PAIR_NFC_TAG_val,0, sizeof(PAIR_NFC_TAG_val));
+		memcpy(PAIR_NFC_TAG_val,param->write.value, param->write.len);
+		ESP_LOGI(TAG, "New NFC tag string %s", PAIR_NFC_TAG_val);
+
+   		break;
+
+
     case CHARGER_STANDALONE_UUID:
 
     	ESP_LOGI(TAG, "Standalone received %02x", param->write.value[0]);
@@ -1122,6 +1153,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	}
 
    		break;
+
+
+    case CHARGER_RUN_COMMAND_UUID:
+
+    	ESP_LOGI(TAG, "Run Command received with %s", param->write.value);
+    	if(param->write.len >= 32)
+    	{
+    		ESP_LOGE(TAG, "To long command string");
+    		break;
+    	}
+
+    	memset(COMMAND_val,0, sizeof(COMMAND_val));
+		memcpy(COMMAND_val,param->write.value, param->write.len);
+		ESP_LOGI(TAG, "New BLE command string %s", COMMAND_val);
+
+   		break;
+
 
     case CHARGER_AUTH_UUID:
 
