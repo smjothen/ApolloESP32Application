@@ -177,10 +177,31 @@ void prodtest_getNewId()
 
 }
 
+enum test_state{
+		TEST_STATE_READY = -1,
+		TEST_STATE_RUNNING = 0,
+		TEST_STATE_SUCCESS = 1,
+		TEST_STATE_FAILURE = 2,
+		TEST_STATE_MESSAGE = 3,
+		TEST_STATE_QUESTION = 4,
+		TEST_STATE_ANSWER = 5,
+		TEST_STATE_TIMESTAMP = 6,
+		TEST_STATE_VERIFYSERIAL = 7,
+		TEST_STATE_SERIALIZEDDATA = 8,
+};
+
+enum test_item{
+	TEST_ITEM_COMPONENT_BUZZER, 
+	TEST_ITEM_COMPONENT_RTC,
+	TEST_ITEM_COMPONENT_LED,
+	TEST_ITEM_COMPONENT_SWITCH,
+	TEST_ITEM_COMPONENT_BG,
+	TEST_ITEM_DEV_TEMP,
+};
 
 static int sock;
 
-void prodtest_send(char *payload)
+void prodtest_sock_send(char *payload)
 {
 	int err = send(sock, payload, strlen(payload), 0);
 	if (err < 0) {
@@ -189,29 +210,48 @@ void prodtest_send(char *payload)
 	}
 }
 
-int await_prodtest_external_step_acceptance(){
-	char rx_buffer[1];
+void prodtest_send(enum test_state state, enum test_item item, char *message){
+	char payload [100];
+	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
+	prodtest_sock_send(payload);
+}
 
-	for (int i = 0; i < 100; i++){
 
-		int len = recv(sock, rx_buffer, sizeof(rx_buffer), MSG_WAITALL);
+int await_prodtest_external_step_acceptance(char * acceptance_string){
+	char rx_buffer[100];
+	char * next_char = rx_buffer;
+
+	for (;;){
+
+		int len = recv(sock, next_char, 1, MSG_WAITALL);
 
 		if (len < 0) {
 			if(errno == 11){
 				//workaround, this error should never happen on a blocking socket
-				i--;
+				ESP_LOGE(TAG, "recv failed: errno %d", errno);
 				continue;
 			}
 			ESP_LOGE(TAG, "recv failed: errno %d", errno);
+			return -10;
 		} else {
-			if(rx_buffer[0]=='*'){
-				ESP_LOGI(TAG, "got external acceptance for test step");
-				return 0;
+
+			if(next_char[0]=='\n'){
+				*next_char = 0;
+				ESP_LOGI(TAG, "got question result line: [%s]", rx_buffer);
+				/*int tail_start = strlen(rx_buffer) - (strlen(acceptance_string);
+				char *line_tail = rx_buffer + tail_start;
+				ESP_LOGW(TAG, "question response: [%s]", line_tail);
+				*/
+				if(strstr(rx_buffer, acceptance_string)){
+					ESP_LOGI(TAG, "accepted");
+					return 0;
+				}
+				return -2;
+
 			}else{
-				ESP_LOGW(TAG, "ignoring unexpected data on socket");
+				next_char += len;
 			}
 		}
-
 	}
 
 	return -1;
@@ -241,33 +281,32 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 	char payload[100];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
-	prodtest_send(payload);
-	sprintf(payload, "0|3|Starting factory test\r\n");
-	prodtest_send(payload);
+	prodtest_sock_send(payload);
+	await_prodtest_external_step_acceptance("ACCEPTED");
+
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Starting factory test");
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
-	charge_cycle_test();
+	// charge_cycle_test();
 
 	prodtest_running = true;
-	ESP_LOGI(TAG, "waitinf on rfid");
+	/*ESP_LOGI(TAG, "waitinf on rfid");
 	prodtest_send("0|0|waiting on rfid");
 	xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
 	
 	sprintf(payload, "0|3|RFID: %s\r\n", latest_tag.idAsString);
 	prodtest_send(payload);
+	*/
 
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");
 		sprintf(payload, "FAIL\r\n");
-		prodtest_send( payload);
+		prodtest_sock_send( payload);
 
 		goto cleanup;
 	}
-
-	
-	sprintf(payload, "4|3|Factory test completed, all tests passed\r\n");
-	prodtest_send( payload);
 
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
@@ -276,7 +315,7 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 	eeprom_wp_enable_nfc_enable();
 	sprintf(payload, "PASS\r\n");
-	prodtest_send( payload);
+	prodtest_sock_send( payload);
 
 	cleanup:
 	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
@@ -287,30 +326,32 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 int test_rtc(){
 
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_RTC, "RTC");
 	struct tm time1 = RTCReadTime();
 	vTaskDelay(pdMS_TO_TICKS(3000));
 	struct tm time2 = RTCReadTime();
 
 	if(time1.tm_sec == time2.tm_sec){
-		prodtest_send("0|0|RTC test FAIL\r\n");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_RTC, "RTC");
 		return -1;
 	}
 
-	prodtest_send("0|0|RTC test PASS\r\n");
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_RTC, "RTC");
 	return 0;
 }
 
 int test_bg(){
 
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BG, "BG95");
 	char payload[128];
 
 	configure_modem_for_prodtest();
-	prodtest_send("0|0|BG95 startup PASS\r\n");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
 
 	char imei[20];
     at_command_get_imei(imei, 20);
-	sprintf(payload, "0|3|BG imei: %s\r\n", imei);
-	prodtest_send(payload);
+	sprintf(payload, "IMEI: %s\r\n", imei);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	int activate_result = at_command_activate_pdp_context();
 	if(activate_result<0){
@@ -321,8 +362,8 @@ int test_bg(){
 	if(at_command_signal_quality(&rssi, &ber)<0){
 		goto err;
 	}
-	sprintf(payload, "0|3|BG rssi: %d\r\n", rssi);
-	prodtest_send(payload);
+	sprintf(payload, "RSSI: %d\r\n", rssi);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	int sent; int rcvd; int lost; int min; int max; int avg;
 	int ping_error = at_command_ping_test(&sent, &rcvd, &lost, &min, &max, &avg);
@@ -330,64 +371,71 @@ int test_bg(){
 		goto err;
 	}
 
-	sprintf(payload, "0|3|BG ping avg: %d\r\n", avg);
-	prodtest_send(payload);
+	sprintf(payload, "Ping avg: %d\r\n", avg);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	int deactivate_result = at_command_deactivate_pdp_context();
 	if(deactivate_result<0){
 		goto err;
 	}
 
-	prodtest_send("0|0|BG tests pass\r\n");
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_BG, "BG95");
 	return 0;
 
 	err:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_BG, "BG95");
 	return -1;
 }
 
 int test_leds(){
 	// led should be on, the dsPIC is already in prodtest mode
-	prodtest_send("0|0|Led test start\r\n");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_LED, "LED");
 
-	int result = await_prodtest_external_step_acceptance();
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_LED, "LED R-G-B-W?|yes|no");
+	int result = await_prodtest_external_step_acceptance("yes");
 	if(result==0){
 		ESP_LOGI(TAG, "led test accepted");
-		prodtest_send("0|0|led test PASS\r\n");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_LED, "LED");
 		return 0;
 	}else{
-		prodtest_send("0|0|led test fail\r\n");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_LED, "LED");
 	}
 	return -1;
 }
 
 int test_buzzer(){
-	prodtest_send("0|0|buzzer test start\r\n");
-	audio_play_nfc_card_accepted();
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
 
-	int result = await_prodtest_external_step_acceptance();
+
+	audio_play_nfc_card_accepted();
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_BUZZER, "buzzed?|yes|no");
+
+	int result = await_prodtest_external_step_acceptance("yes");
 	if(result==0){
 		ESP_LOGI(TAG, "buzzer test accepted");
-		prodtest_send("0|0|buzzer test PASS\r\n");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
 		return 0;
 	}else{
-		prodtest_send("0|0|buzzer test fail\r\n");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
 	}
 	return -1;
 }
 
 int test_switch(){
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 	int switch_state = MCU_GetSwitchState();
 
     if(switch_state==0){
 		//the switch must be in pos 0 when it leaves the factory
-		prodtest_send("0|0|switch test PASS\r\n");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 		return 0;
 	}else if(switch_state==2){
 		// for testing we will also allow switch to be in temp. wifi config postion
-		prodtest_send("0|0|switch test in dev mode PASS\r\n");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch pass with dev mode exception");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 		return 1;
 	}else{
-		prodtest_send("0|0|switch test fail\r\n");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");	
 	}
 
 	return -1;
@@ -469,7 +517,7 @@ char addr_str[128];
 
 			sock =  socket(addr_family, SOCK_STREAM, ip_protocol);
 			if (sock < 0) {
-				ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+				ESP_LOGW(TAG, "Unable to create socket: errno %d", errno);
 				continue;
 			}
 			ESP_LOGI(TAG, "Socket created, connecting to %s:%d", HOST_IP_ADDR, PORT);
