@@ -354,12 +354,16 @@ int test_rtc(){
 	return 0;
 }
 
+void bg_log_cb(char *message){
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, message);
+}
+
 int test_bg(){
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BG, "BG95");
 	char payload[128];
 
-	if(configure_modem_for_prodtest()<0){
+	if(configure_modem_for_prodtest(bg_log_cb)<0){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup error");
 		goto err;
 	}
@@ -378,12 +382,14 @@ int test_bg(){
 		goto err;
 	}
 
-	int rssi; int ber;
-	if(at_command_signal_quality(&rssi, &ber)<0){
+	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
+	if(at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq)<0){
 		goto err;
 	}
-	sprintf(payload, "RSSI: %d\r\n", rssi);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
+	char signal_string[256];
+	snprintf(signal_string, 256, "[AT+QCSQ] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d\r\n", sysmode, rssi, rsrp, sinr, rsrq);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, signal_string);
 
 	int sent; int rcvd; int lost; int min; int max; int avg;
 	int ping_error = at_command_ping_test(&sent, &rcvd, &lost, &min, &max, &avg);

@@ -167,7 +167,7 @@ int at_command_network_registration_status(){
 }
 
 int at_command_set_baud_high(void){
-    return at_command_with_ok_ack("AT+IPR=921600", 300);
+    return at_command_with_ok_ack("AT+IPR=921600;&W", 300);
 }
 
 

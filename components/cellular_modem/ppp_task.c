@@ -702,29 +702,66 @@ void ppp_task_start(void){
     // esp_netif_action_disconnected
 }
 
-int configure_modem_for_prodtest(void){
+int configure_modem_for_prodtest(void (log_cb)(char *)){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x for prodtest");
     xEventGroupSetBits(event_group, UART_TO_LINES);
-    hard_reset_cellular();
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
 
     xEventGroupClearBits(event_group, UART_TO_PPP);
     xEventGroupSetBits(event_group, UART_TO_LINES);
 
-    char at_buffer[LINE_BUFFER_SIZE];
+    bool baudrate_already_high = false;
+    bool bg_started = false;
 
+    log_cb("Checking BG95 state");
+    
     while (true)
     {
-        await_line(at_buffer, pdMS_TO_TICKS(1000));
-        if(strstr(at_buffer, "APP RDY")){
+        uart_set_baudrate( UART_NUM_1, 921600);
+        clear_lines();
+        for(int i = 0; i<3; i++){
+            int fast_at_result = at_command_at();
+            if(fast_at_result==0){
+                baudrate_already_high = true;
+                bg_started = true;
+                break;
+            }
+        }
+
+        if(bg_started)
             break;
+
+        uart_set_baudrate( UART_NUM_1, 115200);
+        clear_lines();
+        for(int i = 0; i<3; i++){
+            int at_result = at_command_at();
+            if(at_result==0){
+                bg_started = true;
+                break;
+            }
         }
-        else if(strstr(at_buffer, "NORMAL POWER DOWN")){
-            hard_reset_cellular();
-            continue;
-        }
+
+        if(bg_started)
+            break;
+
+        log_cb("turning on BG95");
+        cellularPinsOn();
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
+
+    if(baudrate_already_high!=true){
+        int modem_baud_set_error = at_command_set_baud_high();
+        if(modem_baud_set_error != 0){
+            ESP_LOGE(TAG, "failed to upgrade baud rate");
+            return -1;
+        }
+
+        uart_set_baudrate( UART_NUM_1, 921600);
+        log_cb("BG95 baudrate upgraded");
+    }
+
+    clear_lines();
 
     ESP_LOGI(TAG, "BG started");
 
