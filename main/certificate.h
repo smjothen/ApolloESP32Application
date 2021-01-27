@@ -5,8 +5,10 @@
 extern "C" {
 #endif
 
-int certificateGetNew();
+//int certificateGetNew();
 int certificateValidate();
+void certificate_init();
+void certificate_update();
 
 
 #ifdef __cplusplus

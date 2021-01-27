@@ -21,10 +21,10 @@ static const char *TAG = "PPP_TASK";
 #define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
 #define CELLULAR_TX_SIZE 1024
 #define CELLULAR_QUEUE_SIZE 40
-#define ECHO_TEST_TXD1  (GPIO_NUM_5)//(GPIO_NUM_17)
-#define ECHO_TEST_RXD1  (GPIO_NUM_36)//(GPIO_NUM_16)
-#define ECHO_TEST_RTS1  (GPIO_NUM_32)
-#define ECHO_TEST_CTS1  (GPIO_NUM_35)
+#define CELLULAR_PIN_TXD  (GPIO_NUM_5)
+#define CELLULAR_PIN_RXD  (GPIO_NUM_36)
+#define CELLULAR_PIN_RTS  (GPIO_NUM_32)
+#define CELLULAR_PIN_CTS  (GPIO_NUM_35)
 #define RD_BUF_SIZE 256
 
 #define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
@@ -191,48 +191,36 @@ int send_line(char * line){
     return 0;
 }
 
-bool uartConfigured = false;
-void configure_uart(int baudrate){
+void configure_uart(void){
 
-	if(uartConfigured == false)
-	{
-		uartConfigured = true;
+    ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
+    line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );
+    if( line_queue == 0){
+        ESP_LOGE(TAG, "failed to create line queue");
+    }
 
-		ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
-		line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );
-		if( line_queue == 0){
-			ESP_LOGE(TAG, "failed to create line queue");
-		}
+    uart_config_t uart_config = {
+        .baud_rate = 921600,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        // .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+        .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
+        .rx_flow_ctrl_thresh = 120,
+    };
+    uart_param_config(UART_NUM_1, &uart_config);
+    uart_set_pin(UART_NUM_1, CELLULAR_PIN_TXD, CELLULAR_PIN_RXD, CELLULAR_PIN_RTS, CELLULAR_PIN_CTS);
+    uart_driver_install(
+        UART_NUM_1, CELLULAR_RX_SIZE, CELLULAR_TX_SIZE,
+        CELLULAR_QUEUE_SIZE, &uart_queue, 0
+    );
+    line_buffer_end = 0;
 
-		uart_config_t uart_config = {
-			.baud_rate = baudrate,//921600,
-			.data_bits = UART_DATA_8_BITS,
-			.parity    = UART_PARITY_DISABLE,
-			.stop_bits = UART_STOP_BITS_1,
-			// .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-			.flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
-			.rx_flow_ctrl_thresh = 120,
-		};
-		uart_param_config(UART_NUM_1, &uart_config);
-		uart_set_pin(UART_NUM_1, ECHO_TEST_TXD1, ECHO_TEST_RXD1, ECHO_TEST_RTS1, ECHO_TEST_CTS1);
-		uart_driver_install(
-			UART_NUM_1, CELLULAR_RX_SIZE, CELLULAR_TX_SIZE,
-			CELLULAR_QUEUE_SIZE, &uart_queue, 0
-		);
-		line_buffer_end = 0;
-	}
-}
-
-void ppp_set_uart_baud_high()
-{
-	at_command_set_baud_high();
-	uart_set_baudrate( UART_NUM_1, 921600);
-	at_command_save_baud();
 }
 
 static void update_line_buffer(uint8_t* event_data,size_t size){
     event_data[size] = 0;
-    ESP_LOGI(TAG, "got uart data[%s]", event_data);
+    //ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
     if(size+line_buffer_end+1> LINE_BUFFER_SIZE){
         ESP_LOGE(TAG, "no space in line buffer! dropping data");
@@ -424,20 +412,7 @@ int configure_modem_for_ppp(void){
     	        ESP_LOGE(TAG, "AT result %d ", at_result);
     	    }
 
-            //int modem_baud_set_error = at_command_set_baud_high();
-            //int savedBaud = at_command_save_baud();
-            //int baud_set_error =  uart_set_baudrate( UART_NUM_1, 921600);
-            vTaskDelay(pdMS_TO_TICKS(500)); // wait for baud rate to change??
-            int fast_at_result = at_command_at();
-
-            if(fast_at_result<0){
-                ESP_LOGE(TAG, "Failed to upgrade baud rate with modem");
-                esp_restart();
-            }
-
-            /*ESP_LOGI(TAG, "modem baud rate upgraded (errors: %d, %d, %d, %d)",
-                     echo_cmd_result, modem_baud_set_error, baud_set_error, fast_at_result
-            );*/
+            vTaskDelay(pdMS_TO_TICKS(500)); 
 
     	}
 
@@ -479,7 +454,6 @@ int configure_modem_for_ppp(void){
 
         	xEventGroupClearBits(event_group, UART_TO_PPP);
 			xEventGroupSetBits(event_group, UART_TO_LINES);
-            //int baud_set_error =  uart_set_baudrate( UART_NUM_1, 115200);
         	cellularPinsOn();
         	timeout = 0;
         }

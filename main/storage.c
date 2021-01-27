@@ -84,7 +84,7 @@ void storage_Init_Configuration()
 
 	//Local settings
 
-	configurationStruct.communicationMode 		= eCONNECTION_WIFI;//eCONNECTION_NONE;//TODO set default
+	configurationStruct.communicationMode 		= eCONNECTION_NONE;//TODO set default
 	configurationStruct.hmiBrightness 			= 0.2;	//0.0-0.1
 	configurationStruct.permanentLock 			= 0;	//0/1
 
@@ -446,7 +446,23 @@ esp_err_t storage_ReadConfiguration()
 	return err;
 }
 
+void storage_PrintConfiguration()
+{
 
+	ESP_LOGW(TAG, "*********************************");
+	ESP_LOGI(TAG, "AuthRequired: 		%i", configurationStruct.authenticationRequired);
+
+	char comMode[5] = {0};
+	if(configurationStruct.communicationMode == eCONNECTION_NONE)
+		strcpy(comMode, "None");
+	else if(configurationStruct.communicationMode == eCONNECTION_WIFI)
+		strcpy(comMode, "Wifi");
+	else if(configurationStruct.communicationMode == eCONNECTION_LTE)
+		strcpy(comMode, "4G");
+
+	ESP_LOGI(TAG, "CommunicationMode: 	%s", comMode);
+	ESP_LOGW(TAG, "*********************************");
+}
 
 esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
 {

@@ -7,5 +7,6 @@ bool otaIsRunning();
 void validate_booted_image(void);
 const char* OTAReadRunningPartition();
 void ota_rollback();
+bool otaIsRunning();
 
 #endif /* APOLLO_OTA_H */

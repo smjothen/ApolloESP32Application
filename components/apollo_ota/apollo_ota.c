@@ -20,6 +20,16 @@ extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 
+const uint OTA_TIMEOUT_MINUTES = 12;
+const uint OTA_RETRY_PAUSE_SECONDS = 30;
+
+
+void on_ota_timeout( TimerHandle_t xTimer ){
+    ota_log_timeout();
+    vTaskDelay(pdMS_TO_TICKS(1500)); // let's give the system some time to send the log message
+    esp_restart();
+}
+
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id) {
@@ -49,6 +59,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+
 bool otaRunning = false;
 
 bool otaIsRunning()
@@ -56,9 +67,13 @@ bool otaIsRunning()
 	return otaRunning;
 }
 
+
 static void ota_task(void *pvParameters){
 
 	otaRunning = true;
+
+    TickType_t timeout_ticks = pdMS_TO_TICKS((OTA_TIMEOUT_MINUTES*60*1000)+(OTA_RETRY_PAUSE_SECONDS*1000));
+    TimerHandle_t timeout_timer = xTimerCreate( "ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
 
     char image_location[1024] = {0};
     esp_http_client_config_t config = {
@@ -67,7 +82,7 @@ static void ota_task(void *pvParameters){
         // .use_global_ca_store = true,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
-		.buffer_size = 1536,
+		//.buffer_size = 1536,
     };
 
     // config.skip_cert_common_name_check = true;
@@ -79,8 +94,10 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
+        xTimerReset( timeout_timer, portMAX_DELAY );
+
         ota_log_location_fetch();
 
         get_image_location(image_location,sizeof(image_location));
@@ -112,7 +129,7 @@ static void ota_task(void *pvParameters){
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM3: DRAM: %i Lo: %i", free_dram, low_dram);
 
-        vTaskDelay(30000 / portTICK_RATE_MS);
+        vTaskDelay(pdMS_TO_TICKS(OTA_RETRY_PAUSE_SECONDS*1000));
     }
 }
 
@@ -127,7 +144,6 @@ void validate_booted_image(void){
             // We failed to bring the dsPIC app to the version embedded in this code
             // On next reboot we will roll back, and the old dsPIC app will be flashed
             // TODO: should we restart now?
-            // TODO: send info to Cloud before restart.
             esp_restart();
     }
 

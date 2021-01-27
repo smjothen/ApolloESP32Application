@@ -1,5 +1,5 @@
 # Edit following two lines to set component requirements (see docs)
-#set(COMPONENT_REQUIRES "bt")
+#set(COMPONENT_REQUIRES "wpa_supplicant")
 #set(COMPONENT_REQUIRES )
 
 
@@ -33,5 +33,6 @@ idf_component_register(SRCS
 				   	"chargeSession.c"
 				   	"certificate.c"
 				   	"fat.c"	
-					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer 
+					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
+					EMBED_TXTFILES ${project_dir}/main/cert/bundle.crt 
 					)

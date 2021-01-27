@@ -154,6 +154,9 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		printf("\n********************************\n\n");
 			ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
 
+		EEPROM_ReadFactroyStage(&deviceInfo.factory_stage);
+		ESP_LOGI(TAG_EEPROM, "Factory stage: %d", deviceInfo.factory_stage);
+
 		EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
 		int len = strlen(deviceInfo.serialNumber);
 
@@ -204,30 +207,30 @@ static void i2cDevice_task(void *pvParameters)
 
 	audioInit();
 
-	bool NFCInitialized = false;
-
-
-
 	int i2cCount = 0;
 	int nfcCardDetected = 0;
 
 	uint8_t isAuthenticated = 0;
 
+
+	//storage_Set_AuthenticationRequired(1);
+
+	//Without authentication, don't initalize the NFC
+	//If active at boot, or activated later, initialize the NFC antenna once
+	//if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == false))
+
+
+	NFCInit();
+
 	while (true)
 	{
-		storage_Set_AuthenticationRequired(1);
 
-		//Without authentication, don't initalize the NFC
-		//If active at boot, or activated later, initialize the NFC antenna once
-		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == false))
-		{
-			NFCInit();
-			NFCInitialized = true;
-		}
+		nfcCardDetected = NFCReadTag();
 
-		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == true))
+		//if(nfcCardDetected)
+
+		if(storage_Get_AuthenticationRequired() == 1)
 		{
-			nfcCardDetected = NFCReadTag();
 
 			if(nfcCardDetected > 0)
 			{

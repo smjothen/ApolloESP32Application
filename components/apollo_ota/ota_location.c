@@ -2,7 +2,7 @@
 #include "freertos/task.h"
 #include "ota_location.h"
 #include <string.h>
-// #include "esp_tls.h"
+#include "esp_tls.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
@@ -71,8 +71,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         case HTTP_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
             int mbedtls_err = 0;
-            esp_err_t err = 0;
-            // esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
+            //esp_err_t err = 0;
+            esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
             if (err != 0) {
                 if (output_buffer != NULL) {
                     free(output_buffer);
