@@ -162,7 +162,7 @@ static void connectivity_task()
 		if((sntpInitialized == true) && (mqttInitialized == false))
 		{
 			//Make sure Device info has been read from EEPROM before connecting to cloud.
-			if(i2CDeviceInfoIsLoaded() == true)
+			if((deviceInfoVersionOnEeprom()!=0xFF) && i2CDeviceInfoIsLoaded() == true )
 			{
 				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				mqttInitialized = true;

@@ -33,6 +33,8 @@ static const char *TAG = "PROD-TEST :";
 //static bool connected = false;
 
 static bool prodtest_running = false;
+int prodtest_nfc_init();
+char *host_from_rfid();
 
 bool prodtest_active(){
 	return prodtest_running;
@@ -74,6 +76,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 void prodtest_getNewId()
 {
+	prodtest_nfc_init();
 	//if(connected == false)
 		//connected = network_init(true);
 
@@ -83,9 +86,13 @@ void prodtest_getNewId()
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
+	char url [100];
+	sprintf(url, "http://%s:8585/get/mac", host_from_rfid());
+
+	ESP_LOGI(TAG, "Finding id from %s", url);
+
 	esp_http_client_config_t config = {
-		//.url = "http://10.0.1.4:8585/get/mac",//Used at WestControl
-		.url = "http://10.253.73.97:8585/get/mac",//Used at Internal
+		.url = url,
 
 		.method = HTTP_METHOD_GET,
 		.event_handler = _http_event_handler,
@@ -279,15 +286,42 @@ int prodtest_on_nfc_read(){
 	return 0;
 }
 
+int prodtest_nfc_init(){
+	if(!prodtest_running){
+		prodtest_eventgroup = xEventGroupCreate();
+		xEventGroupClearBits(prodtest_eventgroup, NFC_READ);
+		prodtest_running = true;
+	}
+
+	return 0;
+}
+
+char *host_from_rfid(){
+	if(!latest_tag.tagIsValid){
+		ESP_LOGI(TAG, "waiting for RFID");
+		xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
+	}
+
+	ESP_LOGI(TAG, "using rfid tag: %s", latest_tag.idAsString);
+
+	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
+		return "example.com";
+	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0)
+		return "192.168.0.101";
+	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
+		return "192.168.0.101";
+
+	ESP_LOGE(TAG, "Bad rfid tag");
+	return "BAD RFID TAG";
+}
+
 int run_component_tests();
 int charge_cycle_test();
 void socket_connect(void);
 
 void prodtest_perform(struct DeviceInfo device_info)
 {
-	prodtest_eventgroup = xEventGroupCreate();
-    xEventGroupClearBits(prodtest_eventgroup, NFC_READ);
-
+	prodtest_nfc_init();
 	socket_connect();
 
 	char payload[100];
@@ -301,7 +335,6 @@ void prodtest_perform(struct DeviceInfo device_info)
 	MCU_SendCommandId(CommandEnterProductionMode);
 
 
-	prodtest_running = true;
 	/*ESP_LOGI(TAG, "waitinf on rfid");
 	prodtest_send("0|0|waiting on rfid");
 	xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -312,13 +345,17 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");
-		sprintf(payload, "FAIL\r\n");
-		prodtest_sock_send( payload);
+		prodtest_sock_send( "FAIL\r\n" );
 
 		goto cleanup;
 	}
 
-	charge_cycle_test();
+	if(charge_cycle_test()<0){
+		ESP_LOGE(TAG, "charge_cycle_test error");
+		prodtest_sock_send( "FAIL\r\n");
+
+		goto cleanup;
+	}
 
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_DEV_TEMP, "Factory test");
 
@@ -595,7 +632,8 @@ char addr_str[128];
     int addr_family;
     int ip_protocol;
 
-    char HOST_IP_ADDR[] = "192.168.0.101";//"10.0.2.13";
+    char HOST_IP_ADDR[64];
+	strcpy(HOST_IP_ADDR, host_from_rfid());
     int PORT = 8181;
 	// se data on PC with `socat TCP-LISTEN:8181,fork,reuseaddr STDIO`
 

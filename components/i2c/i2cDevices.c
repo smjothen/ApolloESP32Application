@@ -79,6 +79,12 @@ float I2CGetSHT30Humidity()
 	return humidity;
 }
 
+uint8_t deviceInfoVersionOnEeprom(){
+	uint8_t result;
+	EEPROM_ReadFormatVersion(&result);
+	return result;
+}
+
 
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo)
 {

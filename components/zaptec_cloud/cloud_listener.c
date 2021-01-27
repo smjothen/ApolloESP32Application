@@ -1082,6 +1082,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
         refresh_token(&mqtt_config);
+		ESP_LOGD(TAG, "setting config with the new token");
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         break;
     case MQTT_EVENT_ERROR:

@@ -303,6 +303,13 @@ void app_main(void)
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
+	#define FORCE_NEW_ID
+	#ifdef FORCE_NEW_ID
+	eeprom_wp_disable_nfc_disable();
+	EEPROM_WriteFormatVersion(0xFF);
+	eeprom_wp_enable_nfc_enable();
+	#endif
+
 	#define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
 	eeprom_wp_disable_nfc_disable();
@@ -314,6 +321,7 @@ void app_main(void)
 	if(switchState != eConfig_Wifi_Home_Wr32)
 	{
 		devInfo = i2cReadDeviceInfoFromEEPROM();
+		I2CDevicesStartTask();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
 			//Invalid EEPROM content
@@ -327,7 +335,6 @@ void app_main(void)
 			vTaskDelay(3000 / portTICK_PERIOD_MS);
 		}
 
-		I2CDevicesStartTask();
 
 		if(devInfo.factory_stage != FactoryStageFinnished){
 			prodtest_perform(devInfo);
