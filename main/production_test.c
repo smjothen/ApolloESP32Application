@@ -197,6 +197,11 @@ enum test_item{
 	TEST_ITEM_COMPONENT_SWITCH,
 	TEST_ITEM_COMPONENT_BG,
 	TEST_ITEM_DEV_TEMP,
+	TEST_ITEM_CHARGE_CYCLE,
+	TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS,
+	TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES,
+	TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS,
+	TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS,
 };
 
 static int sock;
@@ -291,11 +296,10 @@ void prodtest_perform(struct DeviceInfo device_info)
 	await_prodtest_external_step_acceptance("ACCEPTED");
 
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Starting factory test");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
-	// charge_cycle_test();
 
 	prodtest_running = true;
 	/*ESP_LOGI(TAG, "waitinf on rfid");
@@ -313,6 +317,10 @@ void prodtest_perform(struct DeviceInfo device_info)
 
 		goto cleanup;
 	}
+
+	charge_cycle_test();
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_DEV_TEMP, "Factory test");
 
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
@@ -351,11 +359,17 @@ int test_bg(){
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BG, "BG95");
 	char payload[128];
 
-	configure_modem_for_prodtest();
+	if(configure_modem_for_prodtest()<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup error");
+		goto err;
+	}
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
 
 	char imei[20];
-    at_command_get_imei(imei, 20);
+    if(at_command_get_imei(imei, 20)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem imei error");
+		goto err;
+	}
 	sprintf(payload, "IMEI: %s\r\n", imei);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
@@ -480,23 +494,92 @@ static const uint8_t eCAR_DISCONNECTED = 12;
 static const uint8_t eCAR_CHARGING = 6;
 
 int charge_cycle_test(){
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	while(MCU_GetchargeMode()!=eCAR_CHARGING){
 		ESP_LOGI(TAG, "waiting for charging start");
+
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running"); // ping botch
+
 		vTaskDelay(pdMS_TO_TICKS(1500));
 	}
 
-	ESP_LOGI(TAG, "charging started, sampling data");
+	char payload[100];
+
+	ESP_LOGI(TAG, "charging started, sampling data"); 
+	float emeter_temps[] = {MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2)};
+	float emeter_voltages[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};
+	float emeter_currents[] = { MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2)};
+	float board_temps[] = {MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1)};
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
+	sprintf(payload, "Emeter temps: %f, %f, %f", emeter_temps[0], emeter_temps[1], emeter_temps[2]);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, payload );
+	float temperature_min = 1.0; 
+	float temperature_max = 99.0;
+	if(emeter_temps[0] < temperature_min || emeter_temps[1]  < temperature_min || emeter_temps[2] < temperature_min
+	|| emeter_temps[0] > temperature_max || emeter_temps[1] >  temperature_max || emeter_temps[2] > temperature_max){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
+	}else{
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
+	}
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
+	sprintf(payload, "Emeter voltages: %f, %f, %f", emeter_voltages[0], emeter_voltages[0], emeter_voltages[0]);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, payload );
+	float volt_min = -1.0; 
+	float volt_max = 260.0;
+	if(emeter_voltages[0] < volt_min || emeter_voltages[1]  < volt_min || emeter_voltages[2] < volt_min
+	|| emeter_voltages[0] > volt_max || emeter_voltages[1] >  volt_max || emeter_voltages[2] > volt_max){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
+	}else{
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
+	}
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
+	sprintf(payload, "Emeter currents: %f, %f, %f", emeter_currents[0], emeter_currents[1], emeter_currents[2]);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, payload );
+	float current_min = -1.0; 
+	float current_max = 40.0;
+	if(emeter_currents[0] < current_min || emeter_currents[1]  < current_min || emeter_currents[2] < current_min
+	|| emeter_currents[0] > current_max || emeter_currents[1] >  current_max || emeter_currents[2] > current_max){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
+	}else{
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
+	}
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
+	sprintf(payload, "board temps: %f, %f", board_temps[0], board_temps[1]);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, payload );
+	if(board_temps[0] < temperature_min || board_temps[1]  < temperature_min 
+	|| board_temps[0] > temperature_max || board_temps[1] >  temperature_max){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
+	}else{
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
+	}
+
+	ESP_LOGI(TAG, "Charging data:");
+	ESP_LOGI(TAG, "\teMeter temp: %f, %f, %f", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2));
+	ESP_LOGI(TAG, "\tVoltages: %f, %f, %f", MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2));
+	ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
+	ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
+
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
+	int locked_result = await_prodtest_external_step_acceptance("Yes");
+	if(locked_result != 0){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");
 
 	while(MCU_GetchargeMode()!=eCAR_DISCONNECTED){
-		ESP_LOGI(TAG, "Charging data:");
-		ESP_LOGI(TAG, "\teMeter temp: %f, %f, %f", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2));
-		ESP_LOGI(TAG, "\tVoltages: %f, %f, %f", MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2));
-		ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
-		ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
-		
-		vTaskDelay(pdMS_TO_TICKS(3000));
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running"); // ping botch		
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 
 	return 0;
 }
