@@ -203,6 +203,7 @@ static int sock;
 
 void prodtest_sock_send(char *payload)
 {
+	ESP_LOGI(TAG, "sending to test PC:[%s]", payload);
 	int err = send(sock, payload, strlen(payload), 0);
 	if (err < 0) {
 		ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
@@ -228,10 +229,13 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 		if (len < 0) {
 			if(errno == 11){
 				//workaround, this error should never happen on a blocking socket
-				ESP_LOGE(TAG, "recv failed: errno %d", errno);
+				ESP_LOGW(TAG, "recv failed: errno %d", errno);
+				
+				prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running");
+
 				continue;
 			}
-			ESP_LOGE(TAG, "recv failed: errno %d", errno);
+			ESP_LOGE(TAG, "recv failed: errno %d, aborting", errno);
 			return -10;
 		} else {
 
@@ -246,6 +250,7 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 					ESP_LOGI(TAG, "accepted");
 					return 0;
 				}
+				ESP_LOGW(TAG, "question response not accepted");
 				return -2;
 
 			}else{
@@ -254,6 +259,7 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 		}
 	}
 
+	ESP_LOGW(TAG, "question response parsing bug detected");
 	return -1;
 }
 
