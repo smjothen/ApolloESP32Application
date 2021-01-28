@@ -74,7 +74,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 
-void prodtest_getNewId()
+int prodtest_getNewId()
 {
 	prodtest_nfc_init();
 	//if(connected == false)
@@ -111,7 +111,7 @@ void prodtest_getNewId()
 	if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
 		free(buffer);
-		return;
+		return -1;
 	}
 
 	int content_length =  esp_http_client_fetch_headers(client);
@@ -121,6 +121,7 @@ void prodtest_getNewId()
 	read_len = esp_http_client_read(client, buffer, 100);
 	if (read_len <= 0) {
 		ESP_LOGE(TAG, "Error read data");
+		return -2;
 	}
 	buffer[read_len] = 0;
 	ESP_LOGD(TAG, "read_len = %d", read_len);
@@ -148,28 +149,25 @@ void prodtest_getNewId()
 			eeprom_wp_disable_nfc_disable();
 			esp_err_t err = i2cWriteDeviceInfoToEEPROM(prodDevInfo);
 			eeprom_wp_enable_nfc_enable();
+			i2cReadDeviceInfoFromEEPROM(); // force the buffered device info to refresh
+			ESP_LOGD(TAG, "eeprom updated");
 
 			if (err != ESP_OK)
 			{
-				while(true)
-				{
-					ESP_LOGE(TAG, "ERROR: Not able to save device info to EEPROM!!!");
-					vTaskDelay(3000 / portTICK_PERIOD_MS);
-				}
+				ESP_LOGE(TAG, "ERROR: Not able to save device info to EEPROM!!!");
+				vTaskDelay(3000 / portTICK_PERIOD_MS);
+				return -4;
+			
 			}
-
-//			esp_err_t serr = storage_SaveFactoryParameters(id, psk, pin, 1);
-//
-//			size = storage_readFactoryUniqueId(readId);
-//			size = storage_readFactoryPsk(readPsk);
-//			size = storage_readFactoryPin(readPin);
-//			ESP_LOGI(TAG, "Read: id: %s, psk: %s, pin: %s", readId, readPsk, readPin);
 		}
 		else
 		{
 			ESP_LOGE(TAG, "ERROR: Incorrect onboarding format received form server");
+			return -3;
 		}
 
+	}else{
+		return -5;
 	}
 
 	ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d",
@@ -181,6 +179,8 @@ void prodtest_getNewId()
 	ESP_LOGI(TAG, "buffer = %s", buffer);
 
 	free(buffer);
+
+	return 0;
 
 }
 
@@ -283,6 +283,7 @@ int prodtest_on_nfc_read(){
 	ESP_LOGI(TAG, "nfctag submitted to prodtest procedure");
 	latest_tag = NFCGetTagInfo();
 	xEventGroupSetBits( prodtest_eventgroup, NFC_READ);
+	audio_play_nfc_card_accepted();
 	return 0;
 }
 
@@ -298,6 +299,7 @@ int prodtest_nfc_init(){
 
 char *host_from_rfid(){
 	if(!latest_tag.tagIsValid){
+		audio_play_nfc_card_denied();
 		ESP_LOGI(TAG, "waiting for RFID");
 		xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
 	}
@@ -319,10 +321,12 @@ int run_component_tests();
 int charge_cycle_test();
 void socket_connect(void);
 
-void prodtest_perform(struct DeviceInfo device_info)
+int prodtest_perform(struct DeviceInfo device_info)
 {
 	prodtest_nfc_init();
 	socket_connect();
+
+	bool success = false;
 
 	char payload[100];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
@@ -362,6 +366,8 @@ void prodtest_perform(struct DeviceInfo device_info)
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
+	}else{
+		success = true;
 	}
 
 	eeprom_wp_enable_nfc_enable();
@@ -372,6 +378,13 @@ void prodtest_perform(struct DeviceInfo device_info)
 	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
 	shutdown(sock, 0);
 	close(sock);
+
+	if(success){
+		return 0;
+	}else{
+		audio_play_nfc_card_denied();
+		return -1;
+	}
 
 }
 
@@ -506,12 +519,12 @@ int test_switch(){
 
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
-
-	if(test_buzzer()<0){
-		goto err;
-	}
 	
 	if(test_leds()<0){
+		goto err;
+	}
+
+	if(test_buzzer()<0){
 		goto err;
 	}
 

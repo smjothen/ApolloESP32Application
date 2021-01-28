@@ -164,6 +164,7 @@ static void connectivity_task()
 			//Make sure Device info has been read from EEPROM before connecting to cloud.
 			if((deviceInfoVersionOnEeprom()!=0xFF) && i2CDeviceInfoIsLoaded() == true )
 			{
+				ESP_LOGI(TAG, "starting cloud listener with %s, %s,", i2cGetLoadedDeviceInfo().PSK, i2cGetLoadedDeviceInfo().serialNumber);
 				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				mqttInitialized = true;
 			}

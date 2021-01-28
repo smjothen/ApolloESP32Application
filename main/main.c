@@ -325,7 +325,12 @@ void app_main(void)
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
 			//Invalid EEPROM content
-			prodtest_getNewId();
+			int id_result = prodtest_getNewId();
+			if(id_result<0){
+				ESP_LOGE(TAG_MAIN, "ID assign failed");
+				vTaskDelay(pdMS_TO_TICKS(500));
+				esp_restart();
+			}
 			devInfo = i2cReadDeviceInfoFromEEPROM();
 		}
 		else if(devInfo.EEPROMFormatVersion == 0x0)
@@ -337,7 +342,11 @@ void app_main(void)
 
 
 		if(devInfo.factory_stage != FactoryStageFinnished){
-			prodtest_perform(devInfo);
+			int prodtest_result = prodtest_perform(devInfo);
+			if(prodtest_result<0){
+				ESP_LOGE(TAG_MAIN, "Prodtest failed");
+				esp_restart();
+			}
 		}
 
 	}
