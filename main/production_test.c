@@ -15,6 +15,7 @@
 //#include "storage.h"
 #include "network.h"
 #include "eeprom_wp.h"
+#include "zaptec_cloud_observations.h"
 
 #include "protocol_task.h"
 #include "audioBuzzer.h"
@@ -213,20 +214,37 @@ enum test_item{
 
 static int sock;
 
-void prodtest_sock_send(char *payload)
+int prodtest_sock_send(char *payload)
 {
 	ESP_LOGI(TAG, "sending to test PC:[%s]", payload);
+
+	if(strstr(payload, "5|0|factory test running")){
+		// do not publish the spam
+	}else{
+		if(publish_prodtest_line(payload)<0){
+			return -1;
+		}
+	}
+
 	int err = send(sock, payload, strlen(payload), 0);
 	if (err < 0) {
 		ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-		return;
+		return -2;
 	}
+
+	return 0;
 }
 
-void prodtest_send(enum test_state state, enum test_item item, char *message){
+int prodtest_send(enum test_state state, enum test_item item, char *message){
 	char payload [100];
 	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
-	prodtest_sock_send(payload);
+	if(prodtest_sock_send(payload)<0){
+		ESP_LOGE(TAG, "PRODTEST COMMS ERROR...");
+		vTaskDelay(pdMS_TO_TICKS(10*1000));
+		esp_restart();
+	}
+
+	return 0;
 }
 
 

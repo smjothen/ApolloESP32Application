@@ -2,6 +2,8 @@
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
@@ -111,6 +113,45 @@ int publish_to_iothub(const char* payload, const char* topic){
     }
     ESP_LOGW(TAG, "failed ot add message to mqtt client publish queue");
     return -2;
+}
+
+EventGroupHandle_t blocked_publish_event_group;
+#define BLOCKED_MESSAGE_PUBLISHED BIT0
+#define BLOCKED_MESSAGE_QUEUED BIT1
+SemaphoreHandle_t blocked_publish_mutex;
+static int blocked_message;
+
+int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait){
+
+	int result = -3;
+
+	if(xSemaphoreTake(blocked_publish_mutex, xTicksToWait)!=pdTRUE){
+		int result = -1;
+		goto mutex_err;
+	}
+
+	int message_id = esp_mqtt_client_publish(
+            mqtt_client, event_topic,
+            payload, 0, 1, 0
+    );	
+
+	if(message_id<0){
+		int result = -2;
+		goto mutex_err;
+	}
+
+	blocked_message = message_id;
+	xEventGroupSetBits(blocked_publish_event_group, BLOCKED_MESSAGE_QUEUED);
+
+	EventBits_t flag_field = xEventGroupWaitBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED, 1, 1, xTicksToWait);
+	if((flag_field&BLOCKED_MESSAGE_PUBLISHED) != 0 ){
+		result = 0;
+	}
+
+	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_QUEUED);
+	mutex_err:
+	xSemaphoreGive(blocked_publish_mutex);
+	return result;
 }
 
 int publish_iothub_event(const char *payload){
@@ -942,6 +983,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_PUBLISHED:
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+		if(xEventGroupGetBits(blocked_publish_event_group)&BLOCKED_MESSAGE_QUEUED){
+			if(event->msg_id == blocked_message){
+				ESP_LOGI(TAG, "Blocked message published, returning publish call");
+				xEventGroupSetBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED);
+			}else{
+				ESP_LOGD(TAG, "Published message while a blocking message was pending");
+			}
+		}
+		
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
@@ -1157,6 +1207,11 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.reconnect_timeout_ms = 10000;
     mqtt_config.keepalive = 120;
     //mqtt_config.refresh_connection_after_ms = 30000;
+
+	blocked_publish_event_group = xEventGroupCreate();
+	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED);
+	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_QUEUED);
+	blocked_publish_mutex = xSemaphoreCreateMutex();
 
     mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");

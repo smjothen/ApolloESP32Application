@@ -14,6 +14,7 @@ bool LocalSettingsAreUpdated();
 void ClearLocalSettingsAreUpdated();
 
 int publish_iothub_event(const char *payload);
+int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait);
 int publish_to_iothub(const char* payload, const char* topic);
 
 
