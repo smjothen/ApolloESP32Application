@@ -185,9 +185,11 @@ volatile static uint8_t mcuNetworkType = 0;
 volatile static char networkType[5] = {0};
 volatile static uint8_t mcuCableType = 0;
 volatile static float mcuChargeCurrentUserMax = 0;
+static uint16_t mcuPilotAvg = 0;
+static uint16_t mcuProximityInst = 0;
 
 
-static float mcuMaxInstallationCurrentSwitch = 20.0;//TODO set to 0;
+static float mcuMaxInstallationCurrentSwitch = 0.0;
 
 float GetFloat(uint8_t * input)
 {
@@ -333,6 +335,14 @@ void uartSendTask(void *pvParameters){
 				txMsg.identifier = ParamChargeCurrentUserMax;
 				break;
 
+			case 22:
+				txMsg.identifier = ParamChargePilotLevelAverage;
+				break;
+			case 23:
+				txMsg.identifier = ParamProximityAnalogValue;
+				break;
+
+
         	/*default:
         		vTaskDelay(1000 / portTICK_PERIOD_MS);
         		continue;
@@ -443,10 +453,14 @@ void uartSendTask(void *pvParameters){
 		else if(rxMsg.identifier == ParamCableType)
 			mcuCableType = rxMsg.data[0];
 		else if(rxMsg.identifier == ParamChargeCurrentUserMax)
-		{
 			mcuChargeCurrentUserMax = GetFloat(rxMsg.data);
-			ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, networkType, mcuCableType, mcuChargeCurrentUserMax);
-		}
+
+		else if(rxMsg.identifier == ParamChargePilotLevelAverage)
+			mcuPilotAvg = (rxMsg.data[0] << 8) | rxMsg.data[1];
+		else if(rxMsg.identifier == ParamProximityAnalogValue)
+			mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
+
+
 
 
         /*else if(rxMsg.type != 0)
@@ -465,8 +479,9 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(count >= 23)
+        if(count >= 24)
         {
+        	ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, ACP:%d, APP: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, networkType, mcuCableType, mcuChargeCurrentUserMax, mcuPilotAvg, mcuProximityInst);
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -635,6 +650,18 @@ char * MCU_GetGridType()
 {
 	return networkType;
 }
+
+uint16_t MCU_GetPilotAvg()
+{
+	return mcuPilotAvg;
+}
+
+uint16_t MCU_ProximityInst()
+{
+	return mcuProximityInst;
+}
+
+
 
 void configureUart(){
     int tx_pin = GPIO_NUM_26;

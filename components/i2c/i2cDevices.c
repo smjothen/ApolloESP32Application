@@ -228,8 +228,11 @@ static void i2cDevice_task(void *pvParameters)
 		if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == true))
 		{
 			nfcCardDetected = NFCReadTag();
+			if(nfcCardDetected == false)
+				NFCClearTag();
 
-			if(nfcCardDetected > 0)
+			//TODO EMC mode
+			/*if(nfcCardDetected > 0)
 			{
 				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 
@@ -254,7 +257,7 @@ static void i2cDevice_task(void *pvParameters)
 						ESP_LOGI(TAG, "MCU: NFC DENIED!");
 					}
 				}
-			}
+			}*/
 		}
 
 		i2cCount++;

@@ -35,6 +35,9 @@ uint32_t MCU_GetWarnings();
 uint8_t MCU_GetResetSource();
 char * MCU_GetGridType();
 
+uint16_t MCU_GetPilotAvg();
+uint16_t MCU_ProximityInst();
+
 float MCU_GetMaxInstallationCurrentSwitch();
 
 

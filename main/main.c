@@ -36,7 +36,8 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "0.0.0.8";
+uint32_t onTimeCounter = 0;
+char softwareVersion[] = "0.0.0.10";
 char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
@@ -52,6 +53,11 @@ char * GetSoftwareVersion()
 char * GetSoftwareVersionBLE()
 {
 	return softwareVersionBLEtemp;
+}
+
+uint32_t GetOnTimeCounter()
+{
+	return onTimeCounter;
 }
 
 
@@ -387,7 +393,7 @@ void app_main(void)
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    uint32_t counter = 0;
+
 
     int secleft = 0;
     int min = 0;
@@ -396,7 +402,7 @@ void app_main(void)
 
     while (true)
     {
-    	counter++;
+    	onTimeCounter++;
 
     	if(ledState == 0)
     		ledState = 1;
@@ -405,10 +411,10 @@ void app_main(void)
 
     	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	if(counter % 5 == 0)
+    	if(onTimeCounter % 5 == 0)
     	{
-    		days = counter / 86400;
-    		secleft = counter % 86400;
+    		days = onTimeCounter / 86400;
+    		secleft = onTimeCounter % 86400;
 
     		hours = secleft / 3600;
     		secleft = secleft % 3600;
@@ -421,10 +427,10 @@ void app_main(void)
     		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
     		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    		ESP_LOGE(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
+    		ESP_LOGE(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
     	}
 
-    	if((counter % 60) == 0)
+    	if((onTimeCounter % 60) == 0)
     		ESP_LOGW(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
 
 	#ifdef useConsole
