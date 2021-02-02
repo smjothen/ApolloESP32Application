@@ -316,8 +316,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 {
 
 #ifdef USE_PIN
-	//Check authentication before allowing reads
-	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_DEVICE_MID_UUID))
+	//Check authentication before allowing most reads. Some exceptions.
+	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_DEVICE_MID_UUID) && (attrIndex != CHARGER_FIRMWARE_VERSION_UUID) && (attrIndex != CHARGER_WARNINGS_UUID) && (attrIndex != CHARGER_AUTH_UUID))
 	{
 		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
 		return;
@@ -580,6 +580,9 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_AUTH_UUID:
     	rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
     	rsp->attr_value.len = 1;
+
+    	ESP_LOGI(TAG, "AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
+
     	break;
 
     case CHARGER_SAVE_UUID:
@@ -1250,6 +1253,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 void ClearAuthValue()
 {
-	AUTH_SERV_CHAR_val[0] = 0;
-	SAVE_SERV_CHAR_val[0] = 0;
+	AUTH_SERV_CHAR_val[0] = '0';
+	SAVE_SERV_CHAR_val[0] = '0';
 }

@@ -28,41 +28,6 @@ void SetDataInterval(int newDataInterval)
 }
 
 bool authorizationRequired = true;
-/*static int rssiLTE = 0;
-
-int log_cellular_quality(void){
-
-	int rssiLTE = 0;
-
-	int enter_command_mode_result = enter_command_mode();
-
-	if(enter_command_mode_result<0){
-		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
-		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
-		return 0;
-	}
-
-	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
-	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
-
-	char signal_string[256];
-	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
-	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
-	//publish_diagnostics_observation(signal_string);
-
-	//int rssi2;
-	int ber;
-	char quality_string[256];
-	at_command_signal_quality(&rssiLTE, &ber);
-	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssiLTE, ber);
-	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
-	//publish_diagnostics_observation(quality_string);
-
-	int enter_data_mode_result = enter_data_mode();
-	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
-
-	return rssiLTE;
-}*/
 
 
 void log_task_info(void){
@@ -122,9 +87,6 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
-    //enum ChargerOperatingMode currentChargeOperationMode = eUNKNOWN;
-    //enum ChargerOperatingMode previousChargeOperationMode = eUNKNOWN;
-
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
@@ -132,24 +94,15 @@ static void sessionHandler_task()
 	while (1)
 	{
 		isOnline = isMqttConnected();
+		networkInterface = connectivity_GetActivateInterface();
 
-		if(!isOnline) // Also the case if CommunicationMode == eNONE.
+		if((!isOnline) || (networkInterface == eCONNECTION_NONE)) // Also the case if CommunicationMode == eNONE.
 		{
 			ESP_LOGI(TAG, "Waiting to become online...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 			continue;
 		}
 
-		networkInterface = connectivity_GetActivateInterface();
-
-		//currentChargeOperationMode = MCU_GetChargeOperatingMode();
-
-		/*if((currentChargeOperationMode != previousChargeOperationMode) || (currentCarChargeMode != previousCarChargeMode))
-		{
-			publish_uint32_observation(ParamChargeMode, (uint32_t)currentCarChargeMode);
-			publish_uint32_observation(ParamChargeOperationMode, (uint32_t)currentChargeOperationMode);
-		}
-		previousChargeOperationMode = currentChargeOperationMode;*/
 
 		if(chargeSession_HasNewSessionId() == true)
 		{

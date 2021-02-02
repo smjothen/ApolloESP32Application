@@ -44,58 +44,46 @@ void storage_Init()
 	}
 	ESP_ERROR_CHECK( err );
 
-	    //err = print_what_saved();
-	    //if (err != ESP_OK)
-	    	//printf("Error (%s) reading data from NVS!\n", esp_err_to_name(err));
-
 #ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_INFO);
 #endif
-
-//	esp_err_t ret = nvs_flash_init();
-//	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-//	  ESP_ERROR_CHECK(nvs_flash_erase());
-//	  ret = nvs_flash_init();
-//	}
-//	ESP_ERROR_CHECK(ret);
 
 }
 
 void storage_Init_Configuration()
 {
-	configurationStruct.saveCounter = 1;
+	configurationStruct.saveCounter 				= 1;
 
 	// Cloud settings
-	configurationStruct.authenticationRequired	= 1;
-	configurationStruct.currentInMaximum 		= 6.0;
-	configurationStruct.currentInMinimum		= 6.0;
-	configurationStruct.maxPhases 				= 3;
-	configurationStruct.defaultOfflinePhase		= 1;
-	configurationStruct.defaultOfflineCurrent	= 6.0;
-	configurationStruct.isEnabled				= 1;
+	configurationStruct.authenticationRequired		= 1;
+	configurationStruct.currentInMaximum 			= 32.0;
+	configurationStruct.currentInMinimum			= 6.0;
+	configurationStruct.maxPhases 					= 3;
+	configurationStruct.defaultOfflinePhase			= 1;
+	configurationStruct.defaultOfflineCurrent		= 6.0;
+	configurationStruct.isEnabled					= 1;
 
 	memset(configurationStruct.installationId, 0, sizeof(DEFAULT_STR_SIZE));
 	memset(configurationStruct.routingId, 0, sizeof(DEFAULT_STR_SIZE));
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 
-	configurationStruct.transmitInterval 		= 60;
-	configurationStruct.transmitChangeLevel 	= 1.0;
-	configurationStruct.diagnosticsMode			= 0;
+	configurationStruct.transmitInterval 			= 120;
+	configurationStruct.transmitChangeLevel 		= 1.0;
+	configurationStruct.diagnosticsMode				= 0;
 
 	//Local settings
 
-	configurationStruct.communicationMode 		= eCONNECTION_NONE;//TODO set default
-	configurationStruct.hmiBrightness 			= 0.2;	//0.0-0.1
-	configurationStruct.permanentLock 			= 0;	//0/1
+	configurationStruct.communicationMode 			= eCONNECTION_NONE;//TODO set default
+	configurationStruct.hmiBrightness 				= 0.2;	//0.0-1.0
+	configurationStruct.permanentLock 				= 0;	//0/1
 
-	configurationStruct.standalone 				= 1;	//0/1
-	configurationStruct.standalonePhase 		= 0;	//Nr
-	configurationStruct.standaloneCurrent		= 10;	//A
+	configurationStruct.standalone 					= 1;	//0/1
+	configurationStruct.standalonePhase 			= 0;	//Nr
+	configurationStruct.standaloneCurrent			= 6;	//A
 	configurationStruct.maxInstallationCurrentConfig = 0;
 
-
-	configurationStruct.phaseRotation			= 0;
-	configurationStruct.networkType				= 0;
+	configurationStruct.phaseRotation				= 0;
+	configurationStruct.networkType					= 0;
 }
 
 
@@ -459,8 +447,12 @@ void storage_PrintConfiguration()
 		strcpy(comMode, "Wifi");
 	else if(configurationStruct.communicationMode == eCONNECTION_LTE)
 		strcpy(comMode, "4G");
-
 	ESP_LOGI(TAG, "CommunicationMode: 	%s", comMode);
+
+
+	ESP_LOGI(TAG, "Standalone: 			%i", configurationStruct.standalone);
+	ESP_LOGI(TAG, "Standalone current: 	%2.1f", configurationStruct.standaloneCurrent);
+
 	ESP_LOGW(TAG, "*********************************");
 }
 

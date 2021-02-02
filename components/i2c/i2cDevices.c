@@ -19,6 +19,7 @@
 #include "../../main/storage.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../zaptec_protocol/include/protocol_task.h"
+#include "../../main/connectivity.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -229,11 +230,57 @@ static void i2cDevice_task(void *pvParameters)
 
 		//if(nfcCardDetected)
 
-		if(storage_Get_AuthenticationRequired() == 1)
-		{
+		//if(storage_Get_AuthenticationRequired() == 1)
+		//{
 
 			if(nfcCardDetected > 0)
 			{
+				int check = strcmp("nfc-530796E7", NFCGetTagInfo().idAsString);
+
+				if (check == 0)
+				{
+
+					storage_SaveWifiParameters("ZaptecHQ", "LuckyJack#003");
+					storage_Set_CommunicationMode(eCONNECTION_WIFI);
+					storage_SaveConfiguration();
+					connectivity_ActivateInterface(eCONNECTION_WIFI);
+					MCU_SendCommandId(CommandAuthorizationGranted);
+					ESP_LOGI(TAG, "Set to WIFI!");
+
+					vTaskDelay(3000 / portTICK_RATE_MS);
+					continue;
+				}
+
+				check = strcmp("nfc-3275817B", NFCGetTagInfo().idAsString);
+
+				if (check == 0)
+				{
+						storage_Set_CommunicationMode(eCONNECTION_LTE);
+						storage_SaveConfiguration();
+						connectivity_ActivateInterface(eCONNECTION_LTE);
+						MCU_SendCommandId(CommandAuthorizationGranted);
+						ESP_LOGI(TAG, "Set to LTE!");
+
+					vTaskDelay(3000 / portTICK_RATE_MS);
+					continue;
+				}
+
+				check = strcmp("nfc-5237AB3B", NFCGetTagInfo().idAsString);
+
+				if (check == 0)
+				{
+						storage_Set_CommunicationMode(eCONNECTION_NONE);
+						storage_SaveConfiguration();
+						connectivity_ActivateInterface(eCONNECTION_NONE);
+						MCU_SendCommandId(CommandAuthorizationGranted);
+						ESP_LOGI(TAG, "Set to None!");
+
+					vTaskDelay(3000 / portTICK_RATE_MS);
+					continue;
+				}
+
+
+
 				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 
 				if(isAuthenticated == 1)
@@ -258,7 +305,7 @@ static void i2cDevice_task(void *pvParameters)
 					}
 				}
 			}
-		}
+		//}
 
 		i2cCount++;
 		if(i2cCount >= 6)

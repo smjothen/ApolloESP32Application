@@ -54,7 +54,7 @@ static bool connecting = false;
 static EventGroupHandle_t s_connect_event_group;
 static esp_ip4_addr_t s_ip_addr;
 static const char *s_connection_name;
-static esp_netif_t *s_example_esp_netif = NULL;
+static esp_netif_t *netif = NULL;
 
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
 static esp_ip6_addr_t s_ipv6_addr;
@@ -119,27 +119,47 @@ esp_err_t network_connect_wifi(bool productionSetup)
 
 	isProductionSetup = productionSetup;
 
-	if(firstTime == true)
-	{
+	//if(firstTime == true)
+	//{
 		ESP_ERROR_CHECK(esp_netif_init());
-	    ESP_ERROR_CHECK( esp_event_loop_create_default() );
-	}
+		esp_event_loop_create_default();
+	//}
 
     if (s_connect_event_group != NULL) {
         return ESP_ERR_INVALID_STATE;
     }
-    s_connect_event_group = xEventGroupCreate();
-    start();
-    if(firstTime == true)
-    	ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
+
+	s_connect_event_group = xEventGroupCreate();
+
+	//if(firstTime == true)
+	//{
+    	start();
+
+    	//ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
+	//}
+	/*else
+	{
+	    ESP_ERROR_CHECK(esp_wifi_start());
+	    ESP_ERROR_CHECK(esp_wifi_connect());
+	    s_connection_name = "Wifi";
+	}*/
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to %s", WifiSSID);
-    ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
-#ifdef CONFIG_EXAMPLE_CONNECT_IPV6
-    ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
-#endif
+    //xEventGroupClearBits(s_connect_event_group, CONNECTED_BITS);
 
+    if(isConnected == false)
+    {
+    	vEventGroupDelete(s_connect_event_group);
+    	s_connect_event_group = NULL;
+    }
+    else
+    {
+		ESP_LOGI(TAG, "Connected to %s", WifiSSID);
+		ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
+	#ifdef CONFIG_EXAMPLE_CONNECT_IPV6
+		ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
+	#endif
+    }
     firstTime = false;
 
     return ESP_OK;
@@ -155,6 +175,7 @@ esp_err_t network_disconnect_wifi(void)
     stop();
     ESP_LOGI(TAG, "Disconnected from %s", s_connection_name);
     s_connection_name = NULL;
+    //firstTime = true;
     return ESP_OK;
 }
 
@@ -165,11 +186,20 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
 {
     ESP_LOGI(TAG, "Wi-Fi disconnected, trying to reconnect...");
     isConnected = false;
-    esp_err_t err = esp_wifi_connect();
+
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    xEventGroupSetBits(s_connect_event_group, CONNECTED_BITS);
+
+    /*esp_err_t err = esp_wifi_connect();
     if (err == ESP_ERR_WIFI_NOT_STARTED) {
         return;
     }
     ESP_ERROR_CHECK(err);
+
+    vEventGroupDelete(s_connect_event_group);
+    s_connect_event_group = NULL;
+    */
 }
 
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
@@ -196,16 +226,18 @@ static void start(void)
 
     esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
 
-    esp_netif_t *netif = esp_netif_new(&netif_config);
+    netif = esp_netif_new(&netif_config);
 
-    assert(netif);
+    //assert(netif);
 
     esp_netif_attach_wifi_station(netif);
     esp_wifi_set_default_wifi_sta_handlers();
 
-    s_example_esp_netif = netif;
+    //s_example_esp_netif = netif;
+    volatile esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
+    ESP_LOGI(TAG, "fault %d", fault);
 
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL));
+    //ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL));
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, &on_wifi_connect, netif));
@@ -266,9 +298,9 @@ static void stop(void)
     }
     ESP_ERROR_CHECK(err);
     ESP_ERROR_CHECK(esp_wifi_deinit());
-    ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(s_example_esp_netif));
-    esp_netif_destroy(s_example_esp_netif);
-    s_example_esp_netif = NULL;
+    ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
+    esp_netif_destroy(netif);
+    netif = NULL;
 }
 #endif // CONFIG_EXAMPLE_CONNECT_WIFI
 
@@ -391,7 +423,7 @@ static void stop(void)
 
 esp_netif_t *get_example_netif(void)
 {
-    return s_example_esp_netif;
+    return netif;
 }
 
 void SetupWifi()

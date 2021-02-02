@@ -18,8 +18,7 @@ MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
-int MCU_GetSwitchState();
-
+uint8_t MCU_GetSwitchState();
 float MCU_GetEmeterTemperature(uint8_t phase);
 float MCU_GetTemperaturePowerBoard(uint8_t sensor);
 float MCU_GetTemperature();
@@ -41,6 +40,9 @@ float MCU_GetChargeCurrentUserMax();
 void HOLD_SetPhases(int setPhases);
 int HOLD_GetSetPhases();
 uint8_t MCU_GetCableType();
+
+uint16_t MCU_GetPilotAvg();
+uint16_t MCU_ProximityInst();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 

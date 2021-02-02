@@ -24,6 +24,8 @@
 #include "driver/uart.h"
 #include "protocol_task.h"
 #include "diagnostics_port.h"
+#include "../components/i2c/include/i2cDevices.h"
+#include "../components/i2c/include/CLRC661.h"
 
 //#include "mdns.h"
 //#include <sys/socket.h>
@@ -71,6 +73,8 @@
 
 static const char *TAG = "NETWORK:";
 int sock;
+
+extern uint32_t onTimeCounter;
 
 //extern uint8_t *obisRawData;
 
@@ -158,22 +162,20 @@ int sock;
 #define ECHO_TEST_RTS  (UART_PIN_NO_CHANGE)
 #define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)*/
 
-#define BUF_SIZE (1024)
+//#define BUF_SIZE (1024)
 
 static void tcp_server_task(void *pvParameters)
 {
-    //char rx_buffer[50];
-    //char tx_buffer[54];
+
     char addr_str[128];
     int addr_family;
     int ip_protocol;
-   // unsigned int connectionTimout = 17000;
-    //int value;
+
     int firstTime = 0;
     int err;
     int listen_sock;
-   // int mbusTimeout = 150;
-    //unsigned int status = 0;
+
+    unsigned int byteCount = 0;
 
     while (1) {
 #define  CONFIG_EXAMPLE_IPV4
@@ -300,52 +302,22 @@ static void tcp_server_task(void *pvParameters)
         wifi_ap_record_t wifidata;
 
         int len = 0;
-        unsigned int byteCount = 0;
+
         //unsigned int bufferSize = 0;
         unsigned int value = 0;
         while (1) {
-        	vTaskDelay(1);
-        	//bufferSize = 0;
-
-        	//uart_get_buffered_data_len(UART_NUM_2, &bufferSize);
-//        	if(bufferSize >= 4)
-//        	{
-//        		len = uart_read_bytes(UART_NUM_2, readData, 4, 20 / portTICK_RATE_MS);
-//        		if((readData[3] == 0xee) && (readData[2] == 0xaa))
-//        		{
-//        			value = (readData[1] << 8) + readData[0];
-//        		}
-//        		else
-//        		{
-//        			ESP_LOGE(TAG, "Invalid AMS bytes, flushing buffer");
-//        			uart_flush(UART_NUM_2);
-//        			continue;
-//        		}
-//
-//        		if(len == 0)
-//        			continue;
-//        	}
-//        	else
-//        	{
-//        		continue;
-//        	}
-
-//			if(len <= 1)
-//				ESP_LOGE(TAG, "Error: Only 1 byte read");
+        	//vTaskDelay(1);
+        	vTaskDelay(20 / portTICK_PERIOD_MS);
 
 			byteCount += 1;
 
 			if(byteCount % 100 == 0)
 			{
-				//ESP_LOGE(TAG, "ByteCount: %d", byteCount);
+
 				size_t heapSize = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 				ESP_LOGI(TAG, "Heap size : %d  VALUE: %d", heapSize, value);
-				//ESP_LOGI(TAG, "Value : %d", value);
+
 			}
-
-			//value = (readData[1] << 8) + readData[0];
-
-			//value++;
 
 			float wifiRSSI = 0.0;
 			if (esp_wifi_sta_get_ap_info(&wifidata)==0)
@@ -357,22 +329,40 @@ static void tcp_server_task(void *pvParameters)
 			jsonObject = cJSON_CreateObject();
 			cJSON_AddNumberToObject(jsonObject, "MCUcnt", MCU_GetDebugCounter());
 			cJSON_AddNumberToObject(jsonObject, "ESPcnt", byteCount);
+			cJSON_AddNumberToObject(jsonObject, "OnTime", onTimeCounter);
+
+			cJSON_AddNumberToObject(jsonObject, "VL1", MCU_GetVoltages(0));
+			cJSON_AddNumberToObject(jsonObject, "VL2", MCU_GetVoltages(1));
+			cJSON_AddNumberToObject(jsonObject, "VL3", MCU_GetVoltages(2));
+
+			cJSON_AddNumberToObject(jsonObject, "IL1", MCU_GetCurrents(0));
+			cJSON_AddNumberToObject(jsonObject, "IL2", MCU_GetCurrents(1));
+			cJSON_AddNumberToObject(jsonObject, "IL3", MCU_GetCurrents(2));
+
+			cJSON_AddStringToObject(jsonObject, "GridType", MCU_GetGridTypeString());
+
+			cJSON_AddNumberToObject(jsonObject, "PilotAvg", MCU_GetPilotAvg());
+			cJSON_AddNumberToObject(jsonObject, "ProximityInst", MCU_ProximityInst());
+
+			cJSON_AddNumberToObject(jsonObject, "TI2C", I2CGetSHT30Temperature());
 
 			cJSON_AddNumberToObject(jsonObject, "WifiRSSI", wifiRSSI);
 
 			cJSON_AddNumberToObject(jsonObject, "HwId", GetHardwareId());
 			cJSON_AddNumberToObject(jsonObject, "PwrMeas", GetPowerMeas());
 
+			cJSON_AddStringToObject(jsonObject, "NFC", NFCGetTagInfo().idAsString);
+
 			cJSON_AddNumberToObject(jsonObject, "Warning", MCU_GetWarnings());
 
 			cJSON_AddNumberToObject(jsonObject, "MCUrst", MCU_GetResetSource());
 			cJSON_AddNumberToObject(jsonObject, "ESPrst", (unsigned int)esp_reset_reason());
 
-			cJSON_AddNumberToObject(jsonObject, "TxP", power);
+			//cJSON_AddNumberToObject(jsonObject, "TxP", power);
 
 			jsonString = cJSON_Print(jsonObject);
 			len = strlen(jsonString);
-			//ESP_LOGE(TAG, "Sending jsonString length: %d", len);
+			//ESP_LOGE(TAG, "Sending jsonString length: %d: %s", len, jsonString);
 			//ESP_LOGE(TAG, "Transmit no: %d", measurementNo);
 			err = send(sock, jsonString, len, 0);
 

@@ -1165,13 +1165,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
 
-        if(resetCounter == 5)
+        if((resetCounter == 5) || (resetCounter == 15) || (resetCounter == 50) || (resetCounter == 75))
         {
         	esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
         	ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
         }
 
-        if(resetCounter == 10)
+        if(resetCounter == 100)
         {
         	ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
         	esp_restart();
@@ -1240,6 +1240,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 void stop_cloud_listener_task()
 {
+	MqttSetDisconnected();
 	esp_mqtt_client_disconnect(mqtt_client);
 	esp_mqtt_client_stop(mqtt_client);
 }
