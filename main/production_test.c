@@ -212,23 +212,28 @@ enum test_item{
 	TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS,
 };
 
+static EventGroupHandle_t prodtest_eventgroup;
+static const int NFC_READ = BIT0;
+static const int SOCKET_DATA_READY = BIT1;
+static const int SOCKET_DATA_SENDT = BIT2;
+
 static int sock;
+#define log_line_length_max 256
+static char log_line_buffer[log_line_length_max];
 
 int prodtest_sock_send(char *payload)
 {
 	ESP_LOGI(TAG, "sending to test PC:[%s]", payload);
 
-	if(strstr(payload, "5|0|factory test running")){
-		// do not publish the spam
-	}else{
-		if(publish_prodtest_line(payload)<0){
-			return -1;
-		}
+	if(publish_prodtest_line(payload)<0){
+		return -1;
 	}
 
-	int err = send(sock, payload, strlen(payload), 0);
-	if (err < 0) {
-		ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+	strncpy(log_line_buffer, payload, log_line_length_max);
+	xEventGroupSetBits(prodtest_eventgroup, SOCKET_DATA_READY);
+	EventBits_t bits = xEventGroupWaitBits(prodtest_eventgroup, SOCKET_DATA_SENDT, 1, 1, pdMS_TO_TICKS(5000));
+	if((bits&SOCKET_DATA_SENDT) ==0){
+		ESP_LOGE(TAG, "Failed to communicate with prodtest PC" );
 		return -2;
 	}
 
@@ -260,9 +265,6 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 			if(errno == 11){
 				//workaround, this error should never happen on a blocking socket
 				ESP_LOGW(TAG, "recv failed: errno %d", errno);
-				
-				prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running");
-
 				continue;
 			}
 			ESP_LOGE(TAG, "recv failed: errno %d, aborting", errno);
@@ -294,8 +296,6 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 }
 
 static struct TagInfo latest_tag = {0};
-static EventGroupHandle_t prodtest_eventgroup;
-static const int NFC_READ = BIT0;
 
 int prodtest_on_nfc_read(){
 	ESP_LOGI(TAG, "nfctag submitted to prodtest procedure");
@@ -327,9 +327,9 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0)
-		return "192.168.0.101";
+		return "192.168.0.103";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
-		return "192.168.0.101";
+		return "192.168.0.103";
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
@@ -339,10 +339,38 @@ int run_component_tests();
 int charge_cycle_test();
 void socket_connect(void);
 
+static void socket_task(void *pvParameters){
+
+	TickType_t ping_rate = pdMS_TO_TICKS(1000);
+
+	while(true){
+		EventBits_t bits = xEventGroupWaitBits(prodtest_eventgroup, SOCKET_DATA_READY, 1, 1, ping_rate);
+
+		if((bits&SOCKET_DATA_READY)!=0){
+			int err = send(sock, log_line_buffer, strlen(log_line_buffer), 0);
+			if (err < 0) {
+				ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+			}
+			xEventGroupSetBits(prodtest_eventgroup, SOCKET_DATA_SENDT);
+		}else{
+			// ping botch
+			char *payload = "5|0|factory test running\r\n";
+			int err = send(sock, payload, strlen(payload), 0);
+			if (err < 0) {
+				ESP_LOGE(TAG, "Error sending ping to prodtest pc(%d)", errno);
+			}
+		}
+	}
+}
+
 int prodtest_perform(struct DeviceInfo device_info)
 {
 	prodtest_nfc_init();
 	socket_connect();
+
+	xQueueCreate(1, log_line_length_max);
+	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, NULL);
+
 
 	bool success = false;
 
@@ -575,8 +603,6 @@ int charge_cycle_test(){
 	while(MCU_GetchargeMode()!=eCAR_CHARGING){
 		ESP_LOGI(TAG, "waiting for charging start");
 
-		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running"); // ping botch
-
 		vTaskDelay(pdMS_TO_TICKS(1500));
 	}
 
@@ -648,8 +674,7 @@ int charge_cycle_test(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");
 
-	while(MCU_GetchargeMode()!=eCAR_DISCONNECTED){
-		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "factory test running"); // ping botch		
+	while(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
