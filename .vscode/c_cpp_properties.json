@@ -1,19 +1,24 @@
 {
-    "configurations": [
-        {
-            "name": "Generic",
-            "includePath": [
-                "${workspaceFolder}/main/**",
-                "${workspaceFolder}/build/include/",
-                "${env.HOME}/.local/esp_v4_2/esp-idf/components/**"
-            ],
-            "browse": {
-                "limitSymbolsToIncludedHeaders": true,
-                "databaseFilename": ""
-            },
-            "intelliSenseMode": "gcc-x64",
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
-        }
-    ],
-    "version": 4
+  "configurations": [
+    {
+      "name": "ESP-IDF",
+      "compilerPath": "${default}",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${config:idf.espIdfPath}/components/**",
+        "${config:idf.espIdfPathWin}/components/**",
+        "${workspaceFolder}/**"
+      ],
+      "browse": {
+        "path": [
+          "${config:idf.espIdfPath}/components",
+          "${config:idf.espIdfPathWin}/components",
+          "${workspaceFolder}"
+        ],
+        "limitSymbolsToIncludedHeaders": false
+      }
+    }
+  ],
+  "version": 4
 }
