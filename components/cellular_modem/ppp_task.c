@@ -726,31 +726,15 @@ void ppp_task_start(void){
 
 int ppp_disconnect()
 {
+	hasLTEConnection = false;
+
 	esp_event_handler_unregister(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event);
 	esp_event_handler_unregister(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed);
 	esp_event_loop_delete_default();
 
-
-	/*esp_event_handler_unregister(esp_event_base_t event_base,
-	                                       int32_t event_id,
-	                                       esp_event_handler_t event_handler);
-	*/
 	esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
 	esp_netif_destroy(ppp_netif);
 
-	//TODO: Completed
-	//esp_modem_netif_teardown(void *h)
-	//{
-	/*    esp_modem_netif_driver_t *driver = h;
-	    esp_netif_destroy(driver->base.netif);
-	    free(driver);
-
-	ESP_ERROR_CHECK(esp_modem_stop_ppp(dte));
-	// Destroy the netif adapter withe events, which internally frees also the esp-netif instance
-	esp_modem_netif_clear_default_handlers(modem_netif_adapter);
-	esp_modem_netif_teardown(modem_netif_adapter);
-	xEventGroupWaitBits(event_group, STOP_BIT, pdTRUE, pdTRUE, portMAX_DELAY);
-	*/
 	return 0;
 }
 

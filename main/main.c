@@ -38,8 +38,8 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "0.0.0.18";
-//char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
+char softwareVersion[] = "0.0.0.19";
+char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -51,10 +51,10 @@ char * GetSoftwareVersion()
 	return softwareVersion;
 }
 
-/*char * GetSoftwareVersionBLE()
+char * GetSoftwareVersionBLE()
 {
 	return softwareVersionBLEtemp;
-}*/
+}
 
 
 void InitGPIOs()
@@ -171,7 +171,6 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
 
 		storage_Init_Configuration();
-		//storage_Set_CommunicationMode(eCONNECTION_WIFI);
 		storage_SaveConfiguration();
 	}
 
@@ -187,7 +186,7 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-	//validate_booted_image();
+	validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start(); 

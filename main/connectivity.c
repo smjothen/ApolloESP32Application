@@ -81,41 +81,38 @@ static void connectivity_task()
 			{
 				ESP_LOGI(TAG, "Deinit Wifi interface");
 				// Stop mqtt
-				stop_cloud_listener_task();
+				if(mqttInitialized == true)
+					stop_cloud_listener_task();
 
 				// Disconnect wifi
 				network_disconnect_wifi();
 
 				// Reset connectivity status
 				//sntpInitialized = false;
-				mqttInitialized = false;
 
+				mqttInitialized = false;
 				wifiInitialized = false;
 
-				vTaskDelay(pdMS_TO_TICKS(10000));
+				vTaskDelay(pdMS_TO_TICKS(5000));
 			}
 			else if(activeInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "Deinit LTE interface");
 
 				// Stop mqtt
-				stop_cloud_listener_task();
+				if(mqttInitialized == true)
+					stop_cloud_listener_task();
 
 				ppp_disconnect();
 
 				// Reset connectivity status
 				//sntpInitialized = false;
 				mqttInitialized = false;
-
 				wifiInitialized = false;
 
-				vTaskDelay(pdMS_TO_TICKS(10000));
+				vTaskDelay(pdMS_TO_TICKS(5000));
 			}
-		/*}
 
-
-		if(interfaceChange == true)
-		{*/
 
 			if(localNewInterface == eCONNECTION_NONE)
 			{
@@ -125,31 +122,23 @@ static void connectivity_task()
 			{
 				ESP_LOGI(TAG, "Wifi interface activating");
 				network_connect_wifi(false);
-				wifiInitialized = true;
+				/*wifiInitialized = true;
 				if(network_WifiIsConnected() == false)
 					interfaceChange = true;
-				else
+				else*/
 					interfaceChange = false;
-
-				//activeInterface = localNewInterface;
 			}
 			else if(localNewInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "LTE interface activating");
 				configure_uart(921600);
 				ppp_task_start();
-				//start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				interfaceChange = false;
-
-				//activeInterface = localNewInterface;
 			}
 		}
 
-		//if(interfaceChange == false)
-		//{
 		previousInterface = activeInterface;
 		activeInterface = localNewInterface;
-		//}
 
 		//Handle SNTP connection if we are online either with Wifi or 4G.
 		if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
@@ -169,6 +158,19 @@ static void connectivity_task()
 				zntp_restart();
 				zntpIsRunning = true;
 			}
+
+
+			//Activate MQTT when we are online and has NTP time or RTC time is good.
+			if((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
+			{
+				//Make sure Device info has been read from EEPROM before connecting to cloud.
+				if(i2CDeviceInfoIsLoaded() == true)
+				{
+					start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+					mqttInitialized = true;
+				}
+			}
+
 		}
 		else if(zntp_enabled() == 1)
 		{
@@ -177,23 +179,8 @@ static void connectivity_task()
 			zntpIsRunning = false;
 		}
 
-
-		//Activate MQTT when we are online and has NTP time or RTC time is good.
-		if((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
-		{
-			//Make sure Device info has been read from EEPROM before connecting to cloud.
-			if(i2CDeviceInfoIsLoaded() == true)
-			{
-				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
-				mqttInitialized = true;
-			}
-		}
-
-
 		cloud_listener_check_cmd();
 
-
-		//ESP_LOGI(TAG, "**** Connectivity ****");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
@@ -211,6 +198,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 4096, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

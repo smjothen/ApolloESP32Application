@@ -35,6 +35,7 @@ float network_WifiSignalStrength();
 bool network_wifiIsValid();
 
 void network_startWifiScan();
+void network_WifiScanEnd();
 bool network_renewConnection();
 void network_updateWifi();
 bool network_IsWifiStarted();

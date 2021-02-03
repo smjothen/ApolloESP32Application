@@ -384,7 +384,7 @@ int publish_telemetry_observation_on_change(){
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));*/
 
     uint8_t chargeMode = MCU_GetchargeMode();
-	if ((previousChargeMode != chargeMode) && (chargeMode != 0))
+	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
 		previousChargeMode = chargeMode;
@@ -492,7 +492,7 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float energy = MCU_GetPower();
-	if((energy > previousEnergy + 0.1) != (energy < (previousEnergy - 0.1)))
+	if((energy > previousEnergy + 500.0) != (energy < (previousEnergy - 500.0)))
 	{
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, energy));
 		previousEnergy = energy;

@@ -240,7 +240,7 @@ static void i2cDevice_task(void *pvParameters)
 				if (check == 0)
 				{
 
-					storage_SaveWifiParameters("ZaptecHQ", "LuckyJack#003");
+					storage_SaveWifiParameters("ZaptecHQx", "LuckyJack#003");
 					storage_Set_CommunicationMode(eCONNECTION_WIFI);
 					storage_SaveConfiguration();
 					connectivity_ActivateInterface(eCONNECTION_WIFI);

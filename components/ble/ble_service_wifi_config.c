@@ -36,7 +36,7 @@ uint16_t maxAp = 10;
 wifi_ap_record_t ap_records[10];
 
 
-//#define USE_PIN
+#define USE_PIN
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -427,6 +427,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			wifiRemainder = 0;
     		memset(wifiPackage, 0, 500);
 
+    		//connectivity_ActivateInterface(eCONNECTION_WIFI);
     		network_startWifiScan();
 
     		esp_wifi_scan_get_ap_num(&apNr);
@@ -441,7 +442,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				for (i = 0; i < apNr; i++)
 					ESP_LOGE(TAG, "SSID %d: %s, sig: %d", i+1, ap_records[i].ssid, ap_records[i].rssi);
 			}
-
     	}
 
 		if(apNr > 0)
@@ -511,6 +511,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				rsp->attr_value.len = wifiRemainder;
 				apNr = 0;
 				wifiSegmentCount = 0;
+
+				network_WifiScanEnd();
 			}
 
 		}
@@ -639,8 +641,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     case CHARGER_FIRMWARE_VERSION_UUID:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
- 		int swlen = strlen(GetSoftwareVersion());
- 		memcpy(rsp->attr_value.value, GetSoftwareVersion(), swlen);
+ 		int swlen = strlen(GetSoftwareVersionBLE());
+ 		memcpy(rsp->attr_value.value, GetSoftwareVersionBLE(), swlen);
  		rsp->attr_value.len = swlen;
  		break;
 

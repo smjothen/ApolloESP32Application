@@ -39,7 +39,6 @@ char ip4Address[16] = {0};
 char ip6Address;
 static bool wifiScan = false;
 static bool wifiIsValid = false;
-static bool firstTime = true;
 static bool connecting = false;
 
 #define GOT_IPV4_BIT BIT(0)
@@ -116,36 +115,21 @@ static void on_got_ipv6(void *arg, esp_event_base_t event_base,
 
 esp_err_t network_connect_wifi(bool productionSetup)
 {
-
 	isProductionSetup = productionSetup;
 
-	//if(firstTime == true)
-	//{
-		ESP_ERROR_CHECK(esp_netif_init());
-		esp_event_loop_create_default();
-	//}
+	ESP_ERROR_CHECK(esp_netif_init());
+	esp_event_loop_create_default();
 
-    if (s_connect_event_group != NULL) {
+    /*if (s_connect_event_group != NULL) {
         return ESP_ERR_INVALID_STATE;
-    }
+    }*/
 
 	s_connect_event_group = xEventGroupCreate();
 
-	//if(firstTime == true)
-	//{
-    	start();
+  	start();
 
-    	//ESP_ERROR_CHECK(esp_register_shutdown_handler(&stop));
-	//}
-	/*else
-	{
-	    ESP_ERROR_CHECK(esp_wifi_start());
-	    ESP_ERROR_CHECK(esp_wifi_connect());
-	    s_connection_name = "Wifi";
-	}*/
     ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
-    //xEventGroupClearBits(s_connect_event_group, CONNECTED_BITS);
 
     if(isConnected == false)
     {
@@ -160,7 +144,6 @@ esp_err_t network_connect_wifi(bool productionSetup)
 		ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
 	#endif
     }
-    firstTime = false;
 
     return ESP_OK;
 }
@@ -175,7 +158,7 @@ esp_err_t network_disconnect_wifi(void)
     stop();
     ESP_LOGI(TAG, "Disconnected from %s", s_connection_name);
     s_connection_name = NULL;
-    //firstTime = true;
+
     return ESP_OK;
 }
 
@@ -190,16 +173,6 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
     esp_wifi_disconnect();
     esp_wifi_stop();
     xEventGroupSetBits(s_connect_event_group, CONNECTED_BITS);
-
-    /*esp_err_t err = esp_wifi_connect();
-    if (err == ESP_ERR_WIFI_NOT_STARTED) {
-        return;
-    }
-    ESP_ERROR_CHECK(err);
-
-    vEventGroupDelete(s_connect_event_group);
-    s_connect_event_group = NULL;
-    */
 }
 
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
@@ -228,16 +201,13 @@ static void start(void)
 
     netif = esp_netif_new(&netif_config);
 
-    //assert(netif);
-
     esp_netif_attach_wifi_station(netif);
     esp_wifi_set_default_wifi_sta_handlers();
 
-    //s_example_esp_netif = netif;
-    volatile esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
-    ESP_LOGI(TAG, "fault %d", fault);
 
-    //ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL));
+    esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
+    ESP_LOGI(TAG, "Event handler fault %d", fault);
+
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL));
 #ifdef CONFIG_EXAMPLE_CONNECT_IPV6
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, &on_wifi_connect, netif));
@@ -277,12 +247,91 @@ static void start(void)
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+
+/*    while(wifiScan == true)
+    {
+    	ESP_LOGE(TAG,"wifiScan == true");
+    	vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    */
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
     s_connection_name = "Wifi";
-
     wifiStarted = true;
 }
+
+
+
+static void startScan(void)
+{
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
+
+    netif = esp_netif_new(&netif_config);
+
+    esp_netif_attach_wifi_station(netif);
+    esp_wifi_set_default_wifi_sta_handlers();
+
+
+  //  esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
+    //ESP_LOGI(TAG, "Event handler fault %d", fault);
+
+    //ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL));
+#ifdef CONFIG_EXAMPLE_CONNECT_IPV6
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED, &on_wifi_connect, netif));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6, &on_got_ipv6, NULL));
+#endif
+
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = {0x0},
+            .password = {0x0},
+        },
+    };
+
+    /*if(isProductionSetup == true)
+    {
+    	strcpy(WifiSSID, "ZaptecHQ");
+    	strcpy(WifiPSK, "LuckyJack#003");
+
+    	memset(wifi_config.sta.ssid, 0, 32);
+		memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+		memset(wifi_config.sta.password, 0, 64);
+		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+    }
+    else
+    {
+		network_CheckWifiParameters();
+
+		memset(wifi_config.sta.ssid, 0, 32);
+		memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+
+		memset(wifi_config.sta.password, 0, 64);
+		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+    }*/
+
+    ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+
+/*    while(wifiScan == true)
+    {
+    	ESP_LOGE(TAG,"wifiScan == true");
+    	vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    */
+    ESP_ERROR_CHECK(esp_wifi_start());
+    //ESP_ERROR_CHECK(esp_wifi_connect());
+    s_connection_name = "Wifi";
+    //wifiStarted = true;
+}
+
+
+
 
 static void stop(void)
 {
@@ -538,12 +587,22 @@ void network_clearWifi()
 
 void network_startWifiScan()
 {
+
+
+	/*while(wifiStarted == false)
+	{
+		ESP_LOGE(TAG,"wifiStarted == false");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}*/
+
 	wifiScan = true;
 
-	if(network_IsWifiStarted() == false)
+	startScan();
+	/*if(network_IsWifiStarted() == false)
 		start();
-	else
-		esp_wifi_disconnect();
+		network_connect_wifi(false);
+	else*/
+		//esp_wifi_disconnect();
 
 	//if(firstTime)
 	//{
@@ -572,7 +631,8 @@ void network_startWifiScan()
     	vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    ESP_ERROR_CHECK( esp_wifi_start() );
+    //ESP_ERROR_CHECK( esp_wifi_start() );
+    esp_wifi_disconnect();
     ESP_ERROR_CHECK(esp_wifi_scan_start(&scanConf, true));
     ESP_ERROR_CHECK(esp_wifi_scan_stop());
 
@@ -589,6 +649,14 @@ void network_startWifiScan()
     wifiScan = false;
 }
 
+
+void network_WifiScanEnd()
+{
+	esp_wifi_stop();
+    ESP_ERROR_CHECK(esp_wifi_deinit());
+	ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
+	esp_netif_destroy(netif);
+}
 
 //static bool wait_for_ip(bool prod)
 //{
