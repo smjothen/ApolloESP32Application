@@ -411,15 +411,6 @@ int prodtest_perform(struct DeviceInfo device_info)
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
-
-	/*ESP_LOGI(TAG, "waitinf on rfid");
-	prodtest_send("0|0|waiting on rfid");
-	xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
-	
-	sprintf(payload, "0|3|RFID: %s\r\n", latest_tag.idAsString);
-	prodtest_send(payload);
-	*/
-
 	if(run_component_tests()<0){
 		ESP_LOGE(TAG, "Component test error");
 		prodtest_sock_send( "FAIL\r\n" );
@@ -439,6 +430,8 @@ int prodtest_perform(struct DeviceInfo device_info)
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+		goto cleanup;
 	}else{
 		success = true;
 	}
@@ -447,10 +440,12 @@ int prodtest_perform(struct DeviceInfo device_info)
 	sprintf(payload, "PASS\r\n");
 	prodtest_sock_send( payload);
 	set_prodtest_led_state(TEST_STAGE_PASS);
+	audio_play_nfc_card_accepted();
 
 	cleanup:
-	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
+	xTaskDelete(socket_task);
 	shutdown(sock, 0);
+	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
 	close(sock);
 
 	if(success){
