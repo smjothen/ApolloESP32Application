@@ -70,6 +70,8 @@ static void sessionHandler_task()
 	int8_t rssi = 0;
 	wifi_ap_record_t wifidata;
 	
+	uint32_t onCounter = 0;
+
 	uint32_t onTime = 0;
     uint32_t pulseCounter = 30;
 
@@ -93,13 +95,33 @@ static void sessionHandler_task()
 
 	while (1)
 	{
+		onCounter++;
+
 		isOnline = isMqttConnected();
 		networkInterface = connectivity_GetActivateInterface();
 
+		// Check for MCU communication fault and restart with conditions:
+	 	// Not instantly, let mcu upgrade and start
+		// Not when OTA in progress
+		// Only after given nr of consecutive faults
+		int mcuCOMErrors = GetMCUComErrors();
+		if((onCounter > 30) && (otaIsRunning() == false) && (mcuCOMErrors > 20))
+		{
+			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
+			publish_debug_message_event("mcuCOMError reset", cloud_event_level_warning);
+
+			vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+			esp_restart();
+		}
+
+
 		if((!isOnline) || (networkInterface == eCONNECTION_NONE)) // Also the case if CommunicationMode == eNONE.
 		{
-			ESP_LOGI(TAG, "Waiting to become online...");
-			vTaskDelay(pdMS_TO_TICKS(2000));
+			if((onCounter % 10) == 0)
+				ESP_LOGI(TAG, "No connection configured");
+
+			vTaskDelay(pdMS_TO_TICKS(1000));
 			continue;
 		}
 
@@ -191,7 +213,7 @@ static void sessionHandler_task()
 				if (MCU_GetchargeMode() == 12)
 					dataInterval = 600;	//When car is disconnected
 				else
-					dataInterval = 60;	//When car connected
+					dataInterval = 120;	//When car connected
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
@@ -255,8 +277,7 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		//if(pulseCounter >= 60)
-		if(pulseCounter >= 90)
+		if(pulseCounter >= 60)
 		{
 			if (isMqttConnected() == true)
 			{

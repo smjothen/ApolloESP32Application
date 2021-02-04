@@ -74,7 +74,7 @@ void storage_Init_Configuration()
 	//Local settings
 
 	configurationStruct.communicationMode 			= eCONNECTION_NONE;//TODO set default
-	configurationStruct.hmiBrightness 				= 0.2;	//0.0-1.0
+	configurationStruct.hmiBrightness 				= 0.7;	//0.0-1.0
 	configurationStruct.permanentLock 				= 0;	//0/1
 
 	configurationStruct.standalone 					= 1;	//0/1

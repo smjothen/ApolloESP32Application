@@ -236,6 +236,8 @@ int MCUTxGetStackWatermark()
 }
 
 
+uint32_t mcuComErrorCount = 0;
+
 void uartSendTask(void *pvParameters){
     ESP_LOGI(TAG, "configuring uart");
 
@@ -473,9 +475,14 @@ void uartSendTask(void *pvParameters){
         if (txMsg.identifier == rxMsg.identifier)
         {
         	count++;
+        	mcuComErrorCount = 0;
         }
         else
         {
+        	mcuComErrorCount++;
+
+       		ESP_LOGE(TAG, "mcuComErrorCount: %i",mcuComErrorCount);
+
         	//Delay before retrying on the same parameter identifier
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
@@ -493,6 +500,11 @@ void uartSendTask(void *pvParameters){
     
 }
 
+
+uint32_t GetMCUComErrors()
+{
+	return mcuComErrorCount;
+}
 
 
 MessageType MCU_SendCommandId(uint16_t paramIdentifier)

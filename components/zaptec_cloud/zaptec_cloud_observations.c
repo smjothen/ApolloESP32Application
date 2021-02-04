@@ -229,6 +229,11 @@ int publish_debug_telemetry_observation_StartUpParameters()
 	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
 
+    if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+    	add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
+    else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
+    	add_observation_to_collection(observations, create_observation(CommunicationMode, "LTE"));
+
     //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
@@ -491,9 +496,11 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-	float energy = MCU_GetPower();
+	float energy = MCU_GetEnergy();
 	if((energy > previousEnergy + 500.0) != (energy < (previousEnergy - 500.0)))
 	{
+		if(energy < 0.0)
+			energy = 0.0;
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, energy));
 		previousEnergy = energy;
 		isChange = true;

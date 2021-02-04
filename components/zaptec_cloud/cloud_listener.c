@@ -986,11 +986,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
 
 
-        publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
 
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
         {
+        	// Only show this event on first boot, not on every SAS token expiry with reconnect
+        	publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
 			ridNr++;
 			char devicetwin_topic[64];
 			sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
