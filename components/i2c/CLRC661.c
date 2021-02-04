@@ -1,7 +1,6 @@
 
 #include <stdio.h>
 #include "driver/i2c.h"
-#include "esp_console.h"
 #include "esp_log.h"
 #include "i2cInterface.h"
 #include "CLRC661.h"

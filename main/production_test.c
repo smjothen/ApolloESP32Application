@@ -443,7 +443,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	audio_play_nfc_card_accepted();
 
 	cleanup:
-	xTaskDelete(socket_task);
+	vTaskDelete(socket_task);
 	shutdown(sock, 0);
 	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
 	close(sock);

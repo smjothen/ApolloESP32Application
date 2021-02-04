@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include "driver/i2c.h"
-#include "esp_console.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include <time.h>
