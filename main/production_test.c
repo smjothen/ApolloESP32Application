@@ -41,6 +41,23 @@ bool prodtest_active(){
 	return prodtest_running;
 }
 
+enum test_stage{
+	TEST_STAGE_CONNECTING_WIFI = 1,
+	TEST_STAGE_WAITING_RIFD = 2,
+	TEST_STAGE_WAITING_PC = 3,
+	TEST_STAGE_FETCHING_ID = 4,
+	TEST_STAGE_RUNNING_TEST = 5,
+	TEST_STAGE_WAITING_ANWER = 6,
+	TEST_STAGE_ERROR = 7,
+	TEST_STAGE_PASS = 8,
+
+	TEST_STAGE_LED_DEMO = 20,
+};
+
+void set_prodtest_led_state(enum test_stage state){
+	MCU_SendUint8Parameter(FactoryTestStage, state);
+}
+
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch(evt->event_id) {
@@ -74,6 +91,14 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+void await_ip(){
+	while (network_WifiIsConnected() == false)
+	{
+		set_prodtest_led_state(TEST_STAGE_CONNECTING_WIFI);
+		ESP_LOGE(TAG, "Waiting for IP...");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
 
 int prodtest_getNewId()
 {
@@ -81,11 +106,7 @@ int prodtest_getNewId()
 	//if(connected == false)
 		//connected = network_init(true);
 
-	while (network_WifiIsConnected() == false)
-	{
-		ESP_LOGE(TAG, "Waiting for IP...");
-		vTaskDelay(pdMS_TO_TICKS(1000));
-	}
+	await_ip();
 
 	char url [100];
 	sprintf(url, "http://%s:8585/get/mac", host_from_rfid());
@@ -108,6 +129,7 @@ int prodtest_getNewId()
 
 	esp_http_client_set_header(client, "Content-Type", "text/plain");
 
+	set_prodtest_led_state(TEST_STAGE_FETCHING_ID);
 	esp_err_t err;
 	if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
@@ -253,9 +275,12 @@ int prodtest_send(enum test_state state, enum test_item item, char *message){
 }
 
 
-int await_prodtest_external_step_acceptance(char * acceptance_string){
+int await_prodtest_external_step_acceptance(char * acceptance_string, bool indicate_with_led){
 	char rx_buffer[100];
 	char * next_char = rx_buffer;
+
+	if(indicate_with_led)
+		set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
 
 	for (;;){
 
@@ -280,6 +305,7 @@ int await_prodtest_external_step_acceptance(char * acceptance_string){
 				*/
 				if(strstr(rx_buffer, acceptance_string)){
 					ESP_LOGI(TAG, "accepted");
+					set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 					return 0;
 				}
 				ESP_LOGW(TAG, "question response not accepted");
@@ -319,6 +345,7 @@ char *host_from_rfid(){
 	if(!latest_tag.tagIsValid){
 		audio_play_nfc_card_denied();
 		ESP_LOGI(TAG, "waiting for RFID");
+		set_prodtest_led_state(TEST_STAGE_WAITING_RIFD);
 		xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
 	}
 
@@ -327,9 +354,9 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0)
-		return "192.168.0.103";
+		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
-		return "192.168.0.103";
+		return "10.0.244.234";
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
@@ -366,9 +393,9 @@ static void socket_task(void *pvParameters){
 int prodtest_perform(struct DeviceInfo device_info)
 {
 	prodtest_nfc_init();
+	await_ip();
 	socket_connect();
 
-	xQueueCreate(1, log_line_length_max);
 	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, NULL);
 
 
@@ -377,7 +404,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	char payload[100];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
 	prodtest_sock_send(payload);
-	await_prodtest_external_step_acceptance("ACCEPTED");
+	await_prodtest_external_step_acceptance("ACCEPTED", false);
 
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
@@ -403,7 +430,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	if(charge_cycle_test()<0){
 		ESP_LOGE(TAG, "charge_cycle_test error");
 		prodtest_sock_send( "FAIL\r\n");
-
+		set_prodtest_led_state(TEST_STAGE_ERROR);
 		goto cleanup;
 	}
 
@@ -419,6 +446,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	eeprom_wp_enable_nfc_enable();
 	sprintf(payload, "PASS\r\n");
 	prodtest_sock_send( payload);
+	set_prodtest_led_state(TEST_STAGE_PASS);
 
 	cleanup:
 	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
@@ -435,7 +463,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 }
 
 int test_rtc(){
-
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_RTC, "RTC");
 	struct tm time1 = RTCReadTime();
 	vTaskDelay(pdMS_TO_TICKS(3000));
@@ -457,6 +485,7 @@ void bg_log_cb(char *message){
 int test_bg(){
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BG, "BG95");
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	char payload[128];
 
 	if(configure_modem_for_prodtest(bg_log_cb)<0){
@@ -475,7 +504,13 @@ int test_bg(){
 
 	int activate_result = at_command_activate_pdp_context();
 	if(activate_result<0){
-		goto err;
+		vTaskDelay(pdMS_TO_TICKS(30*1000));
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "retrying pdp activate");
+		if(at_command_activate_pdp_context()<0){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "error on pdp activate");
+			goto err;
+		}
+
 	}
 
 	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
@@ -511,10 +546,12 @@ int test_bg(){
 
 int test_leds(){
 	// led should be on, the dsPIC is already in prodtest mode
+	set_prodtest_led_state(TEST_STAGE_LED_DEMO);//todo rgbw
+
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_LED, "LED");
 
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_LED, "LED R-G-B-W?|yes|no");
-	int result = await_prodtest_external_step_acceptance("yes");
+	int result = await_prodtest_external_step_acceptance("yes", false);
 	if(result==0){
 		ESP_LOGI(TAG, "led test accepted");
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_LED, "LED");
@@ -526,13 +563,14 @@ int test_leds(){
 }
 
 int test_buzzer(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
 
 
 	audio_play_nfc_card_accepted();
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_BUZZER, "buzzed?|yes|no");
 
-	int result = await_prodtest_external_step_acceptance("yes");
+	int result = await_prodtest_external_step_acceptance("yes", true);
 	if(result==0){
 		ESP_LOGI(TAG, "buzzer test accepted");
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
@@ -544,6 +582,7 @@ int test_buzzer(){
 }
 
 int test_switch(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 	int switch_state = MCU_GetSwitchState();
 
@@ -600,6 +639,7 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
+	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
 	while(MCU_GetchargeMode()!=eCAR_CHARGING){
 		ESP_LOGI(TAG, "waiting for charging start");
 
@@ -609,6 +649,7 @@ int charge_cycle_test(){
 	char payload[100];
 
 	ESP_LOGI(TAG, "charging started, sampling data"); 
+	set_prodtest_led_state(TEST_STATE_RUNNING);
 	float emeter_temps[] = {MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2)};
 	float emeter_voltages[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};
 	float emeter_currents[] = { MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2)};
@@ -667,7 +708,7 @@ int charge_cycle_test(){
 	ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
 
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
-	int locked_result = await_prodtest_external_step_acceptance("Yes");
+	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 	}
@@ -684,7 +725,8 @@ int charge_cycle_test(){
 }
 
 void socket_connect(void){
-char addr_str[128];
+	set_prodtest_led_state(TEST_STAGE_WAITING_PC);
+	char addr_str[128];
     int addr_family;
     int ip_protocol;
 

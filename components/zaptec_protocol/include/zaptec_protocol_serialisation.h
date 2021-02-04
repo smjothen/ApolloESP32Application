@@ -176,6 +176,8 @@
         LteIccid = 962,
         LteImei = 963,
 
+        FactoryTestStage = 970,
+
     } ParamNo;
 
     typedef enum
