@@ -75,7 +75,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 		if(sent_bytes<length){
 			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
 		}
-		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, portMAX_DELAY)); // tx flush
+		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, RX_TIMEOUT)); // tx flush. portMAX_DELAY causes the system to hang indefinitely, use a 2s timeout as  workaround. https://github.com/espressif/esp-idf/issues/5156
 
         ZapMessage rxMsg = {0};
         if( xQueueReceive( 

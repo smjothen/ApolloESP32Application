@@ -28,6 +28,7 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "eeprom_wp.h"
+#include "apollo_console.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -143,9 +144,7 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-//	volatile char inputString[] = "+QCCID: 89470060200213074802";
-//	volatile char outputString[21] = {0};
-//	volatile int ret = GetNumberAsString(inputString, outputString, 20);
+	apollo_console_init();
 
 	eeprom_wp_enable_nfc_enable();
 
@@ -303,14 +302,14 @@ void app_main(void)
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
-	#define FORCE_NEW_ID
+	// #define FORCE_NEW_ID
 	#ifdef FORCE_NEW_ID
 	eeprom_wp_disable_nfc_disable();
 	EEPROM_WriteFormatVersion(0xFF);
 	eeprom_wp_enable_nfc_enable();
 	#endif
 
-	#define FORCE_FACTORY_TEST
+	// #define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
 	eeprom_wp_disable_nfc_disable();
 	EEPROM_WriteFactoryStage(FactoryStageUnknown2);

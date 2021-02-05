@@ -55,7 +55,9 @@ enum test_stage{
 };
 
 void set_prodtest_led_state(enum test_stage state){
-	MCU_SendUint8Parameter(FactoryTestStage, state);
+	ESP_LOGI(TAG, "setting led state: %d", state);
+	int reply_type = MCU_SendUint8Parameter(FactoryTestStage, state);
+	ESP_LOGI(TAG, "set led state result %d", reply_type);
 }
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
@@ -134,6 +136,7 @@ int prodtest_getNewId()
 	if ((err = esp_http_client_open(client, 0)) != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
 		free(buffer);
+		set_prodtest_led_state(TEST_STAGE_ERROR);
 		return -1;
 	}
 
@@ -144,6 +147,7 @@ int prodtest_getNewId()
 	read_len = esp_http_client_read(client, buffer, 100);
 	if (read_len <= 0) {
 		ESP_LOGE(TAG, "Error read data");
+		set_prodtest_led_state(TEST_STAGE_ERROR);
 		return -2;
 	}
 	buffer[read_len] = 0;
@@ -178,6 +182,7 @@ int prodtest_getNewId()
 			if (err != ESP_OK)
 			{
 				ESP_LOGE(TAG, "ERROR: Not able to save device info to EEPROM!!!");
+				set_prodtest_led_state(TEST_STAGE_ERROR);
 				vTaskDelay(3000 / portTICK_PERIOD_MS);
 				return -4;
 			
@@ -186,10 +191,12 @@ int prodtest_getNewId()
 		else
 		{
 			ESP_LOGE(TAG, "ERROR: Incorrect onboarding format received form server");
+			set_prodtest_led_state(TEST_STAGE_ERROR);
 			return -3;
 		}
 
 	}else{
+		set_prodtest_led_state(TEST_STAGE_ERROR);
 		return -5;
 	}
 
@@ -353,7 +360,9 @@ char *host_from_rfid(){
 
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
-	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0)
+	if(strcmp(latest_tag.idAsString, "nfc-D69E1A3B")==0) // c365
+		return "192.168.0.103";
+	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
 		return "10.0.244.234";
@@ -396,7 +405,8 @@ int prodtest_perform(struct DeviceInfo device_info)
 	await_ip();
 	socket_connect();
 
-	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, NULL);
+	TaskHandle_t socket_task_handle = NULL;
+	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, socket_task_handle);
 
 
 	bool success = false;
@@ -411,11 +421,25 @@ int prodtest_perform(struct DeviceInfo device_info)
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
-	if(run_component_tests()<0){
-		ESP_LOGE(TAG, "Component test error");
-		prodtest_sock_send( "FAIL\r\n" );
+	if(
+		(device_info.factory_stage<FactoryStagComponentsTested)
+		|| (device_info.factory_stage == FactoryStageUnknown)
+		){
+		if(run_component_tests()<0){
+			ESP_LOGE(TAG, "Component test error");
+			prodtest_sock_send( "FAIL\r\n" );
 
-		goto cleanup;
+			goto cleanup;
+		}
+
+		eeprom_wp_disable_nfc_disable();
+		if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
+			ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+			goto cleanup;
+		}else{
+			success = true;
+		}
 	}
 
 	if(charge_cycle_test()<0){
@@ -428,7 +452,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_DEV_TEMP, "Factory test");
 
 	eeprom_wp_disable_nfc_disable();
-	if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
+	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
 		goto cleanup;
@@ -443,7 +467,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	audio_play_nfc_card_accepted();
 
 	cleanup:
-	vTaskDelete(socket_task);
+	vTaskDelete(socket_task_handle);
 	shutdown(sock, 0);
 	vTaskDelay(pdMS_TO_TICKS(1000)); // workaround, close does not block properly??
 	close(sock);
@@ -540,8 +564,8 @@ int test_bg(){
 }
 
 int test_leds(){
-	// led should be on, the dsPIC is already in prodtest mode
 	set_prodtest_led_state(TEST_STAGE_LED_DEMO);//todo rgbw
+	set_prodtest_led_state(TEST_STAGE_LED_DEMO);
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_LED, "LED");
 
@@ -706,6 +730,7 @@ int charge_cycle_test(){
 	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
 	}
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");

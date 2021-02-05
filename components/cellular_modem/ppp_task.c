@@ -649,8 +649,7 @@ void ppp_task_start(void){
     //ESP_LOGI(TAG, "uart configured");
     //configure_modem_for_ppp(); // TODO rename
 
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
-    //xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, 7, eventTaskHandle);
+    xTaskCreate(uart_event_task, "uart_event_task", 4096*2, NULL, 7, eventTaskHandle);
 
     xEventGroupClearBits(event_group, UART_TO_PPP);
     xEventGroupSetBits(event_group, UART_TO_LINES);
@@ -706,7 +705,7 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x for prodtest");
     xEventGroupSetBits(event_group, UART_TO_LINES);
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 7, &eventTaskHandle);
+    xTaskCreate(uart_event_task, "uart_event_task", 2048*2, NULL, 7, &eventTaskHandle);
 
     xEventGroupClearBits(event_group, UART_TO_PPP);
     xEventGroupSetBits(event_group, UART_TO_LINES);
