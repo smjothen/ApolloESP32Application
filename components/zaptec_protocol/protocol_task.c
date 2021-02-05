@@ -26,8 +26,7 @@ SemaphoreHandle_t uart_write_lock;
 QueueHandle_t uart_recv_message_queue;
 QueueHandle_t uart0_events_queue;
 uint32_t mcuCommunicationError = 0;
-uint8_t receivedSwitchState = 0;
-uint8_t previousSwitchState = 0xFF;
+uint8_t receivedSwitchState = 0xFF;
 
 static TaskHandle_t uartRecvTaskHandle = NULL;
 static TaskHandle_t sendTaskHandle = NULL;
@@ -378,21 +377,7 @@ void uartSendTask(void *pvParameters){
         }
 
         if(rxMsg.identifier == SwitchPosition)
-        {
         	receivedSwitchState = rxMsg.data[0];
-
-        	//ESP_LOGW(TAG, "**** Switch read: %d ****", receivedSwitchState);
-
-        	if(previousSwitchState != 0xff)
-        	{
-        		if(receivedSwitchState != previousSwitchState)
-        		{
-        			//ESP_LOGW(TAG, "**** Switch reset ****");
-        			//esp_restart();
-        		}
-        	}
-        	previousSwitchState = receivedSwitchState;
-        }
         else if(rxMsg.identifier == ParamInternalTemperatureEmeter)
 			temperatureEmeter[0] = GetFloat(rxMsg.data);
 		else if(rxMsg.identifier == ParamInternalTemperatureEmeter2)
@@ -489,7 +474,7 @@ void uartSendTask(void *pvParameters){
 
         if(count >= 24)
         {
-        	ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, ACP:%d, APP: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuPilotAvg, mcuProximityInst);
+        	ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, ACP:%d, APP: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuPilotAvg, mcuProximityInst);
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -628,6 +613,7 @@ float MCU_GetPower()
 
 float MCU_GetEnergy()
 {
+	//Becomes 0 when car disconnects
 	return totalChargePowerSession;
 }
 

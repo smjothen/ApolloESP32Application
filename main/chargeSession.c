@@ -140,12 +140,24 @@ void chargeSession_Start()
 void chargeSession_UpdateEnergy()
 {
 	if(strlen(chargeSession.SessionId) > 0)
-		chargeSession.Energy = MCU_GetEnergy();
+	{
+		float energy = MCU_GetEnergy();
+		if(energy > 0.0)
+		{
+			chargeSession.Energy = energy;
+		}
+	}
+	else
+	{
+		chargeSession.Energy = 0.0;
+	}
+
 }
 
 void chargeSession_Finalize()
 {
-	chargeSession.Energy = MCU_GetEnergy();
+	//chargeSession.Energy = MCU_GetEnergy();
+	chargeSession_UpdateEnergy();
 	GetUTCTimeString(chargeSession.EndTime);
 
 	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);

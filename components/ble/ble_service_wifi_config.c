@@ -580,11 +580,21 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     	break;
 
     case CHARGER_AUTH_UUID:
-    	rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
-    	rsp->attr_value.len = 1;
 
-    	ESP_LOGI(TAG, "AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
+    	//First time when unconfigured by switch or app, don't ask for pin.
+    	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+    	{
+    		rsp->attr_value.value[0] = '1';
+    		rsp->attr_value.len = 1;
 
+    		ESP_LOGI(TAG, "Unconfigured AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
+    	}
+    	else
+    	{
+    		rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
+    		rsp->attr_value.len = 1;
+    		ESP_LOGI(TAG, "Configured AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
+    	}
     	break;
 
     case CHARGER_SAVE_UUID:

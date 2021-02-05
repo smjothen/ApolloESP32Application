@@ -12,6 +12,7 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../cellular_modem/include/ppp_task.h"
+#include "../../main/chargeSession.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -465,7 +466,7 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	uint8_t switchState = MCU_GetSwitchState();
-	if(previousSwitchState != switchState)
+	if((previousSwitchState != switchState) && (switchState != 0xff))
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(SwitchPosition, (uint32_t)switchState));
 		previousSwitchState = switchState;
@@ -489,15 +490,17 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	if((power > previousPower + 100) != (power < (previousPower - 100)))
+	if((power > previousPower + 100) != (power < (previousPower - 100))) //100W
 	{
+		if(power < 0.0)
+			power = 0.0;
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 		previousPower = power;
 		isChange = true;
 	}
 
-	float energy = MCU_GetEnergy();
-	if((energy > previousEnergy + 500.0) != (energy < (previousEnergy - 500.0)))
+	float energy = chargeSession_Get().Energy;
+	if((energy > previousEnergy + 0.1) != (energy < (previousEnergy - 0.1))) //0.1kWh
 	{
 		if(energy < 0.0)
 			energy = 0.0;
@@ -505,6 +508,7 @@ int publish_telemetry_observation_on_change(){
 		previousEnergy = energy;
 		isChange = true;
 	}
+
 
 	//Check ret and retry?
     int ret = 0;

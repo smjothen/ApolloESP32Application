@@ -80,7 +80,7 @@ void storage_Init_Configuration()
 	configurationStruct.standalone 					= 1;	//0/1
 	configurationStruct.standalonePhase 			= 0;	//Nr
 	configurationStruct.standaloneCurrent			= 6;	//A
-	configurationStruct.maxInstallationCurrentConfig = 0;
+	configurationStruct.maxInstallationCurrentConfig = 0.0;
 
 	configurationStruct.phaseRotation				= 0;
 	configurationStruct.networkType					= 0;
@@ -438,7 +438,7 @@ void storage_PrintConfiguration()
 {
 
 	ESP_LOGW(TAG, "*********************************");
-	ESP_LOGI(TAG, "AuthRequired: 		%i", configurationStruct.authenticationRequired);
+	ESP_LOGI(TAG, "AuthRequired: 				%i", configurationStruct.authenticationRequired);
 
 	char comMode[5] = {0};
 	if(configurationStruct.communicationMode == eCONNECTION_NONE)
@@ -447,11 +447,12 @@ void storage_PrintConfiguration()
 		strcpy(comMode, "Wifi");
 	else if(configurationStruct.communicationMode == eCONNECTION_LTE)
 		strcpy(comMode, "4G");
-	ESP_LOGI(TAG, "CommunicationMode: 	%s", comMode);
+	ESP_LOGI(TAG, "CommunicationMode: 			%s", comMode);
 
 
-	ESP_LOGI(TAG, "Standalone: 			%i", configurationStruct.standalone);
-	ESP_LOGI(TAG, "Standalone current: 	%2.1f", configurationStruct.standaloneCurrent);
+	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
+	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
+	ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
 
 	ESP_LOGW(TAG, "*********************************");
 }
