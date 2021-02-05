@@ -310,7 +310,7 @@ int publish_debug_telemetry_observation_all(
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
 
-    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
     //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
@@ -490,7 +490,7 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	if((power > previousPower + 100) != (power < (previousPower - 100))) //100W
+	if((power > previousPower + 700) != (power < (previousPower - 700))) //700W
 	{
 		if(power < 0.0)
 			power = 0.0;

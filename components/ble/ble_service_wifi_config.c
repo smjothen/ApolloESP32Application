@@ -315,6 +315,11 @@ static char nrTostr[11] = {0};
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 
+	//First time when unconfigured by switch or app, don't ask for pin.
+	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+		AUTH_SERV_CHAR_val[0] = '1';
+
+
 #ifdef USE_PIN
 	//Check authentication before allowing most reads. Some exceptions.
 	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_DEVICE_MID_UUID) && (attrIndex != CHARGER_FIRMWARE_VERSION_UUID) && (attrIndex != CHARGER_WARNINGS_UUID) && (attrIndex != CHARGER_AUTH_UUID))
@@ -580,21 +585,9 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     	break;
 
     case CHARGER_AUTH_UUID:
-
-    	//First time when unconfigured by switch or app, don't ask for pin.
-    	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
-    	{
-    		rsp->attr_value.value[0] = '1';
-    		rsp->attr_value.len = 1;
-
-    		ESP_LOGI(TAG, "Unconfigured AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
-    	}
-    	else
-    	{
-    		rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
-    		rsp->attr_value.len = 1;
-    		ESP_LOGI(TAG, "Configured AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
-    	}
+		rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
+		rsp->attr_value.len = 1;
+		ESP_LOGI(TAG, "AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
     	break;
 
     case CHARGER_SAVE_UUID:
@@ -884,6 +877,10 @@ static bool saveConfiguration = false;
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
+
+	//First time when unconfigured by switch or app, don't ask for pin.
+	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+		AUTH_SERV_CHAR_val[0] = '1';
 
 #ifdef USE_PIN
 	//Check authentication before allowing writes
@@ -1215,6 +1212,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				vTaskDelay(pdMS_TO_TICKS(10000));
 			}
 		}
+
+		//First time when unconfigured by switch or app, don't ask for pin.
+		if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+			AUTH_SERV_CHAR_val[0] = '1';
 
 	#ifndef USE_PIN
 		AUTH_SERV_CHAR_val[0] = '1'; //TODO remove to force PIN
