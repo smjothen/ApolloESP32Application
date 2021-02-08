@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include "driver/i2c.h"
-#include "esp_console.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include <time.h>
@@ -19,6 +18,7 @@
 #include "../../main/storage.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../zaptec_protocol/include/protocol_task.h"
+#include "production_test.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -76,6 +76,12 @@ float I2CGetSHT30Temperature()
 float I2CGetSHT30Humidity()
 {
 	return humidity;
+}
+
+uint8_t deviceInfoVersionOnEeprom(){
+	uint8_t result;
+	EEPROM_ReadFormatVersion(&result);
+	return result;
 }
 
 
@@ -149,13 +155,16 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 	EEPROM_Read();
 
 	EEPROM_ReadFormatVersion(&deviceInfo.EEPROMFormatVersion);
+
+	//read factroy stage even if format is invalid to faclitate pordtest devlopment
+	EEPROM_ReadFactroyStage(&deviceInfo.factory_stage);
+	ESP_LOGI(TAG_EEPROM, "Factory stage: %d", deviceInfo.factory_stage);
+
 	if(deviceInfo.EEPROMFormatVersion == GetEEPROMFormatVersion())
 	{
 		printf("\n********************************\n\n");
 			ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
 
-		EEPROM_ReadFactroyStage(&deviceInfo.factory_stage);
-		ESP_LOGI(TAG_EEPROM, "Factory stage: %d", deviceInfo.factory_stage);
 
 		EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
 		int len = strlen(deviceInfo.serialNumber);
@@ -232,7 +241,9 @@ static void i2cDevice_task(void *pvParameters)
 		{
 			nfcCardDetected = NFCReadTag();
 
-			if(nfcCardDetected > 0)
+			if(prodtest_active() && (nfcCardDetected > 0)){
+				prodtest_on_nfc_read();
+			}else if(nfcCardDetected > 0)
 			{
 				isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 

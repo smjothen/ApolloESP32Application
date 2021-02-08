@@ -48,4 +48,6 @@ int publish_cloud_pulse(void);
 
 int publish_noise(void);
 
+int publish_prodtest_line(char *message);
+
 #endif /* ZAPTEC_CLOUD_OBSERVATIONS_H */

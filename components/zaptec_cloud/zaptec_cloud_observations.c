@@ -17,7 +17,7 @@
 
 static bool startupMessage = true;
 
-int publish_json(cJSON *payload){
+int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
     char *message = cJSON_PrintUnformatted(payload);
 
     if(message == NULL){
@@ -27,16 +27,29 @@ int publish_json(cJSON *payload){
     }
     ESP_LOGI(TAG, "<<<sending>>> %s", message);
 
-    int publish_err = publish_iothub_event(message);
+    int publish_err;
+    if(blocking){
+        publish_err = publish_iothub_event_blocked(message, xTicksToWait);
+    }else{
+        publish_err = publish_iothub_event(message);
+    }
 
     cJSON_Delete(payload);
     free(message);
 
-    if(publish_err){
+    if(publish_err<0){
         ESP_LOGW(TAG, "publish to iothub failed");
         return -1;
     }
     return 0;
+}
+
+int publish_json(cJSON *payload){
+    return _publish_json(payload, false, 0);
+}
+
+int publish_json_blocked(cJSON *payload, int timeout_ms){
+    return _publish_json(payload, true, pdMS_TO_TICKS(timeout_ms));
 }
 
 cJSON *create_observation(int observation_id, char *value){
@@ -377,4 +390,8 @@ int publish_noise(void){
     cJSON_Delete(event);
     free(message);
     return 0;
+}
+
+int publish_prodtest_line(char *message){
+    return publish_json_blocked(create_observation(ProductionTestResults, message), 10*1000);
 }

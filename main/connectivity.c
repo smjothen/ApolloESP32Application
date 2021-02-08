@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "string.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "esp_log.h"
@@ -162,8 +163,10 @@ static void connectivity_task()
 		if((sntpInitialized == true) && (mqttInitialized == false))
 		{
 			//Make sure Device info has been read from EEPROM before connecting to cloud.
-			if(i2CDeviceInfoIsLoaded() == true)
+			// check for psk len to avoid prodtest race condition
+			if((deviceInfoVersionOnEeprom()!=0xFF) && i2CDeviceInfoIsLoaded() == true && (strlen(i2cGetLoadedDeviceInfo().PSK)>10))
 			{
+				ESP_LOGI(TAG, "starting cloud listener with %s, %s,", i2cGetLoadedDeviceInfo().PSK, i2cGetLoadedDeviceInfo().serialNumber);
 				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				mqttInitialized = true;
 			}
@@ -198,6 +201,6 @@ void connectivity_init(int inputSwitchState)
 {
 	switchState = inputSwitchState;
 
-	xTaskCreate(connectivity_task, "connectivity_task", 3076, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 1024*5, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 #include "driver/i2c.h"
-#include "esp_console.h"
 
 #include "i2cInterface.h"
 

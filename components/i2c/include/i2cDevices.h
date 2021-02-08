@@ -24,6 +24,8 @@ float I2CGetSHT30Humidity();
 int I2CGetStackWatermark();
 void I2CDevicesStartTask();
 
+uint8_t deviceInfoVersionOnEeprom();
+
 #ifdef __cplusplus
 }
 #endif

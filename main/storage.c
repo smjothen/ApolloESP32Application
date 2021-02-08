@@ -7,6 +7,7 @@
 #include "storage.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "i2cDevices.h"
 
 #include "zaptec_protocol_serialisation.h"
 #include "DeviceInfo.h"
@@ -808,6 +809,23 @@ void storage_SaveWifiParameters(char *SSID, char *PSK)
 
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
+	struct DeviceInfo devInfo = i2cReadDeviceInfoFromEEPROM();
+	if(devInfo.factory_stage != FactoryStageFinnished){
+		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
+		// strcpy(SSID, "arntnett");
+		// strcpy(PSK, "4703c87e817842c4ce6b167d43701b7685693846db");
+
+		strcpy(SSID, "ZapWan");
+
+		//Scramble to avoid readable string in bin-file
+		int tmp = 13179704;
+		tmp *= 4;
+		sprintf(PSK,"%d", tmp);
+		//strcpy(WifiPSK, "52718816");
+
+		return 0;
+	}
+
 	size_t readSize;
 
 	err = nvs_open("wifi", NVS_READONLY, &wifi_handle);

@@ -9,7 +9,6 @@
 #include <stdio.h>
 //#include "argtable3/argtable3.h"
 #include "driver/i2c.h"
-#include "esp_console.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "SHT30.h"
@@ -169,81 +168,3 @@ void do_i2cdetect_cmd()
     }
     printf("I2C active\n");
 }
-
-
-
-
-
-
-//static void register_i2cdectect(void)
-//{
-//    const esp_console_cmd_t i2cdetect_cmd = {
-//        .command = "i2cdetect",
-//        .help = "Scan I2C bus for devices",
-//        .hint = NULL,
-//        .func = &do_i2cdetect_cmd,
-//        .argtable = NULL
-//    };
-//    ESP_ERROR_CHECK(esp_console_cmd_register(&i2cdetect_cmd));
-//}
-
-//static struct {
-//    struct arg_int *chip_address;
-//    struct arg_int *register_address;
-//    struct arg_int *data_length;
-//    struct arg_end *end;
-//} i2cget_args;
-//
-//
-//static struct {
-//    struct arg_int *chip_address;
-//    struct arg_int *register_address;
-//    struct arg_int *data;
-//    struct arg_end *end;
-//} i2cset_args;
-//
-//
-//static struct {
-//    struct arg_int *chip_address;
-//    struct arg_int *size;
-//    struct arg_end *end;
-//} i2cdump_args;
-
-
-
-/*void register_i2ctools(void)
-{
-    //register_i2cconfig();
-	do_i2cdetect_cmd();
-	//SHT30ReadTemperature();
-	//WriteRTC();
-	//ReadRTC();
-	//WriteEEPROM();
-    //register_i2cdectect();
-    //register_i2cget();
-    //register_i2cset();
-    //register_i2cdump();
-}*/
-
-
-//static void i2c_task(void *pvParameters)
-//{
-//
-//	do_i2cdetect_cmd();
-//	SHT30Init();
-//
-//	while (true)
-//	{
-//		SHT30ReadTemperature();
-//		ESP_LOGI(TAG, "waiting for connection");
-//		vTaskDelay(3000 / portTICK_RATE_MS);
-//	}
-//}
-
-//void I2CDevicesInit()
-//{
-//	static uint8_t ucParameterToPass = {0};
-//	TaskHandle_t taskHandle = NULL;
-//	xTaskCreate( i2c_task, "ocppTask", 4096, &ucParameterToPass, 5, &taskHandle );
-//
-//}

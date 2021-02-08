@@ -167,5 +167,77 @@ int at_command_network_registration_status(){
 }
 
 int at_command_set_baud_high(void){
-    return at_command_with_ok_ack("AT+IPR=921600", 300);
+    return at_command_with_ok_ack("AT+IPR=921600;&W", 300);
+}
+
+
+int at_command_activate_pdp_context(void){
+    // note the long response time
+    return at_command_with_ok_ack("AT+QIACT=1", 150*1000);
+}
+
+
+int at_command_deactivate_pdp_context(void){
+    // note the long response time
+    return at_command_with_ok_ack("AT+QIDEACT=1", 40*1000);
+}
+
+
+int at_command_ping_test(int *sent,int *rcvd,int *lost, int *min, int *max, int *avg){
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
+    int timeout_ms = 5*1000;
+
+    char * command = "AT+QPING=1,\"8.8.8.8\",10,4";
+    ESP_LOGD(TAG, "Sending %s", command);
+    send_line(command);
+
+    int ok_result = await_line(at_buffer, pdMS_TO_TICKS(timeout_ms));
+    if(ok_result != pdPASS){
+        return -1;
+    }
+
+    if(!strstr(at_buffer, "OK")){
+        return -2;
+    }
+
+
+    bool error = false;
+    for(int i=0; i<4; i++){
+        int line_result = await_line(at_buffer, pdMS_TO_TICKS(timeout_ms));
+        if(line_result != pdPASS){
+            error = true;
+            //continue the loop to make sure to read all lines returned by the modem
+        }
+
+        if(!strstr(at_buffer, "+QPING: 0")){
+            ESP_LOGE(TAG, "ping line error");
+            error = true;
+        }
+    }
+
+    if(error){
+        return -5;
+    }
+
+    int final_result = await_line(at_buffer, pdMS_TO_TICKS(timeout_ms));
+    if(final_result != pdPASS){
+        return -3;
+    }
+
+    if(!strstr(at_buffer, "+QPING: 0")){
+        return -4;
+    }
+
+    int matches = sscanf(at_buffer, "+QPING: 0,%d,%d,%d,%d,%d,%d]",
+                         sent, rcvd, lost, min, max, avg
+                  );
+
+    if(matches==6){
+        ESP_LOGI(TAG, "avg ping %d", *avg);
+        return 0;
+    }
+
+    ESP_LOGW(TAG, "Parsing failed, matches: %d", matches);
+    return -5;
+
 }
