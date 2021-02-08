@@ -97,7 +97,7 @@ void await_ip(){
 	while (network_WifiIsConnected() == false)
 	{
 		set_prodtest_led_state(TEST_STAGE_CONNECTING_WIFI);
-		ESP_LOGE(TAG, "Waiting for IP...");
+		ESP_LOGE(TAG, "'Waiting for IP...");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
@@ -406,7 +406,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	socket_connect();
 
 	TaskHandle_t socket_task_handle = NULL;
-	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, socket_task_handle);
+	xTaskCreate(socket_task, "prodtest_socket", 2048, NULL, 7, &socket_task_handle);
 
 
 	bool success = false;
@@ -428,6 +428,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 		if(run_component_tests()<0){
 			ESP_LOGE(TAG, "Component test error");
 			prodtest_sock_send( "FAIL\r\n" );
+			ESP_LOGE(TAG, "Cleanding failed test");
 
 			goto cleanup;
 		}
