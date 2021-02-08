@@ -16,6 +16,7 @@
 #include "network.h"
 #include "eeprom_wp.h"
 #include "zaptec_cloud_observations.h"
+#include "zaptec_cloud_listener.h"
 
 #include "protocol_task.h"
 #include "audioBuzzer.h"
@@ -101,6 +102,16 @@ void await_ip(){
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
+
+void await_mqtt(){
+	while (isMqttConnected() == false)
+	{
+		set_prodtest_led_state(TEST_STAGE_CONNECTING_WIFI);
+		ESP_LOGE(TAG, "'Waiting for MQTT...");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
+
 
 int prodtest_getNewId()
 {
@@ -350,7 +361,7 @@ int prodtest_nfc_init(){
 
 char *host_from_rfid(){
 	if(!latest_tag.tagIsValid){
-		audio_play_nfc_card_denied();
+		audio_play_nfc_card_accepted();
 		ESP_LOGI(TAG, "waiting for RFID");
 		set_prodtest_led_state(TEST_STAGE_WAITING_RIFD);
 		xEventGroupWaitBits(prodtest_eventgroup, NFC_READ, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -428,7 +439,8 @@ int prodtest_perform(struct DeviceInfo device_info)
 		if(run_component_tests()<0){
 			ESP_LOGE(TAG, "Component test error");
 			prodtest_sock_send( "FAIL\r\n" );
-			ESP_LOGE(TAG, "Cleanding failed test");
+			set_prodtest_led_state(TEST_STAGE_ERROR);
+			ESP_LOGE(TAG, "Cleaning failed test");
 
 			goto cleanup;
 		}
