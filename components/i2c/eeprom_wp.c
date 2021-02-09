@@ -1,3 +1,5 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "eeprom_wp.h"
 #include "driver/gpio.h"
 
@@ -20,4 +22,5 @@ void eeprom_wp_enable_nfc_enable(){
 
 void eeprom_wp_disable_nfc_disable(){
     gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+	vTaskDelay(pdMS_TO_TICKS(20)); // give the wp disable some me to take affect
 }

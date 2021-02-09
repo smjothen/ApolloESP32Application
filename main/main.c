@@ -169,8 +169,8 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-    //start_ota_task();
-	//validate_booted_image();
+    start_ota_task();
+	validate_booted_image();
 	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start(); 
 
