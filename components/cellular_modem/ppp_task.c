@@ -25,9 +25,10 @@ static const char *TAG = "PPP_TASK";
 #define CELLULAR_PIN_RXD  (GPIO_NUM_36)
 #define CELLULAR_PIN_RTS  (GPIO_NUM_32)
 #define CELLULAR_PIN_CTS  (GPIO_NUM_35)
+#define CELLULAR_PIN_DTR  (GPIO_NUM_27)
 #define RD_BUF_SIZE 256
 
-#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET)
+#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_RESET | 1ULL<<CELLULAR_PIN_DTR)
 //#define GPIO_OUTPUT_PIN_SEL (1ULL<<GPIO_OUTPUT_PWRKEY | 1ULL<<GPIO_OUTPUT_DTR | 1ULL<<GPIO_OUTPUT_RESET)
 
 static QueueHandle_t uart_queue;
@@ -71,6 +72,8 @@ void cellularPinsInit(void){
 
     gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
+
+    gpio_set_level(CELLULAR_PIN_DTR, 1);
 }
 
 void cellularPinsOn()
@@ -218,7 +221,7 @@ void configure_uart(void){
 
 static void update_line_buffer(uint8_t* event_data,size_t size){
     event_data[size] = 0;
-    //ESP_LOGI(TAG, "got uart data[%s]", event_data);
+    // ESP_LOGI(TAG, "got uart data[%s]", event_data);
 
     if(size+line_buffer_end+1> LINE_BUFFER_SIZE){
         ESP_LOGE(TAG, "no space in line buffer! dropping data");
@@ -235,7 +238,7 @@ static void update_line_buffer(uint8_t* event_data,size_t size){
                 // ESP_LOGD(TAG, "line finished");
                 xQueueSend( line_queue, line_buffer, portMAX_DELAY);
                 line_buffer_end = 0;
-                //ESP_LOGI(TAG, "Got line {%s}", line_buffer);
+                ESP_LOGD(TAG, "Got line {%s}", line_buffer);
             }
             
         }else{
@@ -720,8 +723,8 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         uart_set_baudrate( UART_NUM_1, 921600);
         clear_lines();
         for(int i = 0; i<3; i++){
-            int fast_at_result = at_command_at();
-            if(fast_at_result==0){
+            int fast_at_result = at_command_detect_echo();
+            if(fast_at_result>0){
                 baudrate_already_high = true;
                 bg_started = true;
                 break;
@@ -733,9 +736,9 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
 
         uart_set_baudrate( UART_NUM_1, 115200);
         clear_lines();
-        for(int i = 0; i<3; i++){
-            int at_result = at_command_at();
-            if(at_result==0){
+        for(int i = 0; i<5; i++){
+            int at_result = at_command_detect_echo();
+            if(at_result>0){
                 bg_started = true;
                 break;
             }
@@ -748,6 +751,25 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         cellularPinsOn();
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
+
+    clear_lines();
+    at_command_echo_set(false);
+    clear_lines();
+
+    // testing for Kenneth
+    // while (true)
+    // {
+    //     at_command_detect_echo();
+    // }
+    
+
+    // //test only
+    // at_command_set_baud_low();
+    // uart_set_baudrate( UART_NUM_1, 115200);
+    // baudrate_already_high = false;
+    // clear_lines();
+    // vTaskDelay(psMS_TO_TICKS(300));
+    // // test end
 
     if(baudrate_already_high!=true){
         int modem_baud_set_error = at_command_set_baud_high();
@@ -764,7 +786,7 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
 
     ESP_LOGI(TAG, "BG started");
 
-    at_command_echo_set(false);
+
     int at_result = at_command_at();
 
     while(at_result < 0){

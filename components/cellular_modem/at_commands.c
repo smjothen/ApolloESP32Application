@@ -170,6 +170,52 @@ int at_command_set_baud_high(void){
     return at_command_with_ok_ack("AT+IPR=921600;&W", 300);
 }
 
+int at_command_set_baud_low(void){
+    return at_command_with_ok_ack("AT+IPR=115200;&W", 300);
+}
+
+int at_command_detect_echo(void){
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
+    char *command = "AT";
+    int timeout = 300;
+    
+
+    ESP_LOGD(TAG, "Sending [%s]", command);
+    send_line(command);
+
+    int first_line_result = await_line(at_buffer, pdMS_TO_TICKS(timeout));
+
+    if(first_line_result != pdPASS){
+        ESP_LOGW(TAG, "At command got no reply");
+        return -1;
+    }
+
+    if(strstr(at_buffer, command)){
+        ESP_LOGD(TAG, "echo detected, waiting for ack");
+        int second_line_result = await_line(at_buffer, pdMS_TO_TICKS(timeout));
+        if(second_line_result!=pdPASS){
+            ESP_LOGW(TAG, "No ack after echo");
+            return -2;
+        }
+
+        if(strstr(at_buffer, "OK")){
+            ESP_LOGI(TAG, "got echo and ack");
+            return 2;
+        }
+
+        ESP_LOGW(TAG, "failed to get ack after echo");
+        return -3;
+
+    }else if(strstr(at_buffer, "OK")){
+        ESP_LOGI(TAG, "detected only ack -> echo off");
+        return 1;
+    }
+
+    ESP_LOGE(TAG, "unknown response '%s'", at_buffer);
+    clear_lines();
+    return -4;
+
+}
 
 int at_command_activate_pdp_context(void){
     // note the long response time

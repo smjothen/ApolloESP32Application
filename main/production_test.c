@@ -373,6 +373,8 @@ char *host_from_rfid(){
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-D69E1A3B")==0) // c365
 		return "192.168.0.103";
+	if(strcmp(latest_tag.idAsString, "nfc-AAD61A3C")==0) // zaptec rectangular
+		return "192.168.0.103";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
@@ -413,7 +415,7 @@ static void socket_task(void *pvParameters){
 int prodtest_perform(struct DeviceInfo device_info)
 {
 	prodtest_nfc_init();
-	await_ip();
+	await_mqtt();
 	socket_connect();
 
 	TaskHandle_t socket_task_handle = NULL;
@@ -449,9 +451,11 @@ int prodtest_perform(struct DeviceInfo device_info)
 		if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 			ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+			eeprom_wp_enable_nfc_enable();
 			goto cleanup;
 		}else{
 			success = true;
+			eeprom_wp_enable_nfc_enable();
 		}
 	}
 
@@ -468,6 +472,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+		eeprom_wp_enable_nfc_enable();
 		goto cleanup;
 	}else{
 		success = true;
@@ -637,6 +642,10 @@ int test_switch(){
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
 	
+	if(test_bg()<0){
+		goto err;
+	}
+
 	if(test_leds()<0){
 		goto err;
 	}
@@ -653,9 +662,7 @@ int run_component_tests(){
 		goto err;
 	}
 		
-	if(test_bg()<0){
-		goto err;
-	}
+	
 
 	return 0;
 
