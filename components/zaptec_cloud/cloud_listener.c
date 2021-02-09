@@ -22,12 +22,14 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-#define ROUTING_ID "default"
-#define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define ROUTING_ID "default"
+//#define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"//"a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
-#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=%s"
+
 //#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
 /*#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
 (existing != null ? existing + "&" : "")
@@ -1202,10 +1204,18 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     static char username[128];
     sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
-    sprintf(
-        event_topic, MQTT_EVENT_PATTERN,
-		cloudDeviceInfo.serialNumber
-    );
+    char * instId = storage_Get_InstallationId();
+    volatile int instIdLen = strlen(instId);
+
+    int compare = strncmp(instId, INSTALLATION_ID, 36);
+    if(compare != 0)
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_InstallationId());
+    else
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, INSTALLATION_ID);
+
+    //if((instIdLen > 10) && (instIdLen <= 37))
+
+
 
     ESP_LOGI(TAG,
         "mqtt connection:\r\n"

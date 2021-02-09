@@ -226,6 +226,9 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
+    add_observation_to_collection(observations, create_observation(InstallationId, storage_Get_InstallationId()));
+    add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
+
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
 	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
@@ -243,7 +246,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
-        add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
     return publish_json(observations);
 }

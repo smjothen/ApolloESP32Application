@@ -24,6 +24,9 @@ char * GetSoftwareVersion();//char softwareVersion[8];// = "2.8.0.2";
 char * GetSoftwareVersionBLE();
 
 
+#define ROUTING_ID "default"
+#define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"
+
 #define MAX_NR_OF_RFID_TAGS 20
 
 struct RFIDTokens{

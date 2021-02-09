@@ -63,8 +63,11 @@ void storage_Init_Configuration()
 	configurationStruct.defaultOfflineCurrent		= 6.0;
 	configurationStruct.isEnabled					= 1;
 
-	memset(configurationStruct.installationId, 0, sizeof(DEFAULT_STR_SIZE));
-	memset(configurationStruct.routingId, 0, sizeof(DEFAULT_STR_SIZE));
+	//memset(configurationStruct.installationId, 0, sizeof(DEFAULT_STR_SIZE));
+	//memset(configurationStruct.routingId, 0, sizeof(DEFAULT_STR_SIZE));
+	strcpy(configurationStruct.installationId,"00000000-0000-0000-0000-000000000000");
+	strcpy(configurationStruct.routingId, "default");
+
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 
 	configurationStruct.transmitInterval 			= 120;
@@ -253,11 +256,17 @@ uint8_t storage_Get_IsEnabled()
 
 char * storage_Get_InstallationId()
 {
+	if(strlen(configurationStruct.installationId) < 36)
+		strcpy(configurationStruct.installationId, INSTALLATION_ID);
+
 	return configurationStruct.installationId;
 }
 
 char * storage_Get_RoutingId()
 {
+	if(strlen(configurationStruct.routingId) == 0)
+		strcpy(configurationStruct.routingId, ROUTING_ID);
+
 	return configurationStruct.routingId;
 }
 
@@ -453,6 +462,11 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
 	ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
+
+	ESP_LOGI(TAG, "");
+	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
+	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
+
 
 	ESP_LOGW(TAG, "*********************************");
 }
