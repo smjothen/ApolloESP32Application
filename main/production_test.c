@@ -539,6 +539,19 @@ int test_bg(){
 	sprintf(payload, "IMEI: %s\r\n", imei);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	char ccid[30];
+    if(at_command_get_ccid(ccid, 30)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem ccid error");
+		goto err;
+	}
+	sprintf(payload, "CCID: %s\r\n", ccid);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
+	// deactivate incase there already is a context
+	int preventive_deactivate_result = at_command_deactivate_pdp_context();
+	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
 	int activate_result = at_command_activate_pdp_context();
 	if(activate_result<0){
 		vTaskDelay(pdMS_TO_TICKS(30*1000));
