@@ -7,7 +7,7 @@
 #include "i2cInterface.h"
 #include "EEPROM.h"
 #include <string.h>
-//static const char *TAG = "EEPROM   ";
+static const char *TAG = "EEPROM";
 
 //EEPROM-CAT24C04
 static uint8_t slaveAddressEEPROM = 0x56;
@@ -119,17 +119,37 @@ esp_err_t EEPROM_ReadFactroyStage(uint8_t *factory_stage){
 }
 
 esp_err_t _eeprom_write_byte(uint8_t byte_to_write, uint16_t address){
-	i2c_master_write_slave_at_address(slaveAddressEEPROM, address, &byte_to_write, 1);
+	esp_err_t write_error = i2c_master_write_slave_at_address(slaveAddressEEPROM, address, &byte_to_write, 1);
+	if(write_error != ESP_OK){
+		ESP_LOGW(TAG, "failed i2c_master_write_slave_at_address with %d", write_error);
+		return write_error;
+	}
 
 	vTaskDelay(100 / portTICK_PERIOD_MS);
 
 	uint8_t readback_byte = 0;
-	i2c_master_read_slave_at_address(slaveAddressEEPROM, address, &readback_byte, 1);
+	esp_err_t read_error = i2c_master_read_slave_at_address(slaveAddressEEPROM, address, &readback_byte, 1);
+	if(read_error != ESP_OK){
+		ESP_LOGW(TAG, "failed i2c_master_read_slave_at_address with %d", read_error);
+		return read_error;
+	}
 
 	if(readback_byte == byte_to_write)
 		return ESP_OK;
 	else
+		ESP_LOGW(TAG, "Readback error %d and %d", readback_byte, byte_to_write);
 		return ESP_FAIL;
+}
+
+esp_err_t _eeprom_write_byte_with_retires(uint8_t byte_to_write, uint16_t address){
+	for(int retry=0; retry<3; retry++){
+		esp_err_t result = _eeprom_write_byte(byte_to_write, address);
+		if(result == ESP_OK){
+			return ESP_OK;
+		}
+	}
+
+	return ESP_FAIL;
 }
 
 esp_err_t EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite)
@@ -140,7 +160,7 @@ esp_err_t EEPROM_WriteFormatVersion(uint8_t formatVersionToWrite)
 
 esp_err_t EEPROM_WriteFactoryStage(uint8_t stage)
 {
-	return _eeprom_write_byte(stage, EEPROM_FACTORY_STAGE);
+	return _eeprom_write_byte_with_retires(stage, EEPROM_FACTORY_STAGE);
 }
 
 esp_err_t EEPROM_ReadSerialNumber(char * serianNumberToRead)

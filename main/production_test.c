@@ -449,7 +449,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 
 		eeprom_wp_disable_nfc_disable();
 		if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
-			ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
+			ESP_LOGE(TAG, "Failed to mark component test pass on eeprom");
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
 			eeprom_wp_enable_nfc_enable();
 			goto cleanup;
@@ -470,7 +470,7 @@ int prodtest_perform(struct DeviceInfo device_info)
 
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
-		ESP_LOGE(TAG, "Failed to mark test pass on eeprom");
+		ESP_LOGE(TAG, "Failed to mark charge cycle test pass on eeprom");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
 		eeprom_wp_enable_nfc_enable();
 		goto cleanup;
