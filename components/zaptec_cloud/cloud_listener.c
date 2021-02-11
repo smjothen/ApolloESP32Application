@@ -18,6 +18,8 @@
 #include "../../main/chargeSession.h"
 #include "apollo_ota.h"
 #include "ble_interface.h"
+#include "../cellular_modem/include/ppp_task.h"
+#include "../wifi/include/network.h"
 
 #define TAG "Cloud Listener"
 
@@ -993,15 +995,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
         {
-        	// Only show this event on first boot, not on every SAS token expiry with reconnect
-        	publish_debug_message_event("mqtt connected", cloud_event_level_information);
-
 			ridNr++;
 			char devicetwin_topic[64];
 			sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+
 			isFirstConnection = false;
         }
+
+        // Only show this event on first boot, not on every SAS token expiry with reconnect
+		publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
         resetCounter = 0;
 
         mqttConnected = true;
@@ -1064,7 +1068,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        //Handle incomming offline AuthenticationList
+        //Handle incoming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
         	if(event->data_len > 10)
@@ -1089,7 +1093,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         			int ret = publish_uint32_observation(AuthenticationListVersion, version);
         			ESP_LOGI(TAG, "***** AuthenticationListVersion ret: %d *****", ret);
         		}
-
+//				Debug - for testing authentication
 //        		char * messageZer = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}";
 //
 //        		//Add 6
@@ -1153,12 +1157,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        // ESP_LOGD(TAG, "publishing %s", payloadstring);
-        // if(mqtt_count<3){
-        //     msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
-        //     mqtt_count += 1;
-        // }else
-        //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
@@ -1170,18 +1168,23 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
 
-        if((resetCounter == 5) || (resetCounter == 15) || (resetCounter == 50) || (resetCounter == 75))
-        {
-        	esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-        	ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
-        }
 
-        if(resetCounter == 100)
-        {
-        	ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
-        	esp_restart();
-        }
+    	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
+    	{
 
+			if((resetCounter == 5) || (resetCounter == 15) || (resetCounter == 50) || (resetCounter == 75))
+			{
+
+				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
+				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+			}
+
+			if(resetCounter == 100)
+			{
+				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+				esp_restart();
+			}
+    	}
 
         break;
     default:
@@ -1212,10 +1215,6 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_InstallationId());
     else
         sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, INSTALLATION_ID);
-
-    //if((instIdLen > 10) && (instIdLen <= 37))
-
-
 
     ESP_LOGI(TAG,
         "mqtt connection:\r\n"
@@ -1256,4 +1255,5 @@ void stop_cloud_listener_task()
 	MqttSetDisconnected();
 	esp_mqtt_client_disconnect(mqtt_client);
 	esp_mqtt_client_stop(mqtt_client);
+	esp_mqtt_client_destroy(mqtt_client);
 }

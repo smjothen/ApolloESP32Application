@@ -732,7 +732,8 @@ int ppp_disconnect()
 	esp_event_handler_unregister(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed);
 	esp_event_loop_delete_default();
 
-	esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
+	//vTaskDelay(pdMS_TO_TICKS(500));
+	//esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
 	esp_netif_destroy(ppp_netif);
 
 	return 0;

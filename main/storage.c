@@ -841,7 +841,7 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 	err += nvs_get_str(wifi_handle, "WifiPSK", NULL, &readSize);
 	err += nvs_get_str(wifi_handle, "WifiPSK", PSK, &readSize);
 
-	ESP_LOGI(TAG, "Storage read Wifi: SSID: %s PSK: %s",SSID, PSK);
+	ESP_LOGI(TAG, "Storage read Wifi: SSID: %s PSK len: %d",SSID, strlen(PSK));
 
 	nvs_close(wifi_handle);
 

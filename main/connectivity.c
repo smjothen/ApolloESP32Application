@@ -40,6 +40,11 @@ enum CommunicationMode connectivity_GetActivateInterface()
 	return activeInterface;
 }
 
+enum CommunicationMode connectivity_GetPreviousInterface()
+{
+	return previousInterface;
+}
+
 bool wifiInitialized = false;
 
 /*
@@ -101,7 +106,10 @@ static void connectivity_task()
 
 				// Stop mqtt
 				if(mqttInitialized == true)
+				{
 					stop_cloud_listener_task();
+					//vTaskDelay(pdMS_TO_TICKS(1000));
+				}
 
 				ppp_disconnect();
 
@@ -203,6 +211,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 4096, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

@@ -432,7 +432,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			wifiRemainder = 0;
     		memset(wifiPackage, 0, 500);
 
-    		//connectivity_ActivateInterface(eCONNECTION_WIFI);
     		network_startWifiScan();
 
     		esp_wifi_scan_get_ap_num(&apNr);
@@ -517,7 +516,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				apNr = 0;
 				wifiSegmentCount = 0;
 
-				network_WifiScanEnd();
+				//network_WifiScanEnd();
 			}
 
 		}
@@ -874,6 +873,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 static bool saveWifi = false;
 static bool saveConfiguration = false;
+static enum CommunicationMode interface = eCONNECTION_NONE;
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
@@ -969,7 +969,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
 
-		enum CommunicationMode interface = eCONNECTION_NONE;
+		//enum CommunicationMode interface = eCONNECTION_NONE;
 
 		if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
 		{
@@ -991,7 +991,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		storage_Set_CommunicationMode(interface);
 		connectivity_ActivateInterface(interface);
 
-		saveConfiguration = true;
+		//saveConfiguration = true;
 
    		break;
 
@@ -1257,6 +1257,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			///network_updateWifi();
 
 		ESP_LOGI(TAG, "Save val %s", SAVE_SERV_CHAR_val);
+
+
+
+		if((connectivity_GetPreviousInterface() == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
+		{
+			storage_SaveConfiguration();
+			ESP_LOGI(TAG, "LTE -> WIFI restart");
+			esp_restart();
+		}
+
+		if((connectivity_GetPreviousInterface() == eCONNECTION_WIFI) && (interface == eCONNECTION_LTE))
+		{
+			storage_SaveConfiguration();
+			ESP_LOGI(TAG, "WIFI -> LTE restart");
+			esp_restart();
+		}
+
 
 		break;
 	}

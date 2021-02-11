@@ -74,7 +74,7 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 		if(sent_bytes<length){
 			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
 		}
-		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, portMAX_DELAY)); // tx flush
+		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, RX_TIMEOUT)); // tx flush
 
         ZapMessage rxMsg = {0};
         if( xQueueReceive( 

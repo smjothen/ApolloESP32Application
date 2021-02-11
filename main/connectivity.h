@@ -9,6 +9,7 @@ extern "C" {
 
 bool connectivity_GetSNTPInitialized();
 enum CommunicationMode connectivity_GetActivateInterface();
+enum CommunicationMode connectivity_GetPreviousInterface();
 void connectivity_init();
 void connectivity_ActivateInterface(enum CommunicationMode selectedInterface);
 int connectivity_GetStackWatermark();

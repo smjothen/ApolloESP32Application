@@ -27,6 +27,7 @@
 #include "network.h"
 #include "nvs_flash.h"
 #include "../../main/storage.h"
+#include "../../main/connectivity.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
 
@@ -118,33 +119,35 @@ esp_err_t network_connect_wifi(bool productionSetup)
 {
 	isProductionSetup = productionSetup;
 
-	ESP_ERROR_CHECK(esp_netif_init());
+	/*ESP_ERROR_CHECK(esp_netif_init());
 	esp_event_loop_create_default();
 
-    /*if (s_connect_event_group != NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }*/
+    //if (s_connect_event_group != NULL) {
+    //    return ESP_ERR_INVALID_STATE;
+    //}
+
 
 	s_connect_event_group = xEventGroupCreate();
-
+*/
   	start();
 
-    ESP_LOGI(TAG, "Waiting for IP");
+	ESP_LOGI(TAG, "Waiting for IP");
     xEventGroupWaitBits(s_connect_event_group, CONNECTED_BITS, true, true, portMAX_DELAY);
 
-    if(isConnected == false)
+    /*if(isConnected == false)
     {
+    	
     	vEventGroupDelete(s_connect_event_group);
     	s_connect_event_group = NULL;
     }
     else
-    {
+    {*/
 		ESP_LOGI(TAG, "Connected to %s", WifiSSID);
 		ESP_LOGI(TAG, "IPv4 address: " IPSTR, IP2STR(&s_ip_addr));
 	#ifdef CONFIG_EXAMPLE_CONNECT_IPV6
 		ESP_LOGI(TAG, "IPv6 address: " IPV6STR, IPV62STR(s_ipv6_addr));
 	#endif
-    }
+    //}
 
     return ESP_OK;
 }
@@ -171,8 +174,10 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG, "Wi-Fi disconnected, trying to reconnect...");
     isConnected = false;
 
-    esp_wifi_disconnect();
-    esp_wifi_stop();
+    //esp_wifi_disconnect();
+    //esp_wifi_stop();
+    //esp_wifi_start();
+    esp_wifi_connect();
     xEventGroupSetBits(s_connect_event_group, CONNECTED_BITS);
 }
 
@@ -193,10 +198,45 @@ bool network_IsWifiStarted()
 	return wifiStarted;
 }
 
+bool wifiIsInitialized = false;
+void initWifi()
+{
+	if(wifiIsInitialized == false)
+	{
+
+		ESP_ERROR_CHECK(esp_netif_init());
+		esp_event_loop_create_default();
+
+		/*if (s_connect_event_group != NULL) {
+			return ESP_ERR_INVALID_STATE;
+		}*/
+
+
+		s_connect_event_group = xEventGroupCreate();
+
+		wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+		ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+		if(netif == NULL)
+		{
+			esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
+
+			netif = esp_netif_new(&netif_config);
+
+			esp_netif_attach_wifi_station(netif);
+			esp_wifi_set_default_wifi_sta_handlers();
+		}
+
+
+		wifiIsInitialized = true;
+	}
+}
+
 static void start(void)
 {
+	initWifi();
 
-	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+	/*wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
 	if(netif == NULL)
@@ -204,11 +244,12 @@ static void start(void)
 		esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
 
     	netif = esp_netif_new(&netif_config);
+	}
     	esp_netif_attach_wifi_station(netif);
     	esp_wifi_set_default_wifi_sta_handlers();
-	}
 
 
+*/
 
 
     esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
@@ -270,16 +311,18 @@ static void start(void)
 
 static void startScan(void)
 {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+	initWifi();
+    /*wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
-
-    netif = esp_netif_new(&netif_config);
-
-    esp_netif_attach_wifi_station(netif);
-    esp_wifi_set_default_wifi_sta_handlers();
-
+    if(netif == NULL)
+    {
+		esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
+		netif = esp_netif_new(&netif_config);
+    }
+		esp_netif_attach_wifi_station(netif);
+		esp_wifi_set_default_wifi_sta_handlers();
+*/
 
   //  esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
     //ESP_LOGI(TAG, "Event handler fault %d", fault);
@@ -356,6 +399,10 @@ static void stop(void)
     ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
     esp_netif_destroy(netif);
     netif = NULL;
+
+    wifiStarted = false;
+    wifiIsInitialized = false;
+    isConnected = false;
 }
 #endif // CONFIG_EXAMPLE_CONNECT_WIFI
 
@@ -538,6 +585,9 @@ bool network_wifiIsValid()
 
 void network_updateWifi()
 {
+
+	if(connectivity_GetPreviousInterface() != eCONNECTION_WIFI)
+		return;
 	/*if(wifiStarted)
 	{
 		network_disconnect_wifi();
@@ -667,12 +717,17 @@ void network_startWifiScan()
 	bool block = false;
 	esp_wifi_scan_start(config, block);*/
 
+    //esp_wifi_stop();
+
     wifiScan = false;
+
+    //network_disconnect_wifi();
 }
 
 
 void network_WifiScanEnd()
 {
+	//wifiIsInitialized = false;
 	esp_wifi_stop();
     //ESP_ERROR_CHECK(esp_wifi_deinit());
 	//ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
