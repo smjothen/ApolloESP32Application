@@ -36,14 +36,14 @@ const int uart_num = UART_NUM_2;
 void zaptecProtocolStart(){
     ESP_LOGI(TAG, "starting protocol task");
     static uint8_t ucParameterToPass = {0};
-    int stack_size = 3072;//8192;//4096;
+    int stack_size = 8192;//4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
     configASSERT(uartRecvTaskHandle);
 }
 
 void dspic_periodic_poll_start(){
     static uint8_t ucParameterToPass = {0};
-    int stack_size = 4096; //8192;
+    int stack_size = 8192;
     xTaskCreate( uartSendTask, "UARTSendTask", stack_size, &ucParameterToPass, 5, &sendTaskHandle );
     configASSERT( sendTaskHandle );
 }
@@ -165,25 +165,27 @@ void uartRecvTask(void *pvParameters){
         }
 }
 
-volatile static float temperaturePowerBoardT[2]  = {0.0};
-volatile static float temperatureEmeter[3] = {0.0};
-volatile static float voltages[3] = {0.0};
-volatile static float currents[3] = {0.0};
+static char mcuSwVersionString[20] = {0};
+static char mcuGridTestString[32] = {0};
+static float temperaturePowerBoardT[2]  = {0.0};
+static float temperatureEmeter[3] = {0.0};
+static float voltages[3] = {0.0};
+static float currents[3] = {0.0};
 
-volatile static float totalChargePower = 0.0;
-volatile static float totalChargePowerSession = 0.0;
+static float totalChargePower = 0.0;
+static float totalChargePowerSession = 0.0;
 
-volatile static uint8_t chargeMode = 0;
-volatile static uint8_t chargeOperationMode = 0;
+static uint8_t chargeMode = 0;
+static uint8_t chargeOperationMode = 0;
 
-volatile static uint32_t mcuDebugCounter = 0;
-volatile static uint32_t mcuWarnings = 0;
-volatile static uint8_t mcuResetSource = 0;
+static uint32_t mcuDebugCounter = 0;
+static uint32_t mcuWarnings = 0;
+static uint8_t mcuResetSource = 0;
 
-volatile static uint8_t mcuNetworkType = 0;
+static uint8_t mcuNetworkType = 0;
 static char mcuNetworkTypeString[5] = {0};
-volatile static uint8_t mcuCableType = 0;
-volatile static float mcuChargeCurrentUserMax = 0;
+static uint8_t mcuCableType = 0;
+static float mcuChargeCurrentUserMax = 0;
 static uint16_t mcuPilotAvg = 0;
 static uint16_t mcuProximityInst = 0;
 int holdSetPhases = 0;
@@ -242,6 +244,23 @@ void uartSendTask(void *pvParameters){
 
     //Provide application time to initialize before sending to MCU
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    //Read mcu application software at startup. Try up to 5 times
+    uint8_t timout = 5;
+    while(timout > 0)
+    {
+    	ZapMessage rxMsg;
+    	rxMsg = MCU_ReadStringParameter(ParamSmartMainboardAppSwVersion);
+    	if((20>=rxMsg.length) && (rxMsg.length > 1))
+    	{
+    		strncpy(mcuSwVersionString, (char*)rxMsg.data, rxMsg.length);
+    		ESP_LOGW(TAG, "MCU sw version: %s", mcuSwVersionString);
+    		break;
+    	}
+    	timout--;
+
+    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
 
     uint32_t count = 0;
     uint32_t offsetCount = 0;
@@ -354,10 +373,9 @@ void uartSendTask(void *pvParameters){
 
 
 
-        txMsg.type = MsgRead;//MsgWrite;
+        txMsg.type = MsgRead;
 
-        //ESP_LOGI(TAG, "before encoding");
-        uint encoded_length = ZEncodeMessageHeaderOnly(
+        uint16_t encoded_length = ZEncodeMessageHeaderOnly(
                     &txMsg, txBuf, encodedTxBuf
                 );
 
@@ -572,6 +590,31 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
 	return rxMsg.type;
 }
 
+
+ZapMessage MCU_ReadStringParameter(uint16_t paramIdentifier)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgRead;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg;
+}
+
+char * MCU_GetSwVersionString()
+{
+	return mcuSwVersionString;
+}
+
+char * MCU_GetGridTestString()
+{
+	return mcuGridTestString;
+}
 
 uint8_t MCU_GetSwitchState()
 {

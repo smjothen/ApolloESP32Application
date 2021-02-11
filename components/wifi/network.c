@@ -27,6 +27,7 @@
 #include "network.h"
 #include "nvs_flash.h"
 #include "../../main/storage.h"
+#include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
 
 char WifiSSID[32]= {0};
@@ -194,15 +195,20 @@ bool network_IsWifiStarted()
 
 static void start(void)
 {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
+	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    netif = esp_netif_new(&netif_config);
+	if(netif == NULL)
+	{
+		esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
 
-    esp_netif_attach_wifi_station(netif);
-    esp_wifi_set_default_wifi_sta_handlers();
+    	netif = esp_netif_new(&netif_config);
+    	esp_netif_attach_wifi_station(netif);
+    	esp_wifi_set_default_wifi_sta_handlers();
+	}
+
+
 
 
     esp_err_t fault = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_wifi_disconnect, NULL);
@@ -532,9 +538,12 @@ bool network_wifiIsValid()
 
 void network_updateWifi()
 {
-	network_disconnect_wifi();
-	network_connect_wifi(false);
-	return;
+	/*if(wifiStarted)
+	{
+		network_disconnect_wifi();
+		network_connect_wifi(false);
+	}
+	return;*/
 
 
 	if(network_wifiIsValid())
@@ -563,6 +572,7 @@ void network_updateWifi()
 			ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
 			ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
 			ESP_ERROR_CHECK( esp_wifi_start() );
+			ESP_ERROR_CHECK(esp_wifi_connect());
 
 			//Hold the new values
 			memcpy(previousWifiSSID, WifiSSID, 32);
@@ -597,7 +607,15 @@ void network_startWifiScan()
 
 	wifiScan = true;
 
-	startScan();
+	if(!wifiStarted)
+		startScan();
+	else
+	{
+		//stop_cloud_listener_task();
+		esp_wifi_disconnect();
+		esp_wifi_stop();
+	}
+
 	/*if(network_IsWifiStarted() == false)
 		start();
 		network_connect_wifi(false);
@@ -625,14 +643,17 @@ void network_startWifiScan()
     };
 
 
-    while(connecting == true)
+    /*while(connecting == true)
     {
     	ESP_LOGE(TAG, "Waiting for connecting release");
     	vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    }*/
 
     //ESP_ERROR_CHECK( esp_wifi_start() );
-    esp_wifi_disconnect();
+
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_ERROR_CHECK( esp_wifi_start() );
     ESP_ERROR_CHECK(esp_wifi_scan_start(&scanConf, true));
     ESP_ERROR_CHECK(esp_wifi_scan_stop());
 
@@ -653,9 +674,9 @@ void network_startWifiScan()
 void network_WifiScanEnd()
 {
 	esp_wifi_stop();
-    ESP_ERROR_CHECK(esp_wifi_deinit());
-	ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
-	esp_netif_destroy(netif);
+    //ESP_ERROR_CHECK(esp_wifi_deinit());
+	//ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(netif));
+	//esp_netif_destroy(netif);
 }
 
 //static bool wait_for_ip(bool prod)
@@ -706,4 +727,28 @@ bool network_renewConnection()
 
 	network_updateWifi();
 	return true;//wait_for_ip(false);
+}
+
+void network_SendRawTx()
+{
+	uint8_t beacon_raw[] = {
+		0x80, 0x00,							// 0-1: Frame Control
+		0x00, 0x00,							// 2-3: Duration
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff,				// 4-9: Destination address (broadcast)
+		0xba, 0xde, 0xaf, 0xfe, 0x00, 0x06,				// 10-15: Source address
+		0xba, 0xde, 0xaf, 0xfe, 0x00, 0x06,				// 16-21: BSSID
+		0x00, 0x00,							// 22-23: Sequence / fragment number
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,			// 24-31: Timestamp (GETS OVERWRITTEN TO 0 BY HARDWARE)
+		0x64, 0x00,							// 32-33: Beacon interval
+		0x31, 0x04,							// 34-35: Capability info
+		0x00, 0x00, /* FILL CONTENT HERE */				// 36-38: SSID parameter set, 0x00:length:content
+		0x01, 0x08, 0x82, 0x84,	0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24,	// 39-48: Supported rates
+		0x03, 0x01, 0x01,						// 49-51: DS Parameter set, current channel 1 (= 0x01),
+		0x05, 0x04, 0x01, 0x02, 0x00, 0x00,				// 52-57: Traffic Indication Map
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x00,
+	};
+
+	volatile uint8_t messageLength = sizeof(beacon_raw);
+	esp_wifi_80211_tx(ESP_IF_WIFI_STA, beacon_raw, messageLength, false);
+	ESP_LOGW(TAG, "Sending Wifi TX");
 }

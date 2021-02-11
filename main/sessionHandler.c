@@ -92,6 +92,9 @@ static void sessionHandler_task()
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
+    uint32_t mcuDebugCounter = 0;
+    uint32_t previousDebugCounter = 0;
+    uint32_t mcuDebugErrorCount = 0;
 
 	while (1)
 	{
@@ -110,11 +113,32 @@ static void sessionHandler_task()
 			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
 			publish_debug_message_event("mcuCOMError reset", cloud_event_level_warning);
 
-			vTaskDelay(3000 / portTICK_PERIOD_MS);
+			vTaskDelay(5000 / portTICK_PERIOD_MS);
 
 			esp_restart();
 		}
 
+		//Check if debugCounter from MCU stops incrementing - reset if persistent
+		if((onCounter > 30) && (otaIsRunning() == false))
+		{
+			previousDebugCounter = mcuDebugCounter;
+			mcuDebugCounter = MCU_GetDebugCounter();
+
+			if(mcuDebugCounter == previousDebugCounter)
+				mcuDebugErrorCount++;
+			else
+				mcuDebugErrorCount = 0;
+
+			if(mcuDebugErrorCount == 60)
+			{
+				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %i", mcuDebugCounter);
+				publish_debug_message_event("mcuDebugCounter reset", cloud_event_level_warning);
+
+				vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+				esp_restart();
+			}
+		}
 
 		if((!isOnline) || (networkInterface == eCONNECTION_NONE)) // Also the case if CommunicationMode == eNONE.
 		{

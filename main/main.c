@@ -38,8 +38,8 @@ const char *TAG_MAIN = "MAIN     ";
 //#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED | 1ULL<<GPIO_OUTPUT_EEPROM_WP)
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
-char softwareVersion[] = "0.0.0.25";
-char softwareVersionBLEtemp[] = "0.0.0.25";	//USED to face ble version
+char softwareVersion[] = "0.0.0.27";
+char softwareVersionBLEtemp[] = "0.0.0.27";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -162,7 +162,7 @@ void app_main(void)
 
 	gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
 
-	ESP_LOGE(TAG_MAIN, "Apollo multi-mode: %s", OTAReadRunningPartition());
+	ESP_LOGE(TAG_MAIN, "Apollo: %s", OTAReadRunningPartition());
 
 	storage_Init();
 
@@ -192,7 +192,6 @@ void app_main(void)
 	dspic_periodic_poll_start(); 
 
     vTaskDelay(pdMS_TO_TICKS(3000));
-
 
 //#define DEV
 #ifdef DEV
@@ -276,7 +275,7 @@ void app_main(void)
 #endif
 
     // Read connection mode from flash and start interface
-    connectivity_init();
+    //connectivity_init();
 
 
 //#define WriteThisDeviceInfo
@@ -324,6 +323,9 @@ void app_main(void)
 	}
 
 	I2CDevicesStartTask();
+
+    // Read connection mode from flash and start interface
+    connectivity_init();
 
 	/*if(devInfo.factory_stage != FactoryStageFinnished){
 		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);

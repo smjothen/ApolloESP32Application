@@ -39,6 +39,7 @@ void network_WifiScanEnd();
 bool network_renewConnection();
 void network_updateWifi();
 bool network_IsWifiStarted();
+void network_SendRawTx();
 
 #ifdef __cplusplus
 }

@@ -226,16 +226,14 @@ static void i2cDevice_task(void *pvParameters)
 	while (true)
 	{
 
-		nfcCardDetected = NFCReadTag();
+		nfcCardDetected = NFCReadTag(); //Move inside
 
-		//if(nfcCardDetected)
-
-		//if(storage_Get_AuthenticationRequired() == 1)
-		//{
+		if(storage_Get_AuthenticationRequired() == 1)
+		{
 
 			if(nfcCardDetected > 0)
 			{
-				int check = strcmp("nfc-530796E7", NFCGetTagInfo().idAsString);
+				/*int check = strcmp("nfc-530796E7", NFCGetTagInfo().idAsString);
 
 				if (check == 0)
 				{
@@ -277,7 +275,7 @@ static void i2cDevice_task(void *pvParameters)
 
 					vTaskDelay(3000 / portTICK_RATE_MS);
 					continue;
-				}
+				}*/
 
 
 
@@ -305,7 +303,8 @@ static void i2cDevice_task(void *pvParameters)
 					}
 				}
 			}
-		//}
+
+		}
 
 		i2cCount++;
 		if(i2cCount >= 6)

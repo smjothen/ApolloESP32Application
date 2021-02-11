@@ -16,10 +16,13 @@ MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);
 MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
+ZapMessage MCU_ReadStringParameter(uint16_t paramIdentifier);
 
 int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
+char * MCU_GetSwVersionString();
+char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
 float MCU_GetEmeterTemperature(uint8_t phase);
 float MCU_GetTemperaturePowerBoard(uint8_t sensor);

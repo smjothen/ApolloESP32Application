@@ -181,6 +181,11 @@ static void connectivity_task()
 
 		cloud_listener_check_cmd();
 
+
+		//For testing
+		//if(wifiInitialized == true)
+		//	network_SendRawTx();
+
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
