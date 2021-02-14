@@ -220,6 +220,19 @@ int publish_debug_telemetry_observation_CompletedSession(char * CompletedSession
 }
 
 
+int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults)
+{
+    ESP_LOGD(TAG, "sending GridTestResults");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(GridTestResult, gridTestResults));
+
+    return publish_json(observations);
+}
+
+
+
 int publish_debug_telemetry_observation_StartUpParameters()
 {
     ESP_LOGD(TAG, "sending startup telemetry");

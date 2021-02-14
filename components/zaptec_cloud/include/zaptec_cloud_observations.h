@@ -18,6 +18,8 @@ int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
 
 int publish_debug_telemetry_observation_CompletedSession(char * CompletedSessionString);
 
+int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
+
 int publish_debug_telemetry_observation_StartUpParameters();
 
 int publish_debug_telemetry_observation_WifiParameters();

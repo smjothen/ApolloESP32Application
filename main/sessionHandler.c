@@ -16,6 +16,7 @@
 #include "storage.h"
 #include "connectivity.h"
 #include "apollo_ota.h"
+#include "string.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -234,18 +235,18 @@ static void sessionHandler_task()
 		{
 			if (networkInterface == eCONNECTION_WIFI)
 			{
-				if (MCU_GetchargeMode() == 12)
-					dataInterval = 600;	//When car is disconnected
+				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
+					dataInterval = 600;	//When car is disconnected or not charging
 				else
-					dataInterval = 120;	//When car connected
+					dataInterval = 120;	//When car is in charging state
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
 			{
-				if (MCU_GetchargeMode() == 12)
-					dataInterval = 1800;	//When car is disconnected
+				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
+					dataInterval = 1800;	//When car is disconnected or not charging
 				else
-					dataInterval = 600;	//When car connected
+					dataInterval = 600;	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
 				signalInterval = 1800;
@@ -388,6 +389,38 @@ static void sessionHandler_task()
 				}
 			}
 
+
+			if(GetReportGridTestResults() == true)
+			{
+				//Give some time to ensure all values are set
+				vTaskDelay(pdMS_TO_TICKS(3000));
+
+				ZapMessage rxMsg = MCU_ReadStringParameter(GridTestResult);
+				if(rxMsg.length > 0)
+				{
+					char * gtr = (char *)calloc(rxMsg.length+1, 1);
+					memcpy(gtr, rxMsg.data, rxMsg.length);
+					int published = publish_debug_telemetry_observation_GridTestResults(gtr);
+					free(gtr);
+
+					if (published == 0)
+					{
+						ClearReportGridTestResults();
+						ESP_LOGW(TAG,"GridTest flag cleared");
+					}
+					else
+					{
+						ESP_LOGE(TAG,"GridTest flag NOT cleared");
+					}
+				}
+				else
+				{
+					ESP_LOGW(TAG,"GridTest length = 0");
+					ClearReportGridTestResults();
+				}
+			}
+
+
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
 				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
@@ -427,5 +460,5 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 4096, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 8192, NULL, 3, &taskSessionHandle);
 }

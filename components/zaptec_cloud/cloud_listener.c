@@ -53,6 +53,8 @@ bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 //bool cloudCommandCurrentUpdated = false;
 
+bool reportGridTestResults = false;
+
 
 const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
@@ -139,6 +141,19 @@ void ClearLocalSettingsAreUpdated()
 {
 	localSettingsAreUpdated = false;
 }
+
+
+bool GetReportGridTestResults()
+{
+	return reportGridTestResults;
+}
+
+void ClearReportGridTestResults()
+{
+	reportGridTestResults = false;
+}
+
+
 
 /*void ClearCloudCommandCurrentUpdated()
 {
@@ -905,6 +920,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU Granted command OK");
+			reportGridTestResults = true;
 		}
 		else
 		{

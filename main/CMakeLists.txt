@@ -33,6 +33,7 @@ idf_component_register(SRCS
 				   	"chargeSession.c"
 				   	"certificate.c"
 				   	"fat.c"	
+				   	"diagnostics_port.c"
 					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
 					EMBED_TXTFILES ${project_dir}/main/cert/bundle.crt 
 					)

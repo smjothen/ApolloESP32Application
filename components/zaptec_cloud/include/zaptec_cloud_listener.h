@@ -16,6 +16,9 @@ void ClearLocalSettingsAreUpdated();
 void ClearCloudCommandCurrentUpdated();
 bool CloudCommandCurrentUpdated();
 
+bool GetReportGridTestResults();
+void ClearReportGridTestResults();
+
 int publish_iothub_event(const char *payload);
 int publish_to_iothub(const char* payload, const char* topic);
 

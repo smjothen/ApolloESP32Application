@@ -228,6 +228,9 @@ static void i2cDevice_task(void *pvParameters)
 
 		nfcCardDetected = NFCReadTag(); //Move inside
 
+		//if(!nfcCardDetected)
+		//	NFCClearTag();
+
 		if(storage_Get_AuthenticationRequired() == 1)
 		{
 
