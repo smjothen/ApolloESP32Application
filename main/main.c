@@ -40,8 +40,8 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.30";
-char softwareVersionBLEtemp[] = "0.0.0.30";	//USED to face ble version
+char softwareVersion[] = "0.0.0.32";
+char softwareVersionBLEtemp[] = "0.0.0.32";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
