@@ -10,6 +10,7 @@
 #include "esp_attr.h"
 #include "esp_sleep.h"
 
+#include "main.h"
 #include "esp_websocket_client.h"
 #include "protocol_task.h"
 #include "ppp_task.h"
@@ -39,8 +40,8 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.28";
-char softwareVersionBLEtemp[] = "0.0.0.28";	//USED to face ble version
+char softwareVersion[] = "0.0.0.30";
+char softwareVersionBLEtemp[] = "0.0.0.30";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -147,6 +148,29 @@ void HandleCommands()
 
 }
 //#define useConsole
+
+
+
+void GetTimeOnString(char * onTimeString)
+{
+	int secleft = 0;
+	int min = 0;
+	int hours = 0;
+	int days = 0;
+
+	days = onTimeCounter / 86400;
+	secleft = onTimeCounter % 86400;
+
+	hours = secleft / 3600;
+	secleft = secleft % 3600;
+
+	min = secleft / 60;
+	secleft = secleft % 60;
+
+	sprintf(onTimeString, "%dd %02dh%02dm%02ds",days ,hours, min, secleft);
+}
+
+
 
 void app_main(void)
 {
@@ -371,14 +395,16 @@ void app_main(void)
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
 
-    int secleft = 0;
+    /*int secleft = 0;
     int min = 0;
     int hours = 0;
-    int days = 0;
+    int days = 0;*/
 	
 	//certificateGetNew();
     //certificate_init();
-	
+
+    char onTimeString[20]= {0};
+
 	while (true)
     {
 		onTimeCounter++;
@@ -392,21 +418,24 @@ void app_main(void)
 
     	if(onTimeCounter % 5 == 0)
     	{
-    		days = onTimeCounter / 86400;
+    		/*days = onTimeCounter / 86400;
     		secleft = onTimeCounter % 86400;
 
     		hours = secleft / 3600;
     		secleft = secleft % 3600;
 
     		min = secleft / 60;
-    		secleft = secleft % 60;
+    		secleft = secleft % 60;*/
 
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
     		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    		ESP_LOGE(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
+    		GetTimeOnString(onTimeString);
+    		//ESP_LOGE(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
+    		ESP_LOGE(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
+
 
     		ESP_LOGW(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
     		//ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
@@ -421,7 +450,6 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
 
 
 
