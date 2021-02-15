@@ -386,6 +386,7 @@ char *host_from_rfid(){
 
 int run_component_tests();
 int charge_cycle_test();
+int check_dspic_warnings();
 void socket_connect(void);
 
 static void socket_task(void *pvParameters){
@@ -689,6 +690,11 @@ static const uint8_t eCAR_CHARGING = 6;
 int charge_cycle_test(){
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+
+	if(check_dspic_warnings()<0){
+		return -1;
+	}
+
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
@@ -759,10 +765,18 @@ int charge_cycle_test(){
 	ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
 	ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
 
+	if(check_dspic_warnings()<0){
+		return -1;
+	}
+
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
 	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+
+	if(check_dspic_warnings()<0){
 		return -1;
 	}
 
@@ -772,9 +786,87 @@ int charge_cycle_test(){
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
+	if(check_dspic_warnings()<0){
+		return -1;
+	}
+
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 
 	return 0;
+}
+
+
+typedef struct {
+    const uint8_t bit;
+    const char* name;
+} dspic_warning_name;
+
+const dspic_warning_name dspic_warning_names[] = {
+    {0, "HUMIDITY"},
+    {1, "TEMPERATURE"},
+    {2, "TEMPERATURE_ERROR"},
+    {20, "FPGA_VERSION"},
+    {9, "WARNING_NO_SWITCH_POW_DEF"},
+    {21, "FPGA_UNEXPECTED_RELAY"},
+    {22, "FPGA_CHARGING_RESET"},
+    {28, "FPGA_WATCHDOG"},
+    {3, "EMETER_NO_RESPONSE"},
+    {25, "EMETER_LINK"},
+    {24, "EMETER_ALARM"},
+    {5, "CHARGE_OVERCURRENT"},
+    {26, "NO_VOLTAGE_L1"},
+    {27, "NO_VOLTAGE_L2_L3"},
+    {7, "12V LOW LEVEL"},    
+    {6, "PILOT_STATE"},
+    {8, "PILOT_LOW_LEVEL"},
+    {23, "PILOT_NO_PROXIMITY"},
+    //{10, "REBOOT"},
+    //{11, "DISABLED"},
+    //{31, "VARISCITE"},
+    {12, "RCD_6MA"},
+    {13, "RCD_30MA"},
+    {14, "RCD_PEAK"},
+    {16, "RCD_TEST_AC"},
+    {17, "RCD_TEST_DC"},
+    {18, "RCD_FAILURE"},
+    {19, "RCD_TEST_TIMEOUT"},
+};
+
+int check_dspic_warnings()
+{                    
+
+	uint32_t warnings = MCU_GetWarnings();
+
+	if(warnings == 0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "no errors on dspic" );
+		return 0;
+	}
+
+	char payload[100];
+
+	sprintf(payload, "warning mask: 0x%x", warnings);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload );
+
+	uint8_t i = 0;
+	for(i = 0; i<32; i++) {
+		if((warnings & (1l<<i)) != 0) {
+			uint8_t t;
+			for(t = 0; t<(sizeof(dspic_warning_names) / sizeof(dspic_warning_names[0])); t++) {
+				if(i == dspic_warning_names[t].bit) {
+	                sprintf(payload, "dsPIC warning: %s (error code: %d <> %d)", dspic_warning_names[t].name, i, t);
+					prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+					break;
+				}
+			}
+			
+			if(t == (sizeof(dspic_warning_names) / sizeof(dspic_warning_names[0]))){
+				sprintf(payload, "dsPIC warning: NAME NOT DEFINED (error code: %d <> %d)", i, t);
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+			}
+			
+		}
+	}
+	return -1;
 }
 
 void socket_connect(void){
