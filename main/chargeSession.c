@@ -10,6 +10,7 @@
 #include "connectivity.h"
 #include "cJSON.h"
 #include "storage.h"
+#include "protocol_task.h"
 
 
 
@@ -17,7 +18,7 @@ static const char *TAG = "CHARGESESSION:     ";
 
 static struct ChargeSession chargeSession = {0};
 
-static bool hasNewSessionId = false;
+static bool hasNewSessionIdFromCloud = false;
 
 static void ChargeSession_Set_GUID()
 {
@@ -31,7 +32,7 @@ static void ChargeSession_Set_GUID()
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
 	
 	sprintf(chargeSession.SessionId, "%08x-%04x-%04x-%04x-%04x%08x", GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
-	hasNewSessionId = true;
+	//hasNewSessionIdFromCloud = true;
 	ESP_LOGI(TAG, "GUID: %s", chargeSession.SessionId);
 
 }
@@ -43,12 +44,12 @@ char * chargeSession_GetSessionId()
 
 bool chargeSession_HasNewSessionId()
 {
-	return hasNewSessionId;
+	return hasNewSessionIdFromCloud;
 }
 
 void chargeSession_ClearHasNewSession()
 {
-	hasNewSessionId = false;
+	hasNewSessionIdFromCloud = false;
 }
 
 
@@ -60,7 +61,7 @@ void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 	}
 
 	strcpy(chargeSession.SessionId, sessionIdFromCloud);
-	hasNewSessionId = true;
+	hasNewSessionIdFromCloud = true;
 	ESP_LOGI(TAG, "SessionId: %s , len: %d\n", chargeSession.SessionId, strlen(chargeSession.SessionId));
 }
 
@@ -135,8 +136,28 @@ void chargeSession_Start()
 }
 
 
+
+void chargeSession_UpdateEnergy()
+{
+	if(strlen(chargeSession.SessionId) > 0)
+	{
+		float energy = MCU_GetEnergy();
+		if(energy > 0.0)
+		{
+			chargeSession.Energy = energy;
+		}
+	}
+	else
+	{
+		chargeSession.Energy = 0.0;
+	}
+
+}
+
 void chargeSession_Finalize()
 {
+	//chargeSession.Energy = MCU_GetEnergy();
+	chargeSession_UpdateEnergy();
 	GetUTCTimeString(chargeSession.EndTime);
 
 	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);
@@ -156,7 +177,7 @@ void chargeSession_Clear()
 	memset(&chargeSession, 0, sizeof(chargeSession));
 	ESP_LOGI(TAG, "Clearing csResetSession file");
 
-	hasNewSessionId = false;
+	hasNewSessionIdFromCloud = false;
 }
 
 

@@ -24,7 +24,6 @@ static enum CommunicationMode previousInterface = eCONNECTION_NONE;
 
 static bool sntpInitialized = false;
 static bool mqttInitialized = false;
-int switchState = 0;
 
 
 bool connectivity_GetSNTPInitialized()
@@ -42,6 +41,13 @@ enum CommunicationMode connectivity_GetActivateInterface()
 	return activeInterface;
 }
 
+enum CommunicationMode connectivity_GetPreviousInterface()
+{
+	return previousInterface;
+}
+
+bool wifiInitialized = false;
+
 /*
  * This task shall handle the initiation and switching between wireless
  * interfaces and protocols:
@@ -54,21 +60,9 @@ enum CommunicationMode connectivity_GetActivateInterface()
  */
 static void connectivity_task()
 {
-
 	//Read from Flash. If no interface is configured, use none and wait for setting
-	if(switchState == eConfig_NVS)
-		staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
-	else if(switchState <= eConfig_Wifi_Post)
-		staticNewInterface = eCONNECTION_WIFI;
-	else if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
-		staticNewInterface = eCONNECTION_LTE;
+	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 
-	//For developement
-	/*if(staticNewInterface == eCONNECTION_WIFI)
-		SetNetworkType(eWifi);
-	else if(staticNewInterface == eCONNECTION_LTE)
-			SetNetworkType(e4G);
-*/
 	enum CommunicationMode localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
@@ -85,30 +79,49 @@ static void connectivity_task()
 		// If an interface is active and there is a change
 		if(interfaceChange == true)		//  (localActiveInterface != eCONNECTION_NO_INTERFACE) && (localActiveInterface != previousInterface))
 		{
-			if(activeInterface == eCONNECTION_NONE)
+			if((activeInterface == eCONNECTION_NONE) && (wifiInitialized == false))
 			{
 				ESP_LOGI(TAG, "Nothing to deinit, ready to init new interface");
 			}
-			else if(activeInterface == eCONNECTION_WIFI)
+			else if((activeInterface == eCONNECTION_WIFI) || (wifiInitialized == true))
 			{
 				ESP_LOGI(TAG, "Deinit Wifi interface");
 				// Stop mqtt
-				//stop_cloud_listener_task();
+				if(mqttInitialized == true)
+					stop_cloud_listener_task();
 
 				// Disconnect wifi
 				network_disconnect_wifi();
 
-				vTaskDelay(pdMS_TO_TICKS(3000));
+				// Reset connectivity status
+				//sntpInitialized = false;
+
+				mqttInitialized = false;
+				wifiInitialized = false;
+
+				vTaskDelay(pdMS_TO_TICKS(5000));
 			}
 			else if(activeInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "Deinit LTE interface");
+
+				// Stop mqtt
+				if(mqttInitialized == true)
+				{
+					stop_cloud_listener_task();
+					//vTaskDelay(pdMS_TO_TICKS(1000));
+				}
+
+				ppp_disconnect();
+
+				// Reset connectivity status
+				//sntpInitialized = false;
+				mqttInitialized = false;
+				wifiInitialized = false;
+
+				vTaskDelay(pdMS_TO_TICKS(5000));
 			}
-		}
 
-
-		if(interfaceChange == true)
-		{
 
 			if(localNewInterface == eCONNECTION_NONE)
 			{
@@ -117,12 +130,17 @@ static void connectivity_task()
 			else if(localNewInterface == eCONNECTION_WIFI)
 			{
 				ESP_LOGI(TAG, "Wifi interface activating");
-				network_connect_wifi();
-				interfaceChange = false;
+				network_connect_wifi(false);
+				/*wifiInitialized = true;
+				if(network_WifiIsConnected() == false)
+					interfaceChange = true;
+				else*/
+					interfaceChange = false;
 			}
 			else if(localNewInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "LTE interface activating");
+				configure_uart(921600);
 				ppp_task_start();
 				interfaceChange = false;
 			}
@@ -130,7 +148,6 @@ static void connectivity_task()
 
 		previousInterface = activeInterface;
 		activeInterface = localNewInterface;
-
 
 		//Handle SNTP connection if we are online either with Wifi or 4G.
 		if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
@@ -150,6 +167,19 @@ static void connectivity_task()
 				zntp_restart();
 				zntpIsRunning = true;
 			}
+
+
+			//Activate MQTT when we are online and has NTP time or RTC time is good.
+			if((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
+			{
+				//Make sure Device info has been read from EEPROM before connecting to cloud.
+				if(i2CDeviceInfoIsLoaded() == true)
+				{
+					start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+					mqttInitialized = true;
+				}
+			}
+
 		}
 		else if(zntp_enabled() == 1)
 		{
@@ -176,12 +206,10 @@ static void connectivity_task()
 		cloud_listener_check_cmd();
 
 
-		if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
-		{
-			SetDataInterval(10);
-		}
+		//For testing
+		//if(wifiInitialized == true)
+		//	network_SendRawTx();
 
-		//ESP_LOGI(TAG, "**** Connectivity ****");
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
@@ -197,10 +225,8 @@ int connectivity_GetStackWatermark()
 		return -1;
 }
 
-void connectivity_init(int inputSwitchState)
+void connectivity_init()
 {
-	switchState = inputSwitchState;
-
-	xTaskCreate(connectivity_task, "connectivity_task", 1024*5, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

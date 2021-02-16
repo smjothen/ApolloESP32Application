@@ -18,16 +18,22 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../authentication/authentication.h"
 #include "../../main/chargeSession.h"
+#include "apollo_ota.h"
+#include "ble_interface.h"
+#include "../cellular_modem/include/ppp_task.h"
+#include "../wifi/include/network.h"
 
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-#define ROUTING_ID "default"
-#define INSTALLATION_ID "a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define ROUTING_ID "default"
+//#define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"//"a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
-#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
+#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=%s"
+
 //#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
 /*#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
 (existing != null ? existing + "&" : "")
@@ -47,6 +53,9 @@ static struct DeviceInfo cloudDeviceInfo;
 bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
+//bool cloudCommandCurrentUpdated = false;
+
+bool reportGridTestResults = false;
 
 
 const char cert[] =
@@ -177,6 +186,28 @@ void ClearLocalSettingsAreUpdated()
 {
 	localSettingsAreUpdated = false;
 }
+
+
+bool GetReportGridTestResults()
+{
+	return reportGridTestResults;
+}
+
+void ClearReportGridTestResults()
+{
+	reportGridTestResults = false;
+}
+
+
+
+/*void ClearCloudCommandCurrentUpdated()
+{
+	cloudCommandCurrentUpdated = false;
+}
+bool CloudCommandCurrentUpdated()
+{
+	return cloudCommandCurrentUpdated;
+}*/
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -561,25 +592,25 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				uint8_t standalonePhase = atoi(stringPart+1);
 
 				//Allow only 4 settings: TN_L1=1, TN_L3=4, IT_L1_L3=IT_1P=8, IT_L1_L2_L3=IT_3P=9
-				/*if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
+				if((standalonePhase == 1) || (standalonePhase == 4) || (standalonePhase == 8) || (standalonePhase == 9))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
-					if(ret == MsgWriteAck)
-					{
+					//MessageType ret = MCU_SendUint8Parameter(ParamStandalonePhase, standalonePhase);
+					//if(ret == MsgWriteAck)
+					//{
 						storage_Set_StandalonePhase(standalonePhase);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved STANDALONE_PHASE=%d, %s=%d\n", standalonePhase, (err == 0 ? "OK" : "FAIL"), err);
 						localSettingsAreUpdated = true;
-					}
+					/*}
 					else
 					{
 						ESP_LOGE(TAG, "MCU standalone Phase parameter error");
-					}
+					}*/
 				}
 				else
 				{
 					ESP_LOGI(TAG, "Invalid standalonePhase: %d \n", standalonePhase);
-				}*/
+				}
 				ESP_LOGE(TAG, "Parameter standalonePhase: %d Not defined for Apollo\n", standalonePhase);
 			}
 
@@ -630,10 +661,12 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if(networkType != 0)
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
+					//TODO: Value is measured, handle overwrite from cloud
+					/*MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
 					if(ret == MsgWriteAck)
 					{
 						storage_Set_NetworkType(networkType);
+						//storage_Set_StandalonePhase(networkType);//Set same as Network type, (1-relay)
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved NETWORK TYPE=%d, %s=%d\n", networkType, (err == 0 ? "OK" : "FAIL"), err);
 						localSettingsAreUpdated = true;
@@ -641,7 +674,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					else
 					{
 						ESP_LOGE(TAG, "MCU NetworkType parameter error");
-					}
+					}*/
 				}
 				else
 				{
@@ -753,20 +786,39 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart MCU\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 200;
+		MessageType ret = MCU_SendCommandId(CommandReset);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Start command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Start command FAILED");
+		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		ble_interface_deinit();
+		start_ota_task();
+		responseStatus = 200;
 	}
-	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
-		ESP_LOGI(TAG, "TODO: Implement");
-		responseStatus = 400;
+		ESP_LOGI(TAG, "TODO: Implement forced");
+		ble_interface_deinit();
+		start_ota_task();
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
+	{
+		ESP_LOGI(TAG, "Received \"OTA rollback\"-command");
+		ESP_LOGE(TAG, "Active partition: %s", OTAReadRunningPartition());
+		ota_rollback(); //TODO perform in separate thread to be able to ack cloud?
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
@@ -799,6 +851,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					responseStatus = 200;
 					ESP_LOGI(TAG, "MCU Start command OK");
+
+					HOLD_SetPhases(phaseFromCloud);
+					//cloudCommandCurrentUpdated = true;
 				}
 				else
 				{
@@ -902,6 +957,24 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		responseStatus = 200;
 	}
 
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
+	{
+		ESP_LOGI(TAG, "GridTest command");
+		MessageType ret = MCU_SendCommandId(CommandRunGridTest);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU Granted command OK");
+			reportGridTestResults = true;
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Granted command FAILED");
+		}
+		responseStatus = 200;
+	}
+
 	return responseStatus;
 }
 
@@ -938,7 +1011,8 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 	else if(storage_Get_NetworkType() == 4)
 		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_3\\n");
 
-	sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
+	if(storage_Get_StandalonePhase() != 0)
+		sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
 	sprintf(responseBuffer+strlen(responseBuffer), "hmi_brightness = %f\\n\n", storage_Get_HmiBrightness());
 
 	sprintf(responseBuffer+strlen(responseBuffer), "[Wifi_Parameters]\\nname =  %s\\npassword = <masked>\\n\n", " ");
@@ -977,7 +1051,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
 
 
-        publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
 
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
@@ -986,8 +1060,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			char devicetwin_topic[64];
 			sprintf(devicetwin_topic, "$iothub/twin/GET/?$rid=%d", ridNr);
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
+
 			isFirstConnection = false;
         }
+
+        // Only show this event on first boot, not on every SAS token expiry with reconnect
+		publish_debug_message_event("mqtt connected", cloud_event_level_information);
+
         resetCounter = 0;
 
         mqttConnected = true;
@@ -1059,7 +1138,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        //Handle incomming offline AuthenticationList
+        //Handle incoming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
         	if(event->data_len > 10)
@@ -1084,7 +1163,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         			int ret = publish_uint32_observation(AuthenticationListVersion, version);
         			ESP_LOGI(TAG, "***** AuthenticationListVersion ret: %d *****", ret);
         		}
-
+//				Debug - for testing authentication
 //        		char * messageZer = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}";
 //
 //        		//Add 6
@@ -1148,12 +1227,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        // ESP_LOGD(TAG, "publishing %s", payloadstring);
-        // if(mqtt_count<3){
-        //     msg_id = esp_mqtt_client_publish(client, "/topic/esp-pppos", payloadstring, 0, 0, 0);
-        //     mqtt_count += 1;
-        // }else
-        //     // xEventGroupSetBits(event_group, GOT_DATA_BIT);
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
@@ -1166,18 +1239,23 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
 
-        if(resetCounter == 5)
-        {
-        	esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-        	ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
-        }
 
-        if(resetCounter == 10)
-        {
-        	ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
-        	esp_restart();
-        }
+    	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
+    	{
 
+			if((resetCounter == 5) || (resetCounter == 15) || (resetCounter == 50) || (resetCounter == 75))
+			{
+
+				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
+				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+			}
+
+			if(resetCounter == 100)
+			{
+				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+				esp_restart();
+			}
+    	}
 
         break;
     default:
@@ -1200,10 +1278,14 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     static char username[128];
     sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
-    sprintf(
-        event_topic, MQTT_EVENT_PATTERN,
-		cloudDeviceInfo.serialNumber
-    );
+    char * instId = storage_Get_InstallationId();
+    volatile int instIdLen = strlen(instId);
+
+    int compare = strncmp(instId, INSTALLATION_ID, 36);
+    if(compare != 0)
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_InstallationId());
+    else
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, INSTALLATION_ID);
 
     ESP_LOGI(TAG,
         "mqtt connection:\r\n"
@@ -1231,7 +1313,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_config.disable_auto_reconnect = false;
     mqtt_config.reconnect_timeout_ms = 10000;
-    mqtt_config.keepalive = 120;
+    mqtt_config.keepalive = 300;//120;
     //mqtt_config.refresh_connection_after_ms = 30000;
 
 	blocked_publish_event_group = xEventGroupCreate();
@@ -1246,5 +1328,8 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 void stop_cloud_listener_task()
 {
+	MqttSetDisconnected();
+	esp_mqtt_client_disconnect(mqtt_client);
 	esp_mqtt_client_stop(mqtt_client);
+	esp_mqtt_client_destroy(mqtt_client);
 }

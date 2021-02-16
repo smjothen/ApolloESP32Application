@@ -24,6 +24,9 @@ char * GetSoftwareVersion();//char softwareVersion[8];// = "2.8.0.2";
 char * GetSoftwareVersionBLE();
 
 
+#define ROUTING_ID "default"
+#define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"
+
 #define MAX_NR_OF_RFID_TAGS 20
 
 struct RFIDTokens{
@@ -36,6 +39,12 @@ struct RFIDTokens{
 //static char softwareVersion[] = "2.8.0.2";
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
+
+// Network IDs
+/*#define NETWORK_1P3W 1
+#define NETWORK_3P3W 2
+#define NETWORK_1P4W 3
+#define NETWORK_3P4W 4*/
 
 //Numbers should match Pro
 enum CommunicationMode

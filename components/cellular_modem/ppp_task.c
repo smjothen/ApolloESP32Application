@@ -54,6 +54,8 @@ static char modemIccid[30]		= {0};
 static char modemImsi[20]		= {0};
 static char modemOperator[30]	= {0};
 
+char pppIp4Address[16] = {0};
+
 ESP_EVENT_DEFINE_BASE(ESP_MODEM_EVENT);
 typedef enum {
     ESP_MODEM_EVENT_PPP_START = 0,       /*!< ESP Modem Start PPP Session */
@@ -493,18 +495,25 @@ int configure_modem_for_ppp(void){
 
     char op[30];
     at_command_get_operator(op, 30);
+    while (strlen(op) < 12)
+    {
+    	vTaskDelay(pdMS_TO_TICKS(3000));
+    	at_command_get_operator(op, 30);
+    }
+
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
 
     ESP_LOGD(TAG, "checking CREG");
     at_command_network_registration_status();
     
-    if(active_confirmed == true)
-    {
-	    enter_data_mode();
-	    //hasLTEConnection = true;
-	    return 1;
-    }
+	ESP_LOGI(TAG, "dialing(?)");
+	at_command_pdp_define();
+	at_command_dial();
+	enter_data_mode();
+	if(active_confirmed == true)
+		return 1;
+
 
     return 0;
 }
@@ -533,9 +542,12 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
 
         ESP_LOGI(TAG, "GOT ip event!!!");
         hasLTEConnection = true;
+        sprintf(pppIp4Address,IPSTR, IP2STR(&event->ip_info.ip));
+
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
         hasLTEConnection = false;
+        strcpy(pppIp4Address, "0.0.0.0");
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -549,6 +561,11 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
 bool LteIsConnected()
 {
 	return hasLTEConnection;
+}
+
+char * pppGetIp4Address()
+{
+	return pppIp4Address;
 }
 
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
@@ -595,7 +612,7 @@ int enter_command_mode(void){
     xEventGroupClearBits(event_group, UART_TO_PPP);
 
     int at_result = -10;
-    int retries = 5;
+    int retries = 3;
 
     for(int retry = 0; retry < retries; retry++){
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -643,6 +660,10 @@ int enter_data_mode(void){
     return -1;
 }
 
+
+esp_netif_driver_base_t *base_driver;
+esp_event_handler_instance_t start_reg;
+
 void ppp_task_start(void){
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
@@ -679,7 +700,8 @@ void ppp_task_start(void){
     	at_command_dial();
     }
 
-    esp_netif_driver_base_t *base_driver = calloc(1, sizeof(esp_netif_driver_base_t));
+    //esp_netif_driver_base_t *base_driver = calloc(1, sizeof(esp_netif_driver_base_t));
+    base_driver = calloc(1, sizeof(esp_netif_driver_base_t));
     base_driver->post_attach = &post_attach_cb;
 
     // do we need this one?
@@ -689,7 +711,7 @@ void ppp_task_start(void){
     xEventGroupClearBits(event_group, UART_TO_LINES);
     xEventGroupSetBits(event_group, UART_TO_PPP);
 
-    esp_event_handler_instance_t start_reg;
+    //esp_event_handler_instance_t start_reg;
     esp_event_handler_instance_register(
          ESP_MODEM_EVENT, ESP_MODEM_EVENT_PPP_START,
          esp_netif_action_start, ppp_netif,
@@ -799,6 +821,64 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
     return 0;
 }
 
+int ppp_disconnect()
+{
+	hasLTEConnection = false;
+
+	esp_event_handler_unregister(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event);
+	esp_event_handler_unregister(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed);
+	esp_event_loop_delete_default();
+
+	//vTaskDelay(pdMS_TO_TICKS(500));
+	//esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
+	esp_netif_destroy(ppp_netif);
+
+	return 0;
+}
+
+static int rssiLTE_dbm = 0;
+int log_cellular_quality(void){
+
+	int rssiLTE = 0;
+
+	int enter_command_mode_result = enter_command_mode();
+
+	if(enter_command_mode_result<0){
+		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
+		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
+		return 0;
+	}
+
+	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
+	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
+
+	char signal_string[256];
+	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
+	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
+	//publish_diagnostics_observation(signal_string);
+
+	int ber;
+	char quality_string[256];
+	at_command_signal_quality(&rssiLTE, &ber);
+	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssiLTE, ber);
+	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
+	//publish_diagnostics_observation(quality_string);
+
+	int enter_data_mode_result = enter_data_mode();
+	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+
+	rssiLTE_dbm = 2*rssiLTE - 113;
+
+	return rssiLTE_dbm;
+}
+
+int GetCellularQuality()
+{
+	if(hasLTEConnection == false)
+		return 0;
+	else
+		return rssiLTE_dbm;
+}
 
 const char* LTEGetImei()
 {

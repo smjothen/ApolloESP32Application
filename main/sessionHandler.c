@@ -15,6 +15,8 @@
 #include "chargeSession.h"
 #include "storage.h"
 #include "connectivity.h"
+#include "apollo_ota.h"
+#include "string.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -27,39 +29,6 @@ void SetDataInterval(int newDataInterval)
 }
 
 bool authorizationRequired = true;
-static int rssiLTE = 0;
-
-int log_cellular_quality(void){
-
-	int enter_command_mode_result = enter_command_mode();
-
-	if(enter_command_mode_result<0){
-		ESP_LOGW(TAG, "failed to enter command mode, skiping rssi log");
-		vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
-		return 0;
-	}
-
-	char sysmode[16]; int rssi; int rsrp; int sinr; int rsrq;
-	at_command_signal_strength(sysmode, &rssi, &rsrp, &sinr, &rsrq);
-
-	char signal_string[256];
-	snprintf(signal_string, 256, "[AT+QCSQ Report Signal Strength] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d", sysmode, rssi, rsrp, sinr, rsrq);
-	ESP_LOGI(TAG, "sending diagnostics observation (1/2): \"%s\"", signal_string);
-	//publish_diagnostics_observation(signal_string);
-
-	//int rssi2;
-	int ber;
-	char quality_string[256];
-	at_command_signal_quality(&rssiLTE, &ber);
-	snprintf(quality_string, 256, "[AT+CSQ Signal Quality Report] rssi: %d, ber: %d", rssiLTE, ber);
-	ESP_LOGI(TAG, "sending diagnostics observation (2/2): \"%s\"", quality_string );
-	//publish_diagnostics_observation(quality_string);
-
-	int enter_data_mode_result = enter_data_mode();
-	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
-
-	return rssiLTE;
-}
 
 
 void log_task_info(void){
@@ -102,6 +71,8 @@ static void sessionHandler_task()
 	int8_t rssi = 0;
 	wifi_ap_record_t wifidata;
 	
+	uint32_t onCounter = 0;
+
 	uint32_t onTime = 0;
     uint32_t pulseCounter = 30;
 
@@ -119,34 +90,66 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
-    enum ChargerOperatingMode currentChargeOperationMode = eUNKNOWN;
-    enum ChargerOperatingMode previousChargeOperationMode = eUNKNOWN;
-
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
+    uint32_t mcuDebugCounter = 0;
+    uint32_t previousDebugCounter = 0;
+    uint32_t mcuDebugErrorCount = 0;
 
 	while (1)
 	{
-		isOnline = isMqttConnected();
+		onCounter++;
 
-		if(!isOnline)
+		isOnline = isMqttConnected();
+		networkInterface = connectivity_GetActivateInterface();
+
+		// Check for MCU communication fault and restart with conditions:
+	 	// Not instantly, let mcu upgrade and start
+		// Not when OTA in progress
+		// Only after given nr of consecutive faults
+		int mcuCOMErrors = GetMCUComErrors();
+		if((onCounter > 30) && (otaIsRunning() == false) && (mcuCOMErrors > 20))
 		{
-			ESP_LOGI(TAG, "Waiting to become online...");
-			vTaskDelay(pdMS_TO_TICKS(2000));
+			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
+			publish_debug_message_event("mcuCOMError reset", cloud_event_level_warning);
+
+			vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+			esp_restart();
+		}
+
+		//Check if debugCounter from MCU stops incrementing - reset if persistent
+		if((onCounter > 30) && (otaIsRunning() == false))
+		{
+			previousDebugCounter = mcuDebugCounter;
+			mcuDebugCounter = MCU_GetDebugCounter();
+
+			if(mcuDebugCounter == previousDebugCounter)
+				mcuDebugErrorCount++;
+			else
+				mcuDebugErrorCount = 0;
+
+			if(mcuDebugErrorCount == 60)
+			{
+				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %i", mcuDebugCounter);
+				publish_debug_message_event("mcuDebugCounter reset", cloud_event_level_warning);
+
+				vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+				esp_restart();
+			}
+		}
+
+		if((!isOnline) || (networkInterface == eCONNECTION_NONE)) // Also the case if CommunicationMode == eNONE.
+		{
+			if((onCounter % 10) == 0)
+				ESP_LOGI(TAG, "No connection configured");
+
+			vTaskDelay(pdMS_TO_TICKS(1000));
 			continue;
 		}
 
-		networkInterface = connectivity_GetActivateInterface();
-
-		currentChargeOperationMode = MCU_GetChargeOperatingMode();
-
-		if((currentChargeOperationMode != previousChargeOperationMode) || (currentCarChargeMode != previousCarChargeMode))
-		{
-			publish_uint32_observation(ParamChargeMode, (uint32_t)currentCarChargeMode);
-			publish_uint32_observation(ParamChargeOperationMode, (uint32_t)currentChargeOperationMode);
-		}
-		previousChargeOperationMode = currentChargeOperationMode;
 
 		if(chargeSession_HasNewSessionId() == true)
 		{
@@ -156,6 +159,8 @@ static void sessionHandler_task()
 		}
 
 		currentCarChargeMode = MCU_GetchargeMode();
+
+		publish_telemetry_observation_on_change();
 
 		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
@@ -171,8 +176,8 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED) && isOnline == false)
-			chargeSession_Start();
+		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+				chargeSession_Start();
 
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
 		{
@@ -197,17 +202,24 @@ static void sessionHandler_task()
 			}
 		}
 
+
+		if(currentCarChargeMode < eCAR_DISCONNECTED)
+			chargeSession_UpdateEnergy();
+
 		// Check if car connecting -> start a new session
 		if((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED))
 		{
-			//Make sure to get the final energy reading
-			MCU_GetEnergy();
-
 			chargeSession_Finalize();
 			char completedSessionString[200] = {0};
 			chargeSession_GetSessionAsString(completedSessionString);
 
+			// Delay to space data recorded i cloud.
+			vTaskDelay(pdMS_TO_TICKS(2000));
+
 			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+
+			//char empty[] = "\0";
+			//publish_string_observation(SessionIdentifier, empty);
 
 			chargeSession_Clear();
 
@@ -223,18 +235,18 @@ static void sessionHandler_task()
 		{
 			if (networkInterface == eCONNECTION_WIFI)
 			{
-				if (MCU_GetchargeMode() == 12)
-					dataInterval = 600;	//When car is disconnected
+				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
+					dataInterval = 600;	//When car is disconnected or not charging
 				else
-					dataInterval = 60;	//When car connected
+					dataInterval = 120;	//When car is in charging state
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
 			{
-				if (MCU_GetchargeMode() == 12)
-					dataInterval = 1800;	//When car is disconnected
+				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
+					dataInterval = 1800;	//When car is disconnected or not charging
 				else
-					dataInterval = 600;	//When car connected
+					dataInterval = 600;	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
 				signalInterval = 1800;
@@ -260,7 +272,7 @@ static void sessionHandler_task()
 				}
 				else if (networkInterface == eCONNECTION_LTE)
 				{
-					rssi = 2*rssiLTE - 113;//Convert to dB
+					rssi = GetCellularQuality();
 				}
 
 				publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
@@ -277,12 +289,12 @@ static void sessionHandler_task()
 		if (networkInterface == eCONNECTION_LTE)
 		{
 			signalCounter++;
-			if(signalCounter >= signalInterval)
+			if((signalCounter >= signalInterval) && (otaIsRunning() == false))
 			{
 				if (isMqttConnected() == true)
 				{
-				//log_task_info();
-					//rssiLTE = log_cellular_quality(); // check if OTA is in progress before calling this
+					//log_task_info();
+					log_cellular_quality(); // check if OTA is in progress before calling this
 				}
 
 				signalCounter = 0;
@@ -290,8 +302,7 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		//if(pulseCounter >= 60)
-		if(pulseCounter >= 90)
+		if(pulseCounter >= 60)
 		{
 			if (isMqttConnected() == true)
 			{
@@ -307,18 +318,17 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				int dBm = 2*rssiLTE - 113;
-				ESP_LOGW(TAG,"******** Ind %d: %d dBm  DataInterval: %d *******", rssiLTE, dBm, dataInterval);
+				ESP_LOGW(TAG,"******** LTE: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", GetCellularQuality(), dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
 			}
-//			else
-//			{
-//				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
-//					rssi = wifidata.rssi;
-//				else
-//					rssi = 0;
-//
-//				//ESP_LOGW(TAG,"********  %d dBm  DataInterval: %d *******", rssi, dataInterval);
-//			}
+			else if (networkInterface == eCONNECTION_WIFI)
+			{
+				if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+					rssi = wifidata.rssi;
+				else
+					rssi = 0;
+
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", rssi, dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
+			}
 
 			statusCounter = 0;
 		}
@@ -335,7 +345,9 @@ static void sessionHandler_task()
 				if (networkInterface == eCONNECTION_LTE)
 				{
 					//log_task_info();
-					//log_cellular_quality();
+					if(otaIsRunning() == false)
+						log_cellular_quality();
+
 					publish_debug_telemetry_observation_LteParameters();
 				}
 
@@ -377,6 +389,60 @@ static void sessionHandler_task()
 				}
 			}
 
+
+			if(GetReportGridTestResults() == true)
+			{
+				//Give some time to ensure all values are set
+				vTaskDelay(pdMS_TO_TICKS(3000));
+
+				ZapMessage rxMsg = MCU_ReadStringParameter(GridTestResult);
+				if(rxMsg.length > 0)
+				{
+					char * gtr = (char *)calloc(rxMsg.length+1, 1);
+					memcpy(gtr, rxMsg.data, rxMsg.length);
+					int published = publish_debug_telemetry_observation_GridTestResults(gtr);
+					free(gtr);
+
+					if (published == 0)
+					{
+						ClearReportGridTestResults();
+						ESP_LOGW(TAG,"GridTest flag cleared");
+					}
+					else
+					{
+						ESP_LOGE(TAG,"GridTest flag NOT cleared");
+					}
+				}
+				else
+				{
+					ESP_LOGW(TAG,"GridTest length = 0");
+					ClearReportGridTestResults();
+				}
+			}
+
+
+			/*if(CloudCommandCurrentUpdated() == true)
+			{
+				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
+				float currentSetToMCU = GetFloat(rxMsg.data);
+
+				//Give some time to ensure all values are set
+
+				int published = publish_debug_telemetry_observation_local_settings();
+				if (published == 0)
+				{
+					ClearCloudCommandCurrentUpdated();
+					ESP_LOGW(TAG,"Command feedback flag cleared");
+				}
+				else
+				{
+					ESP_LOGE(TAG,"Command feedback flag NOT cleared");
+				}
+			}*/
+
+
+			//publish_telemetry_observation_on_change();
+
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
@@ -394,5 +460,5 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 4096, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 8192, NULL, 3, &taskSessionHandle);
 }

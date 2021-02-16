@@ -174,10 +174,22 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     }
 }
 
-
+//extern int switchState;
 
 void ble_gap_setAdvertisingData(void)
 {
+
+	/*if(switchState == 6)
+		adv_params.channel_map = ADV_CHNL_37;
+	else if (switchState == 7)
+		adv_params.channel_map = ADV_CHNL_38;
+	else if (switchState == 8)
+		adv_params.channel_map = ADV_CHNL_39;
+	else
+		adv_params.channel_map = ADV_CHNL_ALL;
+
+	ESP_LOGW(TAG,"adv_params.channel_map: %x", adv_params.channel_map);
+*/
 	charInit();
 
 	esp_err_t set_dev_name_ret = ESP_FAIL;

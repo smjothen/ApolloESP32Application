@@ -90,6 +90,24 @@ esp_err_t i2c_master_read_slave(uint8_t slave_addr, uint8_t *data_rd, size_t siz
 }
 
 
+esp_err_t i2c_master_read_slave_with_ack(uint8_t slave_addr, uint8_t *data_rd, size_t size)
+{
+    if (size == 0) {
+        return ESP_OK;
+    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (slave_addr << 1) | READ_BIT, ACK_CHECK_EN);
+    if (size > 1) {
+        i2c_master_read(cmd, data_rd, size - 1, ACK_VAL);
+    }
+    i2c_master_read_byte(cmd, data_rd + size - 1, ACK_VAL);//NACK_VAL);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
 esp_err_t i2c_master_write_slave_at_address(uint8_t slave_addr, uint16_t wr_reg, uint8_t *data_wr, size_t size)
 {
 	uint8_t highAddrBit = (uint8_t)(wr_reg >> 8);

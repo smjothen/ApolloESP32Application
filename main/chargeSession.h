@@ -24,6 +24,7 @@ bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
 
 void chargeSession_Start();
+void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();
 void chargeSession_Clear();
 void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);

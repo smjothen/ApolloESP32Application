@@ -210,6 +210,7 @@
         CommandIndicateAppConnect = 603,
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
+		CommandRunGridTest = 804,
 
         CommandEnterProductionMode = 701,
 

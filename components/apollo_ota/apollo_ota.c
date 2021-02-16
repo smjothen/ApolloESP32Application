@@ -23,6 +23,7 @@ static const int OTA_UNBLOCKED = BIT0;
 const uint OTA_TIMEOUT_MINUTES = 12;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
+
 void on_ota_timeout( TimerHandle_t xTimer ){
     ota_log_timeout();
     vTaskDelay(pdMS_TO_TICKS(1500)); // let's give the system some time to send the log message
@@ -59,7 +60,17 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 
+bool otaRunning = false;
+
+bool otaIsRunning()
+{
+	return otaRunning;
+}
+
+
 static void ota_task(void *pvParameters){
+
+	otaRunning = true;
 
     TickType_t timeout_ticks = pdMS_TO_TICKS((OTA_TIMEOUT_MINUTES*60*1000)+(OTA_RETRY_PAUSE_SECONDS*1000));
     TimerHandle_t timeout_timer = xTimerCreate( "ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
@@ -83,7 +94,7 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
         xTimerReset( timeout_timer, portMAX_DELAY );
 
@@ -187,4 +198,18 @@ void start_ota_task(void){
 int start_ota(void){
     xEventGroupSetBits(event_group, OTA_UNBLOCKED);
     return 0;
+}
+
+
+const char* OTAReadRunningPartition()
+{
+	const esp_partition_t * partition = esp_ota_get_running_partition();
+	//ESP_LOGW(TAG, "Partition name: %s", partition->label);
+
+	return partition->label;
+}
+
+void ota_rollback()
+{
+	esp_ota_mark_app_invalid_rollback_and_reboot();
 }

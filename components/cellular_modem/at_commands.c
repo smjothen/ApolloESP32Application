@@ -287,3 +287,7 @@ int at_command_ping_test(int *sent,int *rcvd,int *lost, int *min, int *max, int 
     return -5;
 
 }
+
+int at_command_save_baud(void){
+    return at_command_with_ok_ack("AT&W", 300);
+}

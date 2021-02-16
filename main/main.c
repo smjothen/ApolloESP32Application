@@ -10,6 +10,7 @@
 #include "esp_attr.h"
 #include "esp_sleep.h"
 
+#include "main.h"
 #include "esp_websocket_client.h"
 #include "protocol_task.h"
 #include "ppp_task.h"
@@ -29,14 +30,17 @@
 #include "driver/uart.h"
 #include "eeprom_wp.h"
 #include "apollo_console.h"
+#include "certificate.h"
+#include "fat.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-char softwareVersion[] = "3.2.0.0";
-char softwareVersionBLEtemp[] = "2.8.0.2";	//USED to face ble version
+uint32_t onTimeCounter = 0;
+char softwareVersion[] = "0.0.0.32";
+char softwareVersionBLEtemp[] = "0.0.0.32";	//USED to face ble version
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -63,12 +67,9 @@ void configure_console(void)
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-     //   .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
-       // .rx_flow_ctrl_thresh = 120,
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    //uart_set_pin(UART_NUM_1, ECHO_TEST_TXD1, ECHO_TEST_RXD1, ECHO_TEST_RTS1, ECHO_TEST_CTS1);
-    uart_driver_install(UART_NUM_0, 1024, 1024, NULL, NULL, 0);
+    uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0);
 }
 
 char commandBuffer[10] = {0};
@@ -79,7 +80,6 @@ void HandleCommands()
 	//Simple commands
 	uint8_t uart_data_size = 10;
 	uint8_t uart_data[uart_data_size];
-	volatile int ret = 0;
 
 	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 100);
 	if(length > 0)
@@ -126,7 +126,7 @@ void HandleCommands()
 		else if(strncmp("dtr1", commandBuffer, 4) == 0)
 			gpio_set_level(GPIO_OUTPUT_DTR, 1);
 		else if(strncmp("sdtr", commandBuffer, 4) == 0)
-			ret = at_command_with_ok_ack("AT&D1", 1000);
+			at_command_with_ok_ack("AT&D1", 1000);
 
 		memset(commandBuffer, 0, 10);
 	}
@@ -134,6 +134,29 @@ void HandleCommands()
 
 }
 //#define useConsole
+
+
+
+void GetTimeOnString(char * onTimeString)
+{
+	int secleft = 0;
+	int min = 0;
+	int hours = 0;
+	int days = 0;
+
+	days = onTimeCounter / 86400;
+	secleft = onTimeCounter % 86400;
+
+	hours = secleft / 3600;
+	secleft = secleft % 3600;
+
+	min = secleft / 60;
+	secleft = secleft % 60;
+
+	sprintf(onTimeString, "%dd %02dh%02dm%02ds",days ,hours, min, secleft);
+}
+
+
 
 void app_main(void)
 {
@@ -146,8 +169,13 @@ void app_main(void)
 	apollo_console_init();
 
 	eeprom_wp_enable_nfc_enable();
+	//certificate_init();
+	//fat_make();
+	//certificateGetNew();
+	//certificateValidate();
 
-	ESP_LOGE(TAG_MAIN, "Apollo multi-mode");
+
+	ESP_LOGE(TAG_MAIN, "Apollo: %s", OTAReadRunningPartition());
 
 	storage_Init();
 
@@ -156,12 +184,14 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
 
 		storage_Init_Configuration();
-		storage_Set_CommunicationMode(eCONNECTION_WIFI);
 		storage_SaveConfiguration();
 	}
 
+	storage_PrintConfiguration();
+
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
+
 #ifdef useConsole
 	configure_console();
 #endif
@@ -169,18 +199,17 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-    start_ota_task();
 	validate_booted_image();
-	// validate_booted_image() must sync the dsPIC FW before we canstart the polling
+
+	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start(); 
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-
-#define DEV
+//#define DEV
 #ifdef DEV
-    int switchState = MCU_GetSwitchState();
-	//switchState = eConfig_Wifi_Zaptec;
+    int switchState = 0;
+    switchState = MCU_GetSwitchState();
 
     while(switchState == 0)
     {
@@ -201,7 +230,6 @@ void app_main(void)
 		{
 			if(switchState == eConfig_Wifi_Zaptec)
 			{
-
 				strcpy(WifiSSID, "ZaptecHQ");
 				strcpy(WifiPSK, "LuckyJack#003");
 				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
@@ -245,7 +273,6 @@ void app_main(void)
 
 		}
     }
-#endif
 
 
     if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
@@ -253,15 +280,15 @@ void app_main(void)
     	storage_Set_CommunicationMode(eCONNECTION_LTE);
 		storage_SaveConfiguration();
     }
+#endif
 
-    if(switchState == eConfig_4G_bridge)
-	{
-		//hard_reset_cellular();
-		cellularPinsOn();
-	}
+//#define BG_BRIDGE
+#ifdef BG_BRIDGE
+	cellularPinsOn();
+#endif
 
     // Read connection mode from flash and start interface
-    connectivity_init(switchState);
+    //connectivity_init();
 
 
 //#define WriteThisDeviceInfo
@@ -275,25 +302,9 @@ void app_main(void)
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
 
-	// strcpy(writeDevInfo.serialNumber, "ZAP000001");
-	// strcpy(writeDevInfo.PSK, "ubTCXZJoEs8LjFw3lVFzSLXQ0CCJDEiNt7AyqbvxwFA=");
-	// strcpy(writeDevInfo.Pin, "2121");
-
-//	strcpy(writeDevInfo.serialNumber, "ZAP000002");
-//	strcpy(writeDevInfo.PSK, "mikfgBtUnIbuoSyCwXjUwgF29KONrGIy5H/RbpGTtdo=");
-//	strcpy(writeDevInfo.Pin, "0625");
-
 //	strcpy(writeDevInfo.serialNumber, "ZAP000005");
 //	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
 //	strcpy(writeDevInfo.Pin, "4284");
-
-	// strcpy(writeDevInfo.serialNumber, "ZAP000008");
-	// strcpy(writeDevInfo.PSK, "U66fdr9lD0rkc0fOLL9/253H9Nc/34qEaDUJiEItSks=");
-	// strcpy(writeDevInfo.Pin, "7833");
-
-	strcpy(writeDevInfo.serialNumber, "ZAP000020");
-	strcpy(writeDevInfo.PSK, "z4J8JqxPu51JlP8ewyD2KyMbxLUrXYg8PneWBtgEct8=");
-	strcpy(writeDevInfo.Pin, "6557");
 
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
@@ -313,7 +324,8 @@ void app_main(void)
 	#endif
 
 	struct DeviceInfo devInfo;
-	if(switchState != eConfig_Wifi_Home_Wr32)
+	devInfo = i2cReadDeviceInfoFromEEPROM();
+	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		I2CDevicesStartTask();
@@ -332,8 +344,8 @@ void app_main(void)
 		{
 			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
 
-			vTaskDelay(3000 / portTICK_PERIOD_MS);
-		}
+		vTaskDelay(3000 / portTICK_PERIOD_MS);
+	}
 
 
 		if(devInfo.factory_stage != FactoryStageFinnished){
@@ -343,8 +355,18 @@ void app_main(void)
 				esp_restart();
 			}
 		}
+	I2CDevicesStartTask();
 
-	}
+    // Read connection mode from flash and start interface
+    connectivity_init();
+
+	/*if(devInfo.factory_stage != FactoryStageFinnished){
+		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
+		prodtest_perform(devInfo);
+		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
+	}*/
+
+	/*}
 	else
 	{
 		//Wroom32 ID - BLE - (no EEPROM)
@@ -359,14 +381,9 @@ void app_main(void)
 
 		devInfo.EEPROMFormatVersion = 1;
 		i2cSetDebugDeviceInfoToMemory(devInfo);
-	}
+	}*/
 
 	vTaskDelay(500 / portTICK_PERIOD_MS);
-
-	if((switchState == eConfig_Wifi_Post) || (switchState == eConfig_4G_Post))
-	{
-		SetDataInterval(10);
-	}
 
 	ble_interface_init();
 
@@ -374,24 +391,31 @@ void app_main(void)
 
     gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    //if((switchState != eConfig_4G) && (switchState != eConfig_4G_bridge))
-    	//diagnostics_port_init();
+    //#define DIAGNOSTICS //Enable TCP port for EMC diagnostics
+    #ifdef DIAGNOSTICS
+    	diagnostics_port_init();
+	#endif
 
-    if( (switchState != eConfig_4G_bridge))
-    	sessionHandler_init();
+    #ifndef BG_BRIDGE
+    sessionHandler_init();
+	#endif
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    uint32_t counter = 0;
 
-    int secleft = 0;
+    /*int secleft = 0;
     int min = 0;
     int hours = 0;
-    int days = 0;
+    int days = 0;*/
+	
+	//certificateGetNew();
+    //certificate_init();
 
-    while (true)
+    char onTimeString[20]= {0};
+
+	while (true)
     {
-    	counter++;
+		onTimeCounter++;
 
     	if(ledState == 0)
     		ledState = 1;
@@ -400,16 +424,16 @@ void app_main(void)
 
     	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
-    	if(counter % 5 == 0)
+    	if(onTimeCounter % 5 == 0)
     	{
-    		days = counter / 86400;
-    		secleft = counter % 86400;
+    		/*days = onTimeCounter / 86400;
+    		secleft = onTimeCounter % 86400;
 
     		hours = secleft / 3600;
     		secleft = secleft % 3600;
 
     		min = secleft / 60;
-    		secleft = secleft % 60;
+    		secleft = secleft % 60;*/
 
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -420,27 +444,22 @@ void app_main(void)
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
-
-    		ESP_LOGI(TAG_MAIN, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, switchState);
 			ESP_LOGI(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
-    		//ESP_LOGE(TAG, "%d: %dd %02dh%02dm%02ds %s , rst: %d, Heaps: %i %i, Sw: %i", counter, days, hours, min, secleft, softwareVersion, esp_reset_reason(), free_heap_size_start, (free_heap_size_start-free_heap_size), switchState);
+			ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+
+    		GetTimeOnString(onTimeString);
+    		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
 
-    	//Until BLE driver error is resolved, disable ble after 1 hour.
-//    	if(counter == 60)//3600)
-//    	{
-//    		ESP_LOGW(TAG,"Deinitializing BLE");
-//    		ble_interface_deinit();
-//    	}
 	#ifdef useConsole
     	HandleCommands();
 	#endif
 
+
+
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
 
 
 

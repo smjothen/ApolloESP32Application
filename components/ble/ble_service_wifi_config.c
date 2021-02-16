@@ -18,6 +18,7 @@
 #include "../../main/DeviceInfo.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../../main/connectivity.h"
+#include "../cellular_modem/include/ppp_task.h"
 
 static const char *TAG = "BLE SERVICE";
 
@@ -35,7 +36,7 @@ uint16_t maxAp = 10;
 wifi_ap_record_t ap_records[10];
 
 
-//#define USE_PIN
+#define USE_PIN
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -84,9 +85,17 @@ const uint8_t CommunicationMode_uid128[ESP_UUID_LEN_128] = {0xd2, 0xfc, 0xb5, 0x
 static const uint8_t COMMUNICATION_MODE_CHAR_descr[]   	= "Communication Mode";
 static uint8_t COMMUNICATION_MODE_val[8]          		= {0x00};
 
-const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128] = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128]  = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 static const uint8_t FIRMWARE_VERSION_CHAR_descr[]   	= "Firmware Version";
 //static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
+
+const uint8_t PairNFCTag_uid128[ESP_UUID_LEN_128] = 	{0xe4, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t PAIR_NFC_TAG_CHAR_descr[]   		= "Pair NFC Tag";
+static uint8_t PAIR_NFC_TAG_val[32]          			= {0x00};
+
+const uint8_t NetworkType_uid128[ESP_UUID_LEN_128] 		= {0x05, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t NETWORK_TYPE_CHAR_descr[]   		= "Network type";
+//static uint8_t NETWORK_TYPE_val[4]          			= {0x00};
 
 
 const uint8_t Standalone_uid128[ESP_UUID_LEN_128] 		= {0xd9, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -127,9 +136,13 @@ static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
 //static uint8_t Phase_Rotation_val[1]          			= {0x0};
 
 
+const uint8_t RunCommand_uid128[ESP_UUID_LEN_128] = 	{0x03, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+//static const uint8_t RUN_COMMAND_CHAR_descr[]   		= "Run Command";
+static uint8_t COMMAND_val[32]          				= {0x00};
+
 //static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
-static char wifiPackage[500] = {0};
+static char wifiPackage[500] = {0}; //TODO: Evaluate size
 
 
 
@@ -204,9 +217,14 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 
 	[CHARGER_FIRMWARE_VERSION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_FIRMWARE_VERSION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &FirmwareVersion_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
-	[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+	//[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
+	[CHARGER_PAIR_NFC_TAG_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_PAIR_NFC_TAG_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &PairNFCTag_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 
+	[CHARGER_NETWORK_TYPE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_NETWORK_TYPE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &NetworkType_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_NETWORK_TYPE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 
 	[CHARGER_STANDALONE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
@@ -244,6 +262,10 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_PHASE_ROTATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	[CHARGER_PHASE_ROTATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_RUN_COMMAND_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_RUN_COMMAND_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &RunCommand_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+
 
 };
 
@@ -287,15 +309,20 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 
 
 static float hmiBrightness = 0.0;
-static char nrTostr[8];
+static char nrTostr[11] = {0};
 //static char swVersion[8];
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 
+	//First time when unconfigured by switch or app, don't ask for pin.
+	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+		AUTH_SERV_CHAR_val[0] = '1';
+
+
 #ifdef USE_PIN
-	//Check authentication before allowing reads
-	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_DEVICE_MID_UUID))
+	//Check authentication before allowing most reads. Some exceptions.
+	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_DEVICE_MID_UUID) && (attrIndex != CHARGER_FIRMWARE_VERSION_UUID) && (attrIndex != CHARGER_WARNINGS_UUID) && (attrIndex != CHARGER_AUTH_UUID))
 	{
 		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
 		return;
@@ -419,7 +446,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				for (i = 0; i < apNr; i++)
 					ESP_LOGE(TAG, "SSID %d: %s, sig: %d", i+1, ap_records[i].ssid, ap_records[i].rssi);
 			}
-
     	}
 
 		if(apNr > 0)
@@ -489,6 +515,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				rsp->attr_value.len = wifiRemainder;
 				apNr = 0;
 				wifiSegmentCount = 0;
+
+				//network_WifiScanEnd();
 			}
 
 		}
@@ -503,23 +531,29 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		if(storage_Get_CommunicationMode() == eCONNECTION_NONE)
 		{
-			ESP_LOGI(TAG, "BLE IP4 Address: 0.0.0.0");
+			ESP_LOGI(TAG, "IP4 Address: 0.0.0.0");
 			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
 			cJSON_AddStringToObject(wifiObject, "ip", "0.0.0.0");
 			cJSON_AddNumberToObject(wifiObject, "link", 0);
 			cJSON_AddBoolToObject(jsonObject, "online", false);
 
 		}
-		else //Wifi
+		else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
 		{
-			ESP_LOGI(TAG, "BLE IP4 Address: %s", network_GetIP4Address());
+			ESP_LOGI(TAG, "IP4 Address: %s", network_GetIP4Address());
 			cJSON_AddItemToObject(jsonObject, "wifi", wifiObject=cJSON_CreateObject());
 			cJSON_AddStringToObject(wifiObject, "ip", network_GetIP4Address());
 			cJSON_AddNumberToObject(wifiObject, "link", (int)network_WifiSignalStrength());
 			cJSON_AddBoolToObject(jsonObject, "online", network_WifiIsConnected());
 		}
-
-		//TODO add for LTE
+		else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+		{
+			ESP_LOGI(TAG, "IP4 Address: %s", pppGetIp4Address());
+			cJSON_AddItemToObject(jsonObject, "lte", wifiObject=cJSON_CreateObject());
+			cJSON_AddStringToObject(wifiObject, "ip", pppGetIp4Address());
+			cJSON_AddNumberToObject(wifiObject, "link", (int)GetCellularQuality());
+			cJSON_AddBoolToObject(jsonObject, "online", LteIsConnected());
+		}
 
 		//jsonString = cJSON_Print(jsonObject);
 		jsonString = cJSON_PrintUnformatted(jsonObject);
@@ -550,8 +584,9 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     	break;
 
     case CHARGER_AUTH_UUID:
-    	rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
-    	rsp->attr_value.len = 1;
+		rsp->attr_value.value[0] = AUTH_SERV_CHAR_val[0];
+		rsp->attr_value.len = 1;
+		ESP_LOGI(TAG, "AUTH: %s, %i ",(char*)AUTH_SERV_CHAR_val, AUTH_SERV_CHAR_val[0]);
     	break;
 
     case CHARGER_SAVE_UUID:
@@ -608,7 +643,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     case CHARGER_FIRMWARE_VERSION_UUID:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
- 		//memcpy(rsp->attr_value.value, softwareVersion, strlen(softwareVersion));
  		int swlen = strlen(GetSoftwareVersionBLE());
  		memcpy(rsp->attr_value.value, GetSoftwareVersionBLE(), swlen);
  		rsp->attr_value.len = swlen;
@@ -621,6 +655,23 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
  		break;
 
 
+    case CHARGER_NETWORK_TYPE_UUID:
+
+ 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		//memcpy(NETWORK_TYPE_val, MCU_GetGridType(),4);
+		memcpy(rsp->attr_value.value, MCU_GetGridTypeString(), 4);
+		rsp->attr_value.len = 4;
+		ESP_LOGI(TAG, "Read Network type");
+
+ 		break;
+
+    /*case CHARGER_NETWORK_TYPE_DESCR:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		memcpy(rsp->attr_value.value, NETWORK_TYPE_CHAR_descr, sizeof(NETWORK_TYPE_CHAR_descr));
+		rsp->attr_value.len = sizeof(NETWORK_TYPE_CHAR_descr);
+		break;*/
+
     case CHARGER_STANDALONE_UUID:
 
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -629,13 +680,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     	if(storage_Get_Standalone() == 0)
     	{
-			memcpy(rsp->attr_value.value, "0", 1);
-			rsp->attr_value.len = 1;
+			memcpy(rsp->attr_value.value, "system", 6);
+			rsp->attr_value.len = 6;
     	}
     	else if(storage_Get_Standalone() == 1)
     	{
-			memcpy(rsp->attr_value.value, "1", 1);
-			rsp->attr_value.len = 1;
+			memcpy(rsp->attr_value.value, "standalone", 10);
+			rsp->attr_value.len = 10;
     	}
 
 		break;
@@ -711,15 +762,29 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
   		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-  		ESP_LOGI(TAG, "Read Warning %d ", MCU_GetWarnings());
+  		volatile uint32_t warning = MCU_GetWarnings();
+  		ESP_LOGI(TAG, "Read Warning 0x%x ", warning);
 
-  		memset(nrTostr, 0, sizeof(nrTostr));
-  		//itoa(MCU_GetWarnings(), nrTostr, 10);
+  		// Each bit in the warning value is transferred separate bytes
+  		// 0x00000003 -> 0x02 0x01
+  		// Length 0 = No warnings set
 
-  		//memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
-  		uint32_t warning = 0;//MCU_GetWarnings();
-		memcpy(rsp->attr_value.value, &warning, sizeof(warning));
-  		rsp->attr_value.len = 1;//sizeof(warning);
+  		uint8_t warningBytes[32] = {0};
+  		int nextBitShift = 0;
+  		int byteNr;
+  		int byteCount = 0;
+  		for (byteNr = 0; byteNr < 32; byteNr++)
+  		{
+  			if((warning >> nextBitShift) & 0x1)
+  			{
+  				warningBytes[byteCount] = byteNr;
+  				byteCount++;
+  			}
+  			nextBitShift++;
+  		}
+
+  		memcpy(rsp->attr_value.value, &warningBytes, byteCount);
+  		rsp->attr_value.len = byteCount;
 
   		break;
 
@@ -768,7 +833,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		rsp->attr_value.len = sizeof(Max_Inst_Current_Switch_descr);
   		break;
 
-
     case CHARGER_MAX_INST_CURRENT_CONFIG_UUID:
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
@@ -791,12 +855,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_PHASE_ROTATION_UUID:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read PhaseRotation %d ", storage_Get_PhaseRotation());
-		memset(nrTostr, 0, sizeof(nrTostr));
-		itoa(storage_Get_PhaseRotation(), nrTostr, 10);
+		uint8_t phaseRotation = storage_Get_PhaseRotation();
+		ESP_LOGI(TAG, "Read PhaseRotation %d ", phaseRotation);
 
-		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
-		rsp->attr_value.len = strlen(nrTostr);
+		memcpy(rsp->attr_value.value, &phaseRotation, sizeof(uint8_t));
+		rsp->attr_value.len = sizeof(uint8_t);
 
 		break;
 
@@ -810,9 +873,14 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 static bool saveWifi = false;
 static bool saveConfiguration = false;
+static enum CommunicationMode interface = eCONNECTION_NONE;
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
+
+	//First time when unconfigured by switch or app, don't ask for pin.
+	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+		AUTH_SERV_CHAR_val[0] = '1';
 
 #ifdef USE_PIN
 	//Check authentication before allowing writes
@@ -831,7 +899,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
          */
 
         // This prints the first byte written to the characteristic
-        ESP_LOGI(TAG, "Wifi Info characteristic written with %02x", param->write.value[0]);
+        ESP_LOGI(TAG, "Wifi Info characteristic received with %02x", param->write.value[0]);
 
 
         if(param->write.len <= 64)
@@ -855,7 +923,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
         /*
          *  Handle any writes to Wifi Val char here
          */
-    	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Wifi Val characteristic received with %02x", param->write.value[0]);
     	memset(WIFI_SERV_CHAR_SSID_val,0, sizeof(WIFI_SERV_CHAR_SSID_val));
     	if((32 >= param->write.len) && (param->write.len > 0))
     	{
@@ -872,7 +940,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_HMI_BRIGHTNESS_UUID:
 
-    	ESP_LOGI(TAG, "HMI brightness characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "HMI brightness characteristic received with %02x", param->write.value[0]);
 
     	memset(HMI_BRIGHTNESS_val,0, sizeof(HMI_BRIGHTNESS_val));
 		memcpy(HMI_BRIGHTNESS_val,param->write.value, param->write.len);
@@ -882,22 +950,26 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		if((1.0 >= hmiBrightness) && (hmiBrightness >= 0.0 ))
 		{
-			storage_Set_HmiBrightness(hmiBrightness);
-			ESP_LOGI(TAG, "Set hmiBrightness: %f", hmiBrightness);
-			saveConfiguration = true;
+			MessageType ret = MCU_SendFloatParameter(HmiBrightness, hmiBrightness);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_HmiBrightness(hmiBrightness);
+				ESP_LOGI(TAG, "Set hmiBrightness: %f", hmiBrightness);
+				saveConfiguration = true;
+			}
 		}
 
    		break;
 
     case CHARGER_COMMUNICATION_MODE_UUID:
 
-    	ESP_LOGI(TAG, "Wifi Val characteristic written with %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Wifi Val characteristic received with %02x", param->write.value[0]);
 
     	memset(COMMUNICATION_MODE_val,0, sizeof(COMMUNICATION_MODE_val));
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
 
-		enum CommunicationMode interface = eCONNECTION_NONE;
+		//enum CommunicationMode interface = eCONNECTION_NONE;
 
 		if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
 		{
@@ -919,33 +991,65 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		storage_Set_CommunicationMode(interface);
 		connectivity_ActivateInterface(interface);
 
-		saveConfiguration = true;
+		//saveConfiguration = true;
 
    		break;
+
+
+    case CHARGER_PAIR_NFC_TAG_UUID:
+
+    	ESP_LOGI(TAG, "Pair NFC characteristic received with %s", param->write.value);
+    	if(param->write.len >= 32)
+    	{
+    		ESP_LOGE(TAG, "To long NFC tag string");
+    		break;
+    	}
+
+    	memset(PAIR_NFC_TAG_val,0, sizeof(PAIR_NFC_TAG_val));
+		memcpy(PAIR_NFC_TAG_val,param->write.value, param->write.len);
+		ESP_LOGI(TAG, "New NFC tag string %s", PAIR_NFC_TAG_val);
+
+   		break;
+
 
     case CHARGER_STANDALONE_UUID:
 
-    	ESP_LOGI(TAG, "Standalone written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Standalone received %02x", param->write.value[0]);
 
-    	if(param->write.value[0] == '0')
-    	{
-    		storage_Set_Standalone(0);
-    		ESP_LOGI(TAG, "Set standalone: 0");
-    		saveConfiguration = true;
-    	}
-    	else if (param->write.value[0] == '1')
-    	{
-    		storage_Set_Standalone(1);
-    		ESP_LOGI(TAG, "Set standalone: 1");
-    		saveConfiguration = true;
-    	}
+    	uint8_t standalone = 0xff;
+    	char * systemStr = "system";
+    	char * standaloneStr = "standalone";
+
+    	if(memcmp(param->write.value, systemStr, 6) == 0)
+    		standalone = 0;
+
+    	else if(memcmp(param->write.value, standaloneStr, 10) == 0)
+    		standalone = 1;
+
+    	if((standalone == 0) || (standalone == 1))
+		{
+			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_Standalone((uint8_t)standalone);
+				ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
+				saveConfiguration = true;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU standalone parameter error");
+			}
+		}
+		else
+		{
+			ESP_LOGI(TAG, "Invalid standalone: %d \n", standalone);
+		}
 
    		break;
 
-
     case CHARGER_STANDALONE_PHASE_UUID:
 
-    	ESP_LOGI(TAG, "Standalone PHASE written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Standalone PHASE received %02x", param->write.value[0]);
 
     	memset(nrTostr, 0, sizeof(nrTostr));
     	memcpy(nrTostr, param->write.value, param->write.len);
@@ -968,21 +1072,29 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	memcpy(nrTostr, param->write.value, param->write.len);
     	float standaloneCurrent = atof(nrTostr);
 
-    	ESP_LOGI(TAG, "Standalone CURRENT written %f", standaloneCurrent);
+    	ESP_LOGI(TAG, "Standalone CURRENT received %f", standaloneCurrent);
 
     	//Sanity check
     	if((32.0 >= standaloneCurrent) && (standaloneCurrent >= 6.0))
     	{
-    		storage_Set_StandaloneCurrent(standaloneCurrent);
-    		ESP_LOGI(TAG, "Set standalone Current: %f", standaloneCurrent);
-    		saveConfiguration = true;
+    		MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, standaloneCurrent);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_StandaloneCurrent(standaloneCurrent);
+				ESP_LOGI(TAG, "Set standalone Current to MCU: %f", standaloneCurrent);
+				saveConfiguration = true;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU standalone current parameter error");
+			}
     	}
 
    		break;
 
     case CHARGER_PERMANENT_LOCK_UUID:
 
-    	ESP_LOGI(TAG, "Permanent lock written %02x", param->write.value[0]);
+    	ESP_LOGI(TAG, "Permanent lock received %02x", param->write.value[0]);
 
     	uint8_t lockValue = 0xFF;
 
@@ -998,7 +1110,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 				storage_Set_PermanentLock(lockValue);
 
-				ESP_LOGI(TAG, "BLE ToBeSaved PermanentLock=%d", lockValue);
+				ESP_LOGI(TAG, "BLE PermanentLock=%d sent to MCU", lockValue);
 				saveConfiguration = true;
 			}
 			else
@@ -1019,28 +1131,32 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	memcpy(nrTostr, param->write.value, param->write.len);
     	float maxInstCurrConfig = atof(nrTostr);
 
-    	ESP_LOGI(TAG, "Max installation current CONFIG written %f", maxInstCurrConfig);
+    	ESP_LOGI(TAG, "Max installation current CONFIG received %f", maxInstCurrConfig);
 
     	//Sanity check
-    	if((63.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
+    	if((40.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
     	{
-    		storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
-    		ESP_LOGI(TAG, "Set standalone Current: %f", maxInstCurrConfig);
-    		saveConfiguration = true;
+    		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrConfig);
+			if(ret == MsgWriteAck)
+			{
+				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
+				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
+				saveConfiguration = true;
+			}
     	}
 
    		break;
 
     case CHARGER_PHASE_ROTATION_UUID:
 
-    	ESP_LOGI(TAG, "PhaseRotation written %02x", param->write.value[0]);
-
-    	memset(nrTostr, 0, sizeof(nrTostr));
-    	memcpy(nrTostr, param->write.value, param->write.len);
-    	uint8_t phaseRotation = (uint8_t)atoi(nrTostr);
+    	ESP_LOGI(TAG, "PhaseRotation received %02x", param->write.value[0]);
+    	uint8_t phaseRotation = param->write.value[0];
+    	//memset(nrTostr, 0, sizeof(nrTostr));
+    	//memcpy(nrTostr, param->write.value, param->write.len);
+    	//uint8_t phaseRotation = (uint8_t)atoi(nrTostr);
 
     	//Sanity check
-    	if((3 >= phaseRotation) && (phaseRotation >= 1))
+    	if(18 >= phaseRotation)
     	{
     		storage_Set_PhaseRotation(phaseRotation);
     		ESP_LOGI(TAG, "Set phaseRotation: %d", phaseRotation);
@@ -1048,6 +1164,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	}
 
    		break;
+
+
+    case CHARGER_RUN_COMMAND_UUID:
+
+    	ESP_LOGI(TAG, "Run Command received with %s", param->write.value);
+    	if(param->write.len >= 32)
+    	{
+    		ESP_LOGE(TAG, "To long command string");
+    		break;
+    	}
+
+    	memset(COMMAND_val,0, sizeof(COMMAND_val));
+		memcpy(COMMAND_val,param->write.value, param->write.len);
+		ESP_LOGI(TAG, "New BLE command string %s", COMMAND_val);
+
+   		break;
+
 
     case CHARGER_AUTH_UUID:
 
@@ -1079,6 +1212,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				vTaskDelay(pdMS_TO_TICKS(10000));
 			}
 		}
+
+		//First time when unconfigured by switch or app, don't ask for pin.
+		if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+			AUTH_SERV_CHAR_val[0] = '1';
 
 	#ifndef USE_PIN
 		AUTH_SERV_CHAR_val[0] = '1'; //TODO remove to force PIN
@@ -1121,6 +1258,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		ESP_LOGI(TAG, "Save val %s", SAVE_SERV_CHAR_val);
 
+
+
+		if((connectivity_GetPreviousInterface() == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
+		{
+			storage_SaveConfiguration();
+			ESP_LOGI(TAG, "LTE -> WIFI restart");
+			esp_restart();
+		}
+
+		if((connectivity_GetPreviousInterface() == eCONNECTION_WIFI) && (interface == eCONNECTION_LTE))
+		{
+			storage_SaveConfiguration();
+			ESP_LOGI(TAG, "WIFI -> LTE restart");
+			esp_restart();
+		}
+
+
 		break;
 	}
 
@@ -1129,6 +1283,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 void ClearAuthValue()
 {
-	AUTH_SERV_CHAR_val[0] = 0;
-	SAVE_SERV_CHAR_val[0] = 0;
+	AUTH_SERV_CHAR_val[0] = '0';
+	SAVE_SERV_CHAR_val[0] = '0';
 }

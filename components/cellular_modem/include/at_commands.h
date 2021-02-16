@@ -7,6 +7,7 @@ int at_command_echo_set(bool on);
 int at_command_detect_echo(void);
 int at_command_set_baud_high(void);
 int at_command_set_baud_low(void);
+int at_command_save_baud(void);
 int at_command_get_model_name(char *name, int buff_len);
 int at_command_get_imei(char *imei, int buff_len);
 int at_command_get_ccid(char *ccid, int buff_len);

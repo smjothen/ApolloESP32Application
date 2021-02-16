@@ -154,7 +154,6 @@ bool RTCReadAndUseTime()
 	//RTCSoftwareReset(); //resets to 2000-01-01 00:00:00
 	//vTaskDelay(100 / portTICK_RATE_MS);
 
-
 	readTime = RTCReadTime();
 	char buffer[26];
 	strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", &readTime);
@@ -175,17 +174,17 @@ bool RTCReadAndUseTime()
 
 		ESP_LOGW(TAG_RTC, "**********epocSec: %ld", epochSec);
 
-		struct timeval tv;
+		struct timeval tv = {0};
 		tv.tv_sec = epochSec;
 		int ret = settimeofday(&tv, NULL);
 
 		ESP_LOGW(TAG_RTC, "RTC time set as System time: %s, ret: %d", buffer, ret);
 
-		// Must read back using gettimeofday() to avoid library bug where set time diffs from written time by 1073 sec!
+		// Must read back using gettimeofday() verify correct time
 		struct timeval tvRead = {0};
-		tv.tv_sec = epochSec;
 		gettimeofday(&tvRead, NULL);
-		ESP_LOGW(TAG_RTC, "read sec: %ld, diff: %ld", tvRead.tv_sec, tvRead.tv_sec-tv.tv_sec);
+
+		ESP_LOGW(TAG_RTC, "r: %ld, w: %ld, diff: %ld", tvRead.tv_sec, tv.tv_sec, tvRead.tv_sec-tv.tv_sec);
 	}
 
 	return RTCvalid;
