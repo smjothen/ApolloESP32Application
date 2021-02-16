@@ -643,8 +643,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     case CHARGER_FIRMWARE_VERSION_UUID:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
- 		int swlen = strlen(GetSoftwareVersionBLE());
- 		memcpy(rsp->attr_value.value, GetSoftwareVersionBLE(), swlen);
+ 		int swlen = strlen(GetSoftwareVersion());
+ 		memcpy(rsp->attr_value.value, GetSoftwareVersion(), swlen);
  		rsp->attr_value.len = swlen;
  		break;
 

@@ -8,7 +8,6 @@ extern "C" {
 #include "esp_err.h"
 
 #define GPIO_OUTPUT_EEPROM_WP    4
-#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_EEPROM_WP)
 
 esp_err_t EEPROM_Read();
 esp_err_t EEPROM_Write();

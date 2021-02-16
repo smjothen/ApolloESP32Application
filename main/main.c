@@ -37,10 +37,10 @@ const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
+#define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.32";
-char softwareVersionBLEtemp[] = "0.0.0.32";	//USED to face ble version
+char softwareVersion[] = "0.0.0.34";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -52,11 +52,21 @@ char * GetSoftwareVersion()
 	return softwareVersion;
 }
 
-char * GetSoftwareVersionBLE()
+void InitGPIOs()
 {
-	return softwareVersionBLEtemp;
-}
+    gpio_config_t output_conf;
+	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	output_conf.mode = GPIO_MODE_OUTPUT;
+	output_conf.pin_bit_mask = GPIO_OUTPUT_DEBUG_PIN_SEL;
+	output_conf.pull_down_en = 0;
+	output_conf.pull_up_en = 0;
+	gpio_config(&output_conf);
 
+
+	// Initialize debug led pin to 0. Should not be high at boot
+	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
+
+}
 
 // Configure the RX port of UART0(log-port) for commands
 void configure_console(void)
@@ -169,6 +179,9 @@ void app_main(void)
 	apollo_console_init();
 
 	eeprom_wp_enable_nfc_enable();
+	InitGPIOs();
+
+	// For testing
 	//certificate_init();
 	//fat_make();
 	//certificateGetNew();
@@ -202,93 +215,15 @@ void app_main(void)
 	validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
-	dspic_periodic_poll_start(); 
+	dspic_periodic_poll_start();
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-//#define DEV
-#ifdef DEV
-    int switchState = 0;
-    switchState = MCU_GetSwitchState();
-
-    while(switchState == 0)
-    {
-    	vTaskDelay(1000 / portTICK_PERIOD_MS);
-    	switchState = MCU_GetSwitchState();
-    }
-
-    if (switchState <= eConfig_Wifi_EMC_TCP)
-    {
-		char WifiSSID[32]= {0};
-		char WifiPSK[64] = {0};
-
-		if(switchState == eConfig_Wifi_NVS)
-		{
-			network_CheckWifiParameters();
-		}
-		else
-		{
-			if(switchState == eConfig_Wifi_Zaptec)
-			{
-				strcpy(WifiSSID, "ZaptecHQ");
-				strcpy(WifiPSK, "LuckyJack#003");
-				//strcpy(WifiSSID, "CMW-AP");	Applica Wifi TX test AP without internet connection
-				storage_SaveWifiParameters(WifiSSID, WifiPSK);
-				storage_Set_CommunicationMode(eCONNECTION_WIFI);
-				storage_SaveConfiguration();
-
-			}
-
-			else if(switchState == eConfig_Wifi_Home_Wr32)//eConfig_Wifi_Home_Wr32
-			{
-				if(network_CheckWifiParameters() == false)
-				{
-					strcpy(WifiSSID, "ZaptecHQ-guest");
-					strcpy(WifiPSK, "Ilovezaptec");
-					//strcpy(WifiSSID, "BVb");
-					//strcpy(WifiPSK, "tk51mo79");
-					storage_SaveWifiParameters(WifiSSID, WifiPSK);
-					storage_Set_CommunicationMode(eCONNECTION_WIFI);
-					storage_SaveConfiguration();
-				}
-			}
-			else if(switchState == 4) //Applica - EMC config
-			{
-				strcpy(WifiSSID, "APPLICA-GJEST");
-				strcpy(WifiPSK, "2Sykkelturer!Varmen");//Used during EMC test. Expires in 2021.
-				storage_SaveWifiParameters(WifiSSID, WifiPSK);
-				storage_Set_CommunicationMode(eCONNECTION_WIFI);
-				storage_SaveConfiguration();
-
-			}
-
-//			if(storage_ReadConfiguration() != ESP_OK)
-//			{
-//				ESP_LOGE(TAG_MAIN, "########## Invalid or no parameters in storage! ########");
-//
-//				storage_Init_Configuration();
-//				storage_Set_CommunicationMode(eCONNECTION_WIFI);
-//				storage_SaveConfiguration();
-//			}
-
-		}
-    }
-
-
-    if((switchState == eConfig_4G) || (switchState == eConfig_4G_Post))
-    {
-    	storage_Set_CommunicationMode(eCONNECTION_LTE);
-		storage_SaveConfiguration();
-    }
-#endif
 
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
 	cellularPinsOn();
 #endif
-
-    // Read connection mode from flash and start interface
-    //connectivity_init();
 
 
 //#define WriteThisDeviceInfo
@@ -301,11 +236,6 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
-
-//	strcpy(writeDevInfo.serialNumber, "ZAP000005");
-//	strcpy(writeDevInfo.PSK, "vHZdbNkcPhqJRS9pqEaokFv1CrKN1i2opy4qzikyTOM=");
-//	strcpy(writeDevInfo.Pin, "4284");
-
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 #endif
 
@@ -323,12 +253,13 @@ void app_main(void)
 	eeprom_wp_enable_nfc_enable();
 	#endif
 
+	I2CDevicesStartTask();
+
 	struct DeviceInfo devInfo;
 	devInfo = i2cReadDeviceInfoFromEEPROM();
 	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
 		devInfo = i2cReadDeviceInfoFromEEPROM();
-		I2CDevicesStartTask();
 		if(devInfo.EEPROMFormatVersion == 0xFF)
 		{
 			//Invalid EEPROM content
@@ -343,53 +274,26 @@ void app_main(void)
 		else if(devInfo.EEPROMFormatVersion == 0x0)
 		{
 			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
-
-		vTaskDelay(3000 / portTICK_PERIOD_MS);
+			vTaskDelay(3000 / portTICK_PERIOD_MS);
+			esp_restart();
+		}
 	}
 
-
-		if(devInfo.factory_stage != FactoryStageFinnished){
-			int prodtest_result = prodtest_perform(devInfo);
-			if(prodtest_result<0){
-				ESP_LOGE(TAG_MAIN, "Prodtest failed");
-				esp_restart();
-			}
-		}
-	I2CDevicesStartTask();
-
-    // Read connection mode from flash and start interface
+	// Read connection mode from flash and start interface
     connectivity_init();
 
-	/*if(devInfo.factory_stage != FactoryStageFinnished){
-		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 0);
-		prodtest_perform(devInfo);
-		gpio_set_level(GPIO_OUTPUT_EEPROM_WP, 1);
-	}*/
-
-	/*}
-	else
-	{
-		//Wroom32 ID - BLE - (no EEPROM)
-		strcpy(devInfo.serialNumber, "ZAP000011");
-		strcpy(devInfo.PSK, "eBApJr3SKRbXgLpoJEpnLA+nRK508R3i/yBKroFD1XM=");
-		strcpy(devInfo.Pin, "7053");
-
-		//Wroom32 ID - BLE - (no EEPROM)
-//		strcpy(devInfo.serialNumber, "ZAP000012");
-//		strcpy(devInfo.PSK, "+cype9l6QpYa4Yf375ZuftuzM7PDtso5KvGv08/7f0A=");
-//		strcpy(devInfo.Pin, "5662");
-
-		devInfo.EEPROMFormatVersion = 1;
-		i2cSetDebugDeviceInfoToMemory(devInfo);
-	}*/
+	if(devInfo.factory_stage != FactoryStageFinnished){
+		int prodtest_result = prodtest_perform(devInfo);
+		if(prodtest_result<0){
+			ESP_LOGE(TAG_MAIN, "Prodtest failed");
+			esp_restart();
+		}
+	}
 
 	vTaskDelay(500 / portTICK_PERIOD_MS);
 
 	ble_interface_init();
 
-	uint32_t ledState = 0;
-
-    gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
 
     //#define DIAGNOSTICS //Enable TCP port for EMC diagnostics
     #ifdef DIAGNOSTICS
@@ -402,12 +306,7 @@ void app_main(void)
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-
-    /*int secleft = 0;
-    int min = 0;
-    int hours = 0;
-    int days = 0;*/
-	
+	// For dev testing
 	//certificateGetNew();
     //certificate_init();
 
@@ -417,24 +316,8 @@ void app_main(void)
     {
 		onTimeCounter++;
 
-    	if(ledState == 0)
-    		ledState = 1;
-    	else
-    		ledState = 0;
-
-    	//gpio_set_level(GPIO_OUTPUT_DEBUG_LED, ledState);
-
     	if(onTimeCounter % 5 == 0)
     	{
-    		/*days = onTimeCounter / 86400;
-    		secleft = onTimeCounter % 86400;
-
-    		hours = secleft / 3600;
-    		secleft = secleft % 3600;
-
-    		min = secleft / 60;
-    		secleft = secleft % 60;*/
-
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
@@ -460,6 +343,3 @@ void app_main(void)
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
-
-

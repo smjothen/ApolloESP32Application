@@ -12,5 +12,6 @@
     "files.associations": {
         "*.ipp": "c"
     },
-    "idf.flashType": "UART"
+    "idf.flashType": "UART",
+    "idf.port": "/dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if01-port0"
 }
