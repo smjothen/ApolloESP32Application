@@ -377,6 +377,12 @@ char *host_from_rfid(){
 		return "192.168.0.103";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
+	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0) // id sent by Fredrik (1)
+		return "10.0.1.15";
+	if(strcmp(latest_tag.idAsString, "nfc-AA6449AC")==0) // id sent by Fredrik (2)
+		return "10.0.1.15";
+	if(strcmp(latest_tag.idAsString, "nfc-AAF895AC")==0) // id sent by Fredrik (3)
+		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
 		return "10.0.244.234";
 
