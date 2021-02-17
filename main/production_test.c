@@ -375,6 +375,8 @@ char *host_from_rfid(){
 		return "192.168.0.103";
 	if(strcmp(latest_tag.idAsString, "nfc-AAD61A3C")==0) // zaptec rectangular
 		return "192.168.0.103";
+	if(strcmp(latest_tag.idAsString, "nfc-AA8EA37D")==0) // marked with sitcker
+		return "192.168.0.113";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0) // id sent by Fredrik (1)
