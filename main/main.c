@@ -254,6 +254,7 @@ void app_main(void)
 	#endif
 
 	I2CDevicesStartTask();
+	connectivity_init();
 
 	struct DeviceInfo devInfo;
 	devInfo = i2cReadDeviceInfoFromEEPROM();
@@ -278,9 +279,6 @@ void app_main(void)
 			esp_restart();
 		}
 	}
-
-	// Read connection mode from flash and start interface
-    connectivity_init();
 
 	if(devInfo.factory_stage != FactoryStageFinnished){
 		int prodtest_result = prodtest_perform(devInfo);

@@ -63,6 +63,11 @@ static void connectivity_task()
 	//Read from Flash. If no interface is configured, use none and wait for setting
 	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 
+	struct DeviceInfo devInfo = i2cReadDeviceInfoFromEEPROM();
+	if(devInfo.factory_stage != FactoryStageFinnished){
+		staticNewInterface = eCONNECTION_WIFI;
+	}
+
 	enum CommunicationMode localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
@@ -168,18 +173,22 @@ static void connectivity_task()
 				zntpIsRunning = true;
 			}
 
-
 			//Activate MQTT when we are online and has NTP time or RTC time is good.
-			if((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
+			if ((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
 			{
 				//Make sure Device info has been read from EEPROM before connecting to cloud.
-				if(i2CDeviceInfoIsLoaded() == true)
+				if (i2CDeviceInfoIsLoaded() == true)
 				{
-					start_cloud_listener_task(i2cGetLoadedDeviceInfo());
-					mqttInitialized = true;
+					//Make sure Device info has been read from EEPROM before connecting to cloud.
+					// check for psk len to avoid prodtest race condition
+					if ((deviceInfoVersionOnEeprom() != 0xFF) && i2CDeviceInfoIsLoaded() == true && (strlen(i2cGetLoadedDeviceInfo().PSK) > 10))
+					{
+						ESP_LOGI(TAG, "starting cloud listener with %s, %s,", i2cGetLoadedDeviceInfo().PSK, i2cGetLoadedDeviceInfo().serialNumber);
+						start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+						mqttInitialized = true;
+					}
 				}
 			}
-
 		}
 		else if(zntp_enabled() == 1)
 		{
@@ -187,21 +196,6 @@ static void connectivity_task()
 			zntp_stop();
 			zntpIsRunning = false;
 		}
-
-
-		//Activate MQTT when we are online and has NTP time or RTC time is good.
-		if((sntpInitialized == true) && (mqttInitialized == false))
-		{
-			//Make sure Device info has been read from EEPROM before connecting to cloud.
-			// check for psk len to avoid prodtest race condition
-			if((deviceInfoVersionOnEeprom()!=0xFF) && i2CDeviceInfoIsLoaded() == true && (strlen(i2cGetLoadedDeviceInfo().PSK)>10))
-			{
-				ESP_LOGI(TAG, "starting cloud listener with %s, %s,", i2cGetLoadedDeviceInfo().PSK, i2cGetLoadedDeviceInfo().serialNumber);
-				start_cloud_listener_task(i2cGetLoadedDeviceInfo());
-				mqttInitialized = true;
-			}
-		}
-
 
 		cloud_listener_check_cmd();
 
