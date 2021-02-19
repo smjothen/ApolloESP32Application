@@ -40,7 +40,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.34";
+char softwareVersion[] = "0.0.0.35";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -64,7 +64,7 @@ void InitGPIOs()
 
 
 	// Initialize debug led pin to 0. Should not be high at boot
-	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 0);
+	gpio_set_level(GPIO_OUTPUT_DEBUG_LED, 1);
 
 }
 
@@ -280,11 +280,17 @@ void app_main(void)
 		}
 	}
 
-	if(devInfo.factory_stage != FactoryStageFinnished){
-		int prodtest_result = prodtest_perform(devInfo);
-		if(prodtest_result<0){
-			ESP_LOGE(TAG_MAIN, "Prodtest failed");
-			esp_restart();
+	// Protect prototype versions with serial numbers below ZAP000050 that has not been through factory test
+	// from the production test. If upgraded ota without this they will go into production test mode!
+	int serial = atoi(devInfo.serialNumber + 3);
+	if (serial > 50)
+	{
+		if(devInfo.factory_stage != FactoryStageFinnished){
+			int prodtest_result = prodtest_perform(devInfo);
+			if(prodtest_result<0){
+				ESP_LOGE(TAG_MAIN, "Prodtest failed");
+				esp_restart();
+			}
 		}
 	}
 

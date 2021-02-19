@@ -132,6 +132,9 @@ void chargeSession_Start()
 		{
 			ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", saveErr);
 		}
+
+		strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
+		chargeSession.SignedSession[7]='\0';
 	}
 }
 
@@ -211,6 +214,7 @@ int chargeSession_GetSessionAsString(char * message)
 	cJSON_AddBoolToObject(CompletedSessionObject, "ReliableClock", chargeSession.ReliableClock);
 	cJSON_AddBoolToObject(CompletedSessionObject, "StoppedByRFID", chargeSession.StoppedByRFID);
 	cJSON_AddStringToObject(CompletedSessionObject, "AuthenticationCode", chargeSession.AuthenticationCode);
+	cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", chargeSession.SignedSession);
 
 	char *buf = cJSON_PrintUnformatted(CompletedSessionObject);
 
