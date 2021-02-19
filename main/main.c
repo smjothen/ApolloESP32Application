@@ -188,7 +188,7 @@ void app_main(void)
 	//certificateValidate();
 
 
-	ESP_LOGE(TAG_MAIN, "Apollo: %s", OTAReadRunningPartition());
+	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s", softwareVersion, OTAReadRunningPartition());
 
 	storage_Init();
 
