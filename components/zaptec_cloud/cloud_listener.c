@@ -18,6 +18,7 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../authentication/authentication.h"
 #include "../../main/chargeSession.h"
+#include "../../main/sessionHandler.h"
 #include "apollo_ota.h"
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
@@ -798,6 +799,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU Start command FAILED");
 		}
 	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/104/"))
+	{
+		ESP_LOGI(TAG, "Received \"Update Settings\"-command");
+		ClearStartupSent();
+		responseStatus = 200;
+	}
+
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");

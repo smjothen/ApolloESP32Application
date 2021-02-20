@@ -27,6 +27,7 @@ enum ChargerOperatingMode
 void sessionHandler_init();
 void SetDataInterval(int newDataInterval);
 int sessionHandler_GetStackWatermark();
+void ClearStartupSent();
 
 #ifdef __cplusplus
 }

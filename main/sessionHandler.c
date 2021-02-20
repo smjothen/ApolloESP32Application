@@ -65,6 +65,7 @@ void log_task_info(void){
 	ESP_LOGD(TAG, "log_task_info done");
 }
 
+bool startupSent = false;
 
 static void sessionHandler_task()
 {
@@ -85,7 +86,6 @@ static void sessionHandler_task()
     uint32_t signalInterval = 120;
 
     uint32_t signalCounter = 0;
-    bool startupSent = false;
 
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
@@ -447,6 +447,15 @@ static void sessionHandler_task()
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
+}
+
+
+/*
+ * Call this function to resend startup parameters
+ */
+void ClearStartupSent()
+{
+	startupSent = false;
 }
 
 static TaskHandle_t taskSessionHandle = NULL;

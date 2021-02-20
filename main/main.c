@@ -40,7 +40,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.36";
+char softwareVersion[] = "0.0.0.37";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -323,12 +323,12 @@ void app_main(void)
     		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
     		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 			
-			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+			/*size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
-			ESP_LOGI(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
-			ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+			ESP_LOGI(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);*/
+			//ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
 
     		GetTimeOnString(onTimeString);
     		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
