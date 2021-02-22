@@ -310,13 +310,17 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 
 static float hmiBrightness = 0.0;
 static char nrTostr[11] = {0};
-//static char swVersion[8];
+
+static bool configSession = false;
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
 
 	//First time when unconfigured by switch or app, don't ask for pin.
-	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+	if((MCU_GetSwitchState() == 0) && (MCU_ChargeCurrentInstallationMaxLimit() == 0.0))
+		configSession = true;
+
+	if(configSession == true)
 		AUTH_SERV_CHAR_val[0] = '1';
 
 
@@ -723,10 +727,10 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read Standalone Current %f ", storage_Get_StandaloneCurrent());
+		ESP_LOGI(TAG, "Read Standalone Current %f ", MCU_StandAloneCurrent());
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", storage_Get_StandaloneCurrent());
+		sprintf(nrTostr, "%.1f", MCU_StandAloneCurrent());
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
@@ -836,10 +840,10 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_MAX_INST_CURRENT_CONFIG_UUID:
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", storage_Get_MaxInstallationCurrentConfig());
+		ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", MCU_ChargeCurrentInstallationMaxLimit());
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", storage_Get_MaxInstallationCurrentConfig());
+		sprintf(nrTostr, "%.1f", MCU_ChargeCurrentInstallationMaxLimit());
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
@@ -879,7 +883,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 {
 
 	//First time when unconfigured by switch or app, don't ask for pin.
-	if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+	//if((MCU_GetSwitchState() == 0) && (MCU_ChargeCurrentInstallationMaxLimit() == 0.0))
+	if(configSession == true)
 		AUTH_SERV_CHAR_val[0] = '1';
 
 #ifdef USE_PIN
@@ -1214,7 +1219,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		}
 
 		//First time when unconfigured by switch or app, don't ask for pin.
-		if((MCU_GetSwitchState() == 0) && (storage_Get_MaxInstallationCurrentConfig() == 0.0))
+		//if((MCU_GetSwitchState() == 0) && (MCU_ChargeCurrentInstallationMaxLimit() == 0.0))
+		if(configSession == true)
 			AUTH_SERV_CHAR_val[0] = '1';
 
 	#ifndef USE_PIN
@@ -1283,6 +1289,14 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 void ClearAuthValue()
 {
-	AUTH_SERV_CHAR_val[0] = '0';
-	SAVE_SERV_CHAR_val[0] = '0';
+	if(configSession == false)
+	{
+		//AUTH_SERV_CHAR_val[0] = '0';
+		//SAVE_SERV_CHAR_val[0] = '0';
+		ESP_LOGW(TAG, "Cleared Auth");
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Attempted to clear Auth");
+	}
 }

@@ -188,6 +188,9 @@ static uint8_t mcuCableType = 0;
 static float mcuChargeCurrentUserMax = 0;
 static uint16_t mcuPilotAvg = 0;
 static uint16_t mcuProximityInst = 0;
+static float mcuChargeCurrentInstallationMaxLimit = -1.0;
+static float mcuStandAloneCurrent = -1.0;
+
 int holdSetPhases = 0;
 
 
@@ -250,7 +253,7 @@ void uartSendTask(void *pvParameters){
     while(timout > 0)
     {
     	ZapMessage rxMsg;
-    	rxMsg = MCU_ReadStringParameter(ParamSmartMainboardAppSwVersion);
+    	rxMsg = MCU_ReadParameter(ParamSmartMainboardAppSwVersion);
     	if((20>=rxMsg.length) && (rxMsg.length > 1))
     	{
     		strncpy(mcuSwVersionString, (char*)rxMsg.data, rxMsg.length);
@@ -357,10 +360,10 @@ void uartSendTask(void *pvParameters){
 				break;
 
 			case 22:
-				txMsg.identifier = ParamChargePilotLevelAverage;
+				txMsg.identifier = ChargeCurrentInstallationMaxLimit;
 				break;
 			case 23:
-				txMsg.identifier = ParamProximityAnalogValue;
+				txMsg.identifier = StandAloneCurrent;
 				break;
 
 
@@ -461,10 +464,12 @@ void uartSendTask(void *pvParameters){
 		else if(rxMsg.identifier == ParamChargeCurrentUserMax)
 			mcuChargeCurrentUserMax = GetFloat(rxMsg.data);
 
-		else if(rxMsg.identifier == ParamChargePilotLevelAverage)
-			mcuPilotAvg = (rxMsg.data[0] << 8) | rxMsg.data[1];
-		else if(rxMsg.identifier == ParamProximityAnalogValue)
-			mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
+		else if(rxMsg.identifier == ChargeCurrentInstallationMaxLimit)
+			mcuChargeCurrentInstallationMaxLimit =  GetFloat(rxMsg.data);
+			//mcuPilotAvg = (rxMsg.data[0] << 8) | rxMsg.data[1];
+		else if(rxMsg.identifier == StandAloneCurrent)
+			mcuStandAloneCurrent =  GetFloat(rxMsg.data);
+			//mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
 
 
 
@@ -492,7 +497,7 @@ void uartSendTask(void *pvParameters){
 
         if(count >= 24)
         {
-        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, ACP:%d, APP: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuPilotAvg, mcuProximityInst);
+        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -591,7 +596,7 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
 }
 
 
-ZapMessage MCU_ReadStringParameter(uint16_t paramIdentifier)
+ZapMessage MCU_ReadParameter(uint16_t paramIdentifier)
 {
 	ZapMessage txMsg;
 	txMsg.type = MsgRead;
@@ -605,6 +610,7 @@ ZapMessage MCU_ReadStringParameter(uint16_t paramIdentifier)
 
 	return rxMsg;
 }
+
 
 char * MCU_GetSwVersionString()
 {
@@ -729,6 +735,15 @@ uint16_t MCU_ProximityInst()
 	return mcuProximityInst;
 }
 
+float MCU_ChargeCurrentInstallationMaxLimit()
+{
+	return mcuChargeCurrentInstallationMaxLimit;
+}
+
+float MCU_StandAloneCurrent()
+{
+	return mcuStandAloneCurrent;
+}
 
 
 void configureUart(){

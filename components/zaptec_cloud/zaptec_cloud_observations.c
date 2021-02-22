@@ -188,7 +188,7 @@ int publish_debug_telemetry_observation_local_settings()
     if(networkType != 0)
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
-    add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, storage_Get_StandaloneCurrent()));
+    add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, MCU_StandAloneCurrent()));
     add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, storage_Get_DefaultOfflinePhase()));
     add_observation_to_collection(observations, create_uint32_t_observation(PermanentCableLock, (uint32_t)storage_Get_PermanentLock()));
@@ -486,7 +486,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-	float standaloneCurrent = storage_Get_StandaloneCurrent();
+	float standaloneCurrent = MCU_StandAloneCurrent();//storage_Get_StandaloneCurrent();
 	if((previousStandaloneCurrent != standaloneCurrent))
 	{
 		add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, standaloneCurrent));
@@ -494,7 +494,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-	float maxInstallationCurrentConfig = storage_Get_MaxInstallationCurrentConfig();
+	float maxInstallationCurrentConfig = MCU_ChargeCurrentInstallationMaxLimit();//storage_Get_MaxInstallationCurrentConfig();
 	if((previousMaxInstallationCurrentConfig != maxInstallationCurrentConfig))
 	{
 		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, maxInstallationCurrentConfig));

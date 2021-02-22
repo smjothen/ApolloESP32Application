@@ -3,6 +3,8 @@
 
 #include "zaptec_protocol_serialisation.h"
 
+float GetFloat(uint8_t * input);
+
 void zaptecProtocolStart();
 void dspic_periodic_poll_start();
 void protocol_task_ctrl_debug(int state);
@@ -16,7 +18,7 @@ MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);
 MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
-ZapMessage MCU_ReadStringParameter(uint16_t paramIdentifier);
+ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);
 
 int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
@@ -48,6 +50,9 @@ uint8_t MCU_GetCableType();
 
 uint16_t MCU_GetPilotAvg();
 uint16_t MCU_ProximityInst();
+
+float MCU_ChargeCurrentInstallationMaxLimit();
+float MCU_StandAloneCurrent();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 

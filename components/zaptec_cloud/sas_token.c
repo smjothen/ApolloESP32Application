@@ -33,8 +33,8 @@ void encode(const char *s, char *enc, char *tb)
 int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 
     //Base64 decoded key for creating signature
-	// unsigned char key[45];
-	//storage_readFactoryPsk(key);
+
+	ESP_LOGI(TAG, "Generating token");
 
     //temp dummy values
     unsigned char key[45];// = {97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,97,98,99,100,0};
@@ -55,7 +55,7 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
     //char *uniqueId = "ZAP000007";
     //char *uniqueId = "ZAP000008";
 
-	ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
+	//ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
 	size_t key_len = sizeof(key)-1; //Key length -1 end of line char
 	size_t base64_key_len;
 	unsigned char *base64_key = base64_decode((char *)key, key_len, &base64_key_len);
@@ -64,9 +64,9 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	char unixTime[12];
 	int tokenValidTime = ttl_s;
 	sprintf(unixTime, "%ld", UnixTimeStamp+tokenValidTime);
-	ESP_LOGI(TAG, "Unixtime is: %ld", UnixTimeStamp);
-	ESP_LOGI(TAG, "Unixtime is: %i", tokenValidTime);
-	ESP_LOGI(TAG, "Unixtime is: %s", unixTime);
+	//ESP_LOGI(TAG, "Unixtime is: %ld", UnixTimeStamp);
+	//ESP_LOGI(TAG, "Unixtime is: %i", tokenValidTime);
+	//ESP_LOGI(TAG, "Unixtime is: %s", unixTime);
 	unsigned char *data = malloc(56);
 	strcpy((char*)data, "ZapCloud.azure-devices.net/devices/");
 	strcat((char*)data, uniqueId);
@@ -78,7 +78,7 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	unsigned char mac[33] = "";
 	unsigned char keybuffer[base64_key_len];
 	memcpy(keybuffer, base64_key, base64_key_len);
-	ESP_LOGI(TAG, "base64 key is: %s", keybuffer);
+	//ESP_LOGI(TAG, "base64 key is: %s", keybuffer);
 	hmac_sha256(keybuffer, base64_key_len, data, data_len, mac);
 
 	//Base64 encode the returned token

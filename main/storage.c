@@ -319,7 +319,7 @@ uint8_t storage_Get_StandalonePhase()
 	return configurationStruct.standalonePhase;
 }
 
-float storage_Get_StandaloneCurrent()
+/*float storage_Get_StandaloneCurrent()
 {
 	return configurationStruct.standaloneCurrent;
 }
@@ -327,7 +327,7 @@ float storage_Get_StandaloneCurrent()
 float storage_Get_MaxInstallationCurrentConfig()
 {
 	return configurationStruct.maxInstallationCurrentConfig;
-}
+}*/
 
 uint8_t storage_Get_PhaseRotation()
 {

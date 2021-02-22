@@ -102,7 +102,7 @@ int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
-    ESP_LOGE(TAG, "connection token is %s", token);
+    //ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
     return 0;
 }
@@ -1009,7 +1009,13 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 	else if(storage_Get_Standalone() == 1)
 		sprintf(responseBuffer+strlen(responseBuffer), "standalone_setting = standalone\\n");
 
-	sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", storage_Get_StandaloneCurrent());
+	//sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", storage_Get_StandaloneCurrent());
+	float standaloneCurrent = 0.0;
+	ZapMessage rxMsg = MCU_ReadParameter(StandAloneCurrent);
+	if((rxMsg.identifier == StandAloneCurrent) && (rxMsg.length == 4) && (rxMsg.type == MsgReadAck))
+		standaloneCurrent = GetFloat(rxMsg.data);
+
+	sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", standaloneCurrent);
 
 	if(storage_Get_NetworkType() == 1)
 		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_1\\n");

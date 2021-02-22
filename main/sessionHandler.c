@@ -395,7 +395,7 @@ static void sessionHandler_task()
 				//Give some time to ensure all values are set
 				vTaskDelay(pdMS_TO_TICKS(3000));
 
-				ZapMessage rxMsg = MCU_ReadStringParameter(GridTestResult);
+				ZapMessage rxMsg = MCU_ReadParameter(GridTestResult);
 				if(rxMsg.length > 0)
 				{
 					char * gtr = (char *)calloc(rxMsg.length+1, 1);
