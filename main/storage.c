@@ -460,9 +460,9 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "CommunicationMode: 			%s", comMode);
 
 
-	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
+	//ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
-	ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
+	//ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
 
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);

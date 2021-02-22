@@ -628,9 +628,9 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, maxStandaloneCurrent);
 					if(ret == MsgWriteAck)
 					{
-						storage_Set_StandaloneCurrent(maxStandaloneCurrent);
-						esp_err_t err = storage_SaveConfiguration();
-						ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
+						//storage_Set_StandaloneCurrent(maxStandaloneCurrent);
+						//esp_err_t err = storage_SaveConfiguration();
+						//ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
 						localSettingsAreUpdated = true;
 					}
 					else

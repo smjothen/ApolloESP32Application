@@ -1085,7 +1085,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, standaloneCurrent);
 			if(ret == MsgWriteAck)
 			{
-				storage_Set_StandaloneCurrent(standaloneCurrent);
+				//storage_Set_StandaloneCurrent(standaloneCurrent);
 				ESP_LOGI(TAG, "Set standalone Current to MCU: %f", standaloneCurrent);
 				saveConfiguration = true;
 			}
@@ -1144,7 +1144,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrConfig);
 			if(ret == MsgWriteAck)
 			{
-				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
+				//storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
 				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
 				saveConfiguration = true;
 			}
