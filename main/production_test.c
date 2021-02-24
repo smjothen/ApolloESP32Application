@@ -739,7 +739,7 @@ int charge_cycle_test(){
 	sprintf(payload, "Emeter voltages: %f, %f, %f", emeter_voltages[0], emeter_voltages[1], emeter_voltages[2]);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, payload );
 	float volt_min = -1.0; 
-	float volt_max = 260.0;
+	float volt_max = 50.0;
 	if(emeter_voltages[0] < volt_min || emeter_voltages[1]  < volt_min || emeter_voltages[2] < volt_min
 	|| emeter_voltages[0] > volt_max || emeter_voltages[1] >  volt_max || emeter_voltages[2] > volt_max){
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
