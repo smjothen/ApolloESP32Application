@@ -33,8 +33,8 @@ int ota_log_location_fetch(){
 int ota_log_download_start(char *location){
     time(&last_start_time);
 
-    char formated_message [128];
-    snprintf(formated_message, 128, "starting FW download, location: %s", location);
+    char formated_message [256];
+    snprintf(formated_message, 256, "starting FW download, location: %s", location);
     return log_message(formated_message);
 }
 
