@@ -27,23 +27,10 @@
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
-//#define ROUTING_ID "default"
-//#define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"//"a0d00d05-b959-4466-9a22-13271f0e0c0d"
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
-//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=a0d00d05-b959-4466-9a22-13271f0e0c0d"
-#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=default&ii=%s"
-
-//#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
-/*#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8"
-(existing != null ? existing + "&" : "")
-				+ "$.ct=application%2Fjson&$.ce=utf-8"
-				+ (addRouting ?
-				   (routingId != null && routingId.Length > 0 ? "&ri=" + Uri.EscapeDataString(routingId) : "")
-					+ (encodedInstallationId != null ? "&ii=" + encodedInstallationId : "")
-				   : "");*/
-
+#define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
 
 int resetCounter = 0;
 
@@ -54,8 +41,6 @@ static struct DeviceInfo cloudDeviceInfo;
 bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
-//bool cloudCommandCurrentUpdated = false;
-
 bool reportGridTestResults = false;
 
 
@@ -200,15 +185,16 @@ void ClearReportGridTestResults()
 }
 
 
-
-/*void ClearCloudCommandCurrentUpdated()
+bool newInstallationIdFlag = false;
+void ClearNewInstallationIdFlag()
 {
-	cloudCommandCurrentUpdated = false;
+	newInstallationIdFlag = false;
 }
-bool CloudCommandCurrentUpdated()
+bool GetNewInstallationIdFlag()
 {
-	return cloudCommandCurrentUpdated;
-}*/
+	return newInstallationIdFlag;
+}
+
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -463,6 +449,8 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			ESP_LOGI(TAG, "800 installationId: %s \n", installationId);
 			storage_Set_InstallationId(installationId);
 			doSave = true;
+
+			newInstallationIdFlag = true;
 			//continue;
 		}
 
@@ -475,6 +463,8 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			ESP_LOGI(TAG, "801 routingId: %s \n", routingId);
 			storage_Set_RoutingId(routingId);
 			doSave = true;
+
+			newInstallationIdFlag = true;
 			//continue;
 		}
 
@@ -508,11 +498,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 	}
 
 
-        	//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=15
-        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
-
-			//rTOPIC=$iothub/twin/PATCH/properties/desired/?$version=3
-			//rDATA={"Settings":{"802":"Apollo16","711":"1","120":"1","520":"1"},"$version":3}
 	ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
 
 	if(doSave == true)
@@ -965,7 +950,82 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		}
 		responseStatus = 200;
 	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
+	{
 
+			if(commandEvent->data_len > 4)
+			{
+				// Ensure to use a string with proper ending
+				char commandString[commandEvent->data_len+1];
+				commandString[commandEvent->data_len] = '\0';
+				strncpy(commandString, commandEvent->data, commandEvent->data_len);
+
+				ESP_LOGI(TAG, "Debug command: %s", commandString);
+
+				//DiagnosticsModes
+				if(strstr(commandString,"DiagnosticsMode 0") != NULL)
+				{
+					storage_Set_DiagnosticsMode(0);
+					storage_SaveConfiguration();
+				}
+				else if(strstr(commandString,"DiagnosticsMode 1") != NULL)
+				{
+					storage_Set_DiagnosticsMode(1);
+					storage_SaveConfiguration();
+				}
+
+				// Connectivity
+				else if(strstr(commandString,"Set LTE") != NULL)
+				{
+					storage_Set_CommunicationMode(eCONNECTION_LTE);
+					storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Restarting on LTE");
+					esp_restart();
+				}
+				else if(strstr(commandString,"Set Wifi") != NULL)
+				{
+					if(network_CheckWifiParameters())
+					{
+						storage_Set_DiagnosticsMode(eCONNECTION_WIFI);
+						storage_SaveConfiguration();
+
+						ESP_LOGI(TAG, "Restarting on Wifi");
+						esp_restart();
+					}
+					else
+					{
+						ESP_LOGI(TAG, "No valid Wifi parameters");
+					}
+				}
+				else if(strstr(commandString,"Clear Wifi") != NULL)
+				{
+					storage_clearWifiParameters();
+
+					ESP_LOGI(TAG, "Cleared Wifi parameters");
+				}
+
+
+				// Configuration reset
+				else if(strstr(commandString,"Configuration reset") != NULL)
+				{
+					storage_Init_Configuration();
+					storage_SaveConfiguration();
+
+					ESP_LOGI(TAG, "Configuration reset");
+				}
+
+				// Factory reset
+				else if(strstr(commandString,"Factory reset") != NULL)
+				{
+					storage_clearWifiParameters();
+					storage_Init_Configuration();
+					storage_SaveConfiguration();
+
+					ESP_LOGI(TAG, "Factory reset");
+				}
+			}
+
+	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
 	{
 		ESP_LOGI(TAG, "GridTest command");
@@ -1016,15 +1076,7 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 		standaloneCurrent = GetFloat(rxMsg.data);
 
 	sprintf(responseBuffer+strlen(responseBuffer), "max_standalone_current = %f\\n", standaloneCurrent);
-
-	if(storage_Get_NetworkType() == 1)
-		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_1\\n");
-	else if(storage_Get_NetworkType() == 2)
-		sprintf(responseBuffer+strlen(responseBuffer), "network_type = IT_3\\n");
-	else if(storage_Get_NetworkType() == 3)
-		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_1\\n");
-	else if(storage_Get_NetworkType() == 4)
-		sprintf(responseBuffer+strlen(responseBuffer), "network_type = TN_3\\n");
+	sprintf(responseBuffer+strlen(responseBuffer), "network_type = %s\\n", MCU_GetGridTypeString());
 
 	if(storage_Get_StandalonePhase() != 0)
 		sprintf(responseBuffer+strlen(responseBuffer), "standalone_phase = %d\\n", storage_Get_StandalonePhase());
@@ -1119,13 +1171,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         if(strstr(event->topic, "iothub/twin/PATCH/properties/desired/"))
 		{
         	ParseCloudSettingsFromCloud(event->data, event->data_len);
-        	//rDATA={"Settings":{"120":"0","711":"1","802":"Apollo14","511":"10","520":"1","805":"0","510":"20"},"$version":15}
-
 		}
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
         	ParseCloudSettingsFromCloud(event->data, event->data_len);
-        	//DATA={"desired":{"Settings":{"120":"1","520":"1","711":"1","802":"Apollo05"},"$version":4},"reported":{"$version":1}}
         }
 
         if(strstr(event->topic, "iothub/methods/POST/300/"))
@@ -1298,9 +1347,11 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     int compare = strncmp(instId, INSTALLATION_ID, 36);
     if(compare != 0)
-    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_InstallationId());
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), storage_Get_InstallationId());
     else
-        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, INSTALLATION_ID);
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID);
+
+    ESP_LOGW(TAG,"event_topic: %s ", event_topic);
 
     ESP_LOGI(TAG,
         "mqtt connection:\r\n"
@@ -1348,3 +1399,27 @@ void stop_cloud_listener_task()
 	esp_mqtt_client_stop(mqtt_client);
 	esp_mqtt_client_destroy(mqtt_client);
 }
+
+void update_installationId()
+{
+
+    char * instId = storage_Get_InstallationId();
+
+    int compare = strncmp(instId, INSTALLATION_ID, 36);
+    if(compare != 0)
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), storage_Get_InstallationId());
+    else
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID);
+
+    ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
+
+    //mqtt_config.cert_pem = cert;
+
+    mqtt_config.lwt_topic = event_topic;
+    /*esp_mqtt_client_disconnect(mqtt_client);
+    esp_mqtt_client_stop(mqtt_client);
+	esp_mqtt_set_config(mqtt_client, &mqtt_config);
+	esp_mqtt_client_start(mqtt_client);
+	refresh_token(&mqtt_config);*/
+}
+

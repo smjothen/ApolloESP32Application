@@ -77,8 +77,8 @@ static void sessionHandler_task()
 	uint32_t onTime = 0;
     uint32_t pulseCounter = 30;
 
-    uint32_t dataCounter = 50;
-    uint32_t dataInterval = 120;//60;
+    uint32_t dataCounter = 110;
+    uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 10;
@@ -352,6 +352,7 @@ static void sessionHandler_task()
 				}
 
 				publish_debug_telemetry_observation_StartUpParameters();
+				publish_debug_telemetry_observation_local_settings();
 
 				startupSent = true;
 			}
@@ -359,6 +360,12 @@ static void sessionHandler_task()
 
 			if(CloudSettingsAreUpdated() == true)
 			{
+				if(GetNewInstallationIdFlag() == true)
+				{
+					update_installationId();
+					ClearNewInstallationIdFlag();
+				}
+
 				int published = publish_debug_telemetry_observation_cloud_settings();
 				if (published == 0)
 				{
@@ -419,6 +426,7 @@ static void sessionHandler_task()
 					ClearReportGridTestResults();
 				}
 			}
+
 
 
 			/*if(CloudCommandCurrentUpdated() == true)

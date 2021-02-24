@@ -212,6 +212,18 @@ bool i2cRTCChecked()
 	return RTCchecked;
 }
 
+uint32_t passedDetectedCounter = 0;
+uint32_t failedDetectedCounter = 0;
+
+uint32_t GetPassedDetectedCounter()
+{
+	return passedDetectedCounter;
+}
+
+uint32_t GetFailedDetectedCounter()
+{
+	return failedDetectedCounter;
+}
 
 static void i2cDevice_task(void *pvParameters)
 {
@@ -236,6 +248,7 @@ static void i2cDevice_task(void *pvParameters)
 	//if((storage_Get_AuthenticationRequired() == 1) && (NFCInitialized == false))
 
 
+
 	NFCInit();
 
 	while (true)
@@ -243,6 +256,19 @@ static void i2cDevice_task(void *pvParameters)
 
 		nfcCardDetected = NFCReadTag(); //Move inside
 
+		//Test function for checking successful NFC reading under certain conditions
+		if(storage_Get_DiagnosticsMode() == 1)
+		{
+			if(nfcCardDetected == true)
+				passedDetectedCounter++;
+			else
+				failedDetectedCounter++;
+		}
+		else
+		{
+			passedDetectedCounter = 0;
+			failedDetectedCounter = 0;
+		}
 		//if(!nfcCardDetected)
 		//	NFCClearTag();
 

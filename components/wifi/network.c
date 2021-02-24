@@ -41,7 +41,7 @@ char ip4Address[16] = {0};
 char ip6Address;
 static bool wifiScan = false;
 static bool wifiIsValid = false;
-static bool connecting = false;
+//static bool connecting = false;
 
 #define GOT_IPV4_BIT BIT(0)
 #define GOT_IPV6_BIT BIT(1)
@@ -689,7 +689,9 @@ void network_startWifiScan()
         .ssid = NULL,
         .bssid = NULL,
         .channel = 0,
-        .show_hidden = false
+        .show_hidden = false,
+		.scan_time.active.max = 300,
+		.scan_time.active.min = 0,
     };
 
 

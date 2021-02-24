@@ -521,6 +521,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				wifiSegmentCount = 0;
 
 				//network_WifiScanEnd();
+				ESP_LOGW(TAG, "Resume current wifi");
+				network_updateWifi();
 			}
 
 		}
@@ -1289,14 +1291,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 void ClearAuthValue()
 {
-	if(configSession == false)
-	{
-		//AUTH_SERV_CHAR_val[0] = '0';
-		//SAVE_SERV_CHAR_val[0] = '0';
+		AUTH_SERV_CHAR_val[0] = '0';
+		SAVE_SERV_CHAR_val[0] = '0';
 		ESP_LOGW(TAG, "Cleared Auth");
-	}
-	else
-	{
-		ESP_LOGW(TAG, "Attempted to clear Auth");
-	}
 }

@@ -25,6 +25,8 @@ int I2CGetStackWatermark();
 void I2CDevicesStartTask();
 
 uint8_t deviceInfoVersionOnEeprom();
+uint32_t GetPassedDetectedCounter();
+uint32_t GetFailedDetectedCounter();
 
 #ifdef __cplusplus
 }

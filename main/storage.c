@@ -257,6 +257,7 @@ uint8_t storage_Get_IsEnabled()
 
 char * storage_Get_InstallationId()
 {
+	//Sanity check
 	if(strlen(configurationStruct.installationId) < 36)
 		strcpy(configurationStruct.installationId, INSTALLATION_ID);
 
@@ -265,7 +266,9 @@ char * storage_Get_InstallationId()
 
 char * storage_Get_RoutingId()
 {
-	if(strlen(configurationStruct.routingId) == 0)
+	//Sanity check
+	int len = strlen(configurationStruct.routingId);
+	if((len == 0) || ( len < 50))
 		strcpy(configurationStruct.routingId, ROUTING_ID);
 
 	return configurationStruct.routingId;
