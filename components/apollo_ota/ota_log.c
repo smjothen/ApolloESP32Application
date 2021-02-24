@@ -18,8 +18,8 @@ static int log_message(char *msg){
     char time_string[64];
     strftime(time_string, sizeof(time_string), "@{%Y-%m-%d %H:%M:%S}", &timeinfo);
 
-
-    ESP_LOGI(TAG, "%s %s",time_string, msg);
+    //Use LOGW to highlight
+    ESP_LOGW(TAG, "%s %s",time_string, msg);
 
     char formated_message [128];
     snprintf(formated_message, 128, "[%s] %s %s", TAG, time_string, msg);
@@ -30,8 +30,11 @@ static int log_message(char *msg){
 int ota_log_location_fetch(){
     return log_message("finding ota file location");
 }
+
+static uint32_t total_bytes = 0;
 int ota_log_download_start(char *location){
     time(&last_start_time);
+    total_bytes = 0;
 
     char formated_message [256];
     snprintf(formated_message, 256, "starting FW download, location: %s", location);
@@ -66,7 +69,6 @@ int ota_log_timeout(){
 }
 
 
-static uint32_t total_bytes = 0;
 static uint32_t bytes_at_last_log = 0;
 static const uint32_t progres_log_intervall = 200000;
 

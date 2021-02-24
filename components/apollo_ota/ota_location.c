@@ -179,6 +179,7 @@ int get_image_location(char *location, int buffersize)
         .user_data = local_response_buffer,
         .cert_pem = (char *)server_cert_pem_start,
 		.timeout_ms = 20000,
+		.buffer_size = 1536,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
