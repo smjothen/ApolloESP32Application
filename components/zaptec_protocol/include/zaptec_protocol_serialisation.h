@@ -210,9 +210,9 @@
         CommandIndicateAppConnect = 603,
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
+		CommandEnterProductionMode = 701,
+		CommandServoClearCalibration = 702,
 		CommandRunGridTest = 804,
-
-        CommandEnterProductionMode = 701,
 
     } CommandNo;
 

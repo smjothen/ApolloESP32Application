@@ -29,7 +29,7 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "eeprom_wp.h"
-//#include "apollo_console.h"
+#include "apollo_console.h"
 #include "certificate.h"
 #include "fat.h"
 
@@ -40,7 +40,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.42";
+char softwareVersion[] = "0.0.0.43";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -176,7 +176,8 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-	//apollo_console_init();
+	gpio_pullup_en(GPIO_NUM_3);
+	apollo_console_init();
 
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
@@ -338,6 +339,10 @@ void app_main(void)
     	HandleCommands();
 	#endif
 
+    	if(onTimeCounter == 30)
+    	{
+    		console_stop();
+    	}
 
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);

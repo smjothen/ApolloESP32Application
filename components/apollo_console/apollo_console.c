@@ -17,6 +17,25 @@
 static const char *TAG = "CONSOLE";
 static const char *REPLY_TAG = ">>>>>>";
 
+static bool consoleInUse = false;
+static int console_in_use(int argc, char **argv){
+	consoleInUse = true;
+    ESP_LOGD(REPLY_TAG, "Keeping console alive");
+    return 0;
+}
+
+static int register_console_in_use(void){
+    const esp_console_cmd_t cmd = {
+        .command = "active",
+        .help = "Keep console alive",
+        .hint = NULL,
+        .func = &console_in_use,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
 
 static int prodtest_read_cmd(int argc, char **argv){
     struct DeviceInfo device_info = i2cReadDeviceInfoFromEEPROM();
@@ -178,16 +197,18 @@ static void initialize_console(void)
     linenoiseSetHintsCallback((linenoiseHintsCallback*) &esp_console_get_hint);
 
     /* Set command history size */
-    linenoiseHistorySetMaxLen(100);
+    linenoiseHistorySetMaxLen(10);
 
     /* Don't return empty lines */
     //linenoiseAllowEmpty(false);
 }
 
+
+static bool run = true;
 void console_task(){
     const char *prompt =  "APOLLO ESP> ";
         
-    while(true) {
+    while(run) {
             /* Get a line using linenoise.
             * The line is returned when ENTER is pressed.
             */
@@ -228,12 +249,28 @@ void apollo_console_init(void){
     initialize_console();
     esp_console_register_help_command();
 
+    register_console_in_use();
     register_prodtest_read_cmd();
     register_prodtest_write_cmd();
     register_reboot_cmd();
     register_new_id_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
+}
 
-
-}   
+void console_stop()
+{
+	if(consoleInUse == false)
+	{
+		run = false;
+		//deInit does not work, never return or crashes when ending thread, suspending thread instead.
+		//esp_console_deinit();
+		uart_disable_rx_intr(CONFIG_ESP_CONSOLE_UART_NUM);
+		vTaskSuspend(console_task_handle);
+		ESP_LOGI(TAG, "Console suspended");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "Keeping console open");
+	}
+}

@@ -967,11 +967,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					storage_Set_DiagnosticsMode(0);
 					storage_SaveConfiguration();
+					responseStatus = 200;
 				}
 				else if(strstr(commandString,"DiagnosticsMode 1") != NULL)
 				{
 					storage_Set_DiagnosticsMode(1);
 					storage_SaveConfiguration();
+					responseStatus = 200;
 				}
 
 				// Connectivity
@@ -1002,6 +1004,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_clearWifiParameters();
 
 					ESP_LOGI(TAG, "Cleared Wifi parameters");
+					responseStatus = 200;
 				}
 
 
@@ -1012,6 +1015,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 
 					ESP_LOGI(TAG, "Configuration reset");
+					responseStatus = 200;
 				}
 
 				// Factory reset
@@ -1022,6 +1026,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 
 					ESP_LOGI(TAG, "Factory reset");
+					responseStatus = 200;
 				}
 
 				// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
@@ -1033,6 +1038,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						SetDataInterval(60);
 						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
 					}
 				}
 				// Logging interval
@@ -1040,9 +1050,24 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SetDataInterval(0);
 					ESP_LOGI(TAG, "Using default LogInterval");
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"ClearServoCalibration") != NULL)
+				{
+					ESP_LOGI(TAG, "ClearServoCalibration");
+					MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU cleared servo");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU servo clear FAILED");
+					}
 				}
 			}
-
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
 	{
