@@ -1023,6 +1023,24 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					ESP_LOGI(TAG, "Factory reset");
 				}
+
+				// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
+				else if(strstr(commandString,"LogInterval ") != NULL)
+				{
+					char *endptr;
+					int interval = (int)strtol(commandString, &endptr, 10);
+					if((86400 > interval) && (interval > 0))
+					{
+						SetDataInterval(60);
+						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+					}
+				}
+				// Logging interval
+				else if(strstr(commandString,"LogInterval") != NULL)
+				{
+					SetDataInterval(0);
+					ESP_LOGI(TAG, "Using default LogInterval");
+				}
 			}
 
 	}
