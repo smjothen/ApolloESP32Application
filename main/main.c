@@ -210,6 +210,7 @@ void app_main(void)
 #endif
 
 	configure_uart();
+	start_ota_task();
     zaptecProtocolStart();
 
 	validate_booted_image();

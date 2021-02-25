@@ -94,7 +94,7 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
         ESP_LOGW(TAG, "attempting ota update");
         xTimerReset( timeout_timer, portMAX_DELAY );
 
