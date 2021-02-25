@@ -15,6 +15,7 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../../main/chargeSession.h"
+#include "../apollo_ota/include/apollo_ota.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -276,8 +277,15 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
-
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
+
+    char buf[256];
+    GetTimeOnString(buf);
+    sprintf(buf + strlen(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), OTAReadRunningPartition());
+
+    ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
+    add_observation_to_collection(observations, create_observation(808, buf));
+
 
     return publish_json(observations);
 }
@@ -361,7 +369,7 @@ int publish_debug_telemetry_observation_all(
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  DBC: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState(), MCU_GetDebugCounter());
+	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  MCnt: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), temperature_emeter1, temperature_emeter2, temperature_emeter3, temperature_TM, temperature_TM2, voltage_l1, voltage_l2, voltage_l3, current_l1, current_l2, current_l3, MCU_GetSwitchState(), MCU_GetDebugCounter());
 
 	if(storage_Get_DiagnosticsMode() == 1)
 	{
