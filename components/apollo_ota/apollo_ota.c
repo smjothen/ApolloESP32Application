@@ -211,5 +211,46 @@ const char* OTAReadRunningPartition()
 
 void ota_rollback()
 {
+	ESP_LOGI(TAG, "Rollback to previous good partition");
 	esp_ota_mark_app_invalid_rollback_and_reboot();
+}
+
+void ota_rollback_to_factory()
+{
+	ESP_LOGI(TAG, "Rollback to factory");
+	//Ref: https://esp32.com/viewtopic.php?t=4210
+
+	//***********************************************************************************************
+	//                                B A C K T O F A C T O R Y                                     *
+	//***********************************************************************************************
+	// Return to factory version.                                                                   *
+	// This will set the otadata to boot from the factory image, ignoring previous OTA updates.     *
+	//***********************************************************************************************
+
+	esp_partition_iterator_t  pi ;                                  // Iterator for find
+	const esp_partition_t*    factory ;                             // Factory partition
+	esp_err_t                 err ;
+
+	pi = esp_partition_find ( ESP_PARTITION_TYPE_APP,               // Get partition iterator for
+							  ESP_PARTITION_SUBTYPE_APP_FACTORY,    // factory partition
+							  "factory" ) ;
+	if ( pi == NULL )                                               // Check result
+	{
+		ESP_LOGE ( TAG, "Failed to find factory partition" ) ;
+	}
+	else
+	{
+		factory = esp_partition_get ( pi ) ;                        // Get partition struct
+		esp_partition_iterator_release ( pi ) ;                     // Release the iterator
+		err = esp_ota_set_boot_partition ( factory ) ;              // Set partition for boot
+
+		if ( err != ESP_OK )                                        // Check error
+		{
+			ESP_LOGE ( TAG, "Failed to set boot partition" ) ;
+		}
+		else
+		{
+			esp_restart() ;                                         // Restart ESP
+		}
+	}
 }

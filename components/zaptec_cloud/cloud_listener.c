@@ -811,7 +811,17 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"OTA rollback\"-command");
 		ESP_LOGE(TAG, "Active partition: %s", OTAReadRunningPartition());
-		ota_rollback(); //TODO perform in separate thread to be able to ack cloud?
+
+		char commandString[commandEvent->data_len+1];
+		commandString[commandEvent->data_len] = '\0';
+		strncpy(commandString, commandEvent->data, commandEvent->data_len);
+
+		//TODO perform in separate thread to be able to ack cloud?
+		if(strstr(commandString, "factory") != NULL)
+			ota_rollback_to_factory();
+		else
+			ota_rollback();
+
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
