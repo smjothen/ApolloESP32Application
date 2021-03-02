@@ -1022,7 +1022,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 
 					ESP_LOGI(TAG, "Factory reset");
+				}else if(strstr(commandString, "segmentota") != NULL){
+					start_segmented_ota();
 				}
+
 			}
 
 	}
