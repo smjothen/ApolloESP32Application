@@ -998,7 +998,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					if(network_CheckWifiParameters())
 					{
-						storage_Set_DiagnosticsMode(eCONNECTION_WIFI);
+						storage_Set_CommunicationMode(eCONNECTION_WIFI);
 						storage_SaveConfiguration();
 
 						ESP_LOGI(TAG, "Restarting on Wifi");
