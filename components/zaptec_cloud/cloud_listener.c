@@ -445,7 +445,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 
 			char installationId[DEFAULT_STR_SIZE] = {0};
-			sscanf(pos+strlen(" 800 : "),"%36s", installationId);//Read Max 32 characters
+			sscanf(pos+strlen(" 800 : "),"%36s", installationId);//Read Max 36 characters
 			ESP_LOGI(TAG, "800 installationId: %s \n", installationId);
 			storage_Set_InstallationId(installationId);
 			doSave = true;
@@ -459,7 +459,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		{
 
 			char routingId[DEFAULT_STR_SIZE] = {0};
-			sscanf(pos+strlen(" 801 : "),"%36s", routingId);//Read Max 32 characters
+			sscanf(pos+strlen(" 801 : "),"%36s", routingId);//Read Max 36 characters
 			ESP_LOGI(TAG, "801 routingId: %s \n", routingId);
 			storage_Set_RoutingId(routingId);
 			doSave = true;
@@ -471,12 +471,22 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		pos = strstr(stringPart, " 802 : ");
 		if(pos != NULL)
 		{
+			char * nameEnd = strstr(stringPart, " }");
+			if(nameEnd != NULL)
+			{
+				char chargerName[DEFAULT_STR_SIZE] = {0};
+				char * nameStart = pos+strlen(" 802 : ");
+				int nameLen = nameEnd - nameStart;
+				if(nameLen <= 36)
+				{
+					strncpy(chargerName, nameStart, nameLen);
 
-			char chargerName[DEFAULT_STR_SIZE] = {0};
-			sscanf(pos+strlen(" 802 : "),"%36s", chargerName);//Read Max 32 characters
-			ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
-			storage_Set_ChargerName(chargerName);
-			doSave = true;
+				//sscanf(pos+strlen(" 802 : "),"%36s", chargerName);//Read Max 36 characters %[^\0]
+					ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
+					storage_Set_ChargerName(chargerName);
+					doSave = true;
+				}
+			}
 			//continue;
 		}
 
@@ -785,13 +795,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		}
 	}
 
-	else if(strstr(commandEvent->topic, "iothub/methods/POST/104/"))
-	{
-		ESP_LOGI(TAG, "Received \"Update Settings\"-command");
-		ClearStartupSent();
-		responseStatus = 200;
-	}
-
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
@@ -892,6 +895,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 400;
 			ESP_LOGE(TAG, "MCU Stop command FAILED");
 		}
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/503/"))
+	{
+		ESP_LOGI(TAG, "Received \"ReportChargingState\"-command");
+		ClearStartupSent();
+		responseStatus = 200;
 	}
 
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/504/"))
@@ -998,7 +1008,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					if(network_CheckWifiParameters())
 					{
-						storage_Set_DiagnosticsMode(eCONNECTION_WIFI);
+						storage_Set_CommunicationMode(eCONNECTION_WIFI);
 						storage_SaveConfiguration();
 
 						ESP_LOGI(TAG, "Restarting on Wifi");

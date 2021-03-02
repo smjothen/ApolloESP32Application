@@ -26,13 +26,7 @@ int publish_debug_telemetry_observation_WifiParameters();
 
 int publish_debug_telemetry_observation_LteParameters();
 
-int publish_debug_telemetry_observation_all(
-	double temperature_emeter1, double temperature_emeter2, double temperature_emeter3,
-	double temperature_TM, double temperature_TM2,
-    double voltage_l1, double voltage_l2, double voltage_l3,
-    double current_l1, double current_l2, double current_l3,
-	double rssi
-);
+int publish_debug_telemetry_observation_all(double rssi);
 
 int publish_telemetry_observation_on_change();
 

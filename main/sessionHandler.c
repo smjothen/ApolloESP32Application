@@ -77,7 +77,7 @@ static void sessionHandler_task()
 	uint32_t onTime = 0;
     uint32_t pulseCounter = 30;
 
-    uint32_t dataCounter = 110;
+    uint32_t dataCounter = 0;
     uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
@@ -276,7 +276,7 @@ static void sessionHandler_task()
 				}
 
 				if(otaIsRunning() == false)
-					publish_debug_telemetry_observation_all(MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), rssi);
+					publish_debug_telemetry_observation_all(rssi);
 			}
 			else
 			{
@@ -353,6 +353,7 @@ static void sessionHandler_task()
 				}
 
 				publish_debug_telemetry_observation_StartUpParameters();
+				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
 
 				startupSent = true;
