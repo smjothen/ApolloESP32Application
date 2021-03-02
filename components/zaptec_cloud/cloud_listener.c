@@ -1424,6 +1424,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.username = username;
     mqtt_config.client_id = cloudDeviceInfo.serialNumber;
     mqtt_config.cert_pem = cert;
+    //mqtt_config.use_global_ca_store = true;
 
     mqtt_config.lwt_qos = 1;
     mqtt_config.lwt_topic = event_topic;

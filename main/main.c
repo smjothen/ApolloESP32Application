@@ -40,7 +40,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.45";
+char softwareVersion[] = "0.0.0.46";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -183,9 +183,9 @@ void app_main(void)
 	InitGPIOs();
 
 	// For testing
-	//certificate_init();
+	///certificate_init();
 	//fat_make();
-	//certificateGetNew();
+	///certificate_update();
 	//certificateValidate();
 
 

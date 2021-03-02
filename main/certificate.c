@@ -13,6 +13,7 @@
 #include "esp_tls.h"
 #include "i2cDevices.h"
 #include "fat.h"
+#include "esp_crt_bundle.h"
 
 #define u8 uint8_t
 
@@ -102,6 +103,59 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+unsigned char certBuf[40000] = {0};
+bool ParseCertificateBundle(char * certificateBundle)
+{
+	int receivedVersion = 0;
+	char receivedSign[200] = {0};
+	cJSON *body = cJSON_Parse(certificateBundle);
+	if(body!=NULL){
+		if(cJSON_HasObjectItem(body, "ver")){
+			receivedVersion =  cJSON_GetObjectItem(body, "ver")->valueint;
+			ESP_LOGW(TAG, "Received version: %d", receivedVersion);
+		}
+		if(cJSON_HasObjectItem(body, "data")){
+			//strcpy(receivedSign, cJSON_GetObjectItem(body, "sign")->valuestring);
+			ESP_LOGW(TAG, "Received cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
+		}
+
+		if(cJSON_HasObjectItem(body, "sign")){
+			strcpy(receivedSign, cJSON_GetObjectItem(body, "sign")->valuestring);
+			ESP_LOGW(TAG, "Received signature: %s", receivedSign);
+		}
+
+
+
+
+		/*esp_err_t err = esp_tls_init_global_ca_store();
+		if(err != ESP_OK)
+			printf("Creating store failed: %i\n", err);
+*/
+		unsigned int ca_len = strlen(cJSON_GetObjectItem(body, "data")->valuestring);
+
+		//memcpy(certBuf, cJSON_GetObjectItem(body, "data")->valuestring, ca_len);
+
+		/*esp_tls_cfg_t cfg = {
+		     .crt_bundle_attach = certBuf,
+		};
+
+		mbedtls_ssl_config conf;
+		mbedtls_ssl_config_init(&conf);
+
+		esp_crt_bundle_attach(&conf);*/
+
+		//esp_err_t err = esp_tls_set_global_ca_store(certBuf, ca_len);
+		esp_err_t err = esp_tls_set_global_ca_store(zap_cert_pem_start, zap_cert_pem_end - zap_cert_pem_start);
+		if(err != ESP_OK)
+			printf("Creating store failed: %i\n", err);
+
+
+
+		cJSON_Delete(body);
+	}
+	return true;
+}
+
 
 //int certificateGetNew()
 static void certificate_task()
@@ -117,9 +171,16 @@ static void certificate_task()
 		.buffer_size = 1536,
 	};*/
 
+	bool newCertificateRequired = false;
+
 	char *certificate_location = calloc(50000,1);
 
-	bool newCertificateRequired = true;
+	fat_ReadCertificate(certificate_location);
+
+	bool isOk = ParseCertificateBundle(certificate_location);
+	if(!isOk)
+		newCertificateRequired = true;
+
 	while(newCertificateRequired)
 	{
 
@@ -144,7 +205,7 @@ static void certificate_task()
 			.event_handler = _http_event_handler,
 			.user_data = certificate_location,
 			.cert_pem = (char *)zap_cert_pem_start,
-			.timeout_ms = 10000,
+			.timeout_ms = 30000,
 			.buffer_size = 1024,
 		};
 
@@ -180,7 +241,7 @@ static void certificate_task()
 		read_len = esp_http_client_read(client, certificate_location, 50000);
 
 
-		ESP_LOGI(TAG, "Body: %s", certificate_location);
+		ESP_LOGW(TAG, "Len: %d, Body: %c%c%c ... %c%c%c  ", strlen(certificate_location), certificate_location[0], certificate_location[1], certificate_location[2], certificate_location[read_len-3], certificate_location[read_len-2], certificate_location[read_len-1]);
 
 		cJSON *body = cJSON_Parse(certificate_location);
 		if(body!=NULL){
@@ -199,6 +260,22 @@ static void certificate_task()
 			}
 
 			cJSON_Delete(body);
+
+			//const char sig[] = "304402205882d3826fc16f9da91700ed715b5288736077dcc27a3968594aeb8765bf9c33022031e4127eb145d9eaf5177912ae2a7281820e9556d9ef144789372d4e6312a7c3";
+
+			//memset(certificate_location,0, 50000);
+			//memcpy(certificate_location, sig, sizeof(sig));
+
+			fat_WriteCertificate(certificate_location);
+
+			memset(certificate_location,0, sizeof(char));
+
+			fat_ReadCertificate(certificate_location);
+
+			ESP_LOGW(TAG, "Len: %d, Body: %c%c%c ... %c%c%c  ", strlen(certificate_location), certificate_location[0], certificate_location[1], certificate_location[2], certificate_location[read_len-3], certificate_location[read_len-2], certificate_location[read_len-1]);
+
+			fat_static_unmount();
+
 		}
 		else
 		{
@@ -275,18 +352,18 @@ static void certificate_task()
 }
 
 
-static void certificate_stream_task()
+/*static void certificate_stream_task()
 {
 
-	/*char certificate_location[50000] = {0};
-	esp_http_client_config_t config = {
-		.url = certificate_location,
-		.cert_pem = (char *)server_cert_pem_start,
-		// .use_global_ca_store = true,
-		.event_handler = _http_event_handler,
-		.timeout_ms = 20000,
-		.buffer_size = 1536,
-	};*/
+//	char certificate_location[50000] = {0};
+//	esp_http_client_config_t config = {
+//		.url = certificate_location,
+//		.cert_pem = (char *)server_cert_pem_start,
+//		// .use_global_ca_store = true,
+//		.event_handler = _http_event_handler,
+//		.timeout_ms = 20000,
+//		.buffer_size = 1536,
+//	};
 
 	bool newCertificateRequired = true;
 	while(newCertificateRequired)
@@ -371,14 +448,14 @@ static void certificate_stream_task()
 		//esp_err_t err = esp_http_client_perform(client);
 		if (read_len > 0)
 		{
-			/*ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
-					esp_http_client_get_status_code(client),
-					esp_http_client_get_content_length(client));
+//			ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+//					esp_http_client_get_status_code(client),
+//					esp_http_client_get_content_length(client));
+//
+//			volatile int read = esp_http_client_read(client, certificate_location, 1536);
+//
+//			ESP_LOGI(TAG, "Body: %s", certificate_location);
 
-			volatile int read = esp_http_client_read(client, certificate_location, 1536);
-
-			ESP_LOGI(TAG, "Body: %s", certificate_location);
-*/
 			cJSON *body = cJSON_Parse(buffer);
 			if(body!=NULL){
 				if(cJSON_HasObjectItem(body, "ver")){
@@ -390,6 +467,12 @@ static void certificate_stream_task()
 					strcpy(receivedSign, cJSON_GetObjectItem(body, "sign")->valuestring);
 					ESP_LOGW(TAG, "Received signature: %s", receivedSign);
 				}
+
+				fat_WriteCertificate(body);
+
+				fat_ReadCertificate();
+
+				fat_static_unmount();
 
 				cJSON_Delete(body);
 			}
@@ -412,7 +495,7 @@ static void certificate_stream_task()
 
 	vTaskDelete(taskCertHandle);
 
-}
+}*/
 
 
 
@@ -507,7 +590,15 @@ int certificateValidate()
 
 void certificate_init()
 {
-	fat_make();
+	//fat_make();
+
+	fat_static_mount();
+
+	//fat_WriteCertificate();
+
+	//fat_ReadCertificate();
+
+	//fat_static_unmount();
 
 	/*esp_err_t err = esp_tls_init_global_ca_store();
 	if(err != ESP_OK)
