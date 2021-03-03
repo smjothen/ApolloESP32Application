@@ -145,7 +145,12 @@ bool ParseCertificateBundle(char * certificateBundle)
 		esp_crt_bundle_attach(&conf);*/
 
 		//esp_err_t err = esp_tls_set_global_ca_store(certBuf, ca_len);
-		esp_err_t err = esp_tls_set_global_ca_store(zap_cert_pem_start, zap_cert_pem_end - zap_cert_pem_start);
+		//esp_err_t err = esp_tls_set_global_ca_store(zap_cert_pem_start, zap_cert_pem_end - zap_cert_pem_start);
+		esp_err_t err = esp_tls_init_global_ca_store();
+		if(err != ESP_OK)
+			printf("Creating store failed: %i\n", err);
+
+		err = esp_tls_set_global_ca_store(bundle_crt_start, bundle_crt_end - bundle_crt_start);
 		if(err != ESP_OK)
 			printf("Creating store failed: %i\n", err);
 

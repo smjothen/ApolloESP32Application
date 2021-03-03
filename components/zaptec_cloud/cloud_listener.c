@@ -24,6 +24,8 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
 
+#include "esp_tls.h"
+
 #define TAG "Cloud Listener"
 
 #define MQTT_HOST "zapcloud.azure-devices.net"
@@ -44,7 +46,7 @@ bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
 
 
-const char cert[] =
+const unsigned char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
 "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\r\n"
 "RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\r\n"
@@ -1399,6 +1401,15 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 	ESP_LOGI(TAG, "Connecting to IotHub");
 
+	/*esp_err_t err = esp_tls_init_global_ca_store();
+	if(err != ESP_OK)
+		printf("Creating store failed: %i\n", err);
+
+	int certlen = sizeof(cert)/sizeof(cert[0]);
+	err = esp_tls_set_global_ca_store(cert, certlen);
+	if(err != ESP_OK)
+		printf("Creating store failed: %i\n", err);
+*/
     static char broker_url[128] = {0};
     sprintf(broker_url, "mqtts://%s", MQTT_HOST);
 
@@ -1421,11 +1432,11 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
         " > uri: %s\r\n"
         " > port: %d\r\n"
         " > username: %s\r\n"
-        " > client id: %s\r\n"
-        " > cert_pem len: %d\r\n",
+        " > client id: %s\r\n",
+        //" > cert_pem len: %d\r\n",
         //" > cert_pem: %s\r\n",
-        broker_url, MQTT_PORT, username, cloudDeviceInfo.serialNumber,
-        strlen(cert)//, cert
+        broker_url, MQTT_PORT, username, cloudDeviceInfo.serialNumber
+       // strlen(cert)//, cert
     );
 
     mqtt_config.uri = broker_url;
@@ -1433,8 +1444,8 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.port = MQTT_PORT;
     mqtt_config.username = username;
     mqtt_config.client_id = cloudDeviceInfo.serialNumber;
-    mqtt_config.cert_pem = cert;
-    //mqtt_config.use_global_ca_store = true;
+    //mqtt_config.cert_pem = cert;
+    mqtt_config.use_global_ca_store = true;
 
     mqtt_config.lwt_qos = 1;
     mqtt_config.lwt_topic = event_topic;

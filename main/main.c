@@ -183,9 +183,9 @@ void app_main(void)
 	InitGPIOs();
 
 	// For testing
-	///certificate_init();
+	certificate_init();
 	//fat_make();
-	///certificate_update();
+	certificate_update();
 	//certificateValidate();
 
 

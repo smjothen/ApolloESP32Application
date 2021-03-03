@@ -704,15 +704,6 @@ int charge_cycle_test(){
 		return -1;
 	}
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
-	ESP_LOGI(TAG, "waiting for charging start");
-	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
-	while(MCU_GetchargeMode()!=eCAR_CHARGING){
-		ESP_LOGI(TAG, "waiting for charging start");
-
-		vTaskDelay(pdMS_TO_TICKS(1500));
-	}
-
 	char payload[100];
 
 	ESP_LOGI(TAG, "charging started, sampling data"); 
@@ -772,7 +763,7 @@ int charge_cycle_test(){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
 	}
 
-	ESP_LOGI(TAG, "Charging data:");
+	ESP_LOGI(TAG, "Pre charging data:");
 	ESP_LOGI(TAG, "\teMeter temp: %f, %f, %f", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2));
 	ESP_LOGI(TAG, "\tVoltages: %f, %f, %f", MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2));
 	ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
@@ -780,6 +771,15 @@ int charge_cycle_test(){
 
 	if(check_dspic_warnings()<0){
 		return -1;
+	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
+	ESP_LOGI(TAG, "waiting for charging start");
+	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
+	while(MCU_GetchargeMode()!=eCAR_CHARGING){
+		ESP_LOGI(TAG, "waiting for charging start");
+
+		vTaskDelay(pdMS_TO_TICKS(1500));
 	}
 
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
