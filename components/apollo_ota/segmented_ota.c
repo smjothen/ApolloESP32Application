@@ -42,6 +42,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         if(err!=ESP_OK){
             ESP_LOGE(TAG, "Writing data to flash failed");
             *error_p = 3;
+            ota_log_chunk_flash_error(err);
         }
 
         break;
@@ -57,7 +58,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 void do_segmented_ota(char *image_location){
     ESP_LOGW(TAG, "running experimental segmented ota");
-    
+    ota_log_chunked_update_start(image_location);
+
     esp_err_t err = esp_ota_begin(
         esp_ota_get_next_update_partition(NULL),
          OTA_SIZE_UNKNOWN, &update_handle
@@ -100,9 +102,11 @@ void do_segmented_ota(char *image_location){
         ESP_LOGI(TAG, "fetching [%s]", range_header_value);
         esp_err_t err = esp_http_client_perform(client);
         if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Status = %d, content_length = %d",
+            ESP_LOGI(TAG, "Status = %d, content_length = %d",
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
+        }else{
+            ota_log_chunk_http_error(err);
         }
         esp_http_client_cleanup(client);
 
@@ -112,6 +116,7 @@ void do_segmented_ota(char *image_location){
         }
 
         ESP_LOGI(TAG, "Flashed %d tot %d of %d", read_start, read_end, total_size);
+        ota_log_chunk_flashed(read_start, read_end, total_size);
 
         read_start = read_end + 1;
         read_end = read_start + chunk_size;
@@ -124,8 +129,10 @@ void do_segmented_ota(char *image_location){
     esp_err_t end_err = esp_ota_end(update_handle);
     if(end_err!=ESP_OK){
         ESP_LOGE(TAG, "Partition validation error %d", end_err);
+        ota_log_chunk_validation_error(end_err);
     }else{
         ESP_LOGW(TAG, "update complete, rebooting soon");
+        ota_log_all_chunks_success();
     }
     vTaskDelay(pdMS_TO_TICKS(3000));
     esp_restart();
