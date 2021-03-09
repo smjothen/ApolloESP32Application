@@ -23,6 +23,7 @@
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
+#include "../../main/certificate.h"
 
 #include "esp_tls.h"
 
@@ -46,7 +47,7 @@ bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
 
 
-const unsigned char cert[] =
+/*const char cert[] =
 "-----BEGIN CERTIFICATE-----\r\n"
 "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\r\n"
 "RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\r\n"
@@ -68,7 +69,7 @@ const unsigned char cert[] =
 "ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\r\n"
 "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\r\n"
 "-----END CERTIFICATE-----\r\n"
-;
+;*/
 
 
 void MqttSetDisconnected()
@@ -1033,12 +1034,44 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				// Configuration reset
 				else if(strstr(commandString,"Configuration reset") != NULL)
 				{
-					storage_Init_Configuration();
-					storage_SaveConfiguration();
+					responseStatus = 400;
+
+					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
+					if(ret == MsgWriteAck)
+					{
+						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
+						if(ret == MsgWriteAck)
+						{
+							storage_Init_Configuration();
+							storage_SaveConfiguration();
+							responseStatus = 200;
+						}
+					}
 
 					ESP_LOGI(TAG, "Configuration reset");
-					responseStatus = 200;
 				}
+
+
+				// Installation reset
+				else if(strstr(commandString,"Installation reset") != NULL)
+				{
+					responseStatus = 400;
+
+					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
+					if(ret == MsgWriteAck)
+					{
+						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
+						if(ret == MsgWriteAck)
+						{
+							storage_Set_PhaseRotation(0);
+							storage_SaveConfiguration();
+							responseStatus = 200;
+						}
+					}
+
+					ESP_LOGI(TAG, "Installation reset");
+				}
+
 
 				// Factory reset
 				else if(strstr(commandString,"Factory reset") != NULL)
@@ -1089,6 +1122,16 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ESP_LOGI(TAG, "MCU servo clear FAILED");
 					}
 				}
+
+				// Update certificate
+				else if(strstr(commandString,"Update certificate") != NULL)
+				{
+					certificate_update();
+
+					ESP_LOGI(TAG, "Using default LogInterval");
+					responseStatus = 200;
+				}
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -1165,6 +1208,8 @@ static bool isFirstConnection = false;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
+
+    ESP_LOGW(TAG, "tls: %X %X", event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_last_esp_err);
 
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
@@ -1366,7 +1411,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_ERROR:
     	resetCounter++;
 
-    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10", resetCounter);
+    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
 
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))

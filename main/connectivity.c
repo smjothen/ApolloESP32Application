@@ -14,6 +14,7 @@
 #include "i2cDevices.h"
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "sessionHandler.h"
+#include "certificate.h"
 
 static const char *TAG = "CONNECTIVITY: ";
 
@@ -22,6 +23,7 @@ enum CommunicationMode activeInterface = eCONNECTION_NONE;
 static enum CommunicationMode staticNewInterface = eCONNECTION_NONE;
 static enum CommunicationMode previousInterface = eCONNECTION_NONE;
 
+static bool certificateInitialized = false;
 static bool sntpInitialized = false;
 static bool mqttInitialized = false;
 
@@ -157,6 +159,16 @@ static void connectivity_task()
 		//Handle SNTP connection if we are online either with Wifi or 4G.
 		if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
 		{
+
+			if(certificateInitialized == false)
+			{
+				certificate_init();
+				certificateInitialized = true;
+			}
+
+
+
+
 			if((sntpInitialized == false) && (i2cRTCChecked() == true))
 			{
 				ESP_LOGW(TAG, "Initializing SNTP after first network connection");
@@ -221,6 +233,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 12000, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

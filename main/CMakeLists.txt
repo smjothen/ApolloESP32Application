@@ -31,7 +31,7 @@ idf_component_register(SRCS
 				   	"fat.c"	
 				   	"diagnostics_port.c"
 					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
-					EMBED_TXTFILES ${project_dir}/main/cert/bundle.crt 
+					EMBED_TXTFILES ${project_dir}/main/cert/bundle7.crt 
 
 					INCLUDE_DIRS "./"
 					)

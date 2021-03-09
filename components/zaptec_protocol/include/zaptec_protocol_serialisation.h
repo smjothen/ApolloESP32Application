@@ -212,6 +212,7 @@
         CommandIndicateOffline = 605,
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
+		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
 
     } CommandNo;

@@ -825,6 +825,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		ESP_LOGI(TAG, "Read Max installation current SWITCH %f A", MCU_GetMaxInstallationCurrentSwitch());
 
+
+
 		memset(nrTostr, 0, sizeof(nrTostr));
 		sprintf(nrTostr, "%.1f", MCU_GetMaxInstallationCurrentSwitch());
 

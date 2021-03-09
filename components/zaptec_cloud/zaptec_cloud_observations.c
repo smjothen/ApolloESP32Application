@@ -261,8 +261,6 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_double_observation(ParamChargeCurrentUserMax, MCU_GetChargeCurrentUserMax()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSetPhases, (uint32_t)HOLD_GetSetPhases()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamSetPhases, (uint32_t)HOLD_GetSetPhases()));
-
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
 
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
@@ -394,6 +392,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 
 
 static uint32_t previousWarnings = 0;
+static uint32_t previousNotifications = 0;
 static uint8_t previousNetworkType = 0xff;
 static float previousChargeCurrentUserMax = 0.0;
 static int previousSetPhases = 0;
@@ -482,6 +481,14 @@ int publish_telemetry_observation_on_change(){
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, warnings));
     	previousWarnings = warnings;
+    	isChange = true;
+    }
+
+    uint32_t notifications = GetCombinedNotifications();
+    if(previousNotifications != notifications)
+    {
+    	add_observation_to_collection(observations, create_uint32_t_observation(Notifications, notifications));
+    	previousNotifications = notifications;
     	isChange = true;
     }
 

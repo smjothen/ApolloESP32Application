@@ -35,6 +35,10 @@ struct RFIDTokens{
 	char *ExpiryDate;//[37];
 };
 
+
+#define MAX_CERTIFICATE_SIZE 		45000
+#define MAX_CERTIFICATE_BUNDLE_SIZE 50000
+
 //static uint8_t GetEEPROMFormatVersion() { return 1;}
 //static char softwareVersion[] = "2.8.0.2";
 
@@ -89,7 +93,7 @@ struct Configuration
 	float maxInstallationCurrentConfig;
 	uint8_t phaseRotation;
 	uint8_t networkType;
-
+	uint8_t networkTypeOverride;
 };
 
 #endif /* DEVICEINFO_H_ */

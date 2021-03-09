@@ -191,10 +191,10 @@ static uint16_t mcuProximityInst = 0;
 static float mcuChargeCurrentInstallationMaxLimit = -1.0;
 static float mcuStandAloneCurrent = -1.0;
 
+static uint16_t espNotifications = 0;
+static uint16_t mcuNotifications = 0;
+
 int holdSetPhases = 0;
-
-
-static float mcuMaxInstallationCurrentSwitch = 0.0;
 
 float GetFloat(uint8_t * input)
 {
@@ -692,7 +692,46 @@ uint8_t MCU_GetResetSource()
 
 float MCU_GetMaxInstallationCurrentSwitch()
 {
-	return mcuMaxInstallationCurrentSwitch;
+	float maxCurrent = 0.0;
+
+    switch(receivedSwitchState)
+    {
+        case 0:
+            maxCurrent = 0.0;
+            break;
+        case 1:
+            maxCurrent = 6.0;
+            break;
+        case 2:
+            maxCurrent = 10.0;
+            break;
+        case 3:
+            maxCurrent = 13.0;
+            break;
+        case 4:
+            maxCurrent = 16.0;
+            break;
+        case 5:
+            maxCurrent = 20.0;
+            break;
+        case 6:
+            maxCurrent = 25.0;
+            break;
+        case 7:
+            maxCurrent = 32.0;
+            break;
+        case 8:
+            maxCurrent = 32.0;
+            break;
+        case 9:
+            maxCurrent = 0.0;
+            break;
+        default:
+            maxCurrent = 0.0;
+            break;
+    }
+
+	return maxCurrent;
 }
 
 char * MCU_GetGridTypeString()
@@ -745,6 +784,12 @@ float MCU_StandAloneCurrent()
 	return mcuStandAloneCurrent;
 }
 
+
+
+uint32_t GetCombinedNotifications()
+{
+	return (uint32_t)((espNotifications << 16) + mcuNotifications);
+}
 
 void configureUart(){
     int tx_pin = GPIO_NUM_26;

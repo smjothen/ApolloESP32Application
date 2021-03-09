@@ -55,6 +55,7 @@ float MCU_ChargeCurrentInstallationMaxLimit();
 float MCU_StandAloneCurrent();
 
 float MCU_GetMaxInstallationCurrentSwitch();
+uint32_t GetCombinedNotifications();
 
 
 #endif /* PROTOCOL_TASK_H */

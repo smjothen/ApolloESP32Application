@@ -5,8 +5,9 @@
 extern "C" {
 #endif
 
-//int certificateGetNew();
-int certificateValidate();
+#include <stdbool.h>
+
+bool certificateValidate();
 void certificate_init();
 void certificate_update();
 

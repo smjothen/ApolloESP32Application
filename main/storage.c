@@ -61,11 +61,9 @@ void storage_Init_Configuration()
 	configurationStruct.currentInMinimum			= 6.0;
 	configurationStruct.maxPhases 					= 3;
 	configurationStruct.defaultOfflinePhase			= 1;
-	configurationStruct.defaultOfflineCurrent		= 6.0;
+	configurationStruct.defaultOfflineCurrent		= 10.0;
 	configurationStruct.isEnabled					= 1;
 
-	//memset(configurationStruct.installationId, 0, sizeof(DEFAULT_STR_SIZE));
-	//memset(configurationStruct.routingId, 0, sizeof(DEFAULT_STR_SIZE));
 	strcpy(configurationStruct.installationId,"00000000-0000-0000-0000-000000000000");
 	strcpy(configurationStruct.routingId, "default");
 
@@ -77,17 +75,18 @@ void storage_Init_Configuration()
 
 	//Local settings
 
-	configurationStruct.communicationMode 			= eCONNECTION_LTE;//TODO set default
+	configurationStruct.communicationMode 			= eCONNECTION_LTE;
 	configurationStruct.hmiBrightness 				= 0.7;	//0.0-1.0
 	configurationStruct.permanentLock 				= 0;	//0/1
 
 	configurationStruct.standalone 					= 1;	//0/1
 	configurationStruct.standalonePhase 			= 0;	//Nr
-	configurationStruct.standaloneCurrent			= 6;	//A
-	configurationStruct.maxInstallationCurrentConfig = 0.0;
+	//configurationStruct.standaloneCurrent			= 6;	//A
+	//configurationStruct.maxInstallationCurrentConfig = 0.0;
 
 	configurationStruct.phaseRotation				= 0;
 	configurationStruct.networkType					= 0;
+	configurationStruct.networkTypeOverride			= 0;
 }
 
 
@@ -215,6 +214,10 @@ void storage_Set_NetworkType(uint8_t newValue)
 	configurationStruct.networkType = newValue;
 }
 
+void storage_Set_NetworkTypeOverride(uint8_t newValue)
+{
+	configurationStruct.networkTypeOverride = newValue;
+}
 
 
 
@@ -342,6 +345,11 @@ uint8_t storage_Get_NetworkType()
 	return configurationStruct.networkType;
 }
 
+uint8_t storage_Get_NetworkTypeOverride()
+{
+	return configurationStruct.networkTypeOverride;
+}
+
 
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
 {
@@ -394,6 +402,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_zfloat(configuration_handle, "maxInstCurrConf", configurationStruct.maxInstallationCurrentConfig);
 	err += nvs_set_u8(configuration_handle, "PhaseRotation", configurationStruct.phaseRotation);
 	err += nvs_set_u8(configuration_handle, "NetworkType", configurationStruct.networkType);
+	err += nvs_set_u8(configuration_handle, "NetworkTypeOv", configurationStruct.networkTypeOverride);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -441,6 +450,7 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_zfloat(configuration_handle, "maxInstCurrConf", &configurationStruct.maxInstallationCurrentConfig);
 	err += nvs_get_u8(configuration_handle, "PhaseRotation", &configurationStruct.phaseRotation);
 	err += nvs_get_u8(configuration_handle, "NetworkType", &configurationStruct.networkType);
+	err += nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
 
 	nvs_close(configuration_handle);
 

@@ -183,9 +183,9 @@ void app_main(void)
 	InitGPIOs();
 
 	// For testing
-	certificate_init();
+	///certificate_init();
 	//fat_make();
-	certificate_update();
+	///certificate_update();
 	//certificateValidate();
 
 
@@ -213,7 +213,7 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-	validate_booted_image();
+	//validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();

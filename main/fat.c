@@ -17,6 +17,7 @@
 #include "esp_vfs_fat.h"
 #include "esp_system.h"
 #include "freertos/task.h"
+#include "DeviceInfo.h"
 
 static const char *TAG = "FAT  ";
 
@@ -89,8 +90,14 @@ void fat_make()
 ////
 
 bool mounted = false;
-void fat_static_mount()
+bool fat_static_mount()
 {
+	if(mounted)
+	{
+		ESP_LOGI(TAG, "FAT filesystem is already mounted");
+		return mounted;
+	}
+
     ESP_LOGI(TAG, "Mounting FAT filesystem");
     // To mount device we need name of device partition, define base_path
     // and allow format partition in case if it is new one and was not formated before
@@ -103,17 +110,19 @@ void fat_static_mount()
 	esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "disk", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return;
+		return mounted;
 	}
 
 	mounted = true;
 
 	ESP_LOGI(TAG, "Mounted");
+
+	return mounted;
 }
 
 
 
-void fat_WriteCertificate(char * newCertificateBundle)
+void fat_WriteCertificateBundle(char * newCertificateBundle)
 {
 	if(mounted == false)
 	{
@@ -148,7 +157,7 @@ void fat_WriteCertificate(char * newCertificateBundle)
 
 }
 
-void fat_ReadCertificate(char * readCertificateBundle)
+void fat_ReadCertificateBundle(char * readCertificateBundle)
 {
 
 	if(mounted == false)
@@ -164,8 +173,8 @@ void fat_ReadCertificate(char * readCertificateBundle)
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
     }
-    //char line[50000];
-    fgets(readCertificateBundle, 50000, f);
+
+    fgets(readCertificateBundle, MAX_CERTIFICATE_BUNDLE_SIZE, f);
     fclose(f);
     // strip newline
     /*char *pos = strchr(readCertificateBundle, '\n');
