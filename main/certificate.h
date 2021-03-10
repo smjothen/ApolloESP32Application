@@ -9,6 +9,8 @@ extern "C" {
 
 bool certificateValidate();
 void certificate_init();
+bool certificateOk();
+void certificate_clear();
 void certificate_update();
 
 

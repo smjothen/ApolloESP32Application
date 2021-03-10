@@ -146,6 +146,8 @@
 		ESPResetSource = 815,
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
+		DataUsage = 822,
+		CertificateVersion = 823,
         //..
         CarSessionLog = 850,
         CommunicationModeConfigurationInconsistency = 851,

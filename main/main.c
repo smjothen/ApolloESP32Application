@@ -182,13 +182,6 @@ void app_main(void)
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
 
-	// For testing
-	///certificate_init();
-	//fat_make();
-	///certificate_update();
-	//certificateValidate();
-
-
 	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s", softwareVersion, OTAReadRunningPartition());
 
 	storage_Init();
@@ -254,6 +247,8 @@ void app_main(void)
 	eeprom_wp_enable_nfc_enable();
 	#endif
 
+	fat_static_mount();
+
 	I2CDevicesStartTask();
 	connectivity_init();
 
@@ -306,10 +301,6 @@ void app_main(void)
 	#endif
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-
-	// For dev testing
-	//certificateGetNew();
-    //certificate_init();
 
     char onTimeString[20]= {0};
 

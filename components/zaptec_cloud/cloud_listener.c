@@ -45,6 +45,7 @@ bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
+bool simulateTlsError = false;
 
 
 /*const char cert[] =
@@ -1123,12 +1124,29 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 				}
 
-				// Update certificate
+				// Update certificate (without clearing old directly)
 				else if(strstr(commandString,"Update certificate") != NULL)
 				{
 					certificate_update();
 
 					ESP_LOGI(TAG, "Using default LogInterval");
+					responseStatus = 200;
+				}
+				// Clear certificate (results in new update on next start)
+				else if(strstr(commandString,"Clear certificate") != NULL)
+				{
+					certificate_clear();
+
+					ESP_LOGI(TAG, "Clear certificate");
+					responseStatus = 200;
+				}
+
+				// Set tls error
+				else if(strstr(commandString,"Set tls error") != NULL)
+				{
+					simulateTlsError = true;
+
+					ESP_LOGI(TAG, "Set tls error");
 					responseStatus = 200;
 				}
 
@@ -1210,6 +1228,24 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     mqtt_client = event->client;
 
     ESP_LOGW(TAG, "tls: %X %X", event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_last_esp_err);
+
+    if(simulateTlsError)
+    {
+    	event->error_handle->esp_tls_stack_err = 0x2701;
+    }
+
+    if(event->error_handle->esp_tls_stack_err != 0)
+    {
+    	ESP_LOGE(TAG, "TLS error - Updating certificate");
+    	certificate_update();
+
+    	//Must reset
+    	if(simulateTlsError == true)
+    	{
+    		event->error_handle->esp_tls_stack_err = 0;
+    		simulateTlsError = false;
+    	}
+    }
 
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:

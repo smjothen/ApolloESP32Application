@@ -26,7 +26,7 @@ static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 // Mount path for the partition
 const char *base_path = "/spiflash";
-
+/* For testing
 void fat_make()
 {
     ESP_LOGI(TAG, "Mounting FAT filesystem");
@@ -84,12 +84,11 @@ void fat_make()
     ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
 
     ESP_LOGI(TAG, "Done");
-}
+}*/
 
 
-////
 
-bool mounted = false;
+static bool mounted = false;
 bool fat_static_mount()
 {
 	if(mounted)
@@ -120,6 +119,10 @@ bool fat_static_mount()
 	return mounted;
 }
 
+bool fatIsMounted()
+{
+	return mounted;
+}
 
 
 void fat_WriteCertificateBundle(char * newCertificateBundle)
@@ -138,18 +141,6 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
         return;
     }
 
-    /*int count = 0;
-    int written = 1;
-    int sum = 0;
-    //while (written > 0)
-    //{
-    	written = fwrite(newCertificateBundle, 1, strlen(newCertificateBundle), f);
-    	sum += written;
-    	//count+=1000;
-    	ESP_LOGW(TAG, "Count: %d, Written: %d bytes, Sum: %d", count, written, sum);
-    	*/
-    	//vTaskDelay(10 / portTICK_PERIOD_MS);
-    //}
     int wrt = fprintf(f, "%s\n", newCertificateBundle);
 
     fclose(f);
@@ -176,14 +167,24 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
 
     fgets(readCertificateBundle, MAX_CERTIFICATE_BUNDLE_SIZE, f);
     fclose(f);
-    // strip newline
-    /*char *pos = strchr(readCertificateBundle, '\n');
-    if (pos) {
-        *pos = '\0';
-    }*/
-    //ESP_LOGI(TAG, "Read from file: '%s'", readCertificateBundle);
-
 }
+
+void fat_DeleteCertificateBundle()
+{
+
+	if(mounted == false)
+	{
+		ESP_LOGE(TAG, "Partition not mounted for reading");
+		return;
+	}
+
+    // Open file for reading
+    ESP_LOGI(TAG, "Reading file");
+    int ret = remove("/spiflash/cert.txt");
+
+    ESP_LOGI(TAG, "Removed cert file returned: %d", ret);
+}
+
 
 void fat_static_unmount()
 {
@@ -192,6 +193,6 @@ void fat_static_unmount()
 	ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
 
 	mounted = false;
-	ESP_LOGI(TAG, "Done");
+	ESP_LOGI(TAG, "Done unmounting");
 }
 

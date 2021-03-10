@@ -186,7 +186,7 @@ static void connectivity_task()
 			}
 
 			//Activate MQTT when we are online and has NTP time or RTC time is good.
-			if ((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE))
+			if ((sntpInitialized == true) && (mqttInitialized == false) && (localNewInterface != eCONNECTION_NONE) && certificateOk())
 			{
 				//Make sure Device info has been read from EEPROM before connecting to cloud.
 				if (i2CDeviceInfoIsLoaded() == true)
@@ -233,6 +233,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 12000, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

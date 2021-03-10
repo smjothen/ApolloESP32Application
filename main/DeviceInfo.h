@@ -37,7 +37,7 @@ struct RFIDTokens{
 
 
 #define MAX_CERTIFICATE_SIZE 		45000
-#define MAX_CERTIFICATE_BUNDLE_SIZE 50000
+#define MAX_CERTIFICATE_BUNDLE_SIZE 45000
 
 //static uint8_t GetEEPROMFormatVersion() { return 1;}
 //static char softwareVersion[] = "2.8.0.2";
