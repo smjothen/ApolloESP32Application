@@ -479,5 +479,5 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 8192, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
 }

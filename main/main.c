@@ -40,7 +40,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.46";
+char softwareVersion[] = "0.0.0.52";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -206,7 +206,7 @@ void app_main(void)
 	configure_uart();
     zaptecProtocolStart();
 
-	//validate_booted_image();
+	validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -285,9 +285,6 @@ void app_main(void)
 		}
 	}
 
-
-	vTaskDelay(500 / portTICK_PERIOD_MS);
-
 	ble_interface_init();
 
 
@@ -308,33 +305,31 @@ void app_main(void)
     {
 		onTimeCounter++;
 
-    	if(onTimeCounter % 5 == 0)
+    	if(onTimeCounter % 2 == 0)
     	{
-    		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-    		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
-    		size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-			
-			/*size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
-			ESP_LOGI(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);*/
-			//ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+			ESP_LOGW(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+    	}
+
+    	if(onTimeCounter % 10 == 0)
+    	{
+    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
 
     		GetTimeOnString(onTimeString);
+    		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+			size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+			size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+			size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
     		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
 
 	#ifdef useConsole
     	HandleCommands();
 	#endif
-
-    	/*if(onTimeCounter == 30)
-    	{
-    		console_stop();
-    	}*/
-
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

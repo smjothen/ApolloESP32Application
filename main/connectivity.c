@@ -233,6 +233,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 7000, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

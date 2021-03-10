@@ -32,8 +32,8 @@ static int MTUsize = 22;
 static int pinRetryCounter = 0;
 
 uint16_t apNr = 0;
-uint16_t maxAp = 10;
-wifi_ap_record_t ap_records[10];
+uint16_t maxAp = 15;
+wifi_ap_record_t ap_records[15];
 
 
 #define USE_PIN
@@ -142,8 +142,8 @@ static uint8_t COMMAND_val[32]          				= {0x00};
 
 //static uint8_t CHARGER_SERV_CHAR_config_ccc[2]      	= {0x11,0x22};
 
-static char wifiPackage[500] = {0}; //TODO: Evaluate size
-
+//static char wifiPackage[500] = {0}; //TODO: Evaluate size
+static char * wifiPackage = NULL;
 
 
 
@@ -434,7 +434,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     		apNr = 0;
 			nrOfWifiSegments = 0;
 			wifiRemainder = 0;
-    		memset(wifiPackage, 0, 500);
+    		//memset(wifiPackage, 0, 500);
+			wifiPackage = calloc(600, 1);
 
     		network_startWifiScan();
 
@@ -520,6 +521,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				apNr = 0;
 				wifiSegmentCount = 0;
 
+				free(wifiPackage);
 				//network_WifiScanEnd();
 				ESP_LOGW(TAG, "Resume current wifi");
 				network_updateWifi();

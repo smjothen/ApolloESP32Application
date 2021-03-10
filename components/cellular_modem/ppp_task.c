@@ -673,7 +673,7 @@ void ppp_task_start(void){
     //ESP_LOGI(TAG, "uart configured");
     //configure_modem_for_ppp(); // TODO rename
 
-    xTaskCreate(uart_event_task, "uart_event_task", 4096*2, NULL, 7, &eventTaskHandle);
+    xTaskCreate(uart_event_task, "uart_event_task", 5000, NULL, 7, &eventTaskHandle);
 
     xEventGroupClearBits(event_group, UART_TO_PPP);
     xEventGroupSetBits(event_group, UART_TO_LINES);

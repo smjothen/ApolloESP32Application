@@ -40,7 +40,8 @@ extern const uint8_t bundle7_crt_end[] asm("_binary_bundle7_crt_end");
 static const char zaptecPublicKey[] = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvTEC5cEvbSNkBksOwRItuhBUf3my\n7Eo0EO9Z784bTQ01PkUZcT5JnkFkGRVTzvLlMqNYZvZIGQLfkJqffSFMZA==\n-----END PUBLIC KEY-----\0";
 
 
-static char certificate[MAX_CERTIFICATE_SIZE] = {0};
+//static char certificate[MAX_CERTIFICATE_SIZE] = {0};
+static char * certificate = NULL;//[MAX_CERTIFICATE_SIZE] = {0};
 static unsigned int certificateLength = 0;
 
 static char sign[200] = {0};
@@ -190,7 +191,6 @@ static void certificate_task()
 			vTaskDelay(pdMS_TO_TICKS(1000));
 		}
 
-
 		size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
@@ -199,7 +199,6 @@ static void certificate_task()
 
 		ESP_LOGI(TAG, "Get cert from: %s", url);
 
-		//char certificate_location[1536] = {0};
 		esp_http_client_config_t config = {
 			.url = url,
 			.transport_type = HTTP_TRANSPORT_OVER_SSL,
@@ -363,8 +362,8 @@ void certificate_init()
 
 	if(fatIsMounted())
 	{
-
-		certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1);
+		certificate = calloc(MAX_CERTIFICATE_SIZE,1); //This is used for global ca buffer - do not need to free it.
+		certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1); //Must be free'ed
 
 		//Read certificate from flash
 		fat_ReadCertificateBundle(certificate_bundle);
