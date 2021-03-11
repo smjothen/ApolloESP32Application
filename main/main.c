@@ -190,7 +190,7 @@ void app_main(void)
 	//certificateValidate();
 
 
-	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
+	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 	storage_Init();
 
