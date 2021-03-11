@@ -8,6 +8,7 @@
 
 #include "apollo_ota.h"
 #include "ota_location.h"
+#include "segmented_ota.h"
 #include "pic_update.h"
 #include "ota_log.h"
 
@@ -19,8 +20,10 @@ extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
+static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
 
 const uint OTA_TIMEOUT_MINUTES = 12;
+const uint OTA_GLOBAL_TIMEOUT_MINUTES = 30;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
 
@@ -47,6 +50,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         break;
     case HTTP_EVENT_ON_DATA:
+        ESP_LOGD(TAG, "got data ready to flash %d bytes", evt->data_len);
         ota_log_download_progress_debounced(evt->data_len);
         break;
     case HTTP_EVENT_ON_FINISH:
@@ -67,15 +71,7 @@ bool otaIsRunning()
 	return otaRunning;
 }
 
-
-static void ota_task(void *pvParameters){
-
-	otaRunning = true;
-
-    TickType_t timeout_ticks = pdMS_TO_TICKS((OTA_TIMEOUT_MINUTES*60*1000)+(OTA_RETRY_PAUSE_SECONDS*1000));
-    TimerHandle_t timeout_timer = xTimerCreate( "ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
-
-    char image_location[1024] = {0};
+void _do_sdk_ota(char *image_location){
     esp_http_client_config_t config = {
         .url = image_location,
         .cert_pem = (char *)server_cert_pem_start,
@@ -85,7 +81,38 @@ static void ota_task(void *pvParameters){
 		.buffer_size = 1536,
     };
 
-    // config.skip_cert_common_name_check = true;
+    TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_TIMEOUT_MINUTES*60*1000);
+    TimerHandle_t timeout_timer = xTimerCreate( "sdk_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
+    xTimerReset( timeout_timer, portMAX_DELAY );
+
+    ota_log_download_start(image_location);
+    esp_err_t ret = esp_https_ota(&config);
+    if (ret == ESP_OK) {
+        ota_log_flash_success();
+
+
+        // give the system some time to finnish sending the log message
+        // a better solution would be to detect the message sent event, 
+        // though one must ensure there is a timeout, as the system NEEDS a reboot now
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        esp_restart();
+    } else {
+        ota_log_lib_error();
+    }
+
+    xTimerDelete(timeout_timer, portMAX_DELAY);
+}
+
+
+static void ota_task(void *pvParameters){
+
+	otaRunning = true;
+
+    char image_location[1024] = {0};
+
+    TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
+    TimerHandle_t timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
+    
 
     while (true)
     {
@@ -94,9 +121,15 @@ static void ota_task(void *pvParameters){
 		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
-        //xEventGroupWaitBits(event_group, OTA_UNBLOCKED, pdFALSE, pdFALSE, portMAX_DELAY);
+        EventBits_t ota_selection_field = xEventGroupWaitBits(
+            event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED, 
+            pdFALSE, pdFALSE, portMAX_DELAY
+        );
         ESP_LOGW(TAG, "attempting ota update");
-        xTimerReset( timeout_timer, portMAX_DELAY );
+
+        if(xTimerIsTimerActive(timeout_timer)==pdFALSE){
+            xTimerReset( timeout_timer, portMAX_DELAY );
+        }
 
         ota_log_location_fetch();
 
@@ -110,21 +143,14 @@ static void ota_task(void *pvParameters){
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
 
-        ota_log_download_start(image_location);
-        esp_err_t ret = esp_https_ota(&config);
-        if (ret == ESP_OK) {
-            ota_log_flash_success();
-
-
-            // give the system some time to finnish sending the log message
-            // a better solution would be to detect the message sent event, 
-            // though one must ensure there is a timeout, as the system NEEDS a reboot now
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            esp_restart();
-        } else {
-            ota_log_lib_error();
+        if((ota_selection_field & OTA_UNBLOCKED) != 0 ){
+            _do_sdk_ota(image_location);
+        }else if((ota_selection_field & SEGMENTED_OTA_UNBLOCKED) != 0){
+            do_segmented_ota(image_location);
+        }else{
+            ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }
-
+        
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM3: DRAM: %i Lo: %i", free_dram, low_dram);
@@ -184,6 +210,8 @@ void start_ota_task(void){
 
     event_group = xEventGroupCreate();
     xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+    
 
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t taskHandle = NULL;
@@ -197,6 +225,11 @@ void start_ota_task(void){
 
 int start_ota(void){
     xEventGroupSetBits(event_group, OTA_UNBLOCKED);
+    return 0;
+}
+
+int start_segmented_ota(void){
+    xEventGroupSetBits(event_group, SEGMENTED_OTA_UNBLOCKED);
     return 0;
 }
 

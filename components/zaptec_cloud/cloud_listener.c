@@ -796,7 +796,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
 		ble_interface_deinit();
-		start_ota_task();
+		start_ota();
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
@@ -804,7 +804,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
 		ESP_LOGI(TAG, "TODO: Implement forced");
 		ble_interface_deinit();
-		start_ota_task();
+		start_ota();
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
@@ -1037,7 +1037,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					ESP_LOGI(TAG, "Factory reset");
 					responseStatus = 200;
+				}else if(strstr(commandString, "segmentota") != NULL){
+					start_segmented_ota();
 				}
+
 
 				// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
 				else if(strstr(commandString,"LogInterval ") != NULL)
