@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
+#include "esp_ota_ops.h"
 
 #include "main.h"
 #include "esp_websocket_client.h"
@@ -189,7 +190,7 @@ void app_main(void)
 	//certificateValidate();
 
 
-	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s", softwareVersion, OTAReadRunningPartition());
+	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 	storage_Init();
 
