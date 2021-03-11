@@ -71,7 +71,7 @@ void do_segmented_ota(char *image_location){
 
     int read_start=0;
     int chunk_size = 65536;
-    int read_end = read_start + chunk_size;
+    int read_end = read_start + chunk_size -1; // inclusive read end
     
     int flash_error = 0;
 
@@ -94,9 +94,7 @@ void do_segmented_ota(char *image_location){
         esp_http_client_handle_t client = esp_http_client_init(&config);
 
         char range_header_value[64];
-        // standars compliant servers take the end range as inclusive, our server currently does not,
-        // thus we read one byte paste the last value we actually want
-        snprintf(range_header_value, 64, "bytes=%d-%d", read_start, read_end+1);
+        snprintf(range_header_value, 64, "bytes=%d-%d", read_start, read_end);
         esp_http_client_set_header(client, "Range", range_header_value);
 
         ESP_LOGI(TAG, "fetching [%s]", range_header_value);
@@ -119,7 +117,7 @@ void do_segmented_ota(char *image_location){
         ota_log_chunk_flashed(read_start, read_end, total_size);
 
         read_start = read_end + 1;
-        read_end = read_start + chunk_size;
+        read_end = read_start + chunk_size -1;
 
         if((total_size > 0 )&&(read_end>total_size)){
             read_end = total_size;
