@@ -23,6 +23,7 @@ static const int OTA_UNBLOCKED = BIT0;
 static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
 
 const uint OTA_TIMEOUT_MINUTES = 12;
+const uint OTA_GLOBAL_TIMEOUT_MINUTES = 30;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
 
@@ -109,7 +110,9 @@ static void ota_task(void *pvParameters){
 
     char image_location[1024] = {0};
 
-    // config.skip_cert_common_name_check = true;
+    TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
+    TimerHandle_t timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
+    
 
     while (true)
     {
@@ -123,6 +126,10 @@ static void ota_task(void *pvParameters){
             pdFALSE, pdFALSE, portMAX_DELAY
         );
         ESP_LOGW(TAG, "attempting ota update");
+
+        if(xTimerIsTimerActive(timeout_timer)==pdFALSE){
+            xTimerReset( timeout_timer, portMAX_DELAY );
+        }
 
         ota_log_location_fetch();
 

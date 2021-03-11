@@ -18,9 +18,13 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
+
+    int * error_p  = (int * )evt->user_data;
+
     switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
         ESP_LOGW(TAG, "HTTP_EVENT_ERROR");
+        *error_p = -1;
         break;
     case HTTP_EVENT_ON_CONNECTED:
         ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED, setting debug header");
@@ -37,7 +41,6 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_DATA:
         ESP_LOGI(TAG, "got ota data, %d bytes", evt->data_len);
-        int * error_p  = (int * )evt->user_data;
         esp_err_t err = esp_ota_write(update_handle, evt->data, evt->data_len);
         if(err!=ESP_OK){
             ESP_LOGE(TAG, "Writing data to flash failed");
@@ -108,7 +111,7 @@ void do_segmented_ota(char *image_location){
         }
         esp_http_client_cleanup(client);
 
-        if(flash_error > 0){
+        if(flash_error != 0){
             ESP_LOGW(TAG, "error when flashing segment, retrying");
             continue;
         }
