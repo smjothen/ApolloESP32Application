@@ -13,8 +13,8 @@
 
 #define TAG "OTA"
 
-extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
-extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
+//extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+//extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 
 static EventGroupHandle_t event_group;
@@ -78,8 +78,8 @@ static void ota_task(void *pvParameters){
     char image_location[1024] = {0};
     esp_http_client_config_t config = {
         .url = image_location,
-        .cert_pem = (char *)server_cert_pem_start,
-        //.use_global_ca_store = true,
+        //.cert_pem = (char *)server_cert_pem_start,
+        .use_global_ca_store = true,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,

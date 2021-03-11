@@ -40,8 +40,7 @@ extern const uint8_t bundle7_crt_end[] asm("_binary_bundle7_crt_end");
 static const char zaptecPublicKey[] = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvTEC5cEvbSNkBksOwRItuhBUf3my\n7Eo0EO9Z784bTQ01PkUZcT5JnkFkGRVTzvLlMqNYZvZIGQLfkJqffSFMZA==\n-----END PUBLIC KEY-----\0";
 
 
-//static char certificate[MAX_CERTIFICATE_SIZE] = {0};
-static char * certificate = NULL;//[MAX_CERTIFICATE_SIZE] = {0};
+static char * certificate = NULL;
 static unsigned int certificateLength = 0;
 
 static char sign[200] = {0};
@@ -300,10 +299,10 @@ bool certificateValidate()
 
 	mbedtls_sha256_free(&sha256_ctx);
 
-	printf("\r\n Hash1: ");
+	/*printf("\r\n Hash1: ");
 	for (int i = 0; i <= 31; i++)
 		printf("0x%02X ", sha256[i]);
-
+	*/
 
 	int base64_key_len = strlen(zaptecPublicKey)+1;
 
@@ -323,7 +322,7 @@ bool certificateValidate()
     char *pos = sign;
     unsigned char signBytes[100] = {0};
 
-    printf("\r\n signBytes: ");
+    //printf("\r\n signBytes: ");
 
     int nrOfSignBytes = signLength / 2;
 
@@ -331,11 +330,11 @@ bool certificateValidate()
 	 /* WARNING: no sanitization or error-checking whatsoever */
     for (count = 0; count < nrOfSignBytes; count++) {
 		sscanf(pos, "%2hhx", &signBytes[count]);
-		printf("%02X", signBytes[count]);
+		//printf("%02X", signBytes[count]);
 		pos += 2;
 	}
 
-	printf("\r\n");
+	//printf("\r\n");
 
     // Hard-coded SHA256-hash of certificate bundle (sha256("data")) + signature ("sig")
     //const unsigned char hash[] = {0xf7, 0xe8, 0x05, 0x95, 0x43, 0xfc, 0x49, 0x94, 0xd0, 0xbf, 0x5f, 0x8f, 0x9c, 0x33, 0xb3, 0x4d, 0xcc, 0x59, 0xb5, 0xee, 0x74, 0xd3, 0xfe, 0x9a, 0x04, 0x97, 0x39, 0x6c, 0x65, 0x2d, 0xb6, 0x72};
@@ -359,10 +358,10 @@ bool certificateValidate()
 
 void certificate_init()
 {
+	certificate = calloc(MAX_CERTIFICATE_SIZE,1); //This is used for global ca buffer - do not need to free it.
 
 	if(fatIsMounted())
 	{
-		certificate = calloc(MAX_CERTIFICATE_SIZE,1); //This is used for global ca buffer - do not need to free it.
 		certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1); //Must be free'ed
 
 		//Read certificate from flash
@@ -385,6 +384,7 @@ void certificate_init()
 	}
 	else
 	{
+		printf("Using buildtin certificate\n");
 		//Fallback to included certificate if FAT partition can't be mounted. Can reduce application size if this is not needed.
 		esp_err_t err = esp_tls_init_global_ca_store();
 		if(err != ESP_OK)
