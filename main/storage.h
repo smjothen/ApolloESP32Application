@@ -63,8 +63,8 @@ float storage_Get_HmiBrightness();
 uint8_t storage_Get_PermanentLock();
 uint8_t storage_Get_Standalone();
 uint8_t storage_Get_StandalonePhase();
-//float storage_Get_StandaloneCurrent();
-//float storage_Get_MaxInstallationCurrentConfig();
+float storage_Get_StandaloneCurrent();
+float storage_Get_MaxInstallationCurrentConfig();
 uint8_t storage_Get_PhaseRotation();
 uint8_t storage_Get_NetworkType();
 

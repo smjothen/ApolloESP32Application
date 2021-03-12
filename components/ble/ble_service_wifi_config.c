@@ -737,10 +737,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read Standalone Current %f ", MCU_StandAloneCurrent());
+		//In order to be responsive enough we need to read local value, not bounced from MCU
+		//ESP_LOGI(TAG, "Read Standalone Current %f ", MCU_StandAloneCurrent());
+		ESP_LOGI(TAG, "Read Standalone Current %f ", storage_Get_StandaloneCurrent());
+
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", MCU_StandAloneCurrent());
+		sprintf(nrTostr, "%.1f", storage_Get_StandaloneCurrent());
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
@@ -852,10 +855,12 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_MAX_INST_CURRENT_CONFIG_UUID:
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", MCU_ChargeCurrentInstallationMaxLimit());
+    	//In order to be responsive enough we need to read local value instead of value bounced from MCU
+		//ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", MCU_ChargeCurrentInstallationMaxLimit());
+		ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", storage_Get_MaxInstallationCurrentConfig());
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", MCU_ChargeCurrentInstallationMaxLimit());
+		sprintf(nrTostr, "%.1f", storage_Get_MaxInstallationCurrentConfig());
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
@@ -972,7 +977,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 				storage_Set_HmiBrightness(hmiBrightness);
 				ESP_LOGI(TAG, "Set hmiBrightness: %f", hmiBrightness);
-				saveConfiguration = true;
+				storage_SaveConfiguration();
 			}
 		}
 
@@ -1097,7 +1102,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, standaloneCurrent);
 			if(ret == MsgWriteAck)
 			{
-				//storage_Set_StandaloneCurrent(standaloneCurrent);
+				storage_Set_StandaloneCurrent(standaloneCurrent);
 				ESP_LOGI(TAG, "Set standalone Current to MCU: %f", standaloneCurrent);
 				saveConfiguration = true;
 			}
@@ -1128,7 +1133,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				storage_Set_PermanentLock(lockValue);
 
 				ESP_LOGI(TAG, "BLE PermanentLock=%d sent to MCU", lockValue);
-				saveConfiguration = true;
+
+				storage_SaveConfiguration();
 			}
 			else
 			{
@@ -1151,12 +1157,12 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	ESP_LOGI(TAG, "Max installation current CONFIG received %f", maxInstCurrConfig);
 
     	//Sanity check
-    	if((40.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
+    	if((32.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
     	{
     		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrConfig);
 			if(ret == MsgWriteAck)
 			{
-				//storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
+				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
 				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
 				saveConfiguration = true;
 			}

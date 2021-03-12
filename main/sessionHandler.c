@@ -81,7 +81,7 @@ static void sessionHandler_task()
     uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
-    uint32_t statusInterval = 10;
+    uint32_t statusInterval = 20;
 
     uint32_t signalInterval = 120;
 
@@ -319,7 +319,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", GetCellularQuality(), dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
+				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  -  Sid: %s, Uid: %s *******", GetCellularQuality(), dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -347,7 +347,7 @@ static void sessionHandler_task()
 				{
 					//log_task_info();
 					if(otaIsRunning() == false)
-						log_cellular_quality();
+						rssi = log_cellular_quality();
 
 					publish_debug_telemetry_observation_LteParameters();
 				}
@@ -429,6 +429,16 @@ static void sessionHandler_task()
 				}
 			}
 
+
+			if(GetInstallationConfigOnFile() == true)
+			{
+				int published = publish_debug_telemetry_observation_InstallationConfigOnFile();
+
+				if (published == 0)
+				{
+					ClearReportGridTestResults();
+				}
+			}
 
 
 			/*if(CloudCommandCurrentUpdated() == true)
