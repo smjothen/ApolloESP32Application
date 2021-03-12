@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "freertos/event_groups.h"
+#include "esp_ota_ops.h"
 
 //#include "https_client.h"
 #include "production_test.h"
@@ -441,6 +442,9 @@ int prodtest_perform(struct DeviceInfo device_info)
 
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
+	
+	sprintf(payload, "Version (gitref): %s", esp_ota_get_app_description()->version);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 

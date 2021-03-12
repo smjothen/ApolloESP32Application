@@ -5,6 +5,7 @@
 #include "stdio.h"
 #include "esp_system.h"
 #include "string.h"
+#include "esp_ota_ops.h"
 
 #include "../../main/storage.h"
 #include "../../main/main.h"
@@ -279,6 +280,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
+    add_observation_to_collection(observations, create_observation(SourceVersion, esp_ota_get_app_description()->version));
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
