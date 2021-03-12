@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
+#include "esp_ota_ops.h"
 
 #include "main.h"
 #include "esp_websocket_client.h"
@@ -182,7 +183,7 @@ void app_main(void)
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
 
-	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s", softwareVersion, OTAReadRunningPartition());
+	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 	storage_Init();
 
@@ -204,6 +205,7 @@ void app_main(void)
 #endif
 
 	configure_uart();
+	start_ota_task();
     zaptecProtocolStart();
 
 	validate_booted_image();

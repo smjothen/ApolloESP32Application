@@ -118,28 +118,44 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 
-
+int currentBundleVersion = 0;
 bool ParseCertificateBundle(char * certificateBundle)
 {
-	int receivedVersion = 0;
 	bool certificateValidated = false;
 
 	cJSON *body = cJSON_Parse(certificateBundle);
 	if(body!=NULL){
 		if(cJSON_HasObjectItem(body, "ver")){
-			receivedVersion =  cJSON_GetObjectItem(body, "ver")->valueint;
-			ESP_LOGW(TAG, "Received version: %d", receivedVersion);
+			currentBundleVersion =  cJSON_GetObjectItem(body, "ver")->valueint;
+			ESP_LOGW(TAG, "Received version: %d", currentBundleVersion);
 		}
+		else
+		{
+			//Do not continue if the bundle has no version number.
+			return false;
+		}
+
+		if(cJSON_HasObjectItem(body, "sign")){
+				signLength = strlen(cJSON_GetObjectItem(body, "sign")->valuestring);
+				memcpy(sign, cJSON_GetObjectItem(body, "sign")->valuestring, signLength);
+				ESP_LOGW(TAG, "Received signature: %s", sign);
+		}
+		else
+		{
+			//Do not continue if the bundle has no signature
+			return false;
+		}
+
 		if(cJSON_HasObjectItem(body, "data")){
 
 			ESP_LOGW(TAG, "Received cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
 		}
-
-		if(cJSON_HasObjectItem(body, "sign")){
-			signLength = strlen(cJSON_GetObjectItem(body, "sign")->valuestring);
-			memcpy(sign, cJSON_GetObjectItem(body, "sign")->valuestring, signLength);
-			ESP_LOGW(TAG, "Received signature: %s", sign);
+		else
+		{
+			//Do not continue if the bundle is empty - same version number as we already have
+			return false;
 		}
+
 
 		certificateLength = strlen(cJSON_GetObjectItem(body, "data")->valuestring);
 		memset(certificate,0, MAX_CERTIFICATE_SIZE);
@@ -173,7 +189,7 @@ bool ParseCertificateBundle(char * certificateBundle)
 }
 
 
-static void certificate_task()
+static void certificate_task(int tlsError)
 {
 
 	certificateIsOk = false;
@@ -212,7 +228,8 @@ static void certificate_task()
 
 		// POST
 		char post_data [100] = {0};
-		snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\", \"fw\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion()); //Todo ver 7 on release
+		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\", \"fw\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion()); //Todo ver 7 on release
+		snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\"}", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError); //Todo ver 7 on release
 		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber);
 		//char * post_data = "{\"ver\":7, \"serial\": \"}";
 
@@ -374,7 +391,7 @@ void certificate_init()
 		{
 			free(certificate_bundle);
 			ESP_LOGW(TAG, "Missing or invalid certificate, connect to server and get new");
-			certificate_update();
+			certificate_update(1);
 		}
 		else
 		{
@@ -421,13 +438,13 @@ void certificate_clear()
 
 
 
-void certificate_update()
+void certificate_update(int tls_error)
 {
 	//Only allow one instance
 	if(taskRunning == false)
 	{
 		taskRunning = true;
-		xTaskCreate(certificate_task, "certificate_task", 8192, NULL, 2, &taskCertHandle);
+		xTaskCreate(certificate_task, "certificate_task", 8192, tls_error, 2, &taskCertHandle);
 	}
 
 }

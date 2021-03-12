@@ -803,7 +803,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
 		ble_interface_deinit();
-		start_ota_task();
+		start_ota();
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
@@ -811,7 +811,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
 		ESP_LOGI(TAG, "TODO: Implement forced");
 		ble_interface_deinit();
-		start_ota_task();
+		start_ota();
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
@@ -1083,7 +1083,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					ESP_LOGI(TAG, "Factory reset");
 					responseStatus = 200;
+				}else if(strstr(commandString, "segmentota") != NULL){
+					start_segmented_ota();
 				}
+
 
 				// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
 				else if(strstr(commandString,"LogInterval ") != NULL)
@@ -1127,7 +1130,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				// Update certificate (without clearing old directly)
 				else if(strstr(commandString,"Update certificate") != NULL)
 				{
-					certificate_update();
+					certificate_update(0);
 
 					ESP_LOGI(TAG, "Using default LogInterval");
 					responseStatus = 200;
@@ -1237,7 +1240,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     if(event->error_handle->esp_tls_stack_err != 0)
     {
     	ESP_LOGE(TAG, "TLS error - Updating certificate");
-    	certificate_update();
+    	certificate_update(event->error_handle->esp_tls_stack_err);
 
     	//Must reset
     	if(simulateTlsError == true)

@@ -21,8 +21,8 @@ static int log_message(char *msg){
     //Use LOGW to highlight
     ESP_LOGW(TAG, "%s %s",time_string, msg);
 
-    char formated_message [128];
-    snprintf(formated_message, 128, "[%s] %s %s", TAG, time_string, msg);
+    char formated_message [256];
+    snprintf(formated_message, 256, "[%s] %s %s", TAG, time_string, msg);
      
     return publish_debug_message_event(formated_message, cloud_event_level_information);
 }
@@ -84,4 +84,45 @@ int ota_log_download_progress_debounced(uint32_t bytes_received){
     }
 
     return 1;
+}
+
+int ota_log_chunked_update_start(char *location){
+    time(&last_start_time);
+
+    char formated_message [256];
+    snprintf(formated_message, 256, "starting CHUNKED FW download, location: %s", location);
+    return log_message(formated_message);
+}
+
+int ota_log_chunk_flashed(uint32_t start, uint32_t end, uint32_t total){
+    char formated_message [128];
+    snprintf(formated_message, 128, "Flashed OTA chunk from %d to %d of %d bytes", start, end, total);
+    return log_message(formated_message); 
+}
+
+int ota_log_chunk_flash_error(uint32_t error_code){
+    char formated_message [128];
+    snprintf(formated_message, 128, "failed to flash OTA chunk (%d), will retry chunk", error_code);
+    return log_message(formated_message);
+}
+
+int ota_log_chunk_http_error(uint32_t error_code){
+    char formated_message [128];
+    snprintf(formated_message, 128, "http error in chunk OTA (%d), will retry chunk", error_code);
+    return log_message(formated_message);
+}
+
+int ota_log_chunk_validation_error(uint32_t error_code){
+    char formated_message [128];
+    snprintf(formated_message, 128, "failed to validate OTA chunk (%d), will reboot", error_code);
+    return log_message(formated_message);
+}
+
+int ota_log_all_chunks_success(){
+    time_t now;
+    time(&now);
+
+    char formated_message [128];
+    snprintf(formated_message, 128, "CHUNKED FW validated. Rebooting soon. Total time: %ld seconds", now-last_start_time);
+    return log_message(formated_message);
 }
