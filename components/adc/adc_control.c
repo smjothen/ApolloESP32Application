@@ -148,9 +148,9 @@ int adcGetStackWatermark()
 
 void adc_init(){
 
-#ifndef DO_LOG
+/*#ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_INFO);
-#endif
+#endif*/
 
     xTaskCreate(adc_task, "adc_task", 2048, NULL, 2, &adcTaskHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);

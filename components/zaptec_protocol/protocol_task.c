@@ -816,7 +816,10 @@ float MCU_StandAloneCurrent()
 	return mcuStandAloneCurrent;
 }
 
-
+void SetEspNotification(uint16_t notification)
+{
+	espNotifications |= notification;
+}
 
 uint32_t GetCombinedNotifications()
 {

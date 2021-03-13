@@ -161,7 +161,7 @@ void do_i2cdetect_cmd()
 {
     i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
     i2c_master_driver_initialize();
-    uint8_t address;
+    /*uint8_t address;
     printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
     for (int i = 0; i < 128; i += 16) {
         printf("%02x: ", i);
@@ -184,5 +184,5 @@ void do_i2cdetect_cmd()
         }
         printf("\r\n");
     }
-    printf("I2C active\n");
+    printf("I2C active\n");*/
 }

@@ -258,9 +258,9 @@ void ble_gap_startAdvertising(void)
 
 bool ble_gap_init(void)
 {
-#ifndef DO_LOG
+/*#ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_NONE);
-#endif
+#endif*/
 
 	esp_err_t err = esp_ble_gap_register_callback(gap_event_handler);
 	if( err )

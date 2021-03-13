@@ -27,6 +27,7 @@ static bool certificateInitialized = false;
 static bool sntpInitialized = false;
 static bool mqttInitialized = false;
 
+static uint32_t swapInterfaceTestCounter = 180;
 
 bool connectivity_GetSNTPInitialized()
 {
@@ -35,6 +36,7 @@ bool connectivity_GetSNTPInitialized()
 
 void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
 {
+	previousInterface = activeInterface;
 	staticNewInterface = selectedInterface;
 }
 
@@ -153,7 +155,6 @@ static void connectivity_task()
 			}
 		}
 
-		previousInterface = activeInterface;
 		activeInterface = localNewInterface;
 
 		//Handle SNTP connection if we are online either with Wifi or 4G.
@@ -211,6 +212,38 @@ static void connectivity_task()
 
 		cloud_listener_check_cmd();
 
+		// This checks if we are running communiction mode swap-test.
+		// and disables swap-back if successfull
+		if(storage_Get_DiagnosticsMode() == eSWAP_COMMUNICATION_MODE)
+		{
+			if(isMqttConnected() == false)
+			{
+				//Decrement and restart if timeout.
+				swapInterfaceTestCounter--;
+
+				if(swapInterfaceTestCounter == 0)
+				{
+					ESP_LOGI(TAG, "Swapping back and restarting due to timeout");
+
+					if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+						storage_Set_CommunicationMode(eCONNECTION_LTE);
+					else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+						storage_Set_CommunicationMode(eCONNECTION_WIFI);
+
+					storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE_BACK); // Only for diagnostics
+					storage_SaveConfiguration();
+
+					vTaskDelay(pdMS_TO_TICKS(1000));
+					esp_restart();
+				}
+			}
+			else
+			{
+				ESP_LOGI(TAG, "Online, disables swap-back");
+				storage_Set_DiagnosticsMode(eCLEAR_DIAGNOSTICS_MODE);
+				storage_SaveConfiguration();
+			}
+		}
 
 		//For testing
 		//if(wifiInitialized == true)

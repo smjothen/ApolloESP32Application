@@ -11,6 +11,7 @@
 
 #include "zaptec_protocol_serialisation.h"
 #include "DeviceInfo.h"
+#include "protocol_task.h"
 
 static const char *TAG = "STORAGE:";
 
@@ -42,12 +43,13 @@ void storage_Init()
 		// Retry nvs_flash_init
 		ESP_ERROR_CHECK(nvs_flash_erase());
 		err = nvs_flash_init();
+		SetEspNotification(eNOTIFICATION_NVS_ERROR);
 	}
-	ESP_ERROR_CHECK( err );
+	//ESP_ERROR_CHECK( err );
 
-#ifndef DO_LOG
+/*#ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_INFO);
-#endif
+#endif*/
 
 }
 
@@ -460,7 +462,7 @@ esp_err_t storage_ReadConfiguration()
 void storage_PrintConfiguration()
 {
 
-	ESP_LOGW(TAG, "*********************************");
+	//ESP_LOGW(TAG, "*********************************");
 	ESP_LOGI(TAG, "AuthRequired: 				%i", configurationStruct.authenticationRequired);
 
 	char comMode[5] = {0};
@@ -470,19 +472,19 @@ void storage_PrintConfiguration()
 		strcpy(comMode, "Wifi");
 	else if(configurationStruct.communicationMode == eCONNECTION_LTE)
 		strcpy(comMode, "4G");
-	ESP_LOGI(TAG, "CommunicationMode: 			%s", comMode);
+	ESP_LOGI(TAG, "CommunicationMode: 	\t		%s", comMode);
 
 
-	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
+	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	\t\t%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
-	ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
+	ESP_LOGI(TAG, "Standalone current: 	\t		%2.1f", configurationStruct.standaloneCurrent);
 
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
 
 
-	ESP_LOGW(TAG, "*********************************");
+	//ESP_LOGW(TAG, "*********************************");
 }
 
 esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)

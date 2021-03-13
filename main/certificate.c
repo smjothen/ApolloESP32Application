@@ -15,6 +15,7 @@
 #include "fat.h"
 #include "esp_crt_bundle.h"
 #include "DeviceInfo.h"
+#include "protocol_task.h"
 
 #include "mbedtls/sha256.h"
 
@@ -169,14 +170,14 @@ bool ParseCertificateBundle(char * certificateBundle)
 		{
 			esp_err_t err = esp_tls_init_global_ca_store();
 			if(err != ESP_OK)
-				printf("Creating store failed: %i\n", err);
+				ESP_LOGE(TAG,"Creating store failed: %i", err);
 
 			//err = esp_tls_set_global_ca_store(bundle7_crt_start, bundle7_crt_end - bundle7_crt_start);
 			err = esp_tls_set_global_ca_store((unsigned char*)certificate, certificateLength+1);
 			if(err != ESP_OK)
 			{
 				certificateValidated = false;
-				printf("Creating store failed: %i\n", err);
+				ESP_LOGE(TAG,"Creating store failed: %i", err);
 			}
 			else
 			{
@@ -202,6 +203,8 @@ static void certificate_task(int tlsError)
 	certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1);
 
 	uint32_t backoffDelay = 10;
+
+	SetEspNotification(eNOTIFICATION_CERT_BUNDLE_REQUESTED);
 
 	while(!certificateIsOk)
 	{
@@ -334,7 +337,7 @@ bool certificateValidate()
 
     esp_err_t err;
     if((err = mbedtls_pk_parse_public_key(&key_ctx, (unsigned char*)zaptecPublicKey, base64_key_len))) {
-        printf("Public key read failed: %i\n", err);
+    	ESP_LOGE(TAG,"Public key read failed: %i", err);
         return false;
     }
 
@@ -367,14 +370,13 @@ bool certificateValidate()
     mbedtls_pk_init(&key_ctx);
 
     if(result == 0) {
-        printf("Signature verified\n");
+    	ESP_LOGI(TAG, "Signature verified");
         return true;
     }
     else {
-        printf("Verification failed: %X\n", -result);
+    	ESP_LOGE(TAG,"Verification failed: %X", -result);
         return false;
     }
-
 }
 
 
@@ -406,17 +408,17 @@ void certificate_init()
 	}
 	else
 	{
-		printf("Using buildtin certificate\n");
+		ESP_LOGW(TAG,"Using buildtin certificate");
 		//Fallback to included certificate if FAT partition can't be mounted. Can reduce application size if this is not needed.
 		esp_err_t err = esp_tls_init_global_ca_store();
 		if(err != ESP_OK)
-			printf("Creating store failed: %i\n", err);
+			ESP_LOGE(TAG,"Creating store failed: %i", err);
 
 		err = esp_tls_set_global_ca_store(bundle7_crt_start, bundle7_crt_end - bundle7_crt_start);
 		if(err != ESP_OK)
 		{
 			certificateIsOk = false;
-			printf("Creating store for included certificate failed: %i\n", err);
+			ESP_LOGE(TAG,"Creating store for included certificate failed: %i", err);
 		}
 		else
 		{

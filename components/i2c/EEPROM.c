@@ -20,7 +20,7 @@ esp_err_t EEPROM_Read()
 	uint16_t readAddr = 0;
 	esp_err_t err = ESP_OK;
 	//for (uint8_t line = 0; line <= 31; line++)
-	for (uint8_t line = 0; line <= 6; line++)
+	for (uint8_t line = 0; line <= 1; line++)
 	{
 		printf("#%02d:  ", line);
 

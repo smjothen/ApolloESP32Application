@@ -55,6 +55,7 @@ float MCU_ChargeCurrentInstallationMaxLimit();
 float MCU_StandAloneCurrent();
 
 float MCU_GetMaxInstallationCurrentSwitch();
+void SetEspNotification(uint16_t notification);
 uint32_t GetCombinedNotifications();
 
 

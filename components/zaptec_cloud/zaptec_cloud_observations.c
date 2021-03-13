@@ -398,7 +398,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	GetTimeOnString(buf);
 	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  MCnt: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetSwitchState(), MCU_GetDebugCounter());
 
-	if(storage_Get_DiagnosticsMode() == 1)
+	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
 		sprintf(buf + strlen(buf), " NFC Pass: %d Fail: %d ", GetPassedDetectedCounter(), GetFailedDetectedCounter());
 	}
@@ -432,6 +432,7 @@ static uint8_t previousPermanentLock = 0xff;
 static uint8_t previousCableType = 0xff;
 static float previousPower = -1.0;
 static float previousEnergy = -1.0;
+static uint32_t previousDiagnosticsMode = 0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -599,6 +600,14 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+
+	uint32_t diagnosticsMode = storage_Get_DiagnosticsMode();
+	if(previousDiagnosticsMode != diagnosticsMode)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, diagnosticsMode));
+		previousDiagnosticsMode = diagnosticsMode;
+		isChange = true;
+	}
 
 	//Check ret and retry?
     int ret = 0;

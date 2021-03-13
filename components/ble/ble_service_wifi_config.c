@@ -270,9 +270,9 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 
 void charInit()
 {
-#ifndef DO_LOG
+/*#ifndef DO_LOG
     esp_log_level_set(TAG, ESP_LOG_INFO);
-#endif
+#endif*/
 }
 
 
@@ -1104,7 +1104,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 				storage_Set_StandaloneCurrent(standaloneCurrent);
 				ESP_LOGI(TAG, "Set standalone Current to MCU: %f", standaloneCurrent);
-				saveConfiguration = true;
+				storage_SaveConfiguration();
 			}
 			else
 			{
@@ -1164,7 +1164,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
 				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
-				saveConfiguration = true;
+				storage_SaveConfiguration();
 			}
     	}
 
@@ -1183,7 +1183,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	{
     		storage_Set_PhaseRotation(phaseRotation);
     		ESP_LOGI(TAG, "Set phaseRotation: %d", phaseRotation);
-    		saveConfiguration = true;
+    		storage_SaveConfiguration();//Not using save button in app
     	}
 
    		break;
@@ -1282,8 +1282,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		ESP_LOGI(TAG, "Save val %s", SAVE_SERV_CHAR_val);
 
-
-
 		if((connectivity_GetPreviousInterface() == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
 		{
 			storage_SaveConfiguration();
@@ -1297,7 +1295,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			ESP_LOGI(TAG, "WIFI -> LTE restart");
 			esp_restart();
 		}
-
 
 		break;
 	}

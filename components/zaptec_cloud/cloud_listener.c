@@ -511,7 +511,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			uint32_t diagnosticsMode = 0;
 			sscanf(pos+strlen(" 805 : "),"%d", &diagnosticsMode);
 			ESP_LOGI(TAG, "805 diagnosticsMode: %u \n", diagnosticsMode);
-			storage_Set_DiagnosticsMode(diagnosticsMode);
+			storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE);
 			doSave = true;
 			//continue;
 		}
@@ -1306,8 +1306,32 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "Setting new Wifi");
 				}
 
+				else if(strstr(commandString,"SwapCommunicationMode") != NULL)
+				{
+					if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+						storage_Set_CommunicationMode(eCONNECTION_LTE);
+					else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+						storage_Set_CommunicationMode(eCONNECTION_WIFI);
 
+					storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE);
+					storage_SaveConfiguration();
 
+					ESP_LOGI(TAG, "SwapCommunicationMode");
+					responseStatus = 200;
+
+					esp_restart();
+				}
+
+				else if(strstr(commandString,"ActivateLogging") != NULL)
+				{
+					esp_log_level_set("*", ESP_LOG_INFO);
+					storage_Set_DiagnosticsMode(eACTIVATE_LOGGING);
+					storage_SaveConfiguration();
+
+					ESP_LOGI(TAG, "ActivateLogging");
+					responseStatus = 200;
+
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))

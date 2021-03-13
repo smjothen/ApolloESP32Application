@@ -160,8 +160,8 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 
 	if(deviceInfo.EEPROMFormatVersion == GetEEPROMFormatVersion())
 	{
-		printf("\n********************************\n\n");
-			ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
+		//printf("\n********************************\n\n");
+		ESP_LOGI(TAG_EEPROM, "Format ver:    %d", deviceInfo.EEPROMFormatVersion);
 
 		EEPROM_ReadSerialNumber(deviceInfo.serialNumber);
 		int len = strlen(deviceInfo.serialNumber);
@@ -177,7 +177,7 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 			EEPROM_ReadPin(deviceInfo.Pin);
 			ESP_LOGI(TAG_EEPROM, "PIN:           %s", deviceInfo.Pin);
 
-			printf("\n********************************\n\n");
+			//printf("\n********************************\n\n");
 		}
 		else
 		{
@@ -257,7 +257,7 @@ static void i2cDevice_task(void *pvParameters)
 		nfcCardDetected = NFCReadTag(); //Move inside
 
 		//Test function for checking successful NFC reading under certain conditions
-		if(storage_Get_DiagnosticsMode() == 1)
+		if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 		{
 			if(nfcCardDetected == true)
 				passedDetectedCounter++;

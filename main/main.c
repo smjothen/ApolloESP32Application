@@ -41,7 +41,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.54";
+char softwareVersion[] = "0.0.0.55";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -171,6 +171,10 @@ void GetTimeOnString(char * onTimeString)
 
 void app_main(void)
 {
+#ifdef DISABLE_LOGGING
+	esp_log_level_set("*", ESP_LOG_NONE);
+#endif
+
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
@@ -193,6 +197,11 @@ void app_main(void)
 
 		storage_Init_Configuration();
 		storage_SaveConfiguration();
+	}
+
+	if(storage_Get_DiagnosticsMode() == eACTIVATE_LOGGING)
+	{
+		esp_log_level_set("*", ESP_LOG_INFO);
 	}
 
 	storage_PrintConfiguration();

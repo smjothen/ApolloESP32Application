@@ -8,6 +8,8 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
+#define DISABLE_LOGGING
+
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
 struct DeviceInfo
@@ -57,6 +59,22 @@ enum CommunicationMode
 	eCONNECTION_WIFI		 = 1,
 	eCONNECTION_LTE			 = 5,
 	eCONNECTION_LTE_TO_WIFI	 = 7
+};
+
+
+enum ESPNotifications
+{
+	eNOTIFICATION_NVS_ERROR 			= 0x1,
+	eNOTIFICATION_CERT_BUNDLE_REQUESTED = 0x2
+};
+
+enum DiagnosticsModes
+{
+	eCLEAR_DIAGNOSTICS_MODE			= 0,
+	eNFC_ERROR_COUNT 				= 1,
+	eSWAP_COMMUNICATION_MODE 		= 2,
+	eSWAP_COMMUNICATION_MODE_BACK 	= 3,
+	eACTIVATE_LOGGING				= 4
 };
 
 struct Configuration
