@@ -307,7 +307,7 @@ void app_main(void)
     {
 		onTimeCounter++;
 
-    	if(onTimeCounter % 2 == 0)
+    	if(onTimeCounter % 15 == 0)
     	{
 			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
@@ -316,7 +316,7 @@ void app_main(void)
 			ESP_LOGW(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 
-    	if(onTimeCounter % 10 == 0)
+    	if(onTimeCounter % 15 == 0)
     	{
     		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
 

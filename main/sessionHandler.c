@@ -154,7 +154,7 @@ static void sessionHandler_task()
 	{
 		onCounter++;
 
-		isOnline = false;//isMqttConnected();
+		isOnline = isMqttConnected();
 		networkInterface = connectivity_GetActivateInterface();
 
 		// Check for MCU communication fault and restart with conditions:
