@@ -65,6 +65,55 @@ void log_task_info(void){
 	ESP_LOGD(TAG, "log_task_info done");
 }
 
+
+
+
+void OfflineHandler()
+{
+
+	int activeSessionId = strlen(chargeSession_GetSessionId());
+	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
+
+	if((activeSessionId > 0) && (chargeOperatingMode == 2))//2 = Requesting, add definitions
+	{
+
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "Offline MCU Granted command OK");
+
+			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
+			if(ret == MsgWriteAck)
+			{
+				MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
+
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Offline MCU Start command FAILED");
+				}
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
+			}
+
+		}
+		else
+		{
+			ESP_LOGI(TAG, "Offline MCU Granted command FAILED");
+		}
+
+	}
+}
+
+
+
+
 bool startupSent = false;
 
 static void sessionHandler_task()
@@ -97,11 +146,15 @@ static void sessionHandler_task()
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
 
+    // Offline parameters
+    uint32_t offlineTime = 0;
+    uint32_t secondsSinceLastCheck = 10;
+
 	while (1)
 	{
 		onCounter++;
 
-		isOnline = isMqttConnected();
+		isOnline = false;//isMqttConnected();
 		networkInterface = connectivity_GetActivateInterface();
 
 		// Check for MCU communication fault and restart with conditions:
@@ -146,8 +199,8 @@ static void sessionHandler_task()
 			if((onCounter % 10) == 0)
 				ESP_LOGI(TAG, "No connection configured");
 
-			vTaskDelay(pdMS_TO_TICKS(1000));
-			continue;
+			//vTaskDelay(pdMS_TO_TICKS(1000));
+			//continue;
 		}
 
 
@@ -160,7 +213,32 @@ static void sessionHandler_task()
 
 		currentCarChargeMode = MCU_GetchargeMode();
 
-		publish_telemetry_observation_on_change();
+		if(isOnline)
+		{
+			publish_telemetry_observation_on_change();
+			offlineTime = 0;
+		}
+		else
+		{
+			offlineTime++;
+			if(offlineTime > 20)
+			{
+				if(secondsSinceLastCheck < 10)
+				{
+					secondsSinceLastCheck++;
+				}
+				if(secondsSinceLastCheck >= 10)
+				{
+					OfflineHandler();
+					secondsSinceLastCheck = 0;
+				}
+			}
+			else
+			{
+				ESP_LOGW(TAG, "Waiting to declare offline: %d", offlineTime);
+			}
+		}
+
 
 		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
