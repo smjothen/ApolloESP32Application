@@ -1493,8 +1493,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("rDATA=%.*s\r\n", event->data_len, event->data);
+        //printf("rTOPIC=%.*s\r\n", event->topic_len, event->topic);
+        //printf("rDATA=%.*s\r\n", event->data_len, event->data);
 
         if(strstr(event->topic, "iothub/twin/PATCH/properties/desired/"))
 		{
