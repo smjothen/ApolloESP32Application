@@ -836,7 +836,7 @@ int ppp_disconnect()
 	return 0;
 }
 
-static int rssiLTE_dbm = 0;
+static int rssiLTE_percent = 0;
 int log_cellular_quality(void){
 
 	int rssiLTE = 0;
@@ -867,9 +867,23 @@ int log_cellular_quality(void){
 	int enter_data_mode_result = enter_data_mode();
 	ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
 
-	rssiLTE_dbm = 2*rssiLTE - 113;
+	int rssiLTE_dbm = 2*rssiLTE - 113;
 
-	return rssiLTE_dbm;
+	//These are the level conversions used in Pro.
+	if (rssiLTE_dbm > -55)
+		rssiLTE_percent = 100;
+	else if (rssiLTE_dbm > -65)
+		rssiLTE_percent = 80;
+	else if (rssiLTE_dbm > -75)
+		rssiLTE_percent = 60;
+	else if (rssiLTE_dbm > -85)
+		rssiLTE_percent = 40;
+	else if (rssiLTE_dbm > -95)
+		rssiLTE_percent = 20;
+	else if (rssiLTE_dbm > -105)
+		rssiLTE_percent = 0;
+
+	return rssiLTE_percent;
 }
 
 int GetCellularQuality()
@@ -877,7 +891,7 @@ int GetCellularQuality()
 	if(hasLTEConnection == false)
 		return 0;
 	else
-		return rssiLTE_dbm;
+		return rssiLTE_percent;
 }
 
 const char* LTEGetImei()

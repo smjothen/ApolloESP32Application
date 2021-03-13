@@ -218,6 +218,7 @@
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
+		CommandActivateWatchdog = 810,
 
     } CommandNo;
 

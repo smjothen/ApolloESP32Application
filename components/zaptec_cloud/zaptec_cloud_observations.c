@@ -17,6 +17,8 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../../main/chargeSession.h"
 #include "../apollo_ota/include/apollo_ota.h"
+#include "../apollo_ota/include/pic_update.h"
+#include "../../main/certificate.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -85,7 +87,7 @@ cJSON *create_observation(int observation_id, char *value){
 
 cJSON *create_double_observation(int observation_id, double value){
     char value_string[32];
-    sprintf(value_string, "%f", value);
+    sprintf(value_string, "%.3f", value);
     return create_observation(observation_id, value_string);
 }
 
@@ -249,6 +251,24 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults)
 }
 
 
+/*
+ * Returns the last set of values set. If the MCU values for any reason has been cleared, these are a backup of last
+ */
+int publish_debug_telemetry_observation_InstallationConfigOnFile()
+{
+    ESP_LOGD(TAG, "sending GridTestResults");
+
+    cJSON *observations = create_observation_collection();
+
+    char buf[100];
+    sprintf(buf, "On file: MaxInstallationCurrentConfig: %f, StandaloneCurrent: %f, PhaseRotation %d", storage_Get_MaxInstallationCurrentConfig(), storage_Get_StandaloneCurrent(), storage_Get_PhaseRotation());
+
+    ESP_LOGI(TAG, "Sending InstallationConfigOnFile telemetry: %d/100", strlen(buf));
+    add_observation_to_collection(observations, create_observation(808, buf));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_telemetry_observation_StartUpParameters()
 {
@@ -281,6 +301,9 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
     add_observation_to_collection(observations, create_observation(SourceVersion, esp_ota_get_app_description()->version));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
+    add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, (uint32_t)certificate_GetCurrentBundleVersion()));
+
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
@@ -323,7 +346,7 @@ int publish_debug_telemetry_observation_LteParameters()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(LteImsi, LTEGetImsi()));
-    add_observation_to_collection(observations, create_observation(LteMsisdn, "0"));
+    //add_observation_to_collection(observations, create_observation(LteMsisdn, "0"));
     add_observation_to_collection(observations, create_observation(LteIccid, LTEGetIccid()));
     add_observation_to_collection(observations, create_observation(LteImei, LTEGetImei()));
 

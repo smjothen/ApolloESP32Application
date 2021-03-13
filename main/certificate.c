@@ -118,7 +118,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 
-int currentBundleVersion = 0;
+static int currentBundleVersion = 0;
 bool ParseCertificateBundle(char * certificateBundle)
 {
 	bool certificateValidated = false;
@@ -127,7 +127,7 @@ bool ParseCertificateBundle(char * certificateBundle)
 	if(body!=NULL){
 		if(cJSON_HasObjectItem(body, "ver")){
 			currentBundleVersion =  cJSON_GetObjectItem(body, "ver")->valueint;
-			ESP_LOGW(TAG, "Received version: %d", currentBundleVersion);
+			ESP_LOGW(TAG, "Version: %d", currentBundleVersion);
 		}
 		else
 		{
@@ -138,7 +138,7 @@ bool ParseCertificateBundle(char * certificateBundle)
 		if(cJSON_HasObjectItem(body, "sign")){
 				signLength = strlen(cJSON_GetObjectItem(body, "sign")->valuestring);
 				memcpy(sign, cJSON_GetObjectItem(body, "sign")->valuestring, signLength);
-				ESP_LOGW(TAG, "Received signature: %s", sign);
+				ESP_LOGW(TAG, "Signature: %s", sign);
 		}
 		else
 		{
@@ -148,7 +148,7 @@ bool ParseCertificateBundle(char * certificateBundle)
 
 		if(cJSON_HasObjectItem(body, "data")){
 
-			ESP_LOGW(TAG, "Received cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
+			ESP_LOGW(TAG, "Cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
 		}
 		else
 		{
@@ -186,6 +186,11 @@ bool ParseCertificateBundle(char * certificateBundle)
 
 	}
 	return certificateValidated;
+}
+
+int certificate_GetCurrentBundleVersion()
+{
+	return currentBundleVersion;
 }
 
 

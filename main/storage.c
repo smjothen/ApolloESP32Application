@@ -81,8 +81,8 @@ void storage_Init_Configuration()
 
 	configurationStruct.standalone 					= 1;	//0/1
 	configurationStruct.standalonePhase 			= 0;	//Nr
-	//configurationStruct.standaloneCurrent			= 6;	//A
-	//configurationStruct.maxInstallationCurrentConfig = 0.0;
+	configurationStruct.standaloneCurrent			= 6;	//A
+	configurationStruct.maxInstallationCurrentConfig = 0.0;
 
 	configurationStruct.phaseRotation				= 0;
 	configurationStruct.networkType					= 0;
@@ -325,7 +325,7 @@ uint8_t storage_Get_StandalonePhase()
 	return configurationStruct.standalonePhase;
 }
 
-/*float storage_Get_StandaloneCurrent()
+float storage_Get_StandaloneCurrent()
 {
 	return configurationStruct.standaloneCurrent;
 }
@@ -333,7 +333,7 @@ uint8_t storage_Get_StandalonePhase()
 float storage_Get_MaxInstallationCurrentConfig()
 {
 	return configurationStruct.maxInstallationCurrentConfig;
-}*/
+}
 
 uint8_t storage_Get_PhaseRotation()
 {
@@ -473,9 +473,9 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "CommunicationMode: 			%s", comMode);
 
 
-	//ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
+	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
-	//ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
+	ESP_LOGI(TAG, "Standalone current: 			%2.1f", configurationStruct.standaloneCurrent);
 
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);

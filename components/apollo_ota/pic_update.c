@@ -406,6 +406,14 @@ int set_dspic_header(void){
 
 }
 
+
+uint8_t bootloaderVersion = 0;
+
+uint8_t get_bootloader_version()
+{
+	return bootloaderVersion;
+}
+
 int is_bootloader(bool *result){
     ESP_LOGI(TAG, "reading bootloader version");
 
@@ -424,7 +432,16 @@ int is_bootloader(bool *result){
         ESP_LOGW(TAG, "detected communication with dsPIC app");
         *result = false;
     }else if(validate_dspic_reply(rxMsg, MsgReadAck, 2, 0)==0){
-        ESP_LOGI(TAG, "detected bootloader");
+    	if(rxMsg.length == 2)
+    	{
+    		if((0xff > rxMsg.data[1]) && (rxMsg.data[1] >= 1))
+			{
+				bootloaderVersion = rxMsg.data[1];
+			}
+    	}
+
+    	ESP_LOGI(TAG, "detected bootloader version: %d", bootloaderVersion);
+
         *result = true;
     }else{
         ESP_LOGE(TAG, "inconclusive bootloader test, assuming false");

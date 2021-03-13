@@ -12,6 +12,7 @@ void certificate_init();
 bool certificateOk();
 void certificate_clear();
 void certificate_update(int tls_error);
+int certificate_GetCurrentBundleVersion();
 
 
 #ifdef __cplusplus

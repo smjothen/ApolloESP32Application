@@ -106,8 +106,6 @@ void _do_sdk_ota(char *image_location){
 
 static void ota_task(void *pvParameters){
 
-	otaRunning = true;
-
     char image_location[1024] = {0};
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
@@ -125,6 +123,9 @@ static void ota_task(void *pvParameters){
             event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED, 
             pdFALSE, pdFALSE, portMAX_DELAY
         );
+
+        otaRunning = true;
+
         ESP_LOGW(TAG, "attempting ota update");
 
         if(xTimerIsTimerActive(timeout_timer)==pdFALSE){

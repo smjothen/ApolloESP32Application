@@ -38,13 +38,13 @@
 int resetCounter = 0;
 
 const char event_topic[128];
-const char event_topic_hold[128];
 static struct DeviceInfo cloudDeviceInfo;
 
 bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
+bool reportInstallationConfigOnFile = false;
 bool simulateTlsError = false;
 
 
@@ -186,6 +186,17 @@ bool GetReportGridTestResults()
 void ClearReportGridTestResults()
 {
 	reportGridTestResults = false;
+}
+
+
+bool GetInstallationConfigOnFile()
+{
+	return reportInstallationConfigOnFile;
+}
+
+void ClearInstallationConfigOnFile()
+{
+	reportInstallationConfigOnFile = false;
 }
 
 
@@ -803,14 +814,37 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
 		ble_interface_deinit();
-		start_ota();
-		responseStatus = 200;
+
+
+		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+
+			//Only start ota if MCU has ack'ed the stop command
+			start_ota();
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+		}
+
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
 		ESP_LOGI(TAG, "TODO: Implement forced");
 		ble_interface_deinit();
+
+		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+		if(ret == MsgCommandAck)
+			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+		else
+			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+
+		//Start ota even if MCU has NOT ack'ed the stop command
 		start_ota();
 		responseStatus = 200;
 	}
@@ -1084,6 +1118,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "Factory reset");
 					responseStatus = 200;
 				}else if(strstr(commandString, "segmentota") != NULL){
+
+					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+					if(ret == MsgCommandAck)
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+					else
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+
 					start_segmented_ota();
 				}
 
@@ -1092,10 +1133,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"LogInterval ") != NULL)
 				{
 					char *endptr;
-					int interval = (int)strtol(commandString, &endptr, 10);
+					int interval = (int)strtol(commandString+14, &endptr, 10);
 					if((86400 > interval) && (interval > 0))
 					{
-						SetDataInterval(60);
+						SetDataInterval(interval);
 						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
 						responseStatus = 200;
 					}
@@ -1152,6 +1193,120 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "Set tls error");
 					responseStatus = 200;
 				}
+
+				else if(strstr(commandString,"SetMaxInstallationCurrent ") != NULL)
+				{
+					char *endptr;
+					int maxInt = (int)strtol(commandString+28, &endptr, 10);
+
+					float maxInstCurrentConfig = maxInt * 1.0;
+
+					//Sanity check
+					if((32.0 >= maxInstCurrentConfig) && (maxInstCurrentConfig >= 0.0))
+					{
+						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrentConfig);
+						if(ret == MsgWriteAck)
+						{
+							storage_Set_MaxInstallationCurrentConfig(maxInstCurrentConfig);
+							ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrentConfig);
+							storage_SaveConfiguration();
+							responseStatus = 200;
+						}
+						else
+						{
+							responseStatus = 400;
+						}
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
+				// GetInstallationConfigOnFile
+				else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
+				{
+
+					reportInstallationConfigOnFile = true;
+					ESP_LOGI(TAG, "Getting installationConfigOnFile");
+					responseStatus = 200;
+				}
+
+				// SetNewWifi
+				else if(strstr(commandString,"SetNewWifi:") != NULL)
+				{
+					char * start = strstr(commandString,"{");
+					commandString[commandEvent->data_len-1] = '\0';
+
+					char wifiString[commandEvent->data_len-1];
+					int nextChar = 0;
+					for (int i = 0; i < commandEvent->data_len-2; i++)
+					{
+						if(start[i] != '\\')
+						{
+							wifiString[nextChar] = start[i];
+							nextChar++;
+						}
+					}
+					wifiString[nextChar] = '\0';
+
+					cJSON *body = cJSON_Parse(wifiString);
+					if(body!=NULL){
+						if(cJSON_HasObjectItem(body, "Pin")){
+							char * pin = cJSON_GetObjectItem(body, "Pin")->valuestring;
+							if(strcmp(pin,i2cGetLoadedDeviceInfo().Pin) == 0)
+							{
+								if(cJSON_HasObjectItem(body, "SSID")){
+
+									char * ssid = cJSON_GetObjectItem(body, "SSID")->valuestring;
+									ESP_LOGW(TAG, "SSID: %s", ssid);
+
+
+									if(cJSON_HasObjectItem(body, "PSK")){
+
+										char * psk = cJSON_GetObjectItem(body, "PSK")->valuestring;
+										ESP_LOGW(TAG, "Psk: %s", psk);
+
+										storage_SaveWifiParameters(ssid, psk);
+										if(network_CheckWifiParameters())
+										{
+											network_updateWifi();
+											ESP_LOGW(TAG, "Updated Wifi");
+											responseStatus = 200;
+										}
+									}
+									else
+									{
+										//Do not continue if the bundle is empty - same version number as we already have
+										responseStatus = 400;
+										return false;
+									}
+
+								}
+								else
+								{
+									//Do not continue if the bundle has no signature
+									responseStatus = 400;
+									return false;
+								}
+
+							}
+						}
+						else
+						{
+							//Do not continue invalid content
+							responseStatus = 400;
+							return false;
+						}
+
+					}
+
+					cJSON_Delete(body);
+
+
+					ESP_LOGI(TAG, "Setting new Wifi");
+				}
+
+
 
 			}
 	}
@@ -1455,6 +1610,11 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
+    		if((resetCounter == 5) && (network_WifiIsConnected() == true))
+			{
+    			ESP_LOGI(TAG, "Refreshing Wifi");
+    			network_updateWifi();
+			}
 
 			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 40))
 			{
@@ -1462,13 +1622,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
 				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
 			}
-
-			if(resetCounter == 50)
-			{
-				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
-				esp_restart();
-			}
     	}
+    	else
+    	{
+    		ESP_LOGI(TAG, "No Wifi or LTE");
+    	}
+
+    	if(resetCounter == 50)
+		{
+			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+			esp_restart();
+		}
 
         break;
     default:

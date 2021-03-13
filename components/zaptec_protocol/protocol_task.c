@@ -10,6 +10,7 @@
 #include "protocol_task.h"
 #include "zaptec_protocol_serialisation.h"
 #include "mcu_communication.h"
+#include "../apollo_ota/include/pic_update.h"
 
 const char *TAG = "MCU";
 
@@ -179,6 +180,8 @@ static uint8_t chargeMode = 0;
 static uint8_t chargeOperationMode = 0;
 
 static uint32_t mcuDebugCounter = 0;
+static uint32_t previousMcuDebugCounter = 0;
+
 static uint32_t mcuWarnings = 0;
 static uint8_t mcuResetSource = 0;
 
@@ -240,10 +243,30 @@ int MCUTxGetStackWatermark()
 }
 
 
+void ActivateMCUWatchdog()
+{
+	//If the bootloader version does not have the very high watchdog frequency - activate the watchdog.
+	uint8_t bVersion = get_bootloader_version();
+	ESP_LOGW(TAG, "Bootloader version is: %d", bVersion);
+	if((0xff > bVersion) && (bVersion >= 6))
+	{
+		MessageType ret = MCU_SendCommandId(CommandActivateWatchdog);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGW(TAG, "MCU watchdog OK");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU watchdog FAILED");
+		}
+	}
+}
+
+
 uint32_t mcuComErrorCount = 0;
 
 void uartSendTask(void *pvParameters){
-    ESP_LOGI(TAG, "configuring uart");
+    ESP_LOGI(TAG, "Configuring MCU uart");
 
     //Provide application time to initialize before sending to MCU
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -265,14 +288,20 @@ void uartSendTask(void *pvParameters){
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
+
+    //Only applies to chargers with MCU bootloaders version 6 and greater.
+    ActivateMCUWatchdog();
+
+
     uint32_t count = 0;
     uint32_t offsetCount = 0;
     while (true)
     {
-    	//count++;
-
-    	//vTaskDelay(1000 / portTICK_PERIOD_MS);
-    	//continue;
+    	if(mcuDebugCounter < previousMcuDebugCounter)
+    	{
+    		ActivateMCUWatchdog();
+    		ESP_LOGW(TAG, "MCU restart detected");
+    	}
 
         ZapMessage txMsg;
 
@@ -439,7 +468,10 @@ void uartSendTask(void *pvParameters){
 	    	ESP_LOGW(TAG, "**** Received HMI brightness ACK ****");
 	    }
 	    else if(rxMsg.identifier == DebugCounter)
+	    {
+	    	previousMcuDebugCounter = mcuDebugCounter;
 	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
+	    }
 		else if(rxMsg.identifier == MCUResetSource)
 			mcuResetSource = rxMsg.data[0];
 		else if(rxMsg.identifier == ParamWarnings)
