@@ -823,7 +823,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
 
 			//Only start ota if MCU has ack'ed the stop command
-			start_ota();
+			start_segmented_ota();
+			//start_ota();
 		}
 		else
 		{
@@ -845,7 +846,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 
 		//Start ota even if MCU has NOT ack'ed the stop command
-		start_ota();
+		start_segmented_ota();
+		//start_ota();
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
@@ -1125,7 +1127,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					else
 						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 
-					start_segmented_ota();
+					//start_segmented_ota();
+					start_ota();
 				}
 
 

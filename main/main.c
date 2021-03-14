@@ -41,7 +41,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.55";
+char softwareVersion[] = "0.0.0.56";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -171,6 +171,8 @@ void GetTimeOnString(char * onTimeString)
 
 void app_main(void)
 {
+	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
+
 #ifdef DISABLE_LOGGING
 	esp_log_level_set("*", ESP_LOG_NONE);
 #endif
@@ -186,8 +188,6 @@ void app_main(void)
 
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
-
-	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 	storage_Init();
 
