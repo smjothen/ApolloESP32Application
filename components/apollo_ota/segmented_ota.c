@@ -63,7 +63,7 @@ void do_segmented_ota(char *image_location){
     ESP_LOGW(TAG, "running experimental segmented ota");
     ota_log_chunked_update_start(image_location);
 
-    esp_partition_t * update_partition = esp_ota_get_next_update_partition(NULL);
+    const esp_partition_t * update_partition = esp_ota_get_next_update_partition(NULL);
 
     esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
     if (err != ESP_OK) {
