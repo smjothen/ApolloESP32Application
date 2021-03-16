@@ -74,7 +74,8 @@ enum DiagnosticsModes
 	eNFC_ERROR_COUNT 				= 1,
 	eSWAP_COMMUNICATION_MODE 		= 2,
 	eSWAP_COMMUNICATION_MODE_BACK 	= 3,
-	eACTIVATE_LOGGING				= 4
+	eACTIVATE_LOGGING				= 4,
+	eACTIVATE_TCP_PORT				= 5
 };
 
 struct Configuration

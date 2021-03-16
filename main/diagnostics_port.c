@@ -41,20 +41,18 @@
 
 
 //Radio tester
-#define EXAMPLE_WIFI_SSID "CMW-AP"
-#define EXAMPLE_WIFI_PASS ""//tk51mo79"
+//#define EXAMPLE_WIFI_SSID "CMW-AP"
+
 
 //Radio tester
 //#define EXAMPLE_WIFI_SSID "APPLICA-GJEST"
 //#define EXAMPLE_WIFI_PASS "Deter1findagidag!"
 
-//#define EXAMPLE_WIFI_SSID "BVb"
-//#define EXAMPLE_WIFI_PASS ""//tk51mo79"
-
 //#define EXAMPLE_WIFI_SSID CONFIG_WIFI_SSID
 //#define EXAMPLE_WIFI_PASS CONFIG_WIFI_PASSWORD
 
-#define PORT 53388
+//#define PORT 53388 //For EMC test
+#define PORT 53389	//For lab-diagnostics
 
 
 /*typedef struct CJSON {
@@ -71,12 +69,11 @@
 //const int IPV4_GOTIP_BIT = BIT0;
 //const int IPV6_GOTIP_BIT = BIT1;
 
-static const char *TAG = "NETWORK:";
+static const char *TAG = "TCP:";
 int sock;
 
 extern uint32_t onTimeCounter;
 
-//extern uint8_t *obisRawData;
 
 //static esp_err_t event_handler(void *ctx, system_event_t *event)
 //{
@@ -269,7 +266,7 @@ static void tcp_server_task(void *pvParameters)
         unsigned int value = 0;
         while (1) {
         	//vTaskDelay(1);
-        	vTaskDelay(20 / portTICK_PERIOD_MS);
+        	vTaskDelay(1000 / portTICK_PERIOD_MS);
 
 			byteCount += 1;
 
@@ -289,6 +286,7 @@ static void tcp_server_task(void *pvParameters)
 			esp_wifi_get_max_tx_power(&power);
 
 			jsonObject = cJSON_CreateObject();
+			cJSON_AddNumberToObject(jsonObject, "Version", 1);
 			cJSON_AddNumberToObject(jsonObject, "MCUcnt", MCU_GetDebugCounter());
 			cJSON_AddNumberToObject(jsonObject, "ESPcnt", byteCount);
 			cJSON_AddNumberToObject(jsonObject, "OnTime", onTimeCounter);
@@ -348,15 +346,6 @@ static void tcp_server_task(void *pvParameters)
 
         }
 
-        /*if ((sock != -1)) {// || (connectionTimout == 0)) {
-            ESP_LOGE(TAG, "Shutting down socket and restarting...");
-            shutdown(sock, 2);//0);
-            close(sock);
-            sock = 0;
-            //shutdown(listen_sock, 0);
-            //close(listen_sock);
-            ESP_LOGE(TAG, "Socket closed");
-        }*/
     }
     vTaskDelete(NULL);
 }

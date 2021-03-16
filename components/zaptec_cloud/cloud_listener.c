@@ -1028,13 +1028,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				//DiagnosticsModes
 				if(strstr(commandString,"DiagnosticsMode 0") != NULL)
 				{
-					storage_Set_DiagnosticsMode(0);
+					storage_Set_DiagnosticsMode(eCLEAR_DIAGNOSTICS_MODE);
 					storage_SaveConfiguration();
 					responseStatus = 200;
 				}
 				else if(strstr(commandString,"DiagnosticsMode 1") != NULL)
 				{
-					storage_Set_DiagnosticsMode(1);
+					storage_Set_DiagnosticsMode(eNFC_ERROR_COUNT);
 					storage_SaveConfiguration();
 					responseStatus = 200;
 				}
@@ -1339,13 +1339,19 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"Simulate offline") != NULL)
 				{
-
 					sessionHandler_simulateOffline();
 
 					ESP_LOGI(TAG, "Simulate offline");
 					responseStatus = 200;
-
 				}
+
+				if(strstr(commandString,"Activate TCP") != NULL)
+				{
+					storage_Set_DiagnosticsMode(eACTIVATE_TCP_PORT);
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -1423,7 +1429,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
 
-    ESP_LOGW(TAG, "tls: %X %X", event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_last_esp_err);
+    if((event->error_handle->esp_tls_stack_err != 0) || (event->error_handle->esp_tls_last_esp_err != 0))
+    	ESP_LOGE(TAG, "tls error: %X %X", event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_last_esp_err);
 
     if(simulateTlsError)
     {

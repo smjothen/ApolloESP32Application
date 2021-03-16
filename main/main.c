@@ -300,9 +300,15 @@ void app_main(void)
 
 
     //#define DIAGNOSTICS //Enable TCP port for EMC diagnostics
-    #ifdef DIAGNOSTICS
-    	diagnostics_port_init();
-	#endif
+    //#ifdef DIAGNOSTICS
+	//Allow remote activation for use with lab-testsetup
+	if((storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT) && (storage_Get_CommunicationMode() == eCONNECTION_WIFI))
+	{
+		esp_log_level_set("*", ESP_LOG_INFO);
+		diagnostics_port_init();
+		ESP_LOGE(TAG_MAIN, "TCP PORT ACTIVATED");
+	}
+	//#endif
 
     #ifndef BG_BRIDGE
     sessionHandler_init();
