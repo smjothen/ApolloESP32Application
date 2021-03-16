@@ -229,22 +229,25 @@ static void sessionHandler_task()
 		}
 		else
 		{
-			offlineTime++;
-			if(offlineTime > 120)
+			if(storage_Get_Standalone() == false)
 			{
-				if(secondsSinceLastCheck < 10)
+				offlineTime++;
+				if(offlineTime > 120)
 				{
-					secondsSinceLastCheck++;
+					if(secondsSinceLastCheck < 10)
+					{
+						secondsSinceLastCheck++;
+					}
+					if(secondsSinceLastCheck >= 10)
+					{
+						OfflineHandler();
+						secondsSinceLastCheck = 0;
+					}
 				}
-				if(secondsSinceLastCheck >= 10)
+				else
 				{
-					OfflineHandler();
-					secondsSinceLastCheck = 0;
+					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d", offlineTime);
 				}
-			}
-			else
-			{
-				ESP_LOGW(TAG, "Waiting to declare offline: %d", offlineTime);
 			}
 		}
 

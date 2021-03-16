@@ -12,6 +12,7 @@ void certificate_init();
 bool certificateOk();
 void certificate_clear();
 void certificate_update(int tls_error);
+void certifcate_setBundleVersion(int newBundleVersion);
 int certificate_GetCurrentBundleVersion();
 
 

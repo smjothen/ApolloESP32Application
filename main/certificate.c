@@ -189,6 +189,11 @@ bool ParseCertificateBundle(char * certificateBundle)
 	return certificateValidated;
 }
 
+void certifcate_setBundleVersion(int newBundleVersion)
+{
+	currentBundleVersion = newBundleVersion;
+}
+
 int certificate_GetCurrentBundleVersion()
 {
 	return currentBundleVersion;

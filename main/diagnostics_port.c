@@ -255,46 +255,8 @@ static void tcp_server_task(void *pvParameters)
 		tv.tv_usec = 0;
 		int err_ = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &tv, sizeof(struct timeval));
 		err_ =err_ + 1;
-//        int n;
-//        struct arpreq arpreq_;
-//        bzero(&arpreq_, sizeof(struct arpreq));
-//        if( ( n = ioctl(sock, SIOCGARP, &arpreq_) ) < 0 ){
-//        perror("ioctl");
-//        }
-//
-//        unsigned char *ptr = &arpreq_.arp_ha.sa_data[0];
-//        printf("MAC: %x:%x:%x:%x:%x:%x\n", *ptr, *(ptr+1), *(ptr+2), *(ptr+3),
-//        *(ptr+4), *(ptr+5));
 
-
-		//if(firstTime == 0)
-		//{
-
-			/* Configure parameters of an UART driver,
-			 * communication pins and install the driver */
-//			uart_config_t uart_config = {
-//				.baud_rate = 2400,
-//				.data_bits = UART_DATA_8_BITS,
-//				.parity    = UART_PARITY_DISABLE,
-//				.stop_bits = UART_STOP_BITS_1,
-//				.flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-//			};
-//			uart_param_config(UART_NUM_2, &uart_config);
-//			uart_set_pin(UART_NUM_2, ECHO_TEST_TXD, ECHO_TEST_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS);
-//			uart_driver_install(UART_NUM_2, BUF_SIZE * 2, 0, 0, NULL, 0);
-		//}
 		firstTime = 1;
-
-			// Configure a temporary buffer for the incoming data
-		//uint8_t * readData = (uint8_t *) malloc(150);
-	//	uint8_t * holdData = (uint8_t *) malloc(1024);
-
-	   // int receivedLength = 0;
-
-
-
-
-
 
         cJSON *jsonObject = NULL;
    //     unsigned char * string64;// = (unsigned char *) malloc(500);

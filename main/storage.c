@@ -452,7 +452,9 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_zfloat(configuration_handle, "maxInstCurrConf", &configurationStruct.maxInstallationCurrentConfig);
 	err += nvs_get_u8(configuration_handle, "PhaseRotation", &configurationStruct.phaseRotation);
 	err += nvs_get_u8(configuration_handle, "NetworkType", &configurationStruct.networkType);
-	err += nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
+	nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
+
+	//When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
 

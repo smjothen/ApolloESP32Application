@@ -638,10 +638,13 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, maxStandaloneCurrent);
 					if(ret == MsgWriteAck)
 					{
-						//storage_Set_StandaloneCurrent(maxStandaloneCurrent);
-						//esp_err_t err = storage_SaveConfiguration();
-						//ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f, %s=%d\n", maxStandaloneCurrent, (err == 0 ? "OK" : "FAIL"), err);
-						localSettingsAreUpdated = true;
+						if(storage_Get_StandaloneCurrent() != maxStandaloneCurrent)
+						{
+							storage_Set_StandaloneCurrent(maxStandaloneCurrent);
+							esp_err_t err = storage_SaveConfiguration();
+							ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f", maxStandaloneCurrent);
+							localSettingsAreUpdated = true;
+						}
 					}
 					else
 					{
@@ -1174,6 +1177,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				// Update certificate (without clearing old directly)
 				else if(strstr(commandString,"Update certificate") != NULL)
 				{
+					certifcate_setBundleVersion(0); //Fake old version for test
 					certificate_update(0);
 
 					ESP_LOGI(TAG, "Using default LogInterval");
@@ -1279,7 +1283,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 									}
 									else
 									{
-										//Do not continue if the bundle is empty - same version number as we already have
 										responseStatus = 400;
 										return false;
 									}
@@ -1287,7 +1290,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 								}
 								else
 								{
-									//Do not continue if the bundle has no signature
 									responseStatus = 400;
 									return false;
 								}
