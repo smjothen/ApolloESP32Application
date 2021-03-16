@@ -21,7 +21,7 @@
 static const char *TAG = "SESSION    ";
 
 static uint32_t dataTestInterval = 0;
-
+#define RESEND_REQUEST_TIMER_LIMIT 180
 
 void SetDataInterval(int newDataInterval)
 {
@@ -66,15 +66,13 @@ void log_task_info(void){
 }
 
 
-
-
 void OfflineHandler()
 {
 
 	int activeSessionId = strlen(chargeSession_GetSessionId());
 	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 
-	if((activeSessionId > 0) && (chargeOperatingMode == 2))//2 = Requesting, add definitions
+	if((activeSessionId > 0) && (chargeOperatingMode == eCONNECTED_REQUESTING))//2 = Requesting, add definitions
 	{
 
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
@@ -111,7 +109,13 @@ void OfflineHandler()
 	}
 }
 
-
+static uint32_t simulateOfflineTimeout = 180;
+static bool simulateOffline = false;
+void sessionHandler_simulateOffline()
+{
+	simulateOffline = true;
+	simulateOfflineTimeout = 180;
+}
 
 
 bool startupSent = false;
@@ -149,12 +153,23 @@ static void sessionHandler_task()
     // Offline parameters
     uint32_t offlineTime = 0;
     uint32_t secondsSinceLastCheck = 10;
+    uint32_t resendRequestTimer = 0;
+    uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 
 	while (1)
 	{
 		onCounter++;
 
 		isOnline = isMqttConnected();
+
+		//Allow simulating timelimited offline mode initated with cloud command
+		if(simulateOffline == true)
+		{
+			simulateOfflineTimeout--;
+			if(simulateOfflineTimeout == 0)
+				simulateOffline= false;
+		}
+
 		networkInterface = connectivity_GetActivateInterface();
 
 		// Check for MCU communication fault and restart with conditions:
@@ -220,11 +235,36 @@ static void sessionHandler_task()
 				chargeSession_ClearHasNewSession();
 		}
 
-		currentCarChargeMode = MCU_GetchargeMode();
+		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 
 		if(isOnline)
 		{
-			publish_telemetry_observation_on_change();
+			int sentOk = publish_telemetry_observation_on_change();
+
+			// If we are in system requesting state, make sure to resend state if sending failed, otherwise
+			if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			{
+				resendRequestTimer++;
+				//ESP_LOGW(TAG, "resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				if(resendRequestTimer >= resendRequestTimerLimit)
+				{
+					publish_debug_telemetry_observation_ChargingStateParameters();
+
+					// Reset timer
+					resendRequestTimer = 0;
+
+					// Increase timer limit as a backoff routine if Cloud does not answer
+					if(resendRequestTimerLimit < 1800)
+						resendRequestTimerLimit += 5;
+				}
+			}
+			else
+			{
+				resendRequestTimer = 0;
+				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
+			}
+
+
 			offlineTime = 0;
 		}
 		else
@@ -336,7 +376,7 @@ static void sessionHandler_task()
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
 					dataInterval = 1800;	//When car is disconnected or not charging
 				else
-					dataInterval = 600;	//When car is in charging state
+					dataInterval = 900;	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
 				signalInterval = 1800;

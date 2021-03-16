@@ -1337,6 +1337,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 
 				}
+				else if(strstr(commandString,"Simulate offline") != NULL)
+				{
+
+					sessionHandler_simulateOffline();
+
+					ESP_LOGI(TAG, "Simulate offline");
+					responseStatus = 200;
+
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))

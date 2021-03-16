@@ -24,6 +24,8 @@ int publish_debug_telemetry_observation_InstallationConfigOnFile();
 
 int publish_debug_telemetry_observation_StartUpParameters();
 
+int publish_debug_telemetry_observation_ChargingStateParameters();
+
 int publish_debug_telemetry_observation_WifiParameters();
 
 int publish_debug_telemetry_observation_LteParameters();

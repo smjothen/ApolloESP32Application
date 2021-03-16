@@ -323,6 +323,18 @@ int publish_debug_telemetry_observation_StartUpParameters()
     return publish_json(observations);
 }
 
+int publish_debug_telemetry_observation_ChargingStateParameters()
+{
+    ESP_LOGD(TAG, "sending ChargeState telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_telemetry_observation_WifiParameters()
 {

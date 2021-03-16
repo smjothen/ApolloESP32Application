@@ -269,7 +269,7 @@ static void start(void)
         },
     };
 
-    if(isProductionSetup == true)
+    /*if(isProductionSetup == true)
     {
     	strcpy(WifiSSID, "ZaptecHQ");
     	strcpy(WifiPSK, "LuckyJack#003");
@@ -281,15 +281,15 @@ static void start(void)
 		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
     }
     else
-    {
-		network_CheckWifiParameters();
+    {*/
+	network_CheckWifiParameters();
 
-		memset(wifi_config.sta.ssid, 0, 32);
-		memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
+	memset(wifi_config.sta.ssid, 0, 32);
+	memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));
 
-		memset(wifi_config.sta.password, 0, 64);
-		memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
-    }
+	memset(wifi_config.sta.password, 0, 64);
+	memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
+    //}
 
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
