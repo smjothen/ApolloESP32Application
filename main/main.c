@@ -260,26 +260,24 @@ void app_main(void)
 
 	fat_static_mount();
 
+	i2cReadDeviceInfoFromEEPROM();
 	I2CDevicesStartTask();
 	connectivity_init();
 
-	struct DeviceInfo devInfo;
-	devInfo = i2cReadDeviceInfoFromEEPROM();
+	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
+	
 	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
-		devInfo = i2cReadDeviceInfoFromEEPROM();
-		if(devInfo.EEPROMFormatVersion == 0xFF)
-		{
-			//Invalid EEPROM content
-			int id_result = prodtest_getNewId();
-			if(id_result<0){
-				ESP_LOGE(TAG_MAIN, "ID assign failed");
-				vTaskDelay(pdMS_TO_TICKS(500));
-				esp_restart();
-			}
-			devInfo = i2cReadDeviceInfoFromEEPROM();
+		//Invalid EEPROM content
+		int id_result = prodtest_getNewId();
+		if(id_result<0){
+			ESP_LOGE(TAG_MAIN, "ID assign failed");
+			vTaskDelay(pdMS_TO_TICKS(500));
+			esp_restart();
 		}
-		else if(devInfo.EEPROMFormatVersion == 0x0)
+		devInfo = i2cReadDeviceInfoFromEEPROM();
+		
+		if(devInfo.EEPROMFormatVersion == 0x0)
 		{
 			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
 			vTaskDelay(3000 / portTICK_PERIOD_MS);
