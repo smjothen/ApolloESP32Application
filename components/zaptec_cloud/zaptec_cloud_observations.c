@@ -446,6 +446,8 @@ static float previousPower = -1.0;
 static float previousEnergy = -1.0;
 static uint32_t previousDiagnosticsMode = 0;
 
+static float warningValue = 0;
+
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
 
@@ -506,7 +508,12 @@ int publish_telemetry_observation_on_change(){
 		ESP_LOGW(TAG, "CC ACK: User current %.2f, %d", chargeCurrentUserMax, setPhases);
 	}
 
+
     uint8_t networkType = MCU_GetGridType();
+    uint8_t nwtOverride = storage_Get_NetworkTypeOverride();
+    if(nwtOverride != 0)
+    	networkType = nwtOverride;
+
     if ((previousNetworkType != networkType))// && (networkType != 0))
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
@@ -521,6 +528,25 @@ int publish_telemetry_observation_on_change(){
     	previousWarnings = warnings;
     	isChange = true;
     }
+
+    if(warnings != 0)
+    {
+    	if(warningValue == 0.0)
+    	{
+    		ZapMessage rxMsg = MCU_ReadParameter(ParamWarningValue);
+			if((rxMsg.identifier == ParamWarningValue) && (rxMsg.length == 4))
+			{
+				warningValue = GetFloat(rxMsg.data);
+				add_observation_to_collection(observations, create_uint32_t_observation(ParamWarningValue, warningValue));
+			}
+    	}
+    }
+    else
+    {
+    	warningValue = 0.0;
+    }
+
+
 
     uint32_t notifications = GetCombinedNotifications();
     if(previousNotifications != notifications)

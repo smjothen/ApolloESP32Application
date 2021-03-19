@@ -11,6 +11,8 @@
 #include "zaptec_protocol_serialisation.h"
 #include "mcu_communication.h"
 #include "../apollo_ota/include/pic_update.h"
+#include "../../main/DeviceInfo.h"
+#include "../i2c/include/i2cDevices.h"
 
 const char *TAG = "MCU";
 
@@ -248,16 +250,38 @@ void ActivateMCUWatchdog()
 	//If the bootloader version does not have the very high watchdog frequency - activate the watchdog.
 	uint8_t bVersion = get_bootloader_version();
 	ESP_LOGW(TAG, "Bootloader version is: %d", bVersion);
-	if((0xff > bVersion) && (bVersion >= 6))
+
+	int chargerNumber = 0;
+	if(strstr(i2cGetLoadedDeviceInfo().serialNumber, "ZAP"))
 	{
-		MessageType ret = MCU_SendCommandId(CommandActivateWatchdog);
-		if(ret == MsgCommandAck)
+		char *endptr;
+		chargerNumber = (int)strtol(i2cGetLoadedDeviceInfo().serialNumber+3, &endptr, 10);
+	}
+
+	if(((0xff > bVersion) && (bVersion >= 6)) || (chargerNumber > 60) || (chargerNumber == 25))
+	{
+		bool watchdogSet = false;
+		uint8_t timeout = 10;
+		while((watchdogSet == false) && (timeout > 0))
 		{
-			ESP_LOGW(TAG, "MCU watchdog OK");
-		}
-		else
-		{
-			ESP_LOGE(TAG, "MCU watchdog FAILED");
+
+			MessageType ret = MCU_SendCommandId(CommandActivateWatchdog);
+			if(ret == MsgCommandAck)
+			{
+				watchdogSet = true;
+				ESP_LOGW(TAG, "MCU watchdog OK");
+			}
+			else
+			{
+				watchdogSet = false;
+				ESP_LOGE(TAG, "MCU watchdog FAILED");
+
+				timeout--;
+				if(timeout == 0)
+					SetEspNotification(eNOTIFICATION_MCU_WATCHDOG);
+
+				vTaskDelay(100 / portTICK_PERIOD_MS);
+			}
 		}
 	}
 }
@@ -266,10 +290,16 @@ void ActivateMCUWatchdog()
 uint32_t mcuComErrorCount = 0;
 
 void uartSendTask(void *pvParameters){
-    ESP_LOGI(TAG, "Configuring MCU uart");
+
 
     //Provide application time to initialize before sending to MCU
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    uint8_t timeout = 10;
+    while((i2CDeviceInfoIsLoaded() == false) && (timeout > 0))
+    {
+    	timeout--;
+    	vTaskDelay(1000 / portTICK_PERIOD_MS);
+    	ESP_LOGI(TAG, "Configuring MCU uart waiting for initialization: %d", timeout);
+    }
 
     //Read mcu application software at startup. Try up to 5 times
     uint8_t timout = 5;

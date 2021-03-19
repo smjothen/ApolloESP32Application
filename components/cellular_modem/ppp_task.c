@@ -297,7 +297,6 @@ int pppGetStackWatermark()
 static void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
-    size_t buffered_size;
     uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
     for(;;) {
         //Waiting for UART event.
@@ -358,7 +357,6 @@ static void uart_event_task(void *pvParameters)
 
 int GetNumberAsString(char * inputString, char * outputString, int maxLength)
 {
-	int i;
 	volatile int index = 0;
 	int inLength = strlen(inputString);
 
@@ -403,7 +401,7 @@ int configure_modem_for_ppp(void){
     		startup_confirmed = true;
     		ESP_LOGI(TAG, "BG startup confirmed");
 
-            int echo_cmd_result = at_command_echo_set(false);
+            at_command_echo_set(false);
 
     	    vTaskDelay(pdMS_TO_TICKS(100));
     	    int at_result = at_command_at();

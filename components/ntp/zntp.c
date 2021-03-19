@@ -6,6 +6,7 @@
 #include "zntp.h"
 #include "../i2c/include/RTC.h"
 #include "string.h"
+#include "../i2c/include/i2cDevices.h"
 
 
 static const char *TAG = "ZNTP     ";
@@ -30,12 +31,11 @@ void zntp_init()
     sntp_init();
 }
 
-
+static struct tm timeinfo = { 0 };
 void zntp_checkSyncStatus()
 {
 	    // Wait for time to be set
 	    time_t now = 0;
-	    struct tm timeinfo = { 0 };
 
 	    int retry = 0;
 	    const int retry_count = 60;
@@ -54,14 +54,16 @@ void zntp_checkSyncStatus()
 	    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
 	    ESP_LOGI(TAG, "The sensible time is: %s", strftime_buf);
 
-	    RTCWriteTime(timeinfo);
+	    //Set new time to be written async to RTC
+	    i2cFlagNewTimeWrite();
 
-	    struct tm RTCtime = RTCReadTime();
-	    memset(strftime_buf,0,sizeof(strftime_buf));
-		strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &RTCtime);
-
-		ESP_LOGW(TAG, "NTP synced time read from RTC: %s", strftime_buf);
 }
+
+struct tm zntp_GetLatestNTPTime()
+{
+	return timeinfo;
+}
+
 
 
 void zntp_restart()

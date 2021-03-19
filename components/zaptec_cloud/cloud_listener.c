@@ -37,7 +37,7 @@
 
 int resetCounter = 0;
 
-const char event_topic[128];
+char event_topic[128];
 static struct DeviceInfo cloudDeviceInfo;
 
 bool mqttConnected = false;
@@ -124,7 +124,7 @@ int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait){
 	int result = -3;
 
 	if(xSemaphoreTake(blocked_publish_mutex, xTicksToWait)!=pdTRUE){
-		int result = -1;
+		result = -1;
 		goto mutex_err;
 	}
 
@@ -134,7 +134,7 @@ int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait){
     );	
 
 	if(message_id<0){
-		int result = -2;
+		result = -2;
 		goto mutex_err;
 	}
 
@@ -641,7 +641,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						if(storage_Get_StandaloneCurrent() != maxStandaloneCurrent)
 						{
 							storage_Set_StandaloneCurrent(maxStandaloneCurrent);
-							esp_err_t err = storage_SaveConfiguration();
+							storage_SaveConfiguration();
 							ESP_LOGI(TAG, "Saved STANDALONE_CURRENT=%f", maxStandaloneCurrent);
 							localSettingsAreUpdated = true;
 						}
@@ -1103,13 +1103,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
 						if(ret == MsgWriteAck)
 						{
+							storage_Set_StandaloneCurrent(6.0);
+							storage_Set_MaxInstallationCurrentConfig(0.0);
 							storage_Set_PhaseRotation(0);
 							storage_SaveConfiguration();
+							ESP_LOGI(TAG, "Installation reset");
 							responseStatus = 200;
 						}
 					}
-
-					ESP_LOGI(TAG, "Installation reset");
 				}
 
 
@@ -1229,6 +1230,26 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
+
+				else if(strstr(commandString,"SetPhaseRotation ") != NULL)
+				{
+					char *endptr;
+					int newPhaseRotation = (int)strtol(commandString+19, &endptr, 10);
+
+					//Sanity check
+					if((18 >= newPhaseRotation) && (newPhaseRotation >= 0))
+					{
+							storage_Set_PhaseRotation(newPhaseRotation);
+							ESP_LOGI(TAG, "Set PhaseRotation: %i", newPhaseRotation);
+							storage_SaveConfiguration();
+							responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
+
 				// GetInstallationConfigOnFile
 				else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
 				{
@@ -1352,6 +1373,24 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+				else if(strstr(commandString,"OverrideNetworkType ") != NULL)
+				{
+					char *endptr;
+					int newNetworkType = (int)strtol(commandString+22, &endptr, 10);
+
+					//Sanity check
+					if((4 >= newNetworkType) && (newNetworkType >= 0))
+					{
+							storage_Set_NetworkTypeOverride(newNetworkType);
+							ESP_LOGI(TAG, "Set Override Network type: %i", newNetworkType);
+							storage_SaveConfiguration();
+							responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -1536,10 +1575,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         	//Build LocalSettings-response
 			char devicetwin_topic[64];
-			volatile char ridString[event->topic_len+1];
+			char ridString[event->topic_len+1];
 			strncpy(ridString, event->topic, event->topic_len);
 			ridString[event->topic_len] = '\0';
-			volatile char * ridSubString = strstr(ridString, "$rid=");
+			char * ridSubString = strstr(ridString, "$rid=");
 
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
 
@@ -1605,10 +1644,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         	//Build LocalSettings-response
 			char devicetwin_topic[64];
-			volatile char ridString[event->topic_len+1];
+			char ridString[event->topic_len+1];
 			strncpy(ridString, event->topic, event->topic_len);
 			ridString[event->topic_len] = '\0';
-			volatile char * ridSubString = strstr(ridString, "$rid=");
+			char * ridSubString = strstr(ridString, "$rid=");
 
 
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
@@ -1627,7 +1666,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		char devicetwin_topic[64];
 
-    		volatile char ridString[event->topic_len+1];
+    		char ridString[event->topic_len+1];
 
     		strncpy(ridString, event->topic, event->topic_len);
     		ridString[event->topic_len] = '\0';
@@ -1655,9 +1694,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
-    		if((resetCounter == 5) && (network_WifiIsConnected() == true))
+    		if(resetCounter == 5)
 			{
-    			ESP_LOGI(TAG, "Refreshing Wifi");
+    			ESP_LOGI(TAG, "Refreshing Wifi Connected");
     			network_updateWifi();
 			}
 
@@ -1666,6 +1705,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
 				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+			}
+    	}
+    	else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+    	{
+    		if((resetCounter == 2) || (resetCounter == 10))
+			{
+				ESP_LOGI(TAG, "Refreshing Wifi UnConnected");
+				network_updateWifi();
 			}
     	}
     	else
@@ -1710,7 +1757,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
     char * instId = storage_Get_InstallationId();
-    volatile int instIdLen = strlen(instId);
+    //volatile int instIdLen = strlen(instId);
 
     int compare = strncmp(instId, INSTALLATION_ID, 36);
     if(compare != 0)

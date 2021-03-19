@@ -119,6 +119,7 @@
         CompletedSession = 723,
 
 		DebugCounter = 731,
+		ParamWarningValue = 732,
 
 	    NewChargeCard = 750,
 	    AuthenticationListVersion = 751,
@@ -133,6 +134,7 @@
 		Notifications = 803,
         ParamWarnings = 804,
 		DiagnosticsMode = 805,
+
 		InternalDiagnosticsLog = 807,
         //..
         ParamDiagnosticsString = 808,

@@ -344,7 +344,16 @@ uint8_t storage_Get_PhaseRotation()
 
 uint8_t storage_Get_NetworkType()
 {
-	return configurationStruct.networkType;
+	//If the override value has been set to a valid value, the override measurement value
+	if(configurationStruct.networkTypeOverride != 0)
+	{
+		SetEspNotification(eNOTIFICATION_NETWORK_TYPE_OVERRIDE);
+		return configurationStruct.networkTypeOverride;
+	}
+	else
+	{
+		return configurationStruct.networkType;
+	}
 }
 
 uint8_t storage_Get_NetworkTypeOverride()

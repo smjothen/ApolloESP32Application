@@ -8,7 +8,7 @@ extern "C" {
 
 void zntp_init();
 void zntp_checkSyncStatus();
-
+struct tm zntp_GetLatestNTPTime();
 void zntp_restart();
 void zntp_stop();
 uint8_t zntp_enabled();

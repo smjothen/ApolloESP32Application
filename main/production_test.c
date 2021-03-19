@@ -152,9 +152,8 @@ int prodtest_getNewId()
 		return -1;
 	}
 
-	int content_length =  esp_http_client_fetch_headers(client);
-	volatile int total_read_len = 0, read_len;
-
+	esp_http_client_fetch_headers(client);
+	int read_len;
 
 	read_len = esp_http_client_read(client, buffer, 100);
 	if (read_len <= 0) {
@@ -164,11 +163,6 @@ int prodtest_getNewId()
 	}
 	buffer[read_len] = 0;
 	ESP_LOGD(TAG, "read_len = %d", read_len);
-
-	char readId[10] = {0};
-	char readPsk[45] = {0};
-	char readPin[5] = {0};
-	size_t size = 0;
 
 	if(read_len >= 60)
 	{
@@ -943,7 +937,7 @@ void socket_connect(void){
 			struct timeval tv;
 			tv.tv_sec = 1;
 			tv.tv_usec = 0;
-			int err_ = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &tv, sizeof(struct timeval));
+			err = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &tv, sizeof(struct timeval));
 			if (err != 0) {
 					ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
 					vTaskDelay(pdMS_TO_TICKS(3000));

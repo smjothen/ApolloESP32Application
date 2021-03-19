@@ -586,8 +586,8 @@ bool network_wifiIsValid()
 void network_updateWifi()
 {
 
-	if(connectivity_GetPreviousInterface() != eCONNECTION_WIFI)
-		return;
+	//if(connectivity_GetPreviousInterface() != eCONNECTION_WIFI)
+		//return;
 	/*if(wifiStarted)
 	{
 		network_disconnect_wifi();

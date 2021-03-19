@@ -4,15 +4,12 @@
 #include "esp_adc_cal.h"
 #include "esp_log.h"
 #include "adc_control.h"
-//#include "network.h"
-//#include "HANadapter.h"
-//#include "storage.h"
-//#include "https_client.h"
+
 
 #define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   1//10          //Multisampling
 
-static const char *TAG = "ADC     ";
+//static const char *TAG = "ADC     ";
 
 static TaskHandle_t adcTaskHandle = NULL;
 static esp_adc_cal_characteristics_t *adc_chars;

@@ -28,6 +28,8 @@ uint8_t deviceInfoVersionOnEeprom();
 uint32_t GetPassedDetectedCounter();
 uint32_t GetFailedDetectedCounter();
 
+void i2cFlagNewTimeWrite();
+
 #ifdef __cplusplus
 }
 #endif

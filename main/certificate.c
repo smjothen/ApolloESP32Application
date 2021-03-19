@@ -120,7 +120,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 
 static int currentBundleVersion = 0;
-bool ParseCertificateBundle(char * certificateBundle)
+uint8_t ParseCertificateBundle(char * certificateBundle)
 {
 	bool certificateValidated = false;
 
@@ -133,7 +133,7 @@ bool ParseCertificateBundle(char * certificateBundle)
 		else
 		{
 			//Do not continue if the bundle has no version number.
-			return false;
+			return 1;
 		}
 
 		if(cJSON_HasObjectItem(body, "sign")){
@@ -144,17 +144,25 @@ bool ParseCertificateBundle(char * certificateBundle)
 		else
 		{
 			//Do not continue if the bundle has no signature
-			return false;
+			return 1;
 		}
 
 		if(cJSON_HasObjectItem(body, "data")){
 
-			ESP_LOGW(TAG, "Cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
+			if(cJSON_GetObjectItem(body, "data")->valuestring != NULL)
+				ESP_LOGW(TAG, "Cert len: %d", strlen(cJSON_GetObjectItem(body, "data")->valuestring));
+			else
+			{
+				cJSON_Delete(body);
+				ESP_LOGW(TAG, "data = NULL");
+				return 2;
+			}
 		}
 		else
 		{
 			//Do not continue if the bundle is empty - same version number as we already have
-			return false;
+			cJSON_Delete(body);
+			return 2;
 		}
 
 
@@ -186,7 +194,11 @@ bool ParseCertificateBundle(char * certificateBundle)
 		}
 
 	}
-	return certificateValidated;
+
+	if (certificateValidated)
+		return 0;	//Valid certifcate
+	else
+		return 1;
 }
 
 void certifcate_setBundleVersion(int newBundleVersion)
@@ -200,9 +212,9 @@ int certificate_GetCurrentBundleVersion()
 }
 
 
-static void certificate_task(int tlsError)
+void certificate_task(void* tlsErrorCause)
 {
-
+	int tlsError = (int)tlsErrorCause;
 	certificateIsOk = false;
 
 	certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1);
@@ -265,10 +277,13 @@ static void certificate_task(int tlsError)
 
 		err = esp_http_client_write(client, post_data, postlen);
 
-		volatile int content_length =  esp_http_client_fetch_headers(client);
+		esp_http_client_fetch_headers(client);
 		volatile int read_len = 0;
 
 		read_len = esp_http_client_read(client, certificate_bundle, MAX_CERTIFICATE_BUNDLE_SIZE);
+
+		esp_http_client_close(client);
+		esp_http_client_cleanup(client);
 
 		if(read_len == 0)
 		{
@@ -284,9 +299,9 @@ static void certificate_task(int tlsError)
 
 		ESP_LOGW(TAG, "Len: %d, Body: %c%c%c ... %c%c%c  ", strlen(certificate_bundle), certificate_bundle[0], certificate_bundle[1], certificate_bundle[2], certificate_bundle[read_len-3], certificate_bundle[read_len-2], certificate_bundle[read_len-1]);
 
-		bool inMemoryOk = ParseCertificateBundle(certificate_bundle);
+		uint8_t certStatus = ParseCertificateBundle(certificate_bundle);
 
-		if(inMemoryOk)
+		if(certStatus == 0) //Valid certifcate
 		{
 			fat_WriteCertificateBundle(certificate_bundle);
 
@@ -299,9 +314,24 @@ static void certificate_task(int tlsError)
 			free(certificate_bundle);
 			certificateIsOk = true;
 		}
+		else if(certStatus == 1) //Not a valid header - back off and try again
+		{
+			ESP_LOGE(TAG, "Did not get a valid certificate - backing off: %d sec", backoffDelay);
 
-		esp_http_client_close(client);
-		esp_http_client_cleanup(client);
+			vTaskDelay(pdMS_TO_TICKS(1000 * backoffDelay));
+			if(backoffDelay < (3600 * 6)) //Backoff maximum 6 hours
+				backoffDelay += 60;
+
+			continue;
+		}
+		else if(certStatus == 2)
+		{
+			ESP_LOGE(TAG, "Valid data, but no header, we have the right version, exit");
+			break;
+		}
+
+		//esp_http_client_close(client);
+		//esp_http_client_cleanup(client);
 
 	}
 
@@ -397,18 +427,24 @@ void certificate_init()
 		fat_ReadCertificateBundle(certificate_bundle);
 
 		//Parse and validate
-		certificateIsOk = ParseCertificateBundle(certificate_bundle);
+		uint8_t certStatus = ParseCertificateBundle(certificate_bundle);
 
-		if(!certificateIsOk)
+		if(certStatus == 1) //Invalid header
 		{
 			free(certificate_bundle);
 			ESP_LOGW(TAG, "Missing or invalid certificate, connect to server and get new");
 			certificate_update(1);
 		}
-		else
+		else if(certStatus == 0) //Valid
 		{
 			free(certificate_bundle);
 			ESP_LOGW(TAG, "Found and set valid certificate");
+			certificateIsOk = true;
+		}
+		else if(certStatus == 2)
+		{
+			ESP_LOGW(TAG, "Valid header, no data");
+			certificateIsOk = true; //TODO: check this behavior with no data
 		}
 	}
 	else
@@ -456,7 +492,7 @@ void certificate_update(int tls_error)
 	if(taskRunning == false)
 	{
 		taskRunning = true;
-		xTaskCreate(certificate_task, "certificate_task", 8192, tls_error, 2, &taskCertHandle);
+		xTaskCreate(certificate_task, "certificate_task", 8192, (void*)tls_error, 2, &taskCertHandle);
 	}
 
 }

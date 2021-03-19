@@ -20,6 +20,7 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "production_test.h"
 #include "../../main/connectivity.h"
+#include "../ntp/zntp.h"
 
 static const char *TAG = "I2C_DEVICES";
 static const char *TAG_EEPROM = "EEPROM STATUS";
@@ -225,6 +226,14 @@ uint32_t GetFailedDetectedCounter()
 	return failedDetectedCounter;
 }
 
+
+bool RTCHasNewTime = false;
+void i2cFlagNewTimeWrite()
+{
+	RTCHasNewTime = true;
+}
+
+
 static void i2cDevice_task(void *pvParameters)
 {
 	RTCReadAndUseTime();
@@ -339,7 +348,6 @@ static void i2cDevice_task(void *pvParameters)
 				}
 				else
 				{
-
 					audio_play_nfc_card_denied();
 					ESP_LOGE(TAG, "ESP32: NFC DENIED!");
 					MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
@@ -366,6 +374,19 @@ static void i2cDevice_task(void *pvParameters)
 			char timebuf[30];
 			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
 			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+		}
+
+		if(RTCHasNewTime)
+		{
+			RTCWriteTime(zntp_GetLatestNTPTime());
+			char strftime_buf[64];
+		    struct tm RTCtime = RTCReadTime();
+		    memset(strftime_buf,0,sizeof(strftime_buf));
+			strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &RTCtime);
+
+			ESP_LOGW(TAG, "NTP synced time read from RTC: %s", strftime_buf);
+
+			RTCHasNewTime = false;
 		}
 
 		//Read from NFC at 2Hz for user to not notice delay

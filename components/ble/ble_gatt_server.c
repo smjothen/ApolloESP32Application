@@ -52,7 +52,7 @@
 #define ADV_CONFIG_FLAG             (1 << 0)
 #define SCAN_RSP_CONFIG_FLAG        (1 << 1)
 
-static uint8_t adv_config_done       = 0;
+//static uint8_t adv_config_done       = 0;
 
 
 typedef struct {
@@ -202,7 +202,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             memset(&rsp, 0, sizeof(esp_gatt_rsp_t));
             rsp.attr_value.handle = param->read.handle;
 
-            esp_gatt_status_t status = ESP_GATT_READ_NOT_PERMIT;
+            //esp_gatt_status_t status = ESP_GATT_READ_NOT_PERMIT;
             static int               attrIndex;
 
             /*
@@ -220,7 +220,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             {
             	ESP_LOGI(TAG,"WIFI READ");
             	handleWifiReadEvent(attrIndex, param, &rsp);
-            	status = ESP_GATT_OK;
+            	//status = ESP_GATT_OK;
             }
 
             /* END read handler calls for external services */
@@ -270,7 +270,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                 {
                     ESP_LOGI(TAG,"WIFI READ");
                     handleWifiWriteEvent(attrIndex, param, &rsp);
-                    status = ESP_GATT_OK;
+                    //status = ESP_GATT_OK;
                 }
 
                 /* END read handler calls for external services */
@@ -318,7 +318,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             break;
         case ESP_GATTS_CREAT_ATTR_TAB_EVT:{
 
-        	volatile int cmp = memcmp(param->add_attr_tab.svc_uuid.uuid.uuid128, &Wifi_SERVICE_uuid, 16);
+        	//volatile int cmp = memcmp(param->add_attr_tab.svc_uuid.uuid.uuid128, &Wifi_SERVICE_uuid, 16);
 
             if (param->add_attr_tab.status != ESP_GATT_OK)
             {
