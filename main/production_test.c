@@ -865,6 +865,7 @@ const dspic_warning_name dspic_warning_names[] = {
     {17, "RCD_TEST_DC"},
     {18, "RCD_FAILURE"},
     {19, "RCD_TEST_TIMEOUT"},
+	{29, "WARNING_SERVO"},
 };
 
 int check_dspic_warnings()
