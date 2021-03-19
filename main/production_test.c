@@ -659,11 +659,6 @@ int test_switch(){
 		//the switch must be in pos 0 when it leaves the factory
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 		return 0;
-	}else if(switch_state==2){
-		// for testing we will also allow switch to be in temp. wifi config postion
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch pass with dev mode exception");
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
-		return 1;
 	}else{
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");	
 	}
