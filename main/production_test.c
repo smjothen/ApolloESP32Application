@@ -777,6 +777,26 @@ int charge_cycle_test(){
 		return -1;
 	}
 
+	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected to early");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+	MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
+	if(ret != MsgCommandAck){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Calibration command send failed");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+	vTaskDelay(pdMS_TO_TICKS(10000));
+	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected while calibrating serv");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");
+
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
