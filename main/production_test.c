@@ -789,9 +789,12 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
 	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator rejected lock");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 		return -1;
 	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator accepted lock");
 
 	if(check_dspic_warnings()<0){
 		return -1;
