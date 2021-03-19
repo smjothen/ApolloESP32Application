@@ -67,7 +67,7 @@ static void connectivity_task()
 	//Read from Flash. If no interface is configured, use none and wait for setting
 	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 
-	struct DeviceInfo devInfo = i2cReadDeviceInfoFromEEPROM();
+	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished){
 		staticNewInterface = eCONNECTION_WIFI;
 	}

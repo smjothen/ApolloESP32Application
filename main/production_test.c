@@ -373,6 +373,8 @@ char *host_from_rfid(){
 		return "192.168.0.103";
 	if(strcmp(latest_tag.idAsString, "nfc-AA8EA37D")==0) // marked with sitcker
 		return "192.168.0.113";
+	if(strcmp(latest_tag.idAsString, "nfc-AAAB19AC")==0) // marked with kapton
+		return "192.168.0.113";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0) // id sent by Fredrik (1)
@@ -438,6 +440,9 @@ int prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
 	
 	sprintf(payload, "Version (gitref): %s", esp_ota_get_app_description()->version);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+
+	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
@@ -648,11 +653,6 @@ int test_switch(){
 		//the switch must be in pos 0 when it leaves the factory
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 		return 0;
-	}else if(switch_state==2){
-		// for testing we will also allow switch to be in temp. wifi config postion
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch pass with dev mode exception");
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
-		return 1;
 	}else{
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");	
 	}
@@ -771,6 +771,26 @@ int charge_cycle_test(){
 		return -1;
 	}
 
+	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected to early");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+	MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
+	if(ret != MsgCommandAck){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Calibration command send failed");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+	vTaskDelay(pdMS_TO_TICKS(10000));
+	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected while calibrating serv");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");
+
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
@@ -783,9 +803,12 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
 	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator rejected lock");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 		return -1;
 	}
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator accepted lock");
 
 	if(check_dspic_warnings()<0){
 		return -1;
@@ -854,6 +877,7 @@ const dspic_warning_name dspic_warning_names[] = {
     {17, "RCD_TEST_DC"},
     {18, "RCD_FAILURE"},
     {19, "RCD_TEST_TIMEOUT"},
+	{29, "WARNING_SERVO"},
 };
 
 int check_dspic_warnings()

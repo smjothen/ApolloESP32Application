@@ -858,8 +858,6 @@ void storage_SaveWifiParameters(char *SSID, char *PSK)
 
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
-	//struct DeviceInfo devInfo = i2cReadDeviceInfoFromEEPROM();
-	//Improvement to read from memory instead, since memory is always updated after write. Todo: Should be improved, and must prod_test to affect I2C task
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished){
 		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
