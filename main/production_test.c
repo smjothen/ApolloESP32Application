@@ -448,6 +448,9 @@ int prodtest_perform(struct DeviceInfo device_info)
 	sprintf(payload, "Version (gitref): %s", esp_ota_get_app_description()->version);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
 
+	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+
 	MCU_SendCommandId(CommandEnterProductionMode);
 
 	if(
