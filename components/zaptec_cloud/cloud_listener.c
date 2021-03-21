@@ -44,6 +44,7 @@ bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
+bool diagnosticsResults = false;
 bool reportInstallationConfigOnFile = false;
 bool simulateTlsError = false;
 
@@ -188,6 +189,16 @@ void ClearReportGridTestResults()
 	reportGridTestResults = false;
 }
 
+
+bool GetDiagnosticsResults()
+{
+	return diagnosticsResults;
+}
+
+void ClearDiagnosicsResults()
+{
+	diagnosticsResults = false;
+}
 
 bool GetInstallationConfigOnFile()
 {
@@ -1390,6 +1401,27 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						responseStatus = 400;
 					}
+				}
+				else if(strstr(commandString,"ITMode") != NULL)
+				{
+					ESP_LOGI(TAG, "ITMode");
+					MessageType ret = MCU_SendCommandId(CommandITSelect);
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU IT mode switched");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU IT switch FAILED");
+					}
+				}
+				else if(strstr(commandString,"GetDiagnostics") != NULL)
+				{
+					ESP_LOGI(TAG, "GetDiagnostics");
+					diagnosticsResults = true;
+					responseStatus = 200;
 				}
 			}
 	}

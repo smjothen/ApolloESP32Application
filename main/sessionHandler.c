@@ -366,9 +366,9 @@ static void sessionHandler_task()
 			if (networkInterface == eCONNECTION_WIFI)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 600;	//When car is disconnected or not charging
+					dataInterval = 900;	//When car is disconnected or not charging
 				else
-					dataInterval = 120;	//When car is in charging state
+					dataInterval = 300;	//When car is in charging state
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
@@ -556,6 +556,34 @@ static void sessionHandler_task()
 				{
 					ESP_LOGW(TAG,"GridTest length = 0");
 					ClearReportGridTestResults();
+				}
+			}
+
+
+			if(GetDiagnosticsResults() == true)
+			{
+				ZapMessage rxMsg = MCU_ReadParameter(ParamDiagnosticsString);
+				if(rxMsg.length > 0)
+				{
+					char * gtr = (char *)calloc(rxMsg.length+1, 1);
+					memcpy(gtr, rxMsg.data, rxMsg.length);
+					int published = publish_debug_telemetry_observation_Diagnostics(gtr);
+					free(gtr);
+
+					if (published == 0)
+					{
+						ClearDiagnosicsResults();
+						ESP_LOGW(TAG,"Diagnostics flag cleared");
+					}
+					else
+					{
+						ESP_LOGE(TAG,"Diagnostics flag NOT cleared");
+					}
+				}
+				else
+				{
+					ESP_LOGW(TAG,"Diagnostics length = 0");
+					ClearDiagnosicsResults();
 				}
 			}
 

@@ -19,6 +19,9 @@ bool CloudCommandCurrentUpdated();
 bool GetReportGridTestResults();
 void ClearReportGridTestResults();
 
+bool GetDiagnosticsResults();
+void ClearDiagnosicsResults();
+
 bool GetInstallationConfigOnFile();
 void ClearInstallationConfigOnFile();
 

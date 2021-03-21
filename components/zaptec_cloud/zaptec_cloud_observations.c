@@ -251,6 +251,18 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults)
 }
 
 
+int publish_debug_telemetry_observation_Diagnostics(char * diagnostics)
+{
+    ESP_LOGD(TAG, "sending diagnostics");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(ParamDiagnosticsString, diagnostics));
+
+    return publish_json(observations);
+}
+
+
 /*
  * Returns the last set of values set. If the MCU values for any reason has been cleared, these are a backup of last
  */
