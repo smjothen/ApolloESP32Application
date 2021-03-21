@@ -8,7 +8,7 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-//#define DISABLE_LOGGING
+#define DISABLE_LOGGING
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -21,8 +21,8 @@ struct DeviceInfo
 	char Pin[5];
 };
 
-uint8_t GetEEPROMFormatVersion();// { return 1;}
-char * GetSoftwareVersion();//char softwareVersion[8];// = "2.8.0.2";
+uint8_t GetEEPROMFormatVersion();
+char * GetSoftwareVersion();
 char * GetSoftwareVersionBLE();
 
 
@@ -40,9 +40,6 @@ struct RFIDTokens{
 
 #define MAX_CERTIFICATE_SIZE 		50000
 #define MAX_CERTIFICATE_BUNDLE_SIZE 51000
-
-//static uint8_t GetEEPROMFormatVersion() { return 1;}
-//static char softwareVersion[] = "2.8.0.2";
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 

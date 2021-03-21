@@ -739,11 +739,24 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		//In order to be responsive enough we need to read local value, not bounced from MCU
 		//ESP_LOGI(TAG, "Read Standalone Current %f ", MCU_StandAloneCurrent());
-		ESP_LOGI(TAG, "Read Standalone Current %f ", storage_Get_StandaloneCurrent());
+		//ESP_LOGI(TAG, "Read Standalone Current %f ", storage_Get_StandaloneCurrent());
 
+
+		float standaloneCurrent = 0.0;
+		ZapMessage rxMsg = MCU_ReadParameter(StandAloneCurrent);
+		if((rxMsg.length == 4) && (rxMsg.identifier == StandAloneCurrent))
+		{
+			standaloneCurrent = GetFloat(rxMsg.data);
+			ESP_LOGW(TAG, "Read Standalone current %f A", standaloneCurrent);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Read Standalone current failed: %f", standaloneCurrent);
+		}
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", storage_Get_StandaloneCurrent());
+		//sprintf(nrTostr, "%.1f", storage_Get_StandaloneCurrent());
+		sprintf(nrTostr, "%.1f", standaloneCurrent);
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
@@ -857,10 +870,23 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     	//In order to be responsive enough we need to read local value instead of value bounced from MCU
 		//ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", MCU_ChargeCurrentInstallationMaxLimit());
-		ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", storage_Get_MaxInstallationCurrentConfig());
+		//ESP_LOGI(TAG, "Read Max installation current CONFIG %f A", storage_Get_MaxInstallationCurrentConfig());
+
+		float maxInst = 0.0;
+		ZapMessage rxMsgm = MCU_ReadParameter(ChargeCurrentInstallationMaxLimit);
+		if((rxMsgm.length == 4) && (rxMsgm.identifier == ChargeCurrentInstallationMaxLimit))
+		{
+			maxInst = GetFloat(rxMsgm.data);
+			ESP_LOGW(TAG, "Read Max installation current CONFIG %f A", maxInst);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Read Max installation current CONFIG failed: %f", maxInst);
+		}
 
 		memset(nrTostr, 0, sizeof(nrTostr));
-		sprintf(nrTostr, "%.1f", storage_Get_MaxInstallationCurrentConfig());
+		//sprintf(nrTostr, "%.1f", storage_Get_MaxInstallationCurrentConfig());
+		sprintf(nrTostr, "%.1f", maxInst);
 
 		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
 		rsp->attr_value.len = strlen(nrTostr);
