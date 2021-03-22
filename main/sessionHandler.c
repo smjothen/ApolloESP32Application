@@ -81,6 +81,10 @@ void OfflineHandler()
 			ESP_LOGI(TAG, "Offline MCU Granted command OK");
 
 			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+
+			if(storage_Get_NetworkType() == NETWORK_3P3W)
+				offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
+
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 			if(ret == MsgWriteAck)
 			{
