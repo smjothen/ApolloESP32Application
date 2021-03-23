@@ -119,7 +119,7 @@ static void adc_task()
 		voltage3PwrMeas = esp_adc_cal_raw_to_voltage(adc_reading3, adc_chars) * 0.001;
 
 		//ESP_LOGI(TAG, "Raw6: %d\tHW_ID: %.2fV \t Raw0: %d\tPWR_MEAS: %.2fV", adc_reading6, voltage6HWid, adc_reading3, voltage3PwrMeas);
-		vTaskDelay(pdMS_TO_TICKS(3000));
+		vTaskDelay(pdMS_TO_TICKS(500));
 	}
 
 }
