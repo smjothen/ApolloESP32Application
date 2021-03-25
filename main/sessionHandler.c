@@ -240,6 +240,7 @@ static void sessionHandler_task()
 		}
 
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
+		currentCarChargeMode = MCU_GetchargeMode();
 
 		if(isOnline)
 		{
