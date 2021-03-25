@@ -25,6 +25,7 @@
 #include "at_commands.h"
 #include "ppp_task.h"
 #include "protocol_task.h"
+#include "adc_control.h"
 
 //#include "adc_control.h"
 
@@ -784,12 +785,25 @@ int charge_cycle_test(){
 	}
 	vTaskDelay(pdMS_TO_TICKS(10000));
 	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected while calibrating serv");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected while calibrating servo");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 		return -1;
 	}
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");
+
+	ZapMessage rxMsg = MCU_ReadParameter(GridTestResult);
+	if(rxMsg.length > 0){
+		char * gtr = (char *)calloc(rxMsg.length+1, 1);
+		memcpy(gtr, rxMsg.data, rxMsg.length);
+		sprintf(payload, "Grid detect: %s", gtr);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload );
+		free(gtr);
+	}else{
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "grid detect fail");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		return -1;
+	}
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
@@ -812,6 +826,23 @@ int charge_cycle_test(){
 
 	if(check_dspic_warnings()<0){
 		return -1;
+	}
+	
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "sampling charge cycle data" );
+	
+	for(int i = 0; i<10; i++){
+		if(MCU_GetchargeMode()!=eCAR_CHARGING){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "stop in charge cycle");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+			return -1;
+		}
+
+		snprintf(payload, 100, "cycle currents[%d]: %f, %f, %f, %.2f",
+			 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), GetPowerMeas()
+		);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
 	float emeter_voltages2[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};

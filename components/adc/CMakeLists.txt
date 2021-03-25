@@ -4,6 +4,6 @@ set(COMPONENT_REQUIRES "esp_adc_cal")
 
 set(COMPONENT_SRCS "adc_control.c")
 
-set(COMPONENT_ADD_INCLUDEDIRS "")
+set(COMPONENT_ADD_INCLUDEDIRS "./")
 
 register_component()
