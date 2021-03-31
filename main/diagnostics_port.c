@@ -299,6 +299,13 @@ static void tcp_server_task(void *pvParameters)
 			cJSON_AddNumberToObject(jsonObject, "IL2", MCU_GetCurrents(1));
 			cJSON_AddNumberToObject(jsonObject, "IL3", MCU_GetCurrents(2));
 
+			cJSON_AddNumberToObject(jsonObject, "T1_EM", MCU_GetEmeterTemperature(0));
+			cJSON_AddNumberToObject(jsonObject, "T2_EM", MCU_GetEmeterTemperature(1));
+			cJSON_AddNumberToObject(jsonObject, "T3_EM", MCU_GetEmeterTemperature(2));
+
+			cJSON_AddNumberToObject(jsonObject, "T_M", MCU_GetTemperaturePowerBoard(0));
+			cJSON_AddNumberToObject(jsonObject, "T_M2", MCU_GetTemperaturePowerBoard(1));
+
 			cJSON_AddStringToObject(jsonObject, "GridType", MCU_GetGridTypeString());
 
 			cJSON_AddNumberToObject(jsonObject, "PilotAvg", MCU_GetPilotAvg());
