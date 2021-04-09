@@ -13,6 +13,7 @@
 #include "../apollo_ota/include/pic_update.h"
 #include "../../main/DeviceInfo.h"
 #include "../i2c/include/i2cDevices.h"
+#include "../../main/storage.h"
 
 const char *TAG = "MCU";
 
@@ -818,6 +819,19 @@ void HOLD_SetPhases(int setPhases)
 }
 int HOLD_GetSetPhases()
 {
+	if((mcuNetworkType == NETWORK_3P3W) && (holdSetPhases == 9))
+	{
+		if((currents[0] > 2.0) && ((currents[1] <= 2.0) || (currents[2] <= 2.0)))
+		{
+			if(storage_Get_PhaseRotation() == 13)
+				return 5;
+			else if(storage_Get_PhaseRotation() == 14)
+				return 6;
+			else if(storage_Get_PhaseRotation() == 15)
+				return 8;
+		}
+	}
+
 	return holdSetPhases;
 }
 uint8_t MCU_GetCableType()
