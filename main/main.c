@@ -41,7 +41,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.64";
+char softwareVersion[] = "0.0.0.66";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -265,7 +265,7 @@ void app_main(void)
 	connectivity_init();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-	bool new_id = false;
+	//bool new_id = false;
 	
 	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
@@ -277,7 +277,7 @@ void app_main(void)
 			esp_restart();
 		}
 		devInfo = i2cReadDeviceInfoFromEEPROM();
-		new_id = true;
+		//new_id = true;
 		
 		if(devInfo.EEPROMFormatVersion == 0x0)
 		{
