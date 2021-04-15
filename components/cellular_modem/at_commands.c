@@ -324,7 +324,7 @@ int at_command_registered(void){
     ESP_LOGI(TAG, "AT+CREG?> %s", line);
 
     char registration_result_code = line[9];
-    if((registration_result_code == '1' || registration_result_code == '2') ){
+    if((registration_result_code == '1') ){
         ESP_LOGI(TAG, "BG is registered with %c", registration_result_code);
         return 1;
     }

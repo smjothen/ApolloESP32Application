@@ -115,7 +115,7 @@ void await_mqtt(){
 }
 
 
-int prodtest_getNewId()
+int prodtest_getNewId(bool validate_only)
 {
 	prodtest_nfc_init();
 	//if(connected == false)
@@ -167,6 +167,17 @@ int prodtest_getNewId()
 
 	if(read_len >= 60)
 	{
+		if(validate_only){
+			struct DeviceInfo eeprom_info = i2cGetLoadedDeviceInfo();
+			int match = strncmp(buffer, eeprom_info.serialNumber, strlen("ZAP000000"));
+			if(match!=0){
+				set_prodtest_led_state(TEST_STAGE_ERROR);
+				return -100;
+			}
+			return 1;
+		}
+
+
 		//The string has fixed predefined format, only allow parsing if format is correct
 		if((buffer[0] == 'Z') && (buffer[1] == 'A') && (buffer[2] == 'P') &&
 			(buffer[9] == '|') && (buffer[54] == '|') && (buffer[59] == '|'))
@@ -385,6 +396,12 @@ char *host_from_rfid(){
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
 		return "10.0.244.234";
+	if(strcmp(latest_tag.idAsString, "nfc-AAF807AC")==0) // lab 1
+		return "192.168.0.104";
+	if(strcmp(latest_tag.idAsString, "nfc-AAF291AC")==0) // lab 2
+		return "192.168.0.104";
+	if(strcmp(latest_tag.idAsString, "nfc-AA47047D")==0) // fredrik
+		return "192.168.0.104";
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
@@ -419,7 +436,7 @@ static void socket_task(void *pvParameters){
 	}
 }
 
-int prodtest_perform(struct DeviceInfo device_info)
+int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 {
 	prodtest_nfc_init();
 	await_mqtt();
@@ -446,6 +463,17 @@ int prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
+
+	if(!new_id){
+		int id_result = prodtest_getNewId(true);
+		if(id_result != 1){
+			sprintf(payload, "Scanned id does not match (%d)", id_result);
+	        prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+			set_prodtest_led_state(TEST_STAGE_ERROR);
+			vTaskDelay(pdMS_TO_TICKS(1000)); // workaround??
+			goto cleanup;
+		}
+	}
 
 	if(
 		(device_info.factory_stage<FactoryStagComponentsTested)
