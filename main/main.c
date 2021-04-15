@@ -289,7 +289,11 @@ void app_main(void)
 
 
 	if(devInfo.factory_stage != FactoryStageFinnished){
-		int prodtest_result = prodtest_perform(devInfo, new_id);
+
+		// do not verify zapno until we can resolve ZapProgram issue
+		//int prodtest_result = prodtest_perform(devInfo, new_id);
+		int prodtest_result = prodtest_perform(devInfo, true);
+
 		if(prodtest_result<0){
 			ESP_LOGE(TAG_MAIN, "Prodtest failed");
 			esp_restart();
