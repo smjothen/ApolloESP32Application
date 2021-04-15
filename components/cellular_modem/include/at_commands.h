@@ -24,9 +24,15 @@ int at_command_signal_quality(int *rssi, int *ber);
 int at_command_flow_ctrl_enable(void);
 
 int at_command_network_registration_status();
+int at_command_registered(void);
 
+int at_command_get_detailed_version(char *out, int out_len);
+
+int at_command_status_pdp_context(void);
 int at_command_activate_pdp_context(void);
 int at_command_deactivate_pdp_context(void);
+
+int at_command_http_test(void);
 int at_command_ping_test(int *sent, int *rcvd, int *lost, int *min, int *max, int *avg);
 
 #endif /* AT_COMMANDS_H */

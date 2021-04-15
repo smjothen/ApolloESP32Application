@@ -217,6 +217,26 @@ int at_command_detect_echo(void){
 
 }
 
+int at_command_status_pdp_context(void){
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
+    char *command = "AT+QIACT?";
+    int timeout = 300;
+    
+    ESP_LOGD(TAG, "Sending [%s]", command);
+    send_line(command);
+
+    while(strstr(at_buffer, "OK")==0){
+        int line_result = await_line(at_buffer, pdMS_TO_TICKS(timeout));
+        if(line_result!=pdTRUE){
+            ESP_LOGE(TAG, "failed to get at AT+QIACT?");
+            return -1;
+        }
+        ESP_LOGI(TAG, "AT+QIACT? line: %s", at_buffer);
+    }
+
+    return 0;
+}
+
 int at_command_activate_pdp_context(void){
     // note the long response time
     return at_command_with_ok_ack("AT+QIACT=1", 150*1000);
@@ -290,4 +310,122 @@ int at_command_ping_test(int *sent,int *rcvd,int *lost, int *min, int *max, int 
 
 int at_command_save_baud(void){
     return at_command_with_ok_ack("AT&W", 300);
+}
+
+int at_command_registered(void){
+    char line[64];
+    int at_success = at_command_two_line_response("AT+CREG?", line, 64, 300, 300);
+
+    if(at_success  != 0){
+        ESP_LOGW(TAG, "register check failed ");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "AT+CREG?> %s", line);
+
+    char registration_result_code = line[9];
+    if((registration_result_code == '1') ){
+        ESP_LOGI(TAG, "BG is registered with %c", registration_result_code);
+        return 1;
+    }
+
+    return 0;
+}
+
+int at_command_get_detailed_version(char * out, int out_len){
+    return at_command_two_line_response(
+        "AT+QGMR", out, out_len, 100, 100
+    );
+}
+
+int at_command_http_test(void){
+    char at_buffer[LINE_BUFFER_SIZE] = {0};
+
+    if(at_command_with_ok_ack("AT+QHTTPCFG=\"contextid\",1", pdMS_TO_TICKS(300))<0){
+        ESP_LOGE(TAG, "BAD> AT+QHTTPCFG=\"contextid\",1");
+        return -1;
+    }
+
+    if(at_command_with_ok_ack("AT+QHTTPCFG=\"responseheader\",1", pdMS_TO_TICKS(300))<0){
+        ESP_LOGE(TAG, "BAD> AT+QHTTPCFG=\"responseheader\",1");
+        return -2;
+    }
+
+    send_line("AT+QHTTPURL=35,80");
+    int pre_url_result = await_line(at_buffer, pdMS_TO_TICKS(300));
+
+    if(pre_url_result!=pdTRUE){
+        ESP_LOGE(TAG, "BAD> pre_url_result");
+        return -3;
+    }
+
+    if(strcmp(at_buffer, "CONNECT")!=0){
+        ESP_LOGE(TAG, "BAD> CONNECT, [%s]", at_buffer);
+        return -4;
+    }
+
+    if(at_command_with_ok_ack("http://devices.zaptec.com/lte-reply", pdMS_TO_TICKS(300))<0){
+        ESP_LOGE(TAG, "BAD> url send");
+        return -5;
+    }
+
+    ESP_LOGI(TAG, "downloading document");
+
+    if(at_command_with_ok_ack("AT+QHTTPGET=20", pdMS_TO_TICKS((20*1000) + 300))<0){
+        ESP_LOGE(TAG, "BAD> AT+QHTTPGET=20");
+        return -7;
+    }
+
+    int http_result_result = await_line(at_buffer, pdMS_TO_TICKS(25000));
+    if(http_result_result!=pdTRUE){
+        ESP_LOGE(TAG, "failed to get unsolicited http result");
+        return -12;
+    }
+
+    if(strcmp(at_buffer, "+QHTTPGET: 0,200,4")!=0){
+        ESP_LOGE(TAG, "BAD> response, [%s]", at_buffer);
+        return -11;
+    }
+
+    send_line("AT+QHTTPREAD=80");
+
+    strcpy(at_buffer, "nottheackmessage"); // clear potential "ok"
+
+    bool got_status = false;
+    bool got_body = false;
+    bool got_at_ok = false;
+
+    while(!(got_status && got_body && got_at_ok)){
+        int line_result = await_line(at_buffer, pdMS_TO_TICKS(25000));
+        if(line_result!=pdTRUE){
+            ESP_LOGE(TAG, "failed to get http data");
+            return -8;
+        }
+
+        ESP_LOGI(TAG, "HTTP line: %s", at_buffer);
+
+        if(strstr(at_buffer, "200 OK")){
+            ESP_LOGI(TAG, "got status 200");
+            got_status = true;
+        }
+
+        if(strstr(at_buffer, "test") && (strlen(at_buffer) < 7)){
+            ESP_LOGI(TAG, "got body");
+            got_body = true;
+        }
+
+        if(strstr(at_buffer, "OK") && (strlen(at_buffer) < 5) ){
+            ESP_LOGI(TAG, "got at ok");
+            got_at_ok = true;
+        }
+    }
+    clear_lines();
+
+    if(got_status && got_body && got_at_ok){
+        ESP_LOGI(TAG, "http success");
+        return 0;
+    }
+
+    ESP_LOGI(TAG, "http fail");
+    return -10;
 }

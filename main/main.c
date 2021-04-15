@@ -265,17 +265,19 @@ void app_main(void)
 	connectivity_init();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
+	bool new_id = false;
 	
 	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
 		//Invalid EEPROM content
-		int id_result = prodtest_getNewId();
+		int id_result = prodtest_getNewId(false);
 		if(id_result<0){
 			ESP_LOGE(TAG_MAIN, "ID assign failed");
 			vTaskDelay(pdMS_TO_TICKS(500));
 			esp_restart();
 		}
 		devInfo = i2cReadDeviceInfoFromEEPROM();
+		new_id = true;
 		
 		if(devInfo.EEPROMFormatVersion == 0x0)
 		{
@@ -287,7 +289,7 @@ void app_main(void)
 
 
 	if(devInfo.factory_stage != FactoryStageFinnished){
-		int prodtest_result = prodtest_perform(devInfo);
+		int prodtest_result = prodtest_perform(devInfo, new_id);
 		if(prodtest_result<0){
 			ESP_LOGE(TAG_MAIN, "Prodtest failed");
 			esp_restart();

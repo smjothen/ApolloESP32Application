@@ -115,7 +115,7 @@ void await_mqtt(){
 }
 
 
-int prodtest_getNewId()
+int prodtest_getNewId(bool validate_only)
 {
 	prodtest_nfc_init();
 	//if(connected == false)
@@ -167,6 +167,17 @@ int prodtest_getNewId()
 
 	if(read_len >= 60)
 	{
+		if(validate_only){
+			struct DeviceInfo eeprom_info = i2cGetLoadedDeviceInfo();
+			int match = strncmp(buffer, eeprom_info.serialNumber, strlen("ZAP000000"));
+			if(match!=0){
+				set_prodtest_led_state(TEST_STAGE_ERROR);
+				return -100;
+			}
+			return 1;
+		}
+
+
 		//The string has fixed predefined format, only allow parsing if format is correct
 		if((buffer[0] == 'Z') && (buffer[1] == 'A') && (buffer[2] == 'P') &&
 			(buffer[9] == '|') && (buffer[54] == '|') && (buffer[59] == '|'))
@@ -289,7 +300,6 @@ int prodtest_send(enum test_state state, enum test_item item, char *message){
 	return 0;
 }
 
-
 int await_prodtest_external_step_acceptance(char * acceptance_string, bool indicate_with_led){
 	char rx_buffer[100];
 	char * next_char = rx_buffer;
@@ -386,6 +396,12 @@ char *host_from_rfid(){
 		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
 		return "10.0.244.234";
+	if(strcmp(latest_tag.idAsString, "nfc-AAF807AC")==0) // lab 1
+		return "192.168.0.104";
+	if(strcmp(latest_tag.idAsString, "nfc-AAF291AC")==0) // lab 2
+		return "192.168.0.104";
+	if(strcmp(latest_tag.idAsString, "nfc-AA47047D")==0) // fredrik
+		return "192.168.0.104";
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
@@ -420,7 +436,7 @@ static void socket_task(void *pvParameters){
 	}
 }
 
-int prodtest_perform(struct DeviceInfo device_info)
+int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 {
 	prodtest_nfc_init();
 	await_mqtt();
@@ -447,6 +463,17 @@ int prodtest_perform(struct DeviceInfo device_info)
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
 
 	MCU_SendCommandId(CommandEnterProductionMode);
+
+	if(!new_id){
+		int id_result = prodtest_getNewId(true);
+		if(id_result != 1){
+			sprintf(payload, "Scanned id does not match (%d)", id_result);
+	        prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+			set_prodtest_led_state(TEST_STAGE_ERROR);
+			vTaskDelay(pdMS_TO_TICKS(1000)); // workaround??
+			goto cleanup;
+		}
+	}
 
 	if(
 		(device_info.factory_stage<FactoryStagComponentsTested)
@@ -545,6 +572,24 @@ int test_bg(){
 	}
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
 
+	char version[40];
+	if(at_command_get_detailed_version(version, 40)){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem version read error");
+		goto err;
+	}
+
+	if(
+		strstr(version, "BG95M6LAR02A02_01.002.01.002")||
+		strstr(version, "BG95M6LAR02A02_01.001.01.001")
+	){
+		sprintf(payload, "BG95 FW version accepted: %s\r\n", version);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+	}else{
+		sprintf(payload, "BG95 FW version rejected: %s\r\n", version);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+		goto err;
+	}
+
 	char imei[20];
     if(at_command_get_imei(imei, 20)<0){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem imei error");
@@ -566,8 +611,31 @@ int test_bg(){
 	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "waiting for BG95 REGISTER");
+	for(int i = 0; i<20; i++){
+		int registered = at_command_registered();
+		if(registered<0){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "waiting for BG95 REGISTER check error");
+			goto err;
+		}else if (registered == 0){
+			ESP_LOGW(TAG, "BG not REGISTER yet");
+		}else{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "BG REGISTERED");		
+			break;
+		}
+
+		if(i>19){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "giving up on BG95 REGISTER");
+			goto err;
+		}
+
+		vTaskDelay(pdMS_TO_TICKS(10000));
+	}
+
+
 	int activate_result = at_command_activate_pdp_context();
 	if(activate_result<0){
+		at_command_status_pdp_context();
 		vTaskDelay(pdMS_TO_TICKS(30*1000));
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "retrying pdp activate");
 		if(at_command_activate_pdp_context()<0){
@@ -586,14 +654,14 @@ int test_bg(){
 	snprintf(signal_string, 256, "[AT+QCSQ] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d\r\n", sysmode, rssi, rsrp, sinr, rsrq);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, signal_string);
 
-	int sent; int rcvd; int lost; int min; int max; int avg;
-	int ping_error = at_command_ping_test(&sent, &rcvd, &lost, &min, &max, &avg);
-	if(ping_error<0){
+	int http_result = at_command_http_test();
+	if(http_result<0){
+		sprintf(payload, "bad http get: %d\r\n", http_result);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 		goto err;
 	}
 
-	sprintf(payload, "Ping avg: %d\r\n", avg);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "http get success");
 
 	int deactivate_result = at_command_deactivate_pdp_context();
 	if(deactivate_result<0){

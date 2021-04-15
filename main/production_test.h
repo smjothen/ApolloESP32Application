@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-int prodtest_perform(struct DeviceInfo device_info);
-int prodtest_getNewId();
+int prodtest_perform(struct DeviceInfo device_info, bool new_id);
+int prodtest_getNewId(bool validate_only);
 
 bool prodtest_active();
 int prodtest_on_nfc_read();
