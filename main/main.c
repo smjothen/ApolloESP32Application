@@ -171,7 +171,7 @@ void GetTimeOnString(char * onTimeString)
 
 void app_main(void)
 {
-	ESP_LOGE(TAG_MAIN, "Apollo: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
+	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DISABLE_LOGGING
 	esp_log_level_set("*", ESP_LOG_NONE);
@@ -217,7 +217,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-	//validate_booted_image();
+	validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
