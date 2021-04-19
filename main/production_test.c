@@ -624,7 +624,7 @@ int test_bg(){
 			break;
 		}
 
-		if(i>19){
+		if(i>=10){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "giving up on BG95 REGISTER");
 			goto err;
 		}
