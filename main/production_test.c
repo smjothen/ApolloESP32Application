@@ -898,9 +898,24 @@ int charge_cycle_test(){
 	if(rxMsg.length > 0){
 		char * gtr = (char *)calloc(rxMsg.length+1, 1);
 		memcpy(gtr, rxMsg.data, rxMsg.length);
-		sprintf(payload, "Grid detect: %s", gtr);
+
+		int grid_type;
+		float volt_g; float volt_l12;
+		int sscanf_result = sscanf(gtr, "%d: VG:%f L12:%f", &grid_type, &volt_g, &volt_l12);
+		if(sscanf_result!=3){
+			return -2;
+		}
+
+		sprintf(payload, "Grid detect: %s (%d, %f, %f)", gtr, grid_type, volt_g, volt_l12);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload );
 		free(gtr);
+
+		if(volt_g < -5.0 || volt_g > 5.0 || volt_l12 < 360.0 || volt_l12 > 440.0){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "grid detect voltages out of range");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+			return -1;
+		}
+
 	}else{
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "grid detect fail");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
@@ -944,6 +959,21 @@ int charge_cycle_test(){
 		);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
 
+		float current_max = 8.0;
+		float current_min = 6.5;
+
+		if(i==5){
+			if(
+				(MCU_GetCurrents(0)<current_min || MCU_GetCurrents(0) > current_max)
+			 || (MCU_GetCurrents(1)<current_min || MCU_GetCurrents(1) > current_max)
+			 || (MCU_GetCurrents(2)<current_min || MCU_GetCurrents(2) > current_max)
+			){
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "current out of range");
+				prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+				return -1;
+			}
+		}
+
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
@@ -953,7 +983,11 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
 	float volt_min2 = 200.0; 
 	float volt_max2 = 260.0;
-	if(emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2 ){
+	if(
+		   (emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2)
+		|| (emeter_voltages2[1] < volt_min2 || emeter_voltages2[1] > volt_max2)
+		|| (emeter_voltages2[2] < volt_min2 || emeter_voltages2[2] > volt_max2)
+		 ){
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
 		return -1;
 	}else{
