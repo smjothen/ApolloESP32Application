@@ -91,6 +91,14 @@ int at_command_get_operator(char *operator, int buff_len){
     return at_command_two_line_response("AT+COPS?", operator, buff_len, 300, 300);
 }
 
+int at_command_get_cereg(char *cereg, int buff_len){
+    return at_command_two_line_response("AT+CEREG?", cereg, buff_len, 300, 300);
+}
+
+int at_command_get_qnwinfo(char *qnwinfo, int buff_len){
+    return at_command_two_line_response("AT+QNWINFO", qnwinfo, buff_len, 300, 300);
+}
+
 int at_command_pdp_define(void){
     return at_command_with_ok_ack("AT+CGDCONT=1,\"IP\",\"mdatks\"", 400);
 }

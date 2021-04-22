@@ -560,6 +560,38 @@ void bg_log_cb(char *message){
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, message);
 }
 
+int bg_debug_log(){
+	// data to communicate with Michal @ Quectel
+
+	char payload[128];
+
+	char cereg[30];
+    if(at_command_get_cereg(cereg, 30)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem cereg error");
+		return -1;
+	}
+	sprintf(payload, "CEREG: %s\r\n", cereg);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
+	char qnwinfo[30];
+    if(at_command_get_qnwinfo(qnwinfo, 30)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem QNWINFO error");
+		return -2;
+	}
+	sprintf(payload, "QNWINFO: %s\r\n", qnwinfo);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
+	char cops[30];
+    if(at_command_get_operator(cops, 30)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem cops error");
+		return -3;
+	}
+	sprintf(payload, "COPS: %s\r\n", cops);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
+	return 0;
+}
+
 int test_bg(){
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BG, "BG95");
@@ -626,12 +658,14 @@ int test_bg(){
 
 		if(i>=10){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "giving up on BG95 REGISTER");
+			bg_debug_log();
 			goto err;
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(10000));
 	}
 
+	bg_debug_log();
 
 	int activate_result = at_command_activate_pdp_context();
 	if(activate_result<0){

@@ -13,6 +13,8 @@ int at_command_get_imei(char *imei, int buff_len);
 int at_command_get_ccid(char *ccid, int buff_len);
 int at_command_get_imsi(char *imsi, int buff_len);
 int at_command_get_operator(char *operator, int buff_len);
+int at_command_get_cereg(char *cereg, int buff_len);
+int at_command_get_qnwinfo(char *qnwinfo, int buff_len);
 
 int at_command_pdp_define(void);
 int at_command_dial(void);
