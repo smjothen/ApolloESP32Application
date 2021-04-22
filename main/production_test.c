@@ -402,6 +402,8 @@ char *host_from_rfid(){
 		return "192.168.0.104";
 	if(strcmp(latest_tag.idAsString, "nfc-AA47047D")==0) // fredrik
 		return "192.168.0.104";
+	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0) // WET linje2
+		return "10.0.1.16";
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
