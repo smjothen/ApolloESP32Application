@@ -944,6 +944,24 @@ int charge_cycle_test(){
 	if(check_dspic_warnings()<0){
 		return -1;
 	}
+
+	float emeter_voltages2[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
+	sprintf(payload, "Emeter voltages2: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
+	float volt_min2 = 200.0; 
+	float volt_max2 = 260.0;
+	if(
+		   (emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2)
+		|| (emeter_voltages2[1] < volt_min2 || emeter_voltages2[1] > volt_max2)
+		|| (emeter_voltages2[2] < volt_min2 || emeter_voltages2[2] > volt_max2)
+		 ){
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
+		return -1;
+	}else{
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
+	}
+
 	
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "sampling charge cycle data" );
 	
@@ -975,23 +993,6 @@ int charge_cycle_test(){
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
-	}
-
-	float emeter_voltages2[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
-	sprintf(payload, "Emeter voltages2: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
-	float volt_min2 = 200.0; 
-	float volt_max2 = 260.0;
-	if(
-		   (emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2)
-		|| (emeter_voltages2[1] < volt_min2 || emeter_voltages2[1] > volt_max2)
-		|| (emeter_voltages2[2] < volt_min2 || emeter_voltages2[2] > volt_max2)
-		 ){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
-		return -1;
-	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
 	}
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");
