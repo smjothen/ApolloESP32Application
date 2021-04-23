@@ -388,10 +388,6 @@ char *host_from_rfid(){
 		return "192.168.0.113";
 	if(strcmp(latest_tag.idAsString, "nfc-92BDA93B")==0) // marked WC
 		return "10.0.1.15";
-	if(strcmp(latest_tag.idAsString, "nfc-AA6449AC")==0) // id sent by Fredrik (2)
-		return "10.0.1.15";
-	if(strcmp(latest_tag.idAsString, "nfc-AAF895AC")==0) // id sent by Fredrik (3)
-		return "10.0.1.15";
 	if(strcmp(latest_tag.idAsString, "nfc-E234AC3B")==0)
 		return "10.0.244.234";
 	if(strcmp(latest_tag.idAsString, "nfc-AAF807AC")==0) // lab 1
@@ -400,8 +396,47 @@ char *host_from_rfid(){
 		return "192.168.0.104";
 	if(strcmp(latest_tag.idAsString, "nfc-AA47047D")==0) // fredrik
 		return "192.168.0.104";
-	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0) // WET linje2
+
+	//Wet line 1
+	if(strcmp(latest_tag.idAsString, "nfc-AAF895AC")==0)
+		return "10.0.1.15";
+	if(strcmp(latest_tag.idAsString, "nfc-AA6449AC")==0)
+		return "10.0.1.15";
+	if(strcmp(latest_tag.idAsString, "nfc-AA9DFBDC")==0)
+		return "10.0.1.15";
+
+	//Wet line 2
+	if(strcmp(latest_tag.idAsString, "nfc-AAA58DAC")==0)
 		return "10.0.1.16";
+	if(strcmp(latest_tag.idAsString, "nfc-AA3F18EC")==0)
+		return "10.0.1.16";
+	if(strcmp(latest_tag.idAsString, "nfc-AAAC96DC")==0)
+		return "10.0.1.16";
+
+	//Wet future line
+	if(strcmp(latest_tag.idAsString, "nfc-AA0615EC")==0)
+		return "10.0.1.17";
+	if(strcmp(latest_tag.idAsString, "nfc-AA229EDC")==0)
+		return "10.0.1.17";
+	if(strcmp(latest_tag.idAsString, "nfc-AA5180DC")==0)
+		return "10.0.1.17";
+
+	//Wet future line
+	if(strcmp(latest_tag.idAsString, "nfc-AA2EC4EC")==0)
+		return "10.0.1.18";
+	if(strcmp(latest_tag.idAsString, "nfc-AA4145EC")==0)
+		return "10.0.1.18";
+	if(strcmp(latest_tag.idAsString, "nfc-AA87C2DC")==0)
+		return "10.0.1.18";
+
+	//Wet future line
+	if(strcmp(latest_tag.idAsString, "nfc-AA47BCEC")==0)
+		return "10.0.1.19";
+	if(strcmp(latest_tag.idAsString, "nfc-AA0598DC")==0)
+		return "10.0.1.19";
+	if(strcmp(latest_tag.idAsString, "nfc-AA375FEC")==0)
+		return "10.0.1.19";
+
 
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
