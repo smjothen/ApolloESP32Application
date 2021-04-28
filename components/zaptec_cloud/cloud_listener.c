@@ -16,6 +16,7 @@
 #include "../lib/include/mqtt_msg.h"
 #include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
+#include "../i2c/include/rtc.h"
 #include "../authentication/authentication.h"
 #include "../../main/chargeSession.h"
 #include "../../main/sessionHandler.h"
@@ -1422,6 +1423,21 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "GetDiagnostics");
 					diagnosticsResults = true;
 					responseStatus = 200;
+				}
+				if(strstr(commandString,"RTC ") != NULL)
+				{
+					char *endptr;
+					int rtc = (int)strtol(commandString+5, &endptr, 10);
+
+					ESP_LOGI(TAG, "RTC %i -> 0x%X", rtc, rtc);
+					RTCWriteControl(rtc);
+
+					responseStatus = 200;
+
+				}
+				else if(strstr(commandString,"RTC") != NULL)
+				{
+					SetSendRTC();
 				}
 			}
 	}

@@ -52,6 +52,8 @@ void i2c_ctrl_debug(int state)
 
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
+	// This line is for debugging units with failed production test
+	//deviceInfo.factory_stage = FactoryStageFinnished;
 	return deviceInfo;
 }
 
@@ -236,6 +238,8 @@ void i2cFlagNewTimeWrite()
 
 static void i2cDevice_task(void *pvParameters)
 {
+	RTCVerifyControlRegisters();
+
 	RTCReadAndUseTime();
 
 	RTCchecked = true;
@@ -374,6 +378,8 @@ static void i2cDevice_task(void *pvParameters)
 			char timebuf[30];
 			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
 			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+
+			RTCVerifyControlRegisters();
 		}
 
 		if(RTCHasNewTime)
@@ -388,6 +394,8 @@ static void i2cDevice_task(void *pvParameters)
 
 			RTCHasNewTime = false;
 		}
+
+
 
 		//Read from NFC at 2Hz for user to not notice delay
 		vTaskDelay(500 / portTICK_RATE_MS);

@@ -13,6 +13,7 @@
 #include "zaptec_cloud_observations.h"
 #include "../zaptec_protocol/include/zaptec_protocol_serialisation.h"
 #include "../i2c/include/i2cDevices.h"
+#include "../i2c/include/RTC.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../../main/chargeSession.h"
@@ -326,7 +327,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     char buf[256];
     GetTimeOnString(buf);
-    sprintf(buf + strlen(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), OTAReadRunningPartition());
+    sprintf(buf + strlen(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());
 
     ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
     add_observation_to_collection(observations, create_observation(808, buf));
@@ -420,7 +421,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d  MCnt: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetSwitchState(), MCU_GetDebugCounter());
+	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d MCnt: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetSwitchState(), MCU_GetDebugCounter());
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
@@ -439,6 +440,11 @@ int publish_debug_telemetry_observation_all(double rssi){
 }
 
 
+static bool sendRTC = false;
+void SetSendRTC()
+{
+	sendRTC = true;
+}
 
 static uint32_t previousWarnings = 0;
 static uint32_t previousNotifications = 0;
@@ -457,7 +463,6 @@ static uint8_t previousCableType = 0xff;
 static float previousPower = -1.0;
 static float previousEnergy = -1.0;
 static uint32_t previousDiagnosticsMode = 0;
-
 static float warningValue = 0;
 
 int publish_telemetry_observation_on_change(){
@@ -658,6 +663,21 @@ int publish_telemetry_observation_on_change(){
 		previousDiagnosticsMode = diagnosticsMode;
 		isChange = true;
 	}
+
+	if(RTCIsRegisterChanged() || sendRTC)
+	{
+		char buf[80];
+		sprintf(buf, " RTC: %i 0x%X->0x%X %i 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
+
+		ESP_LOGI(TAG, "Sending RTC telemetry: %d/80", strlen(buf));
+
+		add_observation_to_collection(observations, create_observation(808, buf));
+
+		sendRTC = false;
+
+		isChange = true;
+	}
+
 
 	//Check ret and retry?
     int ret = 0;

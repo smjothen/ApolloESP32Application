@@ -130,6 +130,135 @@ struct tm RTCReadTime()
 }
 
 
+void RTCWriteControl(uint8_t value)
+{
+	uint8_t writeBytes[2] = {0};
+	writeBytes[0] = 1;
+	writeBytes[1] = value;
+	esp_err_t err = i2c_master_write_slave(slaveAddressRTC, (uint8_t*)&writeBytes, 2);
+}
+
+
+static uint32_t valueCheckCounter0 = 0;
+static uint32_t valueCheckCounter1 = 0;
+
+static uint8_t lastIncorrectValue0 = 0;
+static uint8_t lastIncorrectValue1 = 0;
+
+static uint8_t lastValue0 = 0;
+static uint8_t lastValue1 = 0;
+
+static uint8_t holdBootValue0 = 0;
+static uint8_t holdBootValue1 = 0;
+
+static bool isRTCRegisterChange = false;
+bool RTCIsRegisterChanged()
+{
+	if(isRTCRegisterChange == true)
+	{
+		isRTCRegisterChange = false;
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+uint32_t RTCGetValueCheckCounter0()
+{
+	return valueCheckCounter0;
+}
+
+uint32_t RTCGetValueCheckCounter1()
+{
+	return valueCheckCounter1;
+}
+
+uint8_t RTCGetLastIncorrectValue0()
+{
+	return lastIncorrectValue0;
+}
+
+uint8_t RTCGetLastIncorrectValue1()
+{
+	return lastIncorrectValue1;
+}
+
+
+uint8_t RTCGetLastValue0()
+{
+	return lastValue0;
+}
+
+uint8_t RTCGetLastValue1()
+{
+	return lastValue1;
+}
+
+
+uint8_t RTCGetBootValue0()
+{
+	return holdBootValue0;
+}
+
+uint8_t RTCGetBootValue1()
+{
+	return holdBootValue1;
+}
+
+void RTCVerifyControlRegisters()
+{
+	uint8_t readreg = 0;
+	uint8_t readByte = 0xFF;
+	i2c_master_read_slave_at_address(slaveAddressRTC, readreg, &readByte, 1);
+
+	if(readByte != 0)
+	{
+		if(valueCheckCounter0 == 0)
+			holdBootValue0 = readByte;
+
+		valueCheckCounter0++;
+		lastIncorrectValue0 = readByte;
+
+		ESP_LOGE(TAG_RTC, "RTC ctrl 0 == 0x%X, cnt0: %i", lastIncorrectValue0, valueCheckCounter0);
+
+		uint8_t writeBytes[2] = {0};
+
+		//Writing value 0 to register 0
+		i2c_master_write_slave(slaveAddressRTC, (uint8_t*)&writeBytes, 2);
+
+		i2c_master_read_slave_at_address(slaveAddressRTC, readreg, &lastValue0, 1);
+
+		isRTCRegisterChange = true;
+	}
+
+	readreg = 1;
+	readByte = 0xFF;
+	i2c_master_read_slave_at_address(slaveAddressRTC, readreg, &readByte, 1);
+
+	if(readByte != 0)
+	{
+		if(valueCheckCounter1 == 0)
+			holdBootValue1 = readByte;
+
+		valueCheckCounter1++;
+		lastIncorrectValue1 = readByte;
+
+		ESP_LOGE(TAG_RTC, "RTC ctrl 1 == 0x%X, cnt1: %i", lastIncorrectValue1, valueCheckCounter1);
+
+		uint8_t writeBytes[2] = {0};
+
+		//Writing value 0 to register 1
+		writeBytes[0] = 0x01;
+		i2c_master_write_slave(slaveAddressRTC, (uint8_t*)&writeBytes, 2);
+
+		i2c_master_read_slave_at_address(slaveAddressRTC, readreg, &lastValue1, 1);
+
+		isRTCRegisterChange = true;
+	}
+}
+
 void RTCSoftwareReset()
 {
 	uint8_t writeBytes[8] = {0};
