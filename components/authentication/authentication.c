@@ -9,7 +9,7 @@
 
 static const char *TAG = "AUTH     ";
 
-#define MAX_NR_OF_TAGS 20
+#define MAX_NR_OF_TAGS 11
 
 int nrOfUsedTags = 0;
 
@@ -86,13 +86,13 @@ int authentication_ParseOfflineList(char * message, int message_len)
 		//ESP_LOGI(TAG, "resolutions2->type=%s", JSON_Types(tokens->type));
 		int token_array_size = cJSON_GetArraySize(tokens);
 
-		struct RFIDTokens rfidTokens[token_array_size];
+		volatile struct RFIDTokens rfidTokens[token_array_size];
 		memset(rfidTokens,0,sizeof(rfidTokens));
 
 		ESP_LOGI(TAG, "token_array_size=%d", token_array_size);
 
-		if(token_array_size > 20)
-			token_array_size = 20;
+		if(token_array_size > 11)
+			token_array_size = 11;
 
 		bool emptyList = false;
 
@@ -137,9 +137,9 @@ int authentication_ParseOfflineList(char * message, int message_len)
 
 			if(!emptyList)
 			{
-				storage_printRFIDTagsOnFile();
+				storage_printRFIDTagsOnFile(false);
 				storage_updateRFIDTagsToFile(rfidTokens, token_array_size);
-				storage_printRFIDTagsOnFile();
+				storage_printRFIDTagsOnFile(false);
 			}
 		}
 

@@ -30,7 +30,9 @@ void chargeSession_Finalize();
 void chargeSession_Clear();
 void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
+void chargeSession_ClearAuthenticationCode();
 void chargeSession_SetEnergy(float energy);
+void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
 
 struct ChargeSession chargeSession_Get();
 int chargeSession_GetSessionAsString(char * message);

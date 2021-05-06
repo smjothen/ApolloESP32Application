@@ -73,9 +73,13 @@ uint8_t storage_Get_NetworkTypeOverride();
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();
 
+void storage_CreateRFIDbuffer();
+char * storage_GetRFIDbuffer();
+void storage_FreeRFIDbuffer();
+
 esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens);
 esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match);
-esp_err_t storage_printRFIDTagsOnFile();
+esp_err_t storage_printRFIDTagsOnFile(bool writeToBuffer);
 esp_err_t storage_clearAllRFIDTagsOnFile();
 
 void storage_SaveWifiParameters(char *SSID, char *PSK);

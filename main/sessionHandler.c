@@ -248,9 +248,10 @@ static void sessionHandler_task()
 
 			// If we are in system requesting state, make sure to resend state if sending failed, otherwise
 			if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			//if((storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
 			{
 				resendRequestTimer++;
-				//ESP_LOGW(TAG, "resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				ESP_LOGW(TAG, "resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
 					publish_debug_telemetry_observation_ChargingStateParameters();
@@ -312,12 +313,22 @@ static void sessionHandler_task()
 
 		// Check if car connecting -> start a new session
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+		{
 				chargeSession_Start();
+		}
+		else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
+		{
+			ESP_LOGW(TAG, "New session due to tag");
+			chargeSession_Start();
+			//NFCTagInfoClearValid();
+		}
+
+		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
 		{
 
-			if(NFCGetTagInfo().tagIsValid == true)
+			if((NFCGetTagInfo().tagIsValid == true) && (stoppedByRfid == false))
 			{
 //				int i = 0;
 //				for (i = 0; i < NFCGetTagInfo().idLength; i++)
@@ -328,12 +339,25 @@ static void sessionHandler_task()
 				if (isMqttConnected() == true)
 				{
 					publish_debug_telemetry_observation_NFC_tag_id(NFCGetTagInfo().idAsString);
-
+					publish_debug_telemetry_observation_ChargingStateParameters();
 				}
 
 				chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
 				NFCTagInfoClearValid();
 
+			}
+			//De-authorize in cloud?
+			else if(stoppedByRfid == true)
+			{
+				if((strcmp(chargeSession_Get().AuthenticationCode, NFCGetTagInfo().idAsString) == 0))
+				{
+					if (isMqttConnected() == true)
+					{
+						publish_debug_telemetry_observation_NFC_tag_id(NULL);
+						publish_debug_telemetry_observation_ChargingStateParameters();
+					}
+					//NFCTagInfoClearValid();
+				}
 			}
 		}
 
@@ -342,17 +366,20 @@ static void sessionHandler_task()
 			chargeSession_UpdateEnergy();
 
 		// Check if car connecting -> start a new session
-		if((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED))
+		if(((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED)) || (stoppedByRfid == true))
 		{
-			chargeSession_Finalize();
-			char completedSessionString[200] = {0};
-			chargeSession_GetSessionAsString(completedSessionString);
+			//Do not send a CompletedSession with no SessionId.
+			if(chargeSession_Get().SessionId[0] != '\0')
+			{
+				chargeSession_Finalize();
+				char completedSessionString[200] = {0};
+				chargeSession_GetSessionAsString(completedSessionString);
 
-			// Delay to space data recorded i cloud.
-			vTaskDelay(pdMS_TO_TICKS(2000));
+				// Delay to space data recorded i cloud.
+				vTaskDelay(pdMS_TO_TICKS(2000));
 
-			publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-
+				publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+			}
 			//char empty[] = "\0";
 			//publish_string_observation(SessionIdentifier, empty);
 
@@ -565,7 +592,7 @@ static void sessionHandler_task()
 			}
 
 
-			if(GetDiagnosticsResults() == true)
+			if(GetMCUDiagnosticsResults() == true)
 			{
 				ZapMessage rxMsg = MCU_ReadParameter(ParamDiagnosticsString);
 				if(rxMsg.length > 0)
@@ -577,7 +604,7 @@ static void sessionHandler_task()
 
 					if (published == 0)
 					{
-						ClearDiagnosicsResults();
+						ClearMCUDiagnosicsResults();
 						ESP_LOGW(TAG,"Diagnostics flag cleared");
 					}
 					else
@@ -588,8 +615,18 @@ static void sessionHandler_task()
 				else
 				{
 					ESP_LOGW(TAG,"Diagnostics length = 0");
-					ClearDiagnosicsResults();
+					ClearMCUDiagnosicsResults();
 				}
+			}
+
+			if(GetESPDiagnosticsResults() == true)
+			{
+
+				char * rfidBuffer = storage_GetRFIDbuffer();
+				int published = publish_debug_telemetry_observation_Diagnostics(rfidBuffer);
+				storage_FreeRFIDbuffer();
+
+				ClearESPDiagnosicsResults();
 			}
 
 

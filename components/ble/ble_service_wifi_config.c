@@ -921,6 +921,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 static bool saveWifi = false;
 static bool saveConfiguration = false;
 static enum CommunicationMode interface = eCONNECTION_NONE;
+static enum CommunicationMode previousInterface = eCONNECTION_NONE;
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
@@ -1036,6 +1037,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			ESP_LOGI(TAG, "Set None");
 		}
 
+		previousInterface = storage_Get_CommunicationMode();
 		storage_Set_CommunicationMode(interface);
 		connectivity_ActivateInterface(interface);
 
@@ -1308,14 +1310,14 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		ESP_LOGI(TAG, "Save val %s", SAVE_SERV_CHAR_val);
 
-		if((connectivity_GetPreviousInterface() == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
+		if((previousInterface == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
 		{
 			storage_SaveConfiguration();
 			ESP_LOGI(TAG, "LTE -> WIFI restart");
 			esp_restart();
 		}
 
-		if((connectivity_GetPreviousInterface() == eCONNECTION_WIFI) && (interface == eCONNECTION_LTE))
+		if((previousInterface == eCONNECTION_WIFI) && (interface == eCONNECTION_LTE))
 		{
 			storage_SaveConfiguration();
 			ESP_LOGI(TAG, "WIFI -> LTE restart");

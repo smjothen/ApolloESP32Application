@@ -45,7 +45,8 @@ bool mqttConnected = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
-bool diagnosticsResults = false;
+bool MCUDiagnosticsResults = false;
+bool ESPDiagnosticsResults = false;
 bool reportInstallationConfigOnFile = false;
 bool simulateTlsError = false;
 
@@ -191,15 +192,26 @@ void ClearReportGridTestResults()
 }
 
 
-bool GetDiagnosticsResults()
+bool GetMCUDiagnosticsResults()
 {
-	return diagnosticsResults;
+	return MCUDiagnosticsResults;
 }
 
-void ClearDiagnosicsResults()
+void ClearMCUDiagnosicsResults()
 {
-	diagnosticsResults = false;
+	MCUDiagnosticsResults = false;
 }
+
+bool GetESPDiagnosticsResults()
+{
+	return ESPDiagnosticsResults;
+}
+
+void ClearESPDiagnosicsResults()
+{
+	ESPDiagnosticsResults = false;
+}
+
 
 bool GetInstallationConfigOnFile()
 {
@@ -1421,7 +1433,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"GetDiagnostics") != NULL)
 				{
 					ESP_LOGI(TAG, "GetDiagnostics");
-					diagnosticsResults = true;
+					MCUDiagnosticsResults = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"GetRFIDList") != NULL)
+				{
+					ESP_LOGI(TAG, "GetRFIDList");
+					storage_CreateRFIDbuffer();
+					storage_printRFIDTagsOnFile(true);
+					ESPDiagnosticsResults = true;
 					responseStatus = 200;
 				}
 				if(strstr(commandString,"RTC ") != NULL)

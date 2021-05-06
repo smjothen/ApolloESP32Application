@@ -133,9 +133,12 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", saveErr);
 		}
 
-		strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
-		chargeSession.SignedSession[7]='\0';
 	}
+
+	//Add for new and flash-read sessions
+	strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
+	chargeSession.SignedSession[7]='\0';
+
 }
 
 
@@ -191,6 +194,18 @@ void chargeSession_SetAuthenticationCode(char * idAsString)
 	strcpy(chargeSession.AuthenticationCode, idAsString);
 }
 
+
+void chargeSession_ClearAuthenticationCode()
+{
+	memset(chargeSession.AuthenticationCode, 0, sizeof(chargeSession.AuthenticationCode));
+}
+
+
+void chargeSession_SetStoppedByRFID(bool stoppedByRFID)
+{
+	if(chargeSession.SessionId[0] != '\0')
+		chargeSession.StoppedByRFID = stoppedByRFID;
+}
 
 void chargeSession_SetEnergy(float energy)
 {

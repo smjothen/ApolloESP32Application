@@ -177,6 +177,10 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
     //esp_wifi_disconnect();
     //esp_wifi_stop();
     //esp_wifi_start();
+
+	if(network_wifiIsValid() == false)
+		return;
+
     esp_wifi_connect();
     xEventGroupSetBits(s_connect_event_group, CONNECTED_BITS);
 }
@@ -282,7 +286,10 @@ static void start(void)
     }
     else
     {*/
-	network_CheckWifiParameters();
+	bool isConfigOK = network_CheckWifiParameters();
+
+	if(!isConfigOK)
+		return;
 
 	memset(wifi_config.sta.ssid, 0, 32);
 	memcpy(wifi_config.sta.ssid, WifiSSID, strlen(WifiSSID));

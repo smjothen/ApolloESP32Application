@@ -332,6 +332,7 @@ void uartSendTask(void *pvParameters){
     	{
     		ActivateMCUWatchdog();
     		ESP_LOGW(TAG, "MCU restart detected");
+    		previousMcuDebugCounter = mcuDebugCounter;
     	}
 
         ZapMessage txMsg;

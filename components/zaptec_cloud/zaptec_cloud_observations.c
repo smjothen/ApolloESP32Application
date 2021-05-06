@@ -463,6 +463,10 @@ static uint8_t previousCableType = 0xff;
 static float previousPower = -1.0;
 static float previousEnergy = -1.0;
 static uint32_t previousDiagnosticsMode = 0;
+
+static uint8_t previousOfflinePhase = 0;
+static float previousOfflineCurrent = 0.0;
+
 static float warningValue = 0;
 
 int publish_telemetry_observation_on_change(){
@@ -675,6 +679,22 @@ int publish_telemetry_observation_on_change(){
 
 		sendRTC = false;
 
+		isChange = true;
+	}
+
+	uint8_t offlinePhase = storage_Get_DefaultOfflinePhase();
+	if(previousOfflinePhase != offlinePhase)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, (uint32_t)offlinePhase));
+		previousOfflinePhase = offlinePhase;
+		isChange = true;
+	}
+
+	float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+	if((previousOfflineCurrent != offlineCurrent))
+	{
+		add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, offlineCurrent));
+		previousOfflineCurrent = offlineCurrent;
 		isChange = true;
 	}
 
