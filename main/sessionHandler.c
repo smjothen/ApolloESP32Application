@@ -17,11 +17,34 @@
 #include "connectivity.h"
 #include "apollo_ota.h"
 #include "string.h"
+#include "OCMF.h"
+#include "freertos/event_groups.h"
+#include "../components/ntp/zntp.h"
 
 static const char *TAG = "SESSION    ";
 
 static uint32_t dataTestInterval = 0;
 #define RESEND_REQUEST_TIMER_LIMIT 180
+
+
+
+
+TimerHandle_t signedMeterValues_timer;
+
+void on_send_signed_meter_value()
+{
+	//xTimerReset( signedMeterValues_timer, portMAX_DELAY );
+
+	ESP_LOGW(TAG, "*** Sending signed meter values ***");
+
+	char OCMPMessage[200] = {0};
+	OCMF_CreateNewOCMFMessage(OCMPMessage);
+
+	publish_string_observation(SignedMeterValue, OCMPMessage);
+
+
+}
+
 
 void SetDataInterval(int newDataInterval)
 {
@@ -123,6 +146,7 @@ void sessionHandler_simulateOffline()
 
 
 bool startupSent = false;
+bool setTimerSyncronization = false;
 
 static void sessionHandler_task()
 {
@@ -160,8 +184,27 @@ static void sessionHandler_task()
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 
+
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
+    signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
+    //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
+
 	while (1)
 	{
+
+		if((!setTimerSyncronization) && zntp_IsSynced())
+		{
+			if(zntp_Get15MinutePoint())
+			{
+				ESP_LOGW(TAG, " 15 Min sync!");
+				xTimerReset( signedMeterValues_timer, portMAX_DELAY );
+				on_send_signed_meter_value();
+
+				setTimerSyncronization = true;
+			}
+		}
+
 		onCounter++;
 
 		isOnline = isMqttConnected();
@@ -414,7 +457,6 @@ static void sessionHandler_task()
 				signalInterval = 1800;
 			}
 		}
-
 
 		//Test-mode overrides default
 		if(dataTestInterval != 0)
@@ -689,5 +731,5 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 5000, NULL, 3, &taskSessionHandle);
 }

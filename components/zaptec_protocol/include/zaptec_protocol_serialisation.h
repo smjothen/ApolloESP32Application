@@ -88,7 +88,7 @@
 		PhaseRotation = 548,
 
         ParamTotalChargePowerSession = 553,
-        
+		SignedMeterValue = 554,
         ParamSessionEnergyCountActive = 560,
         ParamSessionEnergyCountReactive = 561,
         ParamSessionEnergyCountImportActive = 562,

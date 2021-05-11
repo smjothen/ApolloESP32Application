@@ -11,10 +11,11 @@
 
 static const char *TAG = "ZNTP     ";
 
-
+static bool isSyncronized = false;
 static void time_sync_notification_cb(struct timeval *tv)
 {
     ESP_LOGI(TAG, "Notification of a time synchronization event");
+    isSyncronized = true;
 }
 
 void zntp_init()
@@ -59,11 +60,89 @@ void zntp_checkSyncStatus()
 
 }
 
+bool zntp_IsSynced()
+{
+	return isSyncronized;
+}
+
+
 struct tm zntp_GetLatestNTPTime()
 {
 	return timeinfo;
 }
 
+static struct tm systemTime = { 0 };
+void zntp_GetSystemTime(char * buffer)
+{
+	time_t now = 0;
+
+	time(&now);
+	localtime_r(&now, &systemTime);
+
+	//char strftime_buf[64];
+	setenv("TZ", "UTC-0", 1);
+	tzset();
+	localtime_r(&now, &systemTime);
+	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
+	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+
+}
+
+bool zntp_Get15MinutePoint()
+{
+	time_t now = 0;
+
+	time(&now);
+	localtime_r(&now, &systemTime);
+
+	char buffer[50];
+	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
+	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+
+	bool oneSecAway = false;
+
+	//(systemTime.tm_min == 0) &&
+	if((systemTime.tm_sec == 59))
+		oneSecAway = true;
+	else if((systemTime.tm_sec == 14))
+		oneSecAway = true;
+	else if((systemTime.tm_sec == 29))
+		oneSecAway = true;
+	else if((systemTime.tm_sec == 44))
+		oneSecAway = true;
+	else
+		return false;
+
+	uint8_t timeout = 10;
+	while((oneSecAway == true) && (timeout > 0))
+	{
+		timeout--;
+
+		time(&now);
+		localtime_r(&now, &systemTime);
+
+		if((systemTime.tm_sec == 0))
+			oneSecAway = false;
+		else if((systemTime.tm_sec == 15))
+			oneSecAway = false;
+		else if((systemTime.tm_sec == 30))
+			oneSecAway = false;
+		else if((systemTime.tm_sec == 45))
+			oneSecAway = false;
+
+		if(oneSecAway == true)
+		{
+			ESP_LOGW(TAG, "...looking");
+			vTaskDelay(100 / portTICK_PERIOD_MS);
+		}
+		else
+		{
+			ESP_LOGI(TAG, "...found");
+		}
+	}
+
+	return true;
+}
 
 
 void zntp_restart()

@@ -8,10 +8,14 @@ extern "C" {
 
 void zntp_init();
 void zntp_checkSyncStatus();
+bool zntp_IsSynced();
 struct tm zntp_GetLatestNTPTime();
+void zntp_GetSystemTime(char * buffer);
+bool zntp_Get15MinutePoint();
 void zntp_restart();
 void zntp_stop();
 uint8_t zntp_enabled();
+
 
 #ifdef __cplusplus
 }
