@@ -185,8 +185,8 @@ static void sessionHandler_task()
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 
 
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
-    TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
     //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
