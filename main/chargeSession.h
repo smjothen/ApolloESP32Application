@@ -16,7 +16,7 @@ struct ChargeSession
 	bool StoppedByRFID;
 	char AuthenticationCode[37];//Up to GUID string.
 	uint32_t unixStartTime;
-	char SignedSession[8];
+	char * SignedSession;//[1000];//8
 };
 
 
@@ -33,6 +33,7 @@ void chargeSession_SetAuthenticationCode(char * idAsString);
 void chargeSession_ClearAuthenticationCode();
 void chargeSession_SetEnergy(float energy);
 void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
+void chargeSession_SetOCMF(char * OCMDString);
 
 struct ChargeSession chargeSession_Get();
 int chargeSession_GetSessionAsString(char * message);

@@ -35,14 +35,14 @@ void on_send_signed_meter_value()
 {
 	//xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
-	ESP_LOGW(TAG, "*** Sending signed meter values ***");
+	ESP_LOGW(TAG, "***** Sending signed meter values *****");
 
 	char OCMPMessage[200] = {0};
 	OCMF_CreateNewOCMFMessage(OCMPMessage);
 
-	publish_string_observation(SignedMeterValue, OCMPMessage);
+	//publish_string_observation(SignedMeterValue, OCMPMessage);
 
-
+	OCMF_AddElementToOCMFLog("T", "G");
 }
 
 
@@ -184,9 +184,10 @@ static void sessionHandler_task()
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 
+    OCMF_Init();
 
-    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(1*2*1000); //55 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
     //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
@@ -357,7 +358,7 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
 		{
-				chargeSession_Start();
+			chargeSession_Start();
 		}
 		else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
 		{
@@ -414,6 +415,7 @@ static void sessionHandler_task()
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
+				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
 				char completedSessionString[200] = {0};
 				chargeSession_GetSessionAsString(completedSessionString);

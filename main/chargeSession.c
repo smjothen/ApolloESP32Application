@@ -11,6 +11,7 @@
 #include "cJSON.h"
 #include "storage.h"
 #include "protocol_task.h"
+#include "OCMF.h"
 
 
 
@@ -19,6 +20,8 @@ static const char *TAG = "CHARGESESSION:     ";
 static struct ChargeSession chargeSession = {0};
 
 static bool hasNewSessionIdFromCloud = false;
+
+static const char * basicOCMF = "OCMF|{}";
 
 static void ChargeSession_Set_GUID()
 {
@@ -136,9 +139,12 @@ void chargeSession_Start()
 	}
 
 	//Add for new and flash-read sessions
-	strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
-	chargeSession.SignedSession[7]='\0';
+	//strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
+	//chargeSession.SignedSession[7]='\0';
+	chargeSession.SignedSession = basicOCMF;
 
+	//chargeSession.SignedSession =
+	OCMF_CreateNewOCMFLog();
 }
 
 
@@ -210,6 +216,12 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID)
 void chargeSession_SetEnergy(float energy)
 {
 	chargeSession.Energy = energy;
+}
+
+
+void chargeSession_SetOCMF(char * OCMDString)
+{
+	chargeSession.SignedSession = OCMDString;
 }
 
 
