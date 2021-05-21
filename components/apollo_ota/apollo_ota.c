@@ -11,6 +11,7 @@
 #include "segmented_ota.h"
 #include "pic_update.h"
 #include "ota_log.h"
+#include "DeviceInfo.h"
 
 #define TAG "OTA"
 
@@ -21,6 +22,7 @@
 static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
+static bool updateOnlyIfNewVersion = false;
 
 const uint OTA_TIMEOUT_MINUTES = 12;
 const uint OTA_GLOBAL_TIMEOUT_MINUTES = 30;
@@ -107,6 +109,7 @@ void _do_sdk_ota(char *image_location){
 static void ota_task(void *pvParameters){
 
     char image_location[1024] = {0};
+    char image_version[16] = {0};
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
     TimerHandle_t timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
@@ -134,10 +137,25 @@ static void ota_task(void *pvParameters){
 
         ota_log_location_fetch();
 
-        get_image_location(image_location,sizeof(image_location));
+        get_image_location(image_location,sizeof(image_location), image_version);
         // strcpy( image_location,"http://api.zaptec.com/api/firmware/6476103f-7ef9-4600-9450-e72a282c192b/download");
         // strcpy( image_location,"https://api.zaptec.com/api/firmware/ZAP000001/current");
         ESP_LOGI(TAG, "image location to use: %s", image_location);
+
+        ESP_LOGI(TAG, "Charger version: %s Cloud version: %s", GetSoftwareVersion(), image_version);
+        if(updateOnlyIfNewVersion == true)
+        {
+        	int cmp = strcmp(GetSoftwareVersion(), image_version);
+        	if(cmp == 0)
+        	{
+        		ESP_LOGI(TAG, "Same version -> aborting");
+        		updateOnlyIfNewVersion = false;
+        		otaRunning = false;
+        	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+        	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+        		continue;
+        	}
+        }
 
 
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -233,6 +251,13 @@ int start_segmented_ota(void){
     xEventGroupSetBits(event_group, SEGMENTED_OTA_UNBLOCKED);
     return 0;
 }
+
+int start_segmented_ota_if_new_version(void){
+	updateOnlyIfNewVersion = true;
+    xEventGroupSetBits(event_group, SEGMENTED_OTA_UNBLOCKED);
+    return 0;
+}
+
 
 
 const char* OTAReadRunningPartition()

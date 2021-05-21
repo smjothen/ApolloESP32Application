@@ -194,6 +194,8 @@
                 
         CommandSerialRedirect = 110,
 
+		CommandUpgradeFirmware = 200,
+		CommandUpgradeFirmwareForced = 201,
         CommandUpgradeMcuFirmware = 204,
         CommandHostFwUpdateStart = 205,
 		CommandFpgaFwUpdateStart = 206,

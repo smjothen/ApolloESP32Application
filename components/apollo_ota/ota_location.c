@@ -162,7 +162,7 @@ static void log_task_info(void)
     ESP_LOGD(TAG, "log_task_info done");
 }
 
-int get_image_location(char *location, int buffersize)
+int get_image_location(char *location, int buffersize, char * version)
 {
     char url [100];
     snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
@@ -215,6 +215,14 @@ int get_image_location(char *location, int buffersize)
             }else{
                 ESP_LOGW(TAG, "bad json");
             }
+            if(cJSON_HasObjectItem(body, "Version")){
+				strncpy(
+					version,
+					cJSON_GetObjectItem(body, "Version")->valuestring,
+					strlen(cJSON_GetObjectItem(body, "Version")->valuestring));
+			}else{
+				ESP_LOGW(TAG, "bad json");
+			}
             cJSON_Delete(body);
         }else{
             ESP_LOGW(TAG, "bad body");

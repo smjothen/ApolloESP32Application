@@ -19,6 +19,7 @@
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "../../main/connectivity.h"
 #include "../cellular_modem/include/ppp_task.h"
+#include "../apollo_ota/include/apollo_ota.h"
 
 static const char *TAG = "BLE SERVICE";
 
@@ -87,6 +88,8 @@ static uint8_t COMMUNICATION_MODE_val[8]          		= {0x00};
 const uint8_t FirmwareVersion_uid128[ESP_UUID_LEN_128]  = {0x00, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t FIRMWARE_VERSION_CHAR_descr[]   	= "Firmware Version";
 //static uint8_t FIRMWARE_VERSION_val[8]          		= {0x00};
+
+const uint8_t OperationState_uid128[ESP_UUID_LEN_128]  = {0xdc, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
 const uint8_t PairNFCTag_uid128[ESP_UUID_LEN_128] = 	{0xe4, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t PAIR_NFC_TAG_CHAR_descr[]   		= "Pair NFC Tag";
@@ -217,6 +220,10 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_FIRMWARE_VERSION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_FIRMWARE_VERSION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &FirmwareVersion_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
 	//[CHARGER_FIRMWARE_VERSION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_OPERATION_STATE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_OPERATION_STATE_VERSION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &OperationState_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+
 
 	[CHARGER_PAIR_NFC_TAG_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_PAIR_NFC_TAG_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &PairNFCTag_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
@@ -605,6 +612,9 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     case CHARGER_SAVE_UUID:
     	rsp->attr_value.value[0] = SAVE_SERV_CHAR_val[0];
+
+    	ESP_LOGW(TAG, " **** SAVE: %s, %i ****",(char*)SAVE_SERV_CHAR_val, SAVE_SERV_CHAR_val[0]);
+
     	rsp->attr_value.len = 1;
         break;
 
@@ -661,6 +671,14 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
  		memcpy(rsp->attr_value.value, GetSoftwareVersion(), swlen);
  		rsp->attr_value.len = swlen;
  		break;
+
+    case CHARGER_OPERATION_STATE_VERSION_UUID:
+ 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+ 		char operationState = '1';
+ 		memcpy(rsp->attr_value.value, &operationState, 1);
+ 		rsp->attr_value.len = 1;
+ 		break;
+
 
     /*case CHARGER_FIRMWARE_VERSION_DESCR:
      	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -958,6 +976,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
         	ESP_LOGI(TAG, "New Wifi PSK %s", WIFI_SERV_CHAR_PSK_val);
 
         	saveWifi = true;
+        	SAVE_SERV_CHAR_val[0] = '0';
         }
         else
         	ESP_LOGE(TAG, "To long Wifi PSK %s", WIFI_SERV_CHAR_PSK_val);
@@ -980,6 +999,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		ESP_LOGI(TAG, "New Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
 
     		saveWifi = true;
+    		SAVE_SERV_CHAR_val[0] = '0';
     	}
     	else
     		ESP_LOGE(TAG, "To long Wifi SSID %s", WIFI_SERV_CHAR_SSID_val);
@@ -1041,6 +1061,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		storage_Set_CommunicationMode(interface);
 		connectivity_ActivateInterface(interface);
 
+		SAVE_SERV_CHAR_val[0] = '0';
+
 		//saveConfiguration = true;
 
    		break;
@@ -1084,6 +1106,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				storage_Set_Standalone((uint8_t)standalone);
 				ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
 				saveConfiguration = true;
+				SAVE_SERV_CHAR_val[0] = '0';
 			}
 			else
 			{
@@ -1111,6 +1134,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		storage_Set_StandalonePhase(standalonePhase);
     		ESP_LOGI(TAG, "Set standalone Phase: %d", standalonePhase);
     		saveConfiguration = true;
+    		SAVE_SERV_CHAR_val[0] = '0';
     	}
 
    		break;
@@ -1219,7 +1243,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_RUN_COMMAND_UUID:
 
-    	ESP_LOGI(TAG, "Run Command received with %s", param->write.value);
+    	ESP_LOGW(TAG, " ****** Run Command received with %s ********", param->write.value);
     	if(param->write.len >= 32)
     	{
     		ESP_LOGE(TAG, "To long command string");
@@ -1228,7 +1252,31 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	memset(COMMAND_val,0, sizeof(COMMAND_val));
 		memcpy(COMMAND_val,param->write.value, param->write.len);
-		ESP_LOGI(TAG, "New BLE command string %s", COMMAND_val);
+
+		int command = atoi((char*)COMMAND_val);
+		if(command == CommandUpgradeFirmware)
+		{
+			ESP_LOGI(TAG, "Update firmware command %i", command);
+			start_segmented_ota_if_new_version();
+		}
+		else if(command == CommandSwReboot)
+		{
+			ESP_LOGI(TAG, "SW reboot command");
+			MessageType ret = MCU_SendCommandId(CommandReset);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU Start command OK. Restarting ESP...");
+				esp_restart();
+			}
+			else
+			{
+
+				ESP_LOGI(TAG, "MCU Start command FAILED");
+			}
+		}
+		//else if(command == CommandFactoryReset)
+		else
+			ESP_LOGI(TAG, "BLE command not supported: %i", command);
 
    		break;
 
@@ -1281,7 +1329,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	///wasValid = network_wifiIsValid();
 
-		//SAVE_SERV_CHAR_val[0] = '1';
+		SAVE_SERV_CHAR_val[0] = param->write.value[0];
+
 		if((param->write.value[0] == '1') && (saveWifi == true))
 		{
 			storage_SaveWifiParameters((char*)WIFI_SERV_CHAR_SSID_val, (char*)WIFI_SERV_CHAR_PSK_val);
@@ -1303,7 +1352,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			saveConfiguration = false;
 		}
 
-		param->write.value[0] = 0;
+		//param->write.value[0] = 0;
 
 		///if(wasValid == true)
 			///network_updateWifi();
