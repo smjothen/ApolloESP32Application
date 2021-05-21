@@ -21,7 +21,7 @@ static struct ChargeSession chargeSession = {0};
 
 static bool hasNewSessionIdFromCloud = false;
 
-static const char * basicOCMF = "OCMF|{}";
+static char * basicOCMF = "OCMF|{}";
 
 static void ChargeSession_Set_GUID()
 {

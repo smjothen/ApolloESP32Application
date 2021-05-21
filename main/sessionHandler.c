@@ -27,22 +27,24 @@ static uint32_t dataTestInterval = 0;
 #define RESEND_REQUEST_TIMER_LIMIT 180
 
 
-
+static char * completedSessionString = NULL;
 
 TimerHandle_t signedMeterValues_timer;
 
+//Send every 15 minutes - at XX:00, XX:15, XX:30 and XX:45.
 void on_send_signed_meter_value()
 {
-	//xTimerReset( signedMeterValues_timer, portMAX_DELAY );
+	if(MCU_GetchargeMode() == eCAR_CHARGING)
+	{
+		ESP_LOGW(TAG, "***** Sending signed meter values *****");
 
-	ESP_LOGW(TAG, "***** Sending signed meter values *****");
+		char OCMPMessage[200] = {0};
+		OCMF_CreateNewOCMFMessage(OCMPMessage);
 
-	char OCMPMessage[200] = {0};
-	OCMF_CreateNewOCMFMessage(OCMPMessage);
+		//publish_string_observation(SignedMeterValue, OCMPMessage);
 
-	//publish_string_observation(SignedMeterValue, OCMPMessage);
-
-	OCMF_AddElementToOCMFLog("T", "G");
+		OCMF_AddElementToOCMFLog("T", "G");
+	}
 }
 
 
@@ -187,7 +189,7 @@ static void sessionHandler_task()
     OCMF_Init();
 
     //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
-    TickType_t refresh_ticks = pdMS_TO_TICKS(1*2*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
     //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
@@ -417,13 +419,23 @@ static void sessionHandler_task()
 			{
 				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
-				char completedSessionString[200] = {0};
+				//char completedSessionString[200] = {0};
+				memset(completedSessionString,0, LOG_STRING_SIZE);
 				chargeSession_GetSessionAsString(completedSessionString);
 
 				// Delay to space data recorded i cloud.
-				vTaskDelay(pdMS_TO_TICKS(2000));
+				//vTaskDelay(pdMS_TO_TICKS(2000));
 
-				publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+				int i;
+				for (i = 1; i <= 3; i++)
+				{
+					//Try sending 3 times. This transmission has been made a blocking call
+					int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+					if (ret == 0)
+						break;
+					else
+						ESP_LOGE(TAG," CompletedSession failed %i/3", i);
+				}
 			}
 			//char empty[] = "\0";
 			//publish_string_observation(SessionIdentifier, empty);
@@ -665,9 +677,8 @@ static void sessionHandler_task()
 
 			if(GetESPDiagnosticsResults() == true)
 			{
-
 				char * rfidBuffer = storage_GetRFIDbuffer();
-				int published = publish_debug_telemetry_observation_Diagnostics(rfidBuffer);
+				publish_debug_telemetry_observation_Diagnostics(rfidBuffer);
 				storage_FreeRFIDbuffer();
 
 				ClearESPDiagnosicsResults();
@@ -733,5 +744,6 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
+	completedSessionString = malloc(15000);
 	xTaskCreate(sessionHandler_task, "sessionHandler_task", 5000, NULL, 3, &taskSessionHandle);
 }

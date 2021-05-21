@@ -16,12 +16,12 @@ static char * formatVersion = "1.0";
 
 static char * logString = NULL;
 
-static size_t logStringSize = 15000;
+//static size_t logStringSize = 15000;
 
 
 void OCMF_Init()
 {
-	logString = calloc(logStringSize, 1);
+	logString = calloc(LOG_STRING_SIZE, 1);
 }
 
 int OCMF_CreateNewOCMFMessage(char * newMessage)
@@ -73,7 +73,7 @@ static cJSON * logReaderArray = NULL;
 
 char * OCMF_CreateNewOCMFLog()
 {
-	memset(logString, 0, logStringSize);
+	memset(logString, 0, LOG_STRING_SIZE);
 
 	//if(logRoot != NULL){return -9;}
 
@@ -123,7 +123,10 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 {
 	if(logReaderArray != NULL)
 	{
-		if(cJSON_GetArraySize(logReaderArray) < 100)
+		int arrayLength = cJSON_GetArraySize(logReaderArray);
+
+		//Allow max 100 entries including end message to limit message size.
+		if((arrayLength < 99) || ((arrayLength == 99) && (tx[0] == 'E')))
 		{
 			cJSON * logArrayElement = cJSON_CreateObject();
 			char timeBuffer[50] = {0};

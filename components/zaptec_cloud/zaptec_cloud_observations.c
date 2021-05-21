@@ -236,7 +236,7 @@ int publish_debug_telemetry_observation_CompletedSession(char * CompletedSession
 
     add_observation_to_collection(observations, create_observation(CompletedSession, CompletedSessionString));
 
-    return publish_json(observations);
+    return publish_json_blocked(observations, 10000);
 }
 
 
