@@ -93,8 +93,8 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    //create_sas_token(1*60, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+    create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	//create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     //ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
@@ -1005,6 +1005,42 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		responseStatus = 200;
 	}
 
+	//StopChargingFinal = 506
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/506/"))
+	{
+		//ESP_LOGI(TAG, "Charging denied!");
+		MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);// = 508
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command FAILED");
+		}
+		responseStatus = 200;
+	}
+
+	//ResumeCharging = 507
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/507/"))
+	{
+		//ESP_LOGI(TAG, "Charging denied!");
+		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);// = 509
+		if(ret == MsgCommandAck)
+		{
+			responseStatus = 200;
+			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command FAILED");
+		}
+		responseStatus = 200;
+	}
+
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
 	{
 		//ESP_LOGI(TAG, "Charging granted!");
@@ -1446,7 +1482,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESPDiagnosticsResults = true;
 					responseStatus = 200;
 				}
-				if(strstr(commandString,"RTC ") != NULL)
+				else if(strstr(commandString,"RTC ") != NULL)
 				{
 					char *endptr;
 					int rtc = (int)strtol(commandString+5, &endptr, 10);
@@ -1460,6 +1496,42 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"RTC") != NULL)
 				{
 					SetSendRTC();
+				}
+
+				//StopChargingFinal = 506
+				else if(strstr(commandString,"Final") != NULL)
+				{
+					//ESP_LOGI(TAG, "Charging denied!");
+					MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);// = 508
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command FAILED");
+					}
+					responseStatus = 200;
+				}
+
+				//ResumeCharging = 507
+				else if(strstr(commandString,"Resume") != NULL)
+				{
+					//ESP_LOGI(TAG, "Charging denied!");
+					MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);// = 509
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command FAILED");
+					}
+					responseStatus = 200;
 				}
 			}
 	}
@@ -1908,3 +1980,13 @@ void update_installationId()
 	refresh_token(&mqtt_config);*/
 }
 
+void periodic_refresh_token()
+{
+	ESP_LOGW(TAG, "Periodic new token");
+	refresh_token(&mqtt_config);
+    esp_mqtt_set_config(mqtt_client, &mqtt_config);
+
+    /*esp_mqtt_client_disconnect(mqtt_client);
+    esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
+    ESP_LOGI(TAG, "MQTT reconnect error? %d", rconErr);*/
+}

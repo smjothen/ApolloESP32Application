@@ -37,5 +37,7 @@ int publish_to_iothub(const char* payload, const char* topic);
 
 void update_installationId();
 
+void periodic_refresh_token();
+
 
 #endif /* ZAPTEC_CLOUD_LISTENER_H */

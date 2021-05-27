@@ -1353,11 +1353,12 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		}
 
 		//param->write.value[0] = 0;
+		SAVE_SERV_CHAR_val[0] = '1';
 
 		///if(wasValid == true)
 			///network_updateWifi();
 
-		ESP_LOGI(TAG, "Save val %s", SAVE_SERV_CHAR_val);
+		ESP_LOGI(TAG, "Save val %c->%c", param->write.value[0], SAVE_SERV_CHAR_val[0]);
 
 		if((previousInterface == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
 		{

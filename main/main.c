@@ -34,6 +34,7 @@
 #include "certificate.h"
 #include "fat.h"
 #include "cJSON.h"
+#include "zaptec_cloud_listener.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -42,7 +43,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.73";
+char softwareVersion[] = "0.0.1.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -366,6 +367,11 @@ void app_main(void)
 
     		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
+
+    	/*if(onTimeCounter % 100 == 0)
+    	{
+    		periodic_refresh_token();
+    	}*/
 
 	#ifdef useConsole
     	HandleCommands();

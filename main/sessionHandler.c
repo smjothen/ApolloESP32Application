@@ -41,7 +41,7 @@ void on_send_signed_meter_value()
 		char OCMPMessage[200] = {0};
 		OCMF_CreateNewOCMFMessage(OCMPMessage);
 
-		//publish_string_observation(SignedMeterValue, OCMPMessage);
+		publish_string_observation(SignedMeterValue, OCMPMessage);
 
 		OCMF_AddElementToOCMFLog("T", "G");
 	}
@@ -188,8 +188,8 @@ static void sessionHandler_task()
 
     OCMF_Init();
 
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
-    TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
     //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
@@ -745,5 +745,6 @@ int sessionHandler_GetStackWatermark()
 void sessionHandler_init(){
 
 	completedSessionString = malloc(15000);
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 5000, NULL, 3, &taskSessionHandle);
+	//Got stack overflow on 5000, try with 6000
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
 }

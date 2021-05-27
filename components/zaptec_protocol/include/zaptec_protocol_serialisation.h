@@ -211,8 +211,10 @@
         CommandStopCharging = 502,
 		CommandResetSession = 505,
 		CommandSetFinished = 506,
-        CommandRestartCarInterface = 507,
-                
+        CommandResumeChargingESP = 507,
+		CommandStopChargingFinal = 508,
+		CommandResumeChargingMCU = 509,
+
         CommandAuthorizationGranted = 601,
         CommandAuthorizationDenied = 602,
         CommandIndicateAppConnect = 603,

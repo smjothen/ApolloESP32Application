@@ -99,21 +99,17 @@ bool zntp_Get15MinutePoint()
 	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
 	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
 
-	bool oneSecAway = false;
 
-	//(systemTime.tm_min == 0) &&
-	if((systemTime.tm_sec == 59))
-		oneSecAway = true;
-	else if((systemTime.tm_sec == 14))
-		oneSecAway = true;
-	else if((systemTime.tm_sec == 29))
-		oneSecAway = true;
-	else if((systemTime.tm_sec == 44))
-		oneSecAway = true;
-	else
-		return false;
+	//Find correct quarterly minute
+	if(!((systemTime.tm_sec >= 58)))	//For testing
 
-	uint8_t timeout = 10;
+	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
+			return false;
+
+
+	bool oneSecAway = true;
+	uint8_t timeout = 21;
+
 	while((oneSecAway == true) && (timeout > 0))
 	{
 		timeout--;
@@ -123,16 +119,10 @@ bool zntp_Get15MinutePoint()
 
 		if((systemTime.tm_sec == 0))
 			oneSecAway = false;
-		else if((systemTime.tm_sec == 15))
-			oneSecAway = false;
-		else if((systemTime.tm_sec == 30))
-			oneSecAway = false;
-		else if((systemTime.tm_sec == 45))
-			oneSecAway = false;
 
 		if(oneSecAway == true)
 		{
-			ESP_LOGW(TAG, "...looking");
+			ESP_LOGW(TAG, "...looking %i", timeout);
 			vTaskDelay(100 / portTICK_PERIOD_MS);
 		}
 		else
