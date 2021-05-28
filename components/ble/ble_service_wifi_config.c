@@ -1360,14 +1360,14 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 		ESP_LOGI(TAG, "Save val %c->%c", param->write.value[0], SAVE_SERV_CHAR_val[0]);
 
-		if((previousInterface == eCONNECTION_LTE) && (interface == eCONNECTION_WIFI))
+		if((previousInterface != eCONNECTION_WIFI) && (interface == eCONNECTION_WIFI))
 		{
 			storage_SaveConfiguration();
 			ESP_LOGI(TAG, "LTE -> WIFI restart");
 			esp_restart();
 		}
 
-		if((previousInterface == eCONNECTION_WIFI) && (interface == eCONNECTION_LTE))
+		if((previousInterface != eCONNECTION_LTE) && (interface == eCONNECTION_LTE))
 		{
 			storage_SaveConfiguration();
 			ESP_LOGI(TAG, "WIFI -> LTE restart");

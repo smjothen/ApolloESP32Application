@@ -30,7 +30,12 @@
 
 #define TAG "Cloud Listener"
 
-#define MQTT_HOST "zapcloud.azure-devices.net"
+#ifdef DEVELOPEMENT_URL
+	#define MQTT_HOST "zap-d-iothub.azure-devices.net" //FOR DEVELOPEMENT
+#else
+	#define MQTT_HOST "zapcloud.azure-devices.net"
+#endif
+
 #define MQTT_PORT 8883
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
@@ -93,8 +98,8 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	//create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+    //create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     //ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
@@ -921,7 +926,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			if(ret == MsgWriteAck)
 			{
 				responseStatus = 200;
-				ESP_LOGI(TAG, "MCU Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
+				ESP_LOGE(TAG, "MCU Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
 				MessageType ret = MCU_SendCommandId(CommandStartCharging);
 				if(ret == MsgCommandAck)
 				{
@@ -952,6 +957,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	//Stop charging command
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/502/"))
 	{
+		ESP_LOGE(TAG, "MCU Stop");
+
 		//rDATA=null
 		MessageType ret = MCU_SendCommandId(CommandStopCharging);
 		if(ret == MsgCommandAck)

@@ -67,12 +67,21 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	//ESP_LOGI(TAG, "Unixtime is: %ld", UnixTimeStamp);
 	//ESP_LOGI(TAG, "Unixtime is: %i", tokenValidTime);
 	//ESP_LOGI(TAG, "Unixtime is: %s", unixTime);
+
+
+#ifdef DEVELOPEMENT_URL
+	unsigned char *data = malloc(56+4);
+	strcpy((char*)data, "zap-d-iothub.azure-devices.net/devices/");
+	const size_t data_len = 55+4; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
+#else
 	unsigned char *data = malloc(56);
 	strcpy((char*)data, "ZapCloud.azure-devices.net/devices/");
+	const size_t data_len = 55; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
+#endif
+
 	strcat((char*)data, uniqueId);
 	strcat((char*)data, "\n");
 	strcat((char*)data, unixTime);
-	const size_t data_len = 55; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
 
 	//hmac-sha256
 	unsigned char mac[33] = "";
@@ -105,7 +114,12 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
     //base64_url_encode()
 
 	//Build up signature string
+#ifdef DEVELOPEMENT_URL
+	strcpy(token_out, "SharedAccessSignature sr=zap-d-iothub.azure-devices.net/devices/");
+#else
 	strcpy(token_out, "SharedAccessSignature sr=ZapCloud.azure-devices.net/devices/");
+#endif
+
 	strcat(token_out, uniqueId);
 	strcat(token_out, "&sig=");
 	//strcat(token_out, tokenbuf);//

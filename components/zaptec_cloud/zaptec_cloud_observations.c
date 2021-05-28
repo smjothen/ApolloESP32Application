@@ -404,6 +404,10 @@ int publish_debug_telemetry_observation_all(double rssi){
 
     add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
     //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
+
+
+    //add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
+
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
@@ -468,6 +472,7 @@ static uint8_t previousOfflinePhase = 0;
 static float previousOfflineCurrent = 0.0;
 
 static float warningValue = 0;
+static uint8_t maxRTCSend = 0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -501,21 +506,24 @@ int publish_telemetry_observation_on_change(){
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));*/
 
-    uint8_t chargeMode = MCU_GetchargeMode();
-	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
-	{
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
-		previousChargeMode = chargeMode;
-		isChange = true;
-	}
-
-	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
+    uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 	if ((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0))
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
 		previousChargeOperatingMode = chargeOperatingMode;
 		isChange = true;
 	}
+
+    uint8_t chargeMode = MCU_GetchargeMode();
+	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
+	{
+		if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
+			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
+		previousChargeMode = chargeMode;
+		isChange = true;
+	}
+
+
 
     float chargeCurrentUserMax = MCU_GetChargeCurrentUserMax();
     int setPhases = HOLD_GetSetPhases();
@@ -668,7 +676,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-	if(RTCIsRegisterChanged() || sendRTC)
+	if((RTCIsRegisterChanged() || sendRTC) && (maxRTCSend < 10)) //If there is an I2C bus error, don't send unlimited nr of messages.
 	{
 		char buf[80];
 		sprintf(buf, " RTC: %i 0x%X->0x%X %i 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
@@ -680,6 +688,8 @@ int publish_telemetry_observation_on_change(){
 		sendRTC = false;
 
 		isChange = true;
+
+		maxRTCSend++;
 	}
 
 	uint8_t offlinePhase = storage_Get_DefaultOfflinePhase();

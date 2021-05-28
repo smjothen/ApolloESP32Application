@@ -41,7 +41,8 @@ void on_send_signed_meter_value()
 		char OCMPMessage[200] = {0};
 		OCMF_CreateNewOCMFMessage(OCMPMessage);
 
-		publish_string_observation(SignedMeterValue, OCMPMessage);
+		if (isMqttConnected() == true)
+			publish_string_observation(SignedMeterValue, OCMPMessage);
 
 		OCMF_AddElementToOCMFLog("T", "G");
 	}
@@ -426,15 +427,18 @@ static void sessionHandler_task()
 				// Delay to space data recorded i cloud.
 				//vTaskDelay(pdMS_TO_TICKS(2000));
 
-				int i;
-				for (i = 1; i <= 3; i++)
+				if (isMqttConnected() == true)
 				{
-					//Try sending 3 times. This transmission has been made a blocking call
-					int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-					if (ret == 0)
-						break;
-					else
-						ESP_LOGE(TAG," CompletedSession failed %i/3", i);
+					int i;
+					for (i = 1; i <= 3; i++)
+					{
+						//Try sending 3 times. This transmission has been made a blocking call
+						int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+						if (ret == 0)
+							break;
+						else
+							ESP_LOGE(TAG," CompletedSession failed %i/3", i);
+					}
 				}
 			}
 			//char empty[] = "\0";

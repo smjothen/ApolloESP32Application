@@ -128,6 +128,7 @@ void chargeSession_Start()
 		else
 		{
 			chargeSession.ReliableClock = false;
+			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
 		esp_err_t saveErr = chargeSession_SaveSessionResetInfo();

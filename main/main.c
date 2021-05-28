@@ -43,7 +43,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.1.0";
+char softwareVersion[] = "0.0.1.1";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -190,6 +190,10 @@ void app_main(void)
 {
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
+#ifdef DEVELOPEMENT_URL
+	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URL USED");
+#endif
+
 #ifdef DISABLE_LOGGING
 	esp_log_level_set("*", ESP_LOG_NONE);
 #endif
@@ -237,7 +241,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-	//validate_booted_image();
+	validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();

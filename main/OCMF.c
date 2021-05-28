@@ -42,7 +42,7 @@ int OCMF_CreateNewOCMFMessage(char * newMessage)
 	zntp_GetSystemTime(timeBuffer);
 
 	cJSON_AddStringToObject(readerObject, "TM", timeBuffer);	//TimeAndSyncState
-	cJSON_AddNumberToObject(readerObject, "RV", chargeSession_Get().Energy * 0.001);	//ReadingValue
+	cJSON_AddNumberToObject(readerObject, "RV", chargeSession_Get().Energy);	//ReadingValue
 	cJSON_AddStringToObject(readerObject, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 	cJSON_AddStringToObject(readerObject, "RU", "kWh");			//ReadingUnit
 	cJSON_AddStringToObject(readerObject, "RT", "AC");			//ReadingCurrentType
@@ -134,7 +134,7 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 
 			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
 			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
-			cJSON_AddNumberToObject(logArrayElement, "RV", chargeSession_Get().Energy * 0.001);	//ReadingValue
+			cJSON_AddNumberToObject(logArrayElement, "RV", chargeSession_Get().Energy);	//ReadingValue
 			cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 			cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
 			cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
