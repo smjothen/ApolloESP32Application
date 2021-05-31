@@ -16,7 +16,7 @@
 #include "../lib/include/mqtt_msg.h"
 #include "../../main/storage.h"
 #include "../i2c/include/i2cDevices.h"
-#include "../i2c/include/rtc.h"
+#include "../i2c/include/RTC.h"
 #include "../authentication/authentication.h"
 #include "../../main/chargeSession.h"
 #include "../../main/sessionHandler.h"
