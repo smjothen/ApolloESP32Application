@@ -30,7 +30,7 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "eeprom_wp.h"
-//#include "apollo_console.h"
+#include "apollo_console.h"
 #include "certificate.h"
 #include "fat.h"
 #include "cJSON.h"
@@ -205,7 +205,7 @@ void app_main(void)
 	cellularPinsInit();
 
 	//gpio_pullup_en(GPIO_NUM_3);
-	//apollo_console_init();
+	apollo_console_init();
 
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();

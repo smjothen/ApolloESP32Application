@@ -10,6 +10,7 @@
 #include "argtable3/argtable3.h"
 
 #include "apollo_console.h"
+#include "storage.h"
 #include "i2cDevices.h"
 #include "eeprom_wp.h"
 #include "EEPROM.h"
@@ -92,6 +93,24 @@ static int register_new_id_cmd(void){
         .help = "Reset ZAPno, and reset",
         .hint = NULL,
         .func = &new_id_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+static int clear_energy_cmd(int argc, char **argv){
+    storage_clear_accumulated_energy();
+    return 0;
+}
+
+static int register_clear_energy_cmd(void){
+    const esp_console_cmd_t cmd = {
+        .command = "energy_clear",
+        .help = "cleat accumulated energy",
+        .hint = NULL,
+        .func = &clear_energy_cmd,
         .argtable = NULL
     };
 
@@ -254,6 +273,7 @@ void apollo_console_init(void){
     register_prodtest_write_cmd();
     register_reboot_cmd();
     register_new_id_cmd();
+    register_clear_energy_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }
