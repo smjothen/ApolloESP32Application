@@ -1001,7 +1001,13 @@ double storage_update_accumulated_energy(float session_energy){
 		session_energy, previous_session_energy, previous_accumulated_energy
 	);
 
-	if(session_energy > previous_session_energy){
+	if(session_energy<0.0){
+		ESP_LOGW(TAG, "energy count not updated from dsPIC yet, using stale value: %f",
+			previous_accumulated_energy
+		);
+		result = previous_accumulated_energy;
+		goto err;
+	}else if(session_energy > previous_session_energy){
 		//if the energy count from the dspic has reset and passed previous_session_energy
 		// we loos some energy in this calculation
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
