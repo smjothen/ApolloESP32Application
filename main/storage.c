@@ -392,7 +392,7 @@ esp_err_t nvs_get_zdouble(nvs_handle_t handle, const char* key, double * outputV
 {
 	uint64_t intToDouble;
 	err = nvs_get_u64(handle, key, &intToDouble);
-	memcpy(outputValue, &intToDouble, 4);
+	memcpy(outputValue, &intToDouble, 8);
 
 	return err;
 }
@@ -966,7 +966,7 @@ void storage_GetStats()
 double storage_update_accumulated_energy(float session_energy){
 	double result = -1.0;
 
-	nvs_handle handle;
+	nvs_handle_t handle;
 	esp_err_t open_result = nvs_open("energy", NVS_READWRITE, &handle);
 	if(open_result != ESP_OK ){
 		ESP_LOGE(TAG, "failed to open NVS energy %d", open_result);
@@ -991,18 +991,22 @@ double storage_update_accumulated_energy(float session_energy){
 		accumulator_initialised = true;
 		
 	}else if ((session_read_result != ESP_OK) || (accumulated_read_result != ESP_OK)){
-		ESP_LOGE(TAG, "Very unexpected energy NVS state, %d and %d",session_read_result, accumulated_read_result );
+		ESP_LOGE(TAG, "Very unexpected energy NVS state!!, %d and %d",session_read_result, accumulated_read_result );
 		result = -10.0;
 		// could we do cleanup here?
 		goto err;
 	}
+
+	ESP_LOGI(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
+		session_energy, previous_session_energy, previous_accumulated_energy
+	);
 
 	if(session_energy > previous_session_energy){
 		//if the energy count from the dspic has reset and passed previous_session_energy
 		// we loos some energy in this calculation
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
 	}else if (session_energy < previous_session_energy){
-		// dspic as started new session
+		// dspic has started new session
 		result = previous_accumulated_energy + session_energy;
 	}else{
 		if(accumulator_initialised == true){
@@ -1010,22 +1014,34 @@ double storage_update_accumulated_energy(float session_energy){
 		}else{
 			ESP_LOGW(TAG, "no change in energy");
 			result = previous_accumulated_energy;
-			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f - %f )",
+			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
 				previous_accumulated_energy, result, previous_session_energy, session_energy
 			);
 			goto err;
 		}
 	}
 
-	ESP_LOGI(TAG, "updating total energy %f -> %f (%f - %f )",
+	ESP_LOGI(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
 		previous_accumulated_energy, result, previous_session_energy, session_energy
 	);
 
 	esp_err_t session_write_result = nvs_set_zfloat(handle, "session", session_energy);
 	esp_err_t accumulated_write_result = nvs_set_zdouble(handle, "accumulated", result);
 
+	if((session_write_result!= ESP_OK) || (accumulated_write_result) != ESP_OK){
+		ESP_LOGE(TAG, "Failed to write results, skiping commit (%d, %d)", 
+		session_write_result, accumulated_write_result );
+		goto err;
+	}
+
 	// documentation is unclear on the atomicity of the nvs operations
 	esp_err_t commit_result = nvs_commit(handle);
+	if(commit_result != ESP_OK){
+		ESP_LOGE(TAG, "Failed to commit the result");
+		// since everything worked up to this point, the return value should be valid
+		// since we dont store anything, we should a new chance to store the correct data on the next calculation
+		// but we increase the chance of loosing data, and have to persist it at some time
+	}
 
 	err:
 	nvs_close(handle);
