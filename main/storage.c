@@ -988,6 +988,7 @@ double storage_update_accumulated_energy(float session_energy){
 		ESP_LOGW(TAG, "initing energy accumulation");
 		previous_session_energy = 0.0;
 		previous_accumulated_energy = 0.0;
+		accumulator_initialised = true;
 		
 	}else if ((session_read_result != ESP_OK) || (accumulated_read_result != ESP_OK)){
 		ESP_LOGE(TAG, "Very unexpected energy NVS state, %d and %d",session_read_result, accumulated_read_result );
@@ -1003,6 +1004,17 @@ double storage_update_accumulated_energy(float session_energy){
 	}else if (session_energy < previous_session_energy){
 		// dspic as started new session
 		result = previous_accumulated_energy + session_energy;
+	}else{
+		if(accumulator_initialised == true){
+			result = 0.0;
+		}else{
+			ESP_LOGW(TAG, "no change in energy");
+			result = previous_accumulated_energy;
+			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f - %f )",
+				previous_accumulated_energy, result, previous_session_energy, session_energy
+			);
+			goto err;
+		}
 	}
 
 	ESP_LOGI(TAG, "updating total energy %f -> %f (%f - %f )",
