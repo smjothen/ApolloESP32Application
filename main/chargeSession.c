@@ -101,6 +101,9 @@ void chargeSession_Start()
 	/// First check for resetSession on Flash
 	esp_err_t readErr = chargeSession_ReadSessionResetInfo();
 
+	//indicate that the energy value is invalid
+	chargeSession.Energy = -1.0;
+
 	if (readErr != ESP_OK)
 	{
 		if(readErr == 4354)
@@ -152,21 +155,8 @@ void chargeSession_Start()
 
 void chargeSession_UpdateEnergy()
 {
-	if(strlen(chargeSession.SessionId) > 0)
-	{
-		float energy = MCU_GetEnergy();
-
-		//Only allow significant, positive, increasing energy
-		if((energy > 0.01) && (energy > chargeSession.Energy))
-		{
-			chargeSession.Energy = energy;
-		}
-	}
-	else
-	{
-		chargeSession.Energy = 0.0;
-	}
-
+	float energy = MCU_GetEnergy();
+	chargeSession.Energy = energy;
 }
 
 void chargeSession_Finalize()

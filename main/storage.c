@@ -379,6 +379,25 @@ esp_err_t nvs_get_zfloat(nvs_handle_t handle, const char* key, float * outputVal
 	return err;
 }
 
+
+esp_err_t nvs_set_zdouble(nvs_handle_t handle, const char* key, double inputValue)
+{
+	uint64_t doubleToInt;
+	memcpy(&doubleToInt, &inputValue, 8);
+	err = nvs_set_u64(handle, key, doubleToInt);
+	return err;
+}
+
+esp_err_t nvs_get_zdouble(nvs_handle_t handle, const char* key, double * outputValue)
+{
+	uint64_t intToDouble;
+	err = nvs_get_u64(handle, key, &intToDouble);
+	memcpy(outputValue, &intToDouble, 8);
+
+	return err;
+}
+
+
 esp_err_t storage_SaveConfiguration()
 {
 	volatile esp_err_t err;
@@ -942,4 +961,104 @@ void storage_GetStats()
 	nvs_stats_t nvs_stats;
 	nvs_get_stats(NULL, &nvs_stats);
 	ESP_LOGI(TAG, "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)\n", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
+}
+
+double storage_update_accumulated_energy(float session_energy){
+	double result = -1.0;
+
+	nvs_handle_t handle;
+	esp_err_t open_result = nvs_open("energy", NVS_READWRITE, &handle);
+	if(open_result != ESP_OK ){
+		ESP_LOGE(TAG, "failed to open NVS energy %d", open_result);
+		result =  -2.0;
+		goto err;
+	}
+
+	bool accumulator_initialised = false;
+	float previous_session_energy;
+	double previous_accumulated_energy;
+
+	esp_err_t session_read_result =  nvs_get_zfloat(handle, "session", &previous_session_energy);
+	esp_err_t accumulated_read_result = nvs_get_zdouble(handle, "accumulated", &previous_accumulated_energy);
+	
+	if(
+		   (session_read_result == ESP_ERR_NVS_NOT_FOUND) 
+		&& (accumulated_read_result == ESP_ERR_NVS_NOT_FOUND)
+	){
+		ESP_LOGW(TAG, "initing energy accumulation");
+		previous_session_energy = 0.0;
+		previous_accumulated_energy = 0.0;
+		accumulator_initialised = true;
+		
+	}else if ((session_read_result != ESP_OK) || (accumulated_read_result != ESP_OK)){
+		ESP_LOGE(TAG, "Very unexpected energy NVS state!!, %d and %d",session_read_result, accumulated_read_result );
+		result = -10.0;
+		// could we do cleanup here?
+		goto err;
+	}
+
+	ESP_LOGI(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
+		session_energy, previous_session_energy, previous_accumulated_energy
+	);
+
+	if(session_energy<0.0){
+		ESP_LOGW(TAG, "energy count not updated from dsPIC yet, using stale value: %f",
+			previous_accumulated_energy
+		);
+		result = previous_accumulated_energy;
+		goto err;
+	}else if(session_energy > previous_session_energy){
+		//if the energy count from the dspic has reset and passed previous_session_energy
+		// we loos some energy in this calculation
+		result = previous_accumulated_energy + (session_energy - previous_session_energy);
+	}else if (session_energy < previous_session_energy){
+		// dspic has started new session
+		result = previous_accumulated_energy + session_energy;
+	}else{
+		if(accumulator_initialised == true){
+			result = 0.0;
+		}else{
+			ESP_LOGW(TAG, "no change in energy");
+			result = previous_accumulated_energy;
+			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
+				previous_accumulated_energy, result, previous_session_energy, session_energy
+			);
+			goto err;
+		}
+	}
+
+	ESP_LOGI(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
+		previous_accumulated_energy, result, previous_session_energy, session_energy
+	);
+
+	esp_err_t session_write_result = nvs_set_zfloat(handle, "session", session_energy);
+	esp_err_t accumulated_write_result = nvs_set_zdouble(handle, "accumulated", result);
+
+	if((session_write_result!= ESP_OK) || (accumulated_write_result) != ESP_OK){
+		ESP_LOGE(TAG, "Failed to write results, skiping commit (%d, %d)", 
+		session_write_result, accumulated_write_result );
+		goto err;
+	}
+
+	// documentation is unclear on the atomicity of the nvs operations
+	esp_err_t commit_result = nvs_commit(handle);
+	if(commit_result != ESP_OK){
+		ESP_LOGE(TAG, "Failed to commit the result");
+		// since everything worked up to this point, the return value should be valid
+		// since we dont store anything, we should a new chance to store the correct data on the next calculation
+		// but we increase the chance of loosing data, and have to persist it at some time
+	}
+
+	err:
+	nvs_close(handle);
+	return result;
+}
+
+int storage_clear_accumulated_energy(){
+	nvs_handle handle;
+	nvs_open("energy", NVS_READWRITE, &handle);
+	nvs_erase_all(handle);
+	nvs_commit(handle);
+
+	return 0;
 }

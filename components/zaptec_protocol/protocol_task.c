@@ -177,7 +177,7 @@ static float voltages[3] = {0.0};
 static float currents[3] = {0.0};
 
 static float totalChargePower = 0.0;
-static float totalChargePowerSession = 0.0;
+static float totalChargePowerSession = -1.0;
 
 static uint8_t chargeMode = 0;
 static uint8_t chargeOperationMode = 0;
