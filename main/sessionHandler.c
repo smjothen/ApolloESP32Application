@@ -139,6 +139,11 @@ void OfflineHandler()
 	}
 }
 
+void PrintSession()
+{
+	ESP_LOGW(TAG,"\n SessionId: \t\t%s\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession_GetSessionId(), chargeSession_Get().Energy, chargeSession_Get().StartTime, chargeSession_Get().EndTime, chargeSession_Get().ReliableClock, chargeSession_Get().StoppedByRFID, chargeSession_Get().AuthenticationCode);
+}
+
 static uint32_t simulateOfflineTimeout = 180;
 static bool simulateOffline = false;
 void sessionHandler_simulateOffline()
@@ -165,7 +170,7 @@ static void sessionHandler_task()
     uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
-    uint32_t statusInterval = 20;
+    uint32_t statusInterval = 10;
 
     uint32_t signalInterval = 120;
 
@@ -188,6 +193,7 @@ static void sessionHandler_task()
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 
     OCMF_Init();
+    uint32_t secondsSinceSync = 0;
 
     TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
@@ -206,7 +212,16 @@ static void sessionHandler_task()
 				on_send_signed_meter_value();
 
 				setTimerSyncronization = true;
+				secondsSinceSync = 0;
 			}
+		}
+
+		//The timer must be resynced regularly with the clock to avoid deviation since the clock is updated through NTP.
+		secondsSinceSync++;
+		if((setTimerSyncronization == true) && (secondsSinceSync > 900) && MCU_GetchargeMode() != eCAR_CHARGING)
+		{
+			ESP_LOGW(TAG, " Trig new OCMF timer sync");
+			setTimerSyncronization = false;
 		}
 
 		onCounter++;
@@ -420,6 +435,8 @@ static void sessionHandler_task()
 			{
 				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
+				PrintSession();
+
 				//char completedSessionString[200] = {0};
 				memset(completedSessionString,0, LOG_STRING_SIZE);
 				chargeSession_GetSessionAsString(completedSessionString);
@@ -449,6 +466,12 @@ static void sessionHandler_task()
 			NFCClearTag();
 		}
 		
+		//If the FinalStopActive bit is set when a car disconnect, make sure to clear the status value used by Cloud
+		if((currentCarChargeMode == eCAR_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
+		{
+			SetFinalStopActiveStatus(0);
+		}
+
 		previousCarChargeMode = currentCarChargeMode;
 
 		onTime++;
@@ -459,20 +482,20 @@ static void sessionHandler_task()
 			if (networkInterface == eCONNECTION_WIFI)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 900;	//When car is disconnected or not charging
+					dataInterval = 1800;	//When car is disconnected or not charging
 				else
-					dataInterval = 300;	//When car is in charging state
+					dataInterval = 900;	//When car is in charging state
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 1800;	//When car is disconnected or not charging
+					dataInterval = 3600;	//When car is disconnected or not charging
 				else
 					dataInterval = 900;	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
-				signalInterval = 1800;
+				signalInterval = 3600;
 			}
 		}
 
@@ -541,7 +564,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  -  Sid: %s, Uid: %s *******", GetCellularQuality(), dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
+				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d *******", GetCellularQuality(), dataInterval);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -550,8 +573,10 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  -  Sid: %s, Uid: %s *******", rssi, dataInterval, chargeSession_GetSessionId(), chargeSession_Get().AuthenticationCode);
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  *******", rssi, dataInterval);
 			}
+
+			PrintSession();
 
 			statusCounter = 0;
 		}

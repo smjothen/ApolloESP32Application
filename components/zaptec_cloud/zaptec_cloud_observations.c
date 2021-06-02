@@ -473,6 +473,7 @@ static float previousOfflineCurrent = 0.0;
 
 static float warningValue = 0;
 static uint8_t maxRTCSend = 0;
+static uint8_t previousFinalStopActiveStatus = 0xff;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -642,7 +643,7 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	if((power > previousPower + 500) != (power < (previousPower - 500))) //500W
+	if((power > previousPower + 500) || (power < (previousPower - 500))) //500W
 	{
 		if(power < 0.0)
 			power = 0.0;
@@ -658,7 +659,7 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float energy = chargeSession_Get().Energy;
-	if((energy > previousEnergy + 0.1) != (energy < (previousEnergy - 0.1))) //0.1kWh
+	if((energy > previousEnergy + 0.1) || (energy < (previousEnergy - 0.1))) //0.1kWh
 	{
 		if(energy < 0.0)
 			energy = 0.0;
@@ -708,6 +709,13 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+	uint8_t finalStopActiveStatus = GetFinalStopActiveStatus();
+	if(finalStopActiveStatus != previousFinalStopActiveStatus)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(FinalStopActive, (uint32_t)finalStopActiveStatus));
+		previousFinalStopActiveStatus = finalStopActiveStatus;
+		isChange = true;
+	}
 
 	//Check ret and retry?
     int ret = 0;

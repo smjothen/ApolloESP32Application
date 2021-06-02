@@ -201,6 +201,7 @@ static uint16_t espNotifications = 0;
 static uint16_t mcuNotifications = 0;
 
 int holdSetPhases = 0;
+static uint8_t finalStopActive = false;
 
 float GetFloat(uint8_t * input)
 {
@@ -869,6 +870,16 @@ void SetEspNotification(uint16_t notification)
 uint32_t GetCombinedNotifications()
 {
 	return (uint32_t)((espNotifications << 16) + mcuNotifications);
+}
+
+void SetFinalStopActiveStatus(uint8_t status)
+{
+	finalStopActive = status;
+}
+
+uint8_t GetFinalStopActiveStatus()
+{
+	return finalStopActive;
 }
 
 void configureUart(){

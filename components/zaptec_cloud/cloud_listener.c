@@ -1015,19 +1015,18 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	//StopChargingFinal = 506
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/506/"))
 	{
-		//ESP_LOGI(TAG, "Charging denied!");
 		MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);// = 508
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+			SetFinalStopActiveStatus(1);
 		}
 		else
 		{
 			responseStatus = 400;
 			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command FAILED");
 		}
-		responseStatus = 200;
 	}
 
 	//ResumeCharging = 507
@@ -1039,13 +1038,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
+			SetFinalStopActiveStatus(0);
 		}
 		else
 		{
 			responseStatus = 400;
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command FAILED");
 		}
-		responseStatus = 200;
 	}
 
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
@@ -1063,8 +1062,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 400;
 			ESP_LOGI(TAG, "MCU Granted command FAILED");
 		}
-
-		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
 	{
@@ -1080,7 +1077,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 400;
 			ESP_LOGI(TAG, "MCU Granted command FAILED");
 		}
-		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
 	{
@@ -1514,6 +1510,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						responseStatus = 200;
 						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+						SetFinalStopActiveStatus(1);
 					}
 					else
 					{
@@ -1532,6 +1529,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						responseStatus = 200;
 						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
+						SetFinalStopActiveStatus(0);
+
 					}
 					else
 					{

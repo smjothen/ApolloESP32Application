@@ -57,6 +57,8 @@ float MCU_StandAloneCurrent();
 float MCU_GetMaxInstallationCurrentSwitch();
 void SetEspNotification(uint16_t notification);
 uint32_t GetCombinedNotifications();
+void SetFinalStopActiveStatus(uint8_t status);
+uint8_t GetFinalStopActiveStatus();
 
 
 #endif /* PROTOCOL_TASK_H */
