@@ -9,7 +9,7 @@
 #include "cJSON.h"
 #include "string.h"
 #include "storage.h"
-
+#include "protocol_task.h"
 
 static const char *TAG = "OCMF     ";
 
@@ -26,7 +26,7 @@ void OCMF_Init()
 }
 
 double get_accumulated_energy(){
-	float dspic_session_energy = chargeSession_Get().Energy;
+	float dspic_session_energy = MCU_GetEnergy();
 	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
 	return accumulated_energy;
 }

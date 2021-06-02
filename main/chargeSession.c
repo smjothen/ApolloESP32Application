@@ -155,8 +155,21 @@ void chargeSession_Start()
 
 void chargeSession_UpdateEnergy()
 {
-	float energy = MCU_GetEnergy();
-	chargeSession.Energy = energy;
+	if(strlen(chargeSession.SessionId) > 0)
+	{
+		float energy = MCU_GetEnergy();
+
+		//Only allow significant, positive, increasing energy
+		if((energy > 0.001) && (energy > chargeSession.Energy))
+		{
+			chargeSession.Energy = energy;
+		}
+	}
+	else
+	{
+		chargeSession.Energy = 0.0;
+	}
+
 }
 
 void chargeSession_Finalize()

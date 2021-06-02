@@ -1059,6 +1059,7 @@ int storage_clear_accumulated_energy(){
 	nvs_open("energy", NVS_READWRITE, &handle);
 	nvs_erase_all(handle);
 	nvs_commit(handle);
+	nvs_close(handle);
 
 	return 0;
 }
