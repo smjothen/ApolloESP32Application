@@ -482,7 +482,7 @@ static void sessionHandler_task()
 			if (networkInterface == eCONNECTION_WIFI)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 1800;	//When car is disconnected or not charging
+					dataInterval = 3600;	//When car is disconnected or not charging
 				else
 					dataInterval = 900;	//When car is in charging state
 
