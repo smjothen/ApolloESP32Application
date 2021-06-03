@@ -27,6 +27,13 @@ void OCMF_Init()
 
 double get_accumulated_energy(){
 	float dspic_session_energy = MCU_GetEnergy();
+
+	if(dspic_session_energy < MCU_GetMaximumEnergy()){
+		dspic_session_energy = MCU_GetMaximumEnergy();
+		MCU_ClearMaximumEnergy();
+		ESP_LOGI(TAG, "detected dspic energy restet, passing max value to STORAGE");
+	}
+
 	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
 	return accumulated_energy;
 }
