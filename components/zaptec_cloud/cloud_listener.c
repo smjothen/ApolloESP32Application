@@ -385,19 +385,19 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
 			ESP_LOGE(TAG, "522 defaultOfflinePhase=%d  - Not used\n", defaultOfflinePhase);
 			//if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
-			if((9 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			if((9 >= defaultOfflinePhase) && (defaultOfflinePhase >= 1))
 			{
-				MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
-				if(ret == MsgWriteAck)
-				{
+				//MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
+				//if(ret == MsgWriteAck)
+				//{
 					storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
 					ESP_LOGI(TAG, "DoSave 522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
 					doSave = true;
-				}
-				else
-				{
-					ESP_LOGE(TAG, "MCU defaultOfflinePhase parameter error");
-				}
+				//}
+				//else
+				//{
+				//	ESP_LOGE(TAG, "MCU defaultOfflinePhase parameter error");
+				//}
 			}
 			else
 			{
@@ -413,17 +413,17 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 			if((32.0 >= defaultOfflineCurrent) && (defaultOfflineCurrent >= 0.0))
 			{
-				MessageType ret = MCU_SendFloatParameter(ChargerOfflineCurrent, defaultOfflineCurrent);
-				if(ret == MsgWriteAck)
-				{
-					storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
-					ESP_LOGI(TAG, "DoSave 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
-					doSave = true;
-				}
-				else
-				{
-					ESP_LOGE(TAG, "MCU defaultOfflineCurrent parameter error");
-				}
+				//MessageType ret = MCU_SendFloatParameter(ChargerOfflineCurrent, defaultOfflineCurrent);
+				//if(ret == MsgWriteAck)
+				//{
+				storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
+				ESP_LOGI(TAG, "DoSave 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+				doSave = true;
+				//}
+				//else
+				//{
+					//ESP_LOGE(TAG, "MCU defaultOfflineCurrent parameter error");
+				//}
 			}
 			else
 			{
@@ -903,6 +903,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
+		//return 200; //For testing offline resendRequestTimer in system mode
 		//rDATA=["16","4"]
 		char commandString[commandEvent->data_len+1];
 		//char commandString[20] = {0};

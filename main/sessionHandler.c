@@ -24,7 +24,7 @@
 static const char *TAG = "SESSION    ";
 
 static uint32_t dataTestInterval = 0;
-#define RESEND_REQUEST_TIMER_LIMIT 180
+#define RESEND_REQUEST_TIMER_LIMIT 150
 
 
 static char * completedSessionString = NULL;
@@ -191,6 +191,7 @@ static void sessionHandler_task()
     uint32_t secondsSinceLastCheck = 10;
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
+    uint8_t nrOfResendRetries = 0;
 
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
@@ -308,12 +309,12 @@ static void sessionHandler_task()
 		{
 			int sentOk = publish_telemetry_observation_on_change();
 
-			// If we are in system requesting state, make sure to resend state if sending failed, otherwise
-			if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
-			//if((storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
+			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			if((storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
 			{
 				resendRequestTimer++;
-				ESP_LOGW(TAG, "resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				ESP_LOGE(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
 					publish_debug_telemetry_observation_ChargingStateParameters();
@@ -323,13 +324,21 @@ static void sessionHandler_task()
 
 					// Increase timer limit as a backoff routine if Cloud does not answer
 					if(resendRequestTimerLimit < 1800)
-						resendRequestTimerLimit += 5;
+					{
+						resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT << nrOfResendRetries; //pow(2.0, nrOfResendRetries) => 150 300 600 1200 2400
+						//ESP_LOGE(TAG, "CHARGE STATE resendRequestTimerLimit: %d nrOfResendRetries %d", resendRequestTimerLimit, nrOfResendRetries);
+						nrOfResendRetries++;
+					}
 				}
 			}
 			else
 			{
+				//if(resendRequestTimerLimit != RESEND_REQUEST_TIMER_LIMIT)
+					//ESP_LOGE(TAG, "CHARGE STATE timer reset!");
+
 				resendRequestTimer = 0;
 				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
+				nrOfResendRetries = 0;
 			}
 
 
@@ -602,6 +611,7 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
+				publish_debug_telemetry_observation_cloud_settings();
 
 				startupSent = true;
 			}
