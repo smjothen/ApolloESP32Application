@@ -1009,7 +1009,8 @@ double storage_update_accumulated_energy(float session_energy){
 		goto err;
 	}else if(session_energy > previous_session_energy){
 		//if the energy count from the dspic has reset and passed previous_session_energy
-		// we loos some energy in this calculation
+		// we may loose some energy in this calculation,
+		// tough normally this should be fine
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
 	}else if (session_energy < previous_session_energy){
 		// dspic has started new session
