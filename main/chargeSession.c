@@ -102,7 +102,7 @@ void chargeSession_Start()
 	esp_err_t readErr = chargeSession_ReadSessionResetInfo();
 
 	//indicate that the energy value is invalid
-	chargeSession.Energy = -1.0;
+	//chargeSession.Energy = -1.0;
 
 	if (readErr != ESP_OK)
 	{
