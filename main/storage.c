@@ -86,7 +86,7 @@ void storage_Init_Configuration()
 	configurationStruct.standaloneCurrent			= 6;	//A
 	configurationStruct.maxInstallationCurrentConfig = 0.0;
 
-	configurationStruct.phaseRotation				= 0;
+	configurationStruct.phaseRotation				= 1;
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
 }

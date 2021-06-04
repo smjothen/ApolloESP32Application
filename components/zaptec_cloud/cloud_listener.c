@@ -46,7 +46,8 @@ int resetCounter = 0;
 char event_topic[128];
 static struct DeviceInfo cloudDeviceInfo;
 
-bool mqttConnected = false;
+static bool mqttConnected = false;
+static bool mqttSimulateOffline = false;
 bool cloudSettingsAreUpdated = false;
 bool localSettingsAreUpdated = false;
 bool reportGridTestResults = false;
@@ -88,9 +89,17 @@ void MqttSetDisconnected()
 	mqttConnected = false;
 }
 
+void MqttSetSimulatedOffline(bool simOffline)
+{
+	mqttSimulateOffline = simOffline;
+}
+
 bool isMqttConnected()
 {
-	return mqttConnected;
+	if(mqttSimulateOffline == true)
+		return false;
+	else
+		return mqttConnected;
 }
 
 esp_mqtt_client_handle_t mqtt_client = {0};
@@ -923,6 +932,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 		if((32 >= currentFromCloud) && (currentFromCloud >= 0))
 		{
+			//Ensure that when a cloud start command is received, the offlineCurrentSent flag must be cleared
+			//to allow a offline current to be resent in case we go offline multiple times.
+			sessionHandler_ClearOfflineCurrentSent();
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentFromCloud);
 			if(ret == MsgWriteAck)
 			{
@@ -1247,7 +1259,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					certifcate_setBundleVersion(0); //Fake old version for test
 					certificate_update(0);
 
-					ESP_LOGI(TAG, "Using default LogInterval");
+					ESP_LOGI(TAG, "Update certificate");
 					responseStatus = 200;
 				}
 				// Clear certificate (results in new update on next start)
@@ -1276,9 +1288,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					float maxInstCurrentConfig = maxInt * 1.0;
 
 					//Sanity check
-					if((32.0 >= maxInstCurrentConfig) && (maxInstCurrentConfig >= 0.0))
+					if((40.0 >= maxInstCurrentConfig) && (maxInstCurrentConfig >= 0.0))
 					{
-						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrentConfig);
+						float limitedMaxInst = maxInstCurrentConfig;
+						if(maxInstCurrentConfig > 32.0)
+							limitedMaxInst = 32.0;
+
+						//Never send higher than 32 to MCU
+						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, limitedMaxInst);
 						if(ret == MsgWriteAck)
 						{
 							storage_Set_MaxInstallationCurrentConfig(maxInstCurrentConfig);

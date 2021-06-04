@@ -26,6 +26,7 @@ enum ChargerOperatingMode
 
 void sessionHandler_init();
 void SetDataInterval(int newDataInterval);
+void sessionHandler_ClearOfflineCurrentSent();
 void sessionHandler_simulateOffline();
 int sessionHandler_GetStackWatermark();
 void ClearStartupSent();

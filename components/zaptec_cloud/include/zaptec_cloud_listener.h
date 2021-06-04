@@ -4,6 +4,7 @@
 #include "../../main/DeviceInfo.h"
 
 void MqttSetDisconnected();
+void MqttSetSimulatedOffline(bool simOffline);
 bool isMqttConnected();
 void cloud_listener_check_cmd();
 void start_cloud_listener_task(struct DeviceInfo deviceInfo);

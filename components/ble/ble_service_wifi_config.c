@@ -902,6 +902,9 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			ESP_LOGE(TAG, "Read Max installation current CONFIG failed: %f", maxInst);
 		}
 
+		if((maxInst <= 32.0) && (storage_Get_MaxInstallationCurrentConfig() > 32.0) && (storage_Get_MaxInstallationCurrentConfig() <= 40.0))
+			maxInst = storage_Get_MaxInstallationCurrentConfig();
+
 		memset(nrTostr, 0, sizeof(nrTostr));
 		//sprintf(nrTostr, "%.1f", storage_Get_MaxInstallationCurrentConfig());
 		sprintf(nrTostr, "%.1f", maxInst);
@@ -1209,11 +1212,18 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	ESP_LOGI(TAG, "Max installation current CONFIG received %f", maxInstCurrConfig);
 
     	//Sanity check
-    	if((32.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
+    	if((40.0 >= maxInstCurrConfig) && (maxInstCurrConfig >= 6.0))
     	{
-    		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, maxInstCurrConfig);
+    		float limitedMaxInstCurrent = maxInstCurrConfig;
+
+    		//If installed on a 40 A fuse reduce the value sent to MCU.
+			if(limitedMaxInstCurrent > 32.0)
+				limitedMaxInstCurrent = 32.0;
+
+    		MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, limitedMaxInstCurrent);
 			if(ret == MsgWriteAck)
 			{
+				//Store up to 40A value
 				storage_Set_MaxInstallationCurrentConfig(maxInstCurrConfig);
 				ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrConfig);
 				storage_SaveConfiguration();

@@ -20,6 +20,7 @@
 #include "../apollo_ota/include/apollo_ota.h"
 #include "../apollo_ota/include/pic_update.h"
 #include "../../main/certificate.h"
+#include "sessionHandler.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -336,6 +337,18 @@ int publish_debug_telemetry_observation_StartUpParameters()
     return publish_json(observations);
 }
 
+int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
+{
+    ESP_LOGD(TAG, "sending Request start command telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, eCONNECTED_REQUESTING));
+
+    return publish_json(observations);
+}
+
 int publish_debug_telemetry_observation_ChargingStateParameters()
 {
     ESP_LOGD(TAG, "sending ChargeState telemetry");
@@ -462,6 +475,7 @@ static uint8_t previousChargeOperatingMode = 0;
 static uint8_t previousIsStandalone = 0xff;
 static float previousStandaloneCurrent = -1.0;
 static float previousMaxInstallationCurrentConfig = -1.0;
+static float previousMaxInstallationCurrentOnFile = -1.0;
 static uint8_t previousSwitchState = 0xff;
 static uint8_t previousPermanentLock = 0xff;
 static uint8_t previousCableType = 0xff;
@@ -612,10 +626,24 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float maxInstallationCurrentConfig = MCU_ChargeCurrentInstallationMaxLimit();//storage_Get_MaxInstallationCurrentConfig();
-	if((previousMaxInstallationCurrentConfig != maxInstallationCurrentConfig))
+	float maxInstallationCurrentOnFile = storage_Get_MaxInstallationCurrentConfig();
+	if((previousMaxInstallationCurrentConfig != maxInstallationCurrentConfig) || (previousMaxInstallationCurrentOnFile != maxInstallationCurrentOnFile))
 	{
-		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, maxInstallationCurrentConfig));
+		float valueToSend = 0.0;
+		if((maxInstallationCurrentOnFile <= 40.0) && (maxInstallationCurrentOnFile > 32.0))
+		{
+			valueToSend = maxInstallationCurrentOnFile;
+			ESP_LOGW(TAG, "Sending ESP value: %f", maxInstallationCurrentOnFile);
+		}
+		else
+		{
+			valueToSend = maxInstallationCurrentConfig;
+			ESP_LOGW(TAG, "Sending MCU value: %f", maxInstallationCurrentConfig);
+		}
+
+		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, valueToSend));
 		previousMaxInstallationCurrentConfig = maxInstallationCurrentConfig;
+		previousMaxInstallationCurrentOnFile = maxInstallationCurrentOnFile;
 		isChange = true;
 	}
 

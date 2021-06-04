@@ -92,12 +92,23 @@ void log_task_info(void){
 }
 
 
+static uint32_t simulateOfflineTimeout = 180;
+static bool simulateOffline = false;
+void sessionHandler_simulateOffline()
+{
+	simulateOffline = true;
+	simulateOfflineTimeout = 180;
+}
+
+
+static bool offlineCurrentSent = false;
 void OfflineHandler()
 {
 
 	int activeSessionId = strlen(chargeSession_GetSessionId());
 	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 
+	//Handle charge session started offline
 	if((activeSessionId > 0) && (chargeOperatingMode == eCONNECTED_REQUESTING))//2 = Requesting, add definitions
 	{
 
@@ -135,21 +146,52 @@ void OfflineHandler()
 		{
 			ESP_LOGI(TAG, "Offline MCU Granted command FAILED");
 		}
-
 	}
+
+	//Handel existing charge session that has gone offline
+	//Handle charge session started offline
+	else if((activeSessionId > 0) && ((chargeOperatingMode == eCONNECTED_CHARGING) || (chargeOperatingMode == eCONNECTED_FINISHED)) && !offlineCurrentSent)//2 = Requesting, add definitions
+	{
+		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+
+		if(storage_Get_NetworkType() == NETWORK_3P3W)
+			offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
+
+		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
+
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
+		if(ret == MsgWriteAck)
+		{
+			MessageType ret = MCU_SendCommandId(CommandStartCharging);
+			if(ret == MsgCommandAck)
+			{
+				offlineCurrentSent = true;
+				ESP_LOGE(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
+			}
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Offline MCU Start command FAILED");
+		}
+	}
+	else if(offlineCurrentSent == true)
+	{
+		ESP_LOGE(TAG, "Offline current mode. SimulateOfflineTimeout: %d", simulateOfflineTimeout);
+	}
+}
+
+void sessionHandler_ClearOfflineCurrentSent()
+{
+	offlineCurrentSent = false;
 }
 
 void PrintSession()
 {
 	ESP_LOGW(TAG,"\n SessionId: \t\t%s\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession_GetSessionId(), chargeSession_Get().Energy, chargeSession_Get().StartTime, chargeSession_Get().EndTime, chargeSession_Get().ReliableClock, chargeSession_Get().StoppedByRFID, chargeSession_Get().AuthenticationCode);
-}
-
-static uint32_t simulateOfflineTimeout = 180;
-static bool simulateOffline = false;
-void sessionHandler_simulateOffline()
-{
-	simulateOffline = true;
-	simulateOfflineTimeout = 180;
 }
 
 
@@ -182,6 +224,7 @@ static void sessionHandler_task()
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
+    bool previousIsOnline = true;
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
@@ -196,10 +239,8 @@ static void sessionHandler_task()
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
 
-    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //55 minutes
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*15*1000); //55 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
-    //xTimerReset( signedMeterValues_timer, portMAX_DELAY );
 
 	while (1)
 	{
@@ -219,7 +260,7 @@ static void sessionHandler_task()
 
 		//The timer must be resynced regularly with the clock to avoid deviation since the clock is updated through NTP.
 		secondsSinceSync++;
-		if((setTimerSyncronization == true) && (secondsSinceSync > 900) && MCU_GetchargeMode() != eCAR_CHARGING)
+		if((setTimerSyncronization == true) && (secondsSinceSync > 3400) && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		{
 			ESP_LOGW(TAG, " Trig new OCMF timer sync");
 			setTimerSyncronization = false;
@@ -227,15 +268,26 @@ static void sessionHandler_task()
 
 		onCounter++;
 
-		isOnline = isMqttConnected();
-
 		//Allow simulating timelimited offline mode initated with cloud command
 		if(simulateOffline == true)
 		{
+			//Override state
+			//isOnline = false;
+			MqttSetSimulatedOffline(true);
+
 			simulateOfflineTimeout--;
 			if(simulateOfflineTimeout == 0)
+			{
 				simulateOffline= false;
+				MqttSetSimulatedOffline(false);
+			}
 		}
+
+		isOnline = isMqttConnected();
+
+		//Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
+		if(isOnline == true)
+			offlineCurrentSent = false;
 
 		networkInterface = connectivity_GetActivateInterface();
 
@@ -304,6 +356,23 @@ static void sessionHandler_task()
 
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 		currentCarChargeMode = MCU_GetchargeMode();
+
+		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
+		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
+		if(((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == eCONNECTED_CHARGING)))
+		{
+			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
+			/*MessageType ret = MCU_SendCommandId(CommandStopCharging);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU Offline Stop command OK");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU Offline Stop command FAILED");
+			}*/
+		}
+
 
 		if(isOnline)
 		{
@@ -758,6 +827,8 @@ static void sessionHandler_task()
 			//publish_telemetry_observation_on_change();
 
 		}
+
+		previousIsOnline = isOnline;
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
