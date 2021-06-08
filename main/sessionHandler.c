@@ -102,6 +102,7 @@ void sessionHandler_simulateOffline()
 
 
 static bool offlineCurrentSent = false;
+static uint32_t offlineTime = 0;
 void OfflineHandler()
 {
 
@@ -109,7 +110,7 @@ void OfflineHandler()
 	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 
 	//Handle charge session started offline
-	if((activeSessionId > 0) && (chargeOperatingMode == eCONNECTED_REQUESTING))//2 = Requesting, add definitions
+	if((activeSessionId > 0) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))//2 = Requesting, add definitions
 	{
 
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
@@ -150,7 +151,7 @@ void OfflineHandler()
 
 	//Handel existing charge session that has gone offline
 	//Handle charge session started offline
-	else if((activeSessionId > 0) && ((chargeOperatingMode == eCONNECTED_CHARGING) || (chargeOperatingMode == eCONNECTED_FINISHED)) && !offlineCurrentSent)//2 = Requesting, add definitions
+	else if((activeSessionId > 0) && ((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)) && !offlineCurrentSent)//2 = Requesting, add definitions
 	{
 		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 
@@ -287,7 +288,15 @@ static void sessionHandler_task()
 
 		//Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
 		if(isOnline == true)
+		{
 			offlineCurrentSent = false;
+			offlineTime = 0;
+		}
+		else
+		{
+			offlineTime++;
+		}
+
 
 		networkInterface = connectivity_GetActivateInterface();
 
@@ -359,18 +368,10 @@ static void sessionHandler_task()
 
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
-		if(((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == eCONNECTED_CHARGING)))
+		//Check the offline time to ensure we don't send at every token refresh.
+		if(((previousIsOnline == false) && (isOnline == true) && (offlineTime > 120) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)))
 		{
 			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
-			/*MessageType ret = MCU_SendCommandId(CommandStopCharging);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU Offline Stop command OK");
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU Offline Stop command FAILED");
-			}*/
 		}
 
 
@@ -380,7 +381,7 @@ static void sessionHandler_task()
 
 			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
 			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
-			if((storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
 			{
 				resendRequestTimer++;
 				ESP_LOGE(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
@@ -854,7 +855,7 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
-	completedSessionString = malloc(15000);
+	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000
 	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
 }

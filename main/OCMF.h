@@ -7,7 +7,7 @@ extern "C" {
 
 #include "cJSON.h"
 
-#define LOG_STRING_SIZE 15000
+#define LOG_STRING_SIZE 20000
 
 void OCMF_Init();
 int OCMF_CreateNewOCMFMessage(char * newMessage);

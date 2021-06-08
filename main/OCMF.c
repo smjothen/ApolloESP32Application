@@ -133,6 +133,13 @@ char * OCMF_CreateNewOCMFLog()
 
 	free(buf);*/
 
+	//For testing maximum message size
+	/*
+	int i;
+	for (i = 0; i < 99; i++)
+		OCMF_AddElementToOCMFLog("T", "G");
+	*/
+
 	return logString;
 }
 

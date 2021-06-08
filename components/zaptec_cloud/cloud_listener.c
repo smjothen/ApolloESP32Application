@@ -998,6 +998,22 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
+		if((commandEvent->data_len == 4) && (strncmp(commandEvent->data, "null", 4) == 0))
+		{
+			MessageType ret = MCU_SendCommandId(CommandResetSession);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU ResetSession command OK");
+				return 200;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU ResetSession command FAILED");
+				return 400;
+			}
+		}
+
+
 		if(commandEvent->data_len < 40)
 		{
 
@@ -1023,6 +1039,46 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
 		chargeSession_SetSessionIdFromCloud(sessionIdString);
 		responseStatus = 200;
+	}
+
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/505/"))
+	{
+		//rTOPIC=$iothub/methods/POST/504/?$rid=1
+		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
+
+		//Clear user UUID
+		if(storage_Get_AuthenticationRequired() == 1)
+		{
+			char * ptr = strnstr(commandEvent->data, "null", commandEvent->data_len);
+			if((ptr != NULL) && (ptr != commandEvent->data) && (commandEvent->data_len < 37))
+			{
+				MessageType ret = MCU_SendCommandId(CommandResetSession);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU ResetSession command OK");
+					return 200;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU ResetSession command FAILED");
+					return 400;
+				}
+			}
+			else if((commandEvent->data_len > 4) && (commandEvent->data_len < 37)) //Auth code length limit
+			{
+				if(chargeSession_Get().SessionId[0] != '\0')
+				{
+					char newAuthCode[37] = {0};
+					strncpy(newAuthCode, &commandEvent->data[2], commandEvent->data_len-4);
+					chargeSession_SetAuthenticationCode(newAuthCode);
+					publish_debug_telemetry_observation_NFC_tag_id(newAuthCode);
+				}
+			}
+		}
+		else
+		{
+			return 400;
+		}
 	}
 
 	//StopChargingFinal = 506
@@ -1520,7 +1576,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 
 				//StopChargingFinal = 506
-				else if(strstr(commandString,"Final") != NULL)
+				/*else if(strstr(commandString,"Final") != NULL)
 				{
 					//ESP_LOGI(TAG, "Charging denied!");
 					MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);// = 508
@@ -1556,7 +1612,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command FAILED");
 					}
 					responseStatus = 200;
-				}
+				}*/
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -1844,6 +1900,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
 
         }
+
+        memset(event->data, 0, event->data_len);
 
         break;
     case MQTT_EVENT_BEFORE_CONNECT:

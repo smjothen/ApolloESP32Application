@@ -15,13 +15,25 @@ enum CarChargeMode
 };
 
 
-enum ChargerOperatingMode
+/*enum ChargerOperatingMode
 {
 	eUNKNOWN 				= 0,
 	eDISCONNECTED 			= 1,
 	eCONNECTED_REQUESTING 	= 2,
 	eCONNECTED_CHARGING 	= 3,
 	eCONNECTED_FINISHED 	= 5,
+};*/
+
+enum ChargerOperatingMode
+{
+    CHARGE_OPERATION_STATE_DISCONNECTED     = 1,
+    CHARGE_OPERATION_STATE_REQUESTING       = 2,
+    CHARGE_OPERATION_STATE_ACTIVE           = 10,
+    CHARGE_OPERATION_STATE_CHARGING         = 3,
+    CHARGE_OPERATION_STATE_STOPPING         = 4,
+    CHARGE_OPERATION_STATE_PAUSED           = 5,
+    CHARGE_OPERATION_STATE_STOPPED          = 6,
+    CHARGE_OPERATION_STATE_WARNING          = 7,
 };
 
 void sessionHandler_init();

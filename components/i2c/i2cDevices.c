@@ -368,7 +368,8 @@ static void i2cDevice_task(void *pvParameters)
 				else
 				{
 
-					isAuthenticated = authentication_CheckId(NFCGetTagInfo());
+					//Always allow charging when offline (Requested by external party. Make setting?)
+					isAuthenticated = 1;//authentication_CheckId(NFCGetTagInfo());
 
 					if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
 					{

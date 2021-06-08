@@ -344,7 +344,7 @@ int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, eCONNECTED_REQUESTING));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_REQUESTING));
 
     return publish_json(observations);
 }
