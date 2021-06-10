@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "stddef.h"
 #include "OCMF.h"
@@ -17,12 +18,16 @@ static char * formatVersion = "1.0";
 
 static char * logString = NULL;
 
-//static size_t logStringSize = 15000;
+static SemaphoreHandle_t ocmf_lock;
+static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st);
 
 
 void OCMF_Init()
 {
 	logString = calloc(LOG_STRING_SIZE, 1);
+	ocmf_lock = xSemaphoreCreateMutex();
+	xSemaphoreGive(ocmf_lock);
 }
 
 double get_accumulated_energy(){
@@ -93,6 +98,15 @@ char * OCMF_CreateNewOCMFLog()
 {
 	memset(logString, 0, LOG_STRING_SIZE);
 
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during log create");
+		goto err;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_CreateNewOCMFLog");
+	}
+
+
 	//if(logRoot != NULL){return -9;}
 
 	logRoot = cJSON_CreateObject();
@@ -118,7 +132,7 @@ char * OCMF_CreateNewOCMFLog()
 	cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
 	cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState*/
 
-	logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
+	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G");
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 
@@ -140,12 +154,15 @@ char * OCMF_CreateNewOCMFLog()
 		OCMF_AddElementToOCMFLog("T", "G");
 	*/
 
+	xSemaphoreGive(ocmf_lock);
+
+	err:
 	return logString;
 }
 
-
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st)
 {
+
 	if(logReaderArray != NULL)
 	{
 		int arrayLength = cJSON_GetArraySize(logReaderArray);
@@ -174,16 +191,42 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 			ESP_LOGW(TAG, "MAX OCMF Array size reached");
 		}
 	}
-
 	return logReaderArray;
 }
 
 
+cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+{
+	cJSON * result = NULL;
+
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during element add");
+		goto err;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_AddElementToOCMFLog");
+	}
+
+	result = OCMF_AddElementToOCMFLog_no_lock(tx, st);
+
+	xSemaphoreGive(ocmf_lock);
+	err:
+	return result;
+}
+
 int OCMF_FinalizeOCMFLog()
 {
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
+	}
+
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog("E", "G");
+		OCMF_AddElementToOCMFLog_no_lock("E", "G");
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -207,5 +250,6 @@ int OCMF_FinalizeOCMFLog()
 		ESP_LOGW(TAG, "Nothing to finalize");
 	}
 
+	xSemaphoreGive(ocmf_lock);
 	return 0;
 }
