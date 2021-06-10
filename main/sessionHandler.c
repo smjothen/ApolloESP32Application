@@ -195,6 +195,25 @@ void PrintSession()
 	ESP_LOGW(TAG,"\n SessionId: \t\t%s\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession_GetSessionId(), chargeSession_Get().Energy, chargeSession_Get().StartTime, chargeSession_Get().EndTime, chargeSession_Get().ReliableClock, chargeSession_Get().StoppedByRFID, chargeSession_Get().AuthenticationCode);
 }
 
+SemaphoreHandle_t ocmf_sync_semaphore;
+
+void ocmf_sync_task(void * pvParameters){
+	while(true){
+		if( xSemaphoreTake( ocmf_sync_semaphore, portMAX_DELAY ) == pdTRUE ){
+			ESP_LOGI(TAG, "triggered 15 min sync with semaphore");
+			on_send_signed_meter_value();
+		}else{
+			ESP_LOGE(TAG, "bad semaphore??");
+		}
+	}
+
+}
+
+void on_ocmf_sync_time(TimerHandle_t xTimer){
+	xSemaphoreGive(ocmf_sync_semaphore);
+}
+
+
 
 bool startupSent = false;
 bool setTimerSyncronization = false;
@@ -241,7 +260,7 @@ static void sessionHandler_task()
     uint32_t secondsSinceSync = 0;
 
     TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
-    signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
+    signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
 	{
@@ -252,7 +271,7 @@ static void sessionHandler_task()
 			{
 				ESP_LOGW(TAG, " 15 Min sync!");
 				xTimerReset( signedMeterValues_timer, portMAX_DELAY );
-				on_send_signed_meter_value();
+				on_ocmf_sync_time(NULL);
 
 				setTimerSyncronization = true;
 				secondsSinceSync = 0;
@@ -855,7 +874,11 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
+	ocmf_sync_semaphore = xSemaphoreCreateBinary();
+	xTaskCreate(ocmf_sync_task, "ocmf", 3000, NULL, 3, NULL);
+
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000
 	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
+
 }
