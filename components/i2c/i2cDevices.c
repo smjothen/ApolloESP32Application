@@ -345,7 +345,7 @@ static void i2cDevice_task(void *pvParameters)
 						audio_play_nfc_card_accepted();
 						ESP_LOGW(TAG, "Online: Authenticate by Cloud");
 					}
-					else
+					/*else
 					{
 						ESP_LOGW(TAG, "Online: Charging stopped by RFID-tag");
 
@@ -362,7 +362,7 @@ static void i2cDevice_task(void *pvParameters)
 						}
 
 						audio_play_nfc_card_accepted();
-					}
+					}*/
 				}
 				//Charger offline authentication
 				else
@@ -382,7 +382,7 @@ static void i2cDevice_task(void *pvParameters)
 						}
 					}
 
-					else if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] != '\0'))
+					/*else if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] != '\0'))
 					{
 
 						ESP_LOGW(TAG, "Offline: Local stop using RFID-tag");
@@ -404,7 +404,7 @@ static void i2cDevice_task(void *pvParameters)
 								ESP_LOGE(TAG, "MCU Reset command FAILED");
 							}
 						}
-					}
+					}*/
 					else
 					{
 						audio_play_nfc_card_denied();

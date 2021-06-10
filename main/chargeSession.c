@@ -56,19 +56,6 @@ void chargeSession_ClearHasNewSession()
 }
 
 
-void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
-{
-	if(strlen(chargeSession.SessionId) > 0)
-	{
-		ESP_LOGE(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
-	}
-
-	strcpy(chargeSession.SessionId, sessionIdFromCloud);
-	hasNewSessionIdFromCloud = true;
-	ESP_LOGI(TAG, "SessionId: %s , len: %d\n", chargeSession.SessionId, strlen(chargeSession.SessionId));
-}
-
-
 void GetUTCTimeString(char * timeString)
 {
 	time_t now = 0;
@@ -94,6 +81,25 @@ static void ChargeSession_Set_StartTime()
 
 	ESP_LOGI(TAG, "Start time is: %s", chargeSession.StartTime);
 }
+
+void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
+{
+	if(strlen(chargeSession.SessionId) > 0)
+	{
+		ESP_LOGE(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
+	}
+
+	strcpy(chargeSession.SessionId, sessionIdFromCloud);
+	hasNewSessionIdFromCloud = true;
+	ESP_LOGI(TAG, "SessionId: %s , len: %d\n", chargeSession.SessionId, strlen(chargeSession.SessionId));
+
+	if(chargeSession.StartTime[0] == '\0')
+	{
+		ESP_LOGI(TAG, "Setting cloud start time");
+		ChargeSession_Set_StartTime();
+	}
+}
+
 
 
 void chargeSession_Start()
@@ -130,6 +136,7 @@ void chargeSession_Start()
 		}
 		else
 		{
+			ChargeSession_Set_StartTime();
 			chargeSession.ReliableClock = false;
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}

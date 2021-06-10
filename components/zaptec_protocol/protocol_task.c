@@ -14,6 +14,7 @@
 #include "../../main/DeviceInfo.h"
 #include "../i2c/include/i2cDevices.h"
 #include "../../main/storage.h"
+#include "../../main/sessionHandler.h"
 
 const char *TAG = "MCU";
 
@@ -180,7 +181,7 @@ static float totalChargePower = 0.0;
 static float totalChargePowerSession = -1.0;
 static float max_reported_energy = -1.0;
 
-static uint8_t chargeMode = 0;
+static uint8_t chargeMode = eCAR_UNINITIALIZED;
 static uint8_t chargeOperationMode = 0;
 
 static uint32_t mcuDebugCounter = 0;

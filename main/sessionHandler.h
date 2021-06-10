@@ -42,6 +42,7 @@ void sessionHandler_ClearOfflineCurrentSent();
 void sessionHandler_simulateOffline();
 int sessionHandler_GetStackWatermark();
 void ClearStartupSent();
+void SetAuthorized(bool authFromCloud);
 
 #ifdef __cplusplus
 }

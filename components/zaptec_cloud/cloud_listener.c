@@ -1124,6 +1124,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;
+			SetAuthorized(true);
 			ESP_LOGI(TAG, "MCU Granted command OK");
 		}
 		else
@@ -1139,6 +1140,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;
+			SetAuthorized(false);
 			ESP_LOGI(TAG, "MCU Granted command OK");
 		}
 		else
@@ -1913,7 +1915,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_ERROR:
     	resetCounter++;
 
-    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/10, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
+    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/100, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
 
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
@@ -1924,7 +1926,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     			network_updateWifi();
 			}
 
-			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 40))
+			if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 70) || (resetCounter == 90))
 			{
 
 				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
@@ -1944,7 +1946,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		ESP_LOGI(TAG, "No Wifi or LTE");
     	}
 
-    	if(resetCounter == 50)
+    	if(resetCounter == 100)
 		{
 			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 			esp_restart();

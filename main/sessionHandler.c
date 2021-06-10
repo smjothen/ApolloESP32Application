@@ -54,8 +54,21 @@ void SetDataInterval(int newDataInterval)
 	dataTestInterval = newDataInterval;
 }
 
-bool authorizationRequired = true;
+static bool authorizationRequired = true;
+static bool pendingCloudAuthorization = false;
+static char pendingRFIDTag[DEFAULT_STR_SIZE]= {0};
+static bool isAuthorized = false;
 
+void SetAuthorized(bool authFromCloud)
+{
+	isAuthorized = authFromCloud;
+
+	if(isAuthorized == true)
+		chargeSession_SetAuthenticationCode(pendingRFIDTag);
+
+	pendingCloudAuthorization = false;
+	memset(pendingRFIDTag, 0, DEFAULT_STR_SIZE);
+}
 
 void log_task_info(void){
 	char task_info[40*15];
@@ -483,7 +496,9 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_ChargingStateParameters();
 				}
 
-				chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+				pendingCloudAuthorization = true;
+				strcpy(pendingRFIDTag,NFCGetTagInfo().idAsString);
+				//chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
 				NFCTagInfoClearValid();
 
 			}
