@@ -47,7 +47,7 @@ double get_accumulated_energy(){
 	return accumulated_energy;
 }
 
-int OCMF_CreateNewOCMFMessage(char * newMessage)
+int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out)
 {
 	cJSON *OCMFObject = cJSON_CreateObject();
 	if(OCMFObject == NULL){return -10;}
@@ -62,10 +62,11 @@ int OCMF_CreateNewOCMFMessage(char * newMessage)
 	cJSON * readerObject = cJSON_CreateObject();
 
 	char timeBuffer[50] = {0};
-	zntp_GetSystemTime(timeBuffer);
+	zntp_GetSystemTime(timeBuffer, time_out);
+	*energy_out = get_accumulated_energy();
 
 	cJSON_AddStringToObject(readerObject, "TM", timeBuffer);	//TimeAndSyncState
-	cJSON_AddNumberToObject(readerObject, "RV", get_accumulated_energy());	//ReadingValue
+	cJSON_AddNumberToObject(readerObject, "RV", *energy_out);	//ReadingValue
 	cJSON_AddStringToObject(readerObject, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 	cJSON_AddStringToObject(readerObject, "RU", "kWh");			//ReadingUnit
 	cJSON_AddStringToObject(readerObject, "RT", "AC");			//ReadingCurrentType
@@ -172,7 +173,7 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 		{
 			cJSON * logArrayElement = cJSON_CreateObject();
 			char timeBuffer[50] = {0};
-			zntp_GetSystemTime(timeBuffer);
+			zntp_GetSystemTime(timeBuffer, NULL);
 
 			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
 			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)

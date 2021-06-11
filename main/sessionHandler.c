@@ -20,6 +20,7 @@
 #include "OCMF.h"
 #include "freertos/event_groups.h"
 #include "../components/ntp/zntp.h"
+#include "offline_log.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -39,10 +40,24 @@ void on_send_signed_meter_value()
 		ESP_LOGW(TAG, "***** Sending signed meter values *****");
 
 		char OCMPMessage[200] = {0};
-		OCMF_CreateNewOCMFMessage(OCMPMessage);
+		time_t time;
+		double energy;
+
+		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
+
+		int publish_result = -1;
 
 		if (isMqttConnected() == true)
-			publish_string_observation(SignedMeterValue, OCMPMessage);
+			publish_result = publish_string_observation_blocked(
+				SignedMeterValue, OCMPMessage, 2000
+			);
+
+		if(publish_result<0){
+			append_offline_energy(time, energy);
+		}else{
+			//force loging now to ease development
+			append_offline_energy(time, energy);
+		}
 
 		OCMF_AddElementToOCMFLog("T", "G");
 	}

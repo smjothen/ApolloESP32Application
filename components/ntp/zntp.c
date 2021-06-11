@@ -72,7 +72,7 @@ struct tm zntp_GetLatestNTPTime()
 }
 
 static struct tm systemTime = { 0 };
-void zntp_GetSystemTime(char * buffer)
+void zntp_GetSystemTime(char * buffer, time_t *now_out)
 {
 	time_t now = 0;
 
@@ -85,6 +85,10 @@ void zntp_GetSystemTime(char * buffer)
 	localtime_r(&now, &systemTime);
 	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
 	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+
+	if(now_out != NULL){
+		*now_out = now;
+	}
 
 }
 

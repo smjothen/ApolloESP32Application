@@ -10,7 +10,7 @@ void zntp_init();
 void zntp_checkSyncStatus();
 bool zntp_IsSynced();
 struct tm zntp_GetLatestNTPTime();
-void zntp_GetSystemTime(char * buffer);
+void zntp_GetSystemTime(char * buffer, time_t *now_out);
 bool zntp_Get15MinutePoint();
 void zntp_restart();
 void zntp_stop();
