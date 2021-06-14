@@ -115,7 +115,6 @@ void sessionHandler_simulateOffline()
 
 
 static bool offlineCurrentSent = false;
-static uint32_t offlineTime = 0;
 void OfflineHandler()
 {
 
@@ -390,7 +389,7 @@ static void sessionHandler_task()
 
 		if(isOnline)
 		{
-			int sentOk = publish_telemetry_observation_on_change();
+			publish_telemetry_observation_on_change();
 
 			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
 			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))

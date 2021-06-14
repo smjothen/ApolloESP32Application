@@ -834,6 +834,7 @@ void HOLD_SetPhases(int setPhases)
 }
 int HOLD_GetSetPhases()
 {
+	//On IT-indicate number of used phases based on current measurement
 	if((mcuNetworkType == NETWORK_3P3W) && (holdSetPhases == 9))
 	{
 		if((currents[0] > 2.0) && ((currents[1] <= 2.0) || (currents[2] <= 2.0)))
@@ -847,8 +848,58 @@ int HOLD_GetSetPhases()
 		}
 	}
 
+	//In system mode the holdPhases is set from Cloud.
+	//In standalone the charging ID must be based on network type and phase rotation
+	if(storage_Get_Standalone())
+	{
+		//Return charging ID for 1P3W
+		if(mcuNetworkType == NETWORK_1P3W)
+		{
+			if(storage_Get_PhaseRotation() == 10) 		//L1-L3
+				return 8;
+			else if(storage_Get_PhaseRotation() == 11)	//L2-L3
+				return 6;
+			else if(storage_Get_PhaseRotation() == 12)	//L1-L2
+				return 5;
+		}
+		//Return charging ID for 1P4W
+		else if(mcuNetworkType == NETWORK_1P4W)
+		{
+			if(storage_Get_PhaseRotation() == 1) 		//L1-N
+				return 1;
+			else if(storage_Get_PhaseRotation() == 2)	//L2-N
+				return 2;
+			else if(storage_Get_PhaseRotation() == 3)	//L3-N
+				return 3;
+		}
+		//Return charging ID for 3P4W
+		else if(mcuNetworkType == NETWORK_3P4W)
+		{
+			if((storage_Get_PhaseRotation() == 4) || (storage_Get_PhaseRotation() == 5) || (storage_Get_PhaseRotation() == 6))		//L1-N
+				return 4;
+		}
+		else
+		{
+			return 0;
+		}
+
+	}
+
 	return holdSetPhases;
 }
+
+//On Pro the maximum number of phases can be configured.
+//On Go it depends on the measured wiring
+uint8_t GetMaxPhases()
+{
+	if((mcuNetworkType == NETWORK_1P3W) || (mcuNetworkType == NETWORK_1P4W))
+		return 1;
+	else if((mcuNetworkType == NETWORK_3P3W) || (mcuNetworkType == NETWORK_3P4W))
+		return 3;
+	else
+		return 0;
+}
+
 uint8_t MCU_GetCableType()
 {
 	return mcuCableType;

@@ -715,7 +715,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if(networkType != 0)
 				{
-					//TODO: Value is measured, handle overwrite from cloud
+					//TODO: Value is measured, handle overwrite from cloud. Must include MCU to hande IT3-phase correctly
 					/*MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, networkType);
 					if(ret == MsgWriteAck)
 					{
@@ -992,7 +992,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		ClearStartupSent();
 		responseStatus = 200;
 	}
-
+	/// SetSessionId
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/504/"))
 	{
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
@@ -1040,7 +1040,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		chargeSession_SetSessionIdFromCloud(sessionIdString);
 		responseStatus = 200;
 	}
-
+	/// SetUserUuid
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/505/"))
 	{
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
@@ -1577,44 +1577,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					SetSendRTC();
 				}
 
-				//StopChargingFinal = 506
-				/*else if(strstr(commandString,"Final") != NULL)
-				{
-					//ESP_LOGI(TAG, "Charging denied!");
-					MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);// = 508
-					if(ret == MsgCommandAck)
-					{
-						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
-						SetFinalStopActiveStatus(1);
-					}
-					else
-					{
-						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command FAILED");
-					}
-					responseStatus = 200;
-				}
-
-				//ResumeCharging = 507
-				else if(strstr(commandString,"Resume") != NULL)
-				{
-					//ESP_LOGI(TAG, "Charging denied!");
-					MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);// = 509
-					if(ret == MsgCommandAck)
-					{
-						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
-						SetFinalStopActiveStatus(0);
-
-					}
-					else
-					{
-						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command FAILED");
-					}
-					responseStatus = 200;
-				}*/
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))

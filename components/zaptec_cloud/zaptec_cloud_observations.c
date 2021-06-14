@@ -163,7 +163,7 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMaximum, storage_Get_CurrentInMaximum()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMinimum, storage_Get_CurrentInMinimum()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
+    add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)GetMaxPhases()));
     add_observation_to_collection(observations, create_uint32_t_observation(ChargerOfflinePhase, (uint32_t)storage_Get_DefaultOfflinePhase()));
     add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
 
@@ -190,9 +190,9 @@ int publish_debug_telemetry_observation_local_settings()
     else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
     	add_observation_to_collection(observations, create_observation(CommunicationMode, "LTE"));
 
-    uint8_t networkType = storage_Get_NetworkType();
-    if(networkType != 0)
-    	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
+    //uint8_t networkType = storage_Get_NetworkType();
+    //if(networkType != 0)
+    	//add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
     add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, MCU_StandAloneCurrent()));
     add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, storage_Get_DefaultOfflineCurrent()));
@@ -299,7 +299,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
 
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
-	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)storage_Get_MaxPhases()));
+	//add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)GetMaxPhases()));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
 
     /*These are sent at startup with localsettings.

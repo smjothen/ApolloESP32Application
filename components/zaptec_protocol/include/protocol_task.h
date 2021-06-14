@@ -48,6 +48,7 @@ uint8_t MCU_GetGridType();
 float MCU_GetChargeCurrentUserMax();
 void HOLD_SetPhases(int setPhases);
 int HOLD_GetSetPhases();
+uint8_t GetMaxPhases();
 uint8_t MCU_GetCableType();
 
 uint16_t MCU_GetPilotAvg();
