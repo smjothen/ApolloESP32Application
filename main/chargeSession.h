@@ -19,7 +19,7 @@ struct ChargeSession
 	char * SignedSession;//[1000];//8
 };
 
-
+void chargeSession_PrintSession();
 char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();

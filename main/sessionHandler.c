@@ -59,6 +59,11 @@ static bool pendingCloudAuthorization = false;
 static char pendingRFIDTag[DEFAULT_STR_SIZE]= {0};
 static bool isAuthorized = false;
 
+void SetPendingRFIDTag(char * pendingTag)
+{
+	strcpy(pendingRFIDTag, pendingTag);
+}
+
 void SetAuthorized(bool authFromCloud)
 {
 	isAuthorized = authFromCloud;
@@ -202,14 +207,16 @@ void sessionHandler_ClearOfflineCurrentSent()
 	offlineCurrentSent = false;
 }
 
-void PrintSession()
-{
-	ESP_LOGW(TAG,"\n SessionId: \t\t%s\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession_GetSessionId(), chargeSession_Get().Energy, chargeSession_Get().StartTime, chargeSession_Get().EndTime, chargeSession_Get().ReliableClock, chargeSession_Get().StoppedByRFID, chargeSession_Get().AuthenticationCode);
-}
-
 
 bool startupSent = false;
 bool setTimerSyncronization = false;
+
+static bool stoppedByCloud = false;
+
+void sessionHandler_SetStoppedByCloud(bool stateFromCloud)
+{
+	stoppedByCloud = stateFromCloud;
+}
 
 static void sessionHandler_task()
 {
@@ -241,6 +248,7 @@ static void sessionHandler_task()
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
+    bool sessionIDClearedByCloud = false;
 
     // Offline parameters
     uint32_t offlineTime = 0;
@@ -469,6 +477,11 @@ static void sessionHandler_task()
 		{
 			chargeSession_Start();
 		}
+		else if((currentCarChargeMode < eCAR_DISCONNECTED) && (sessionIDClearedByCloud == true))
+		{
+			sessionIDClearedByCloud = false;
+			chargeSession_Start();
+		}
 		else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
 		{
 			ESP_LOGW(TAG, "New session due to tag");
@@ -521,14 +534,14 @@ static void sessionHandler_task()
 			chargeSession_UpdateEnergy();
 
 		// Check if car connecting -> start a new session
-		if(((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED)) || (stoppedByRfid == true))
+		if(((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
 		{
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
 				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
-				PrintSession();
+				chargeSession_PrintSession();
 
 				//char completedSessionString[200] = {0};
 				memset(completedSessionString,0, LOG_STRING_SIZE);
@@ -551,9 +564,17 @@ static void sessionHandler_task()
 					}
 				}
 			}
-			//char empty[] = "\0";
-			//publish_string_observation(SessionIdentifier, empty);
 
+			//Reset if set
+			if(stoppedByCloud == true)
+			{
+				stoppedByCloud = false;
+				sessionIDClearedByCloud = true;
+				ESP_LOGE(TAG," Session ended by Cloud");
+
+				//char empty[] = "\0";
+				publish_string_observation(SessionIdentifier, NULL);
+			}
 			chargeSession_Clear();
 
 			NFCClearTag();
@@ -563,6 +584,12 @@ static void sessionHandler_task()
 		if((currentCarChargeMode == eCAR_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
 		{
 			SetFinalStopActiveStatus(0);
+		}
+
+		//If session is cleared while car is disconnecting, ensure a new session is not generated incorrectly
+		if(currentCarChargeMode == eCAR_DISCONNECTED)
+		{
+			sessionIDClearedByCloud = false;
 		}
 
 		previousCarChargeMode = currentCarChargeMode;
@@ -669,7 +696,7 @@ static void sessionHandler_task()
 				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  *******", rssi, dataInterval);
 			}
 
-			PrintSession();
+			chargeSession_PrintSession();
 
 			statusCounter = 0;
 		}

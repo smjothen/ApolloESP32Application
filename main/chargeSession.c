@@ -23,6 +23,8 @@ static bool hasNewSessionIdFromCloud = false;
 
 static char * basicOCMF = "OCMF|{}";
 
+static char sidOrigin[6] = "     \0";
+
 static void ChargeSession_Set_GUID()
 {
 	volatile uint32_t GUID[4] = {0};
@@ -36,9 +38,17 @@ static void ChargeSession_Set_GUID()
 	
 	sprintf(chargeSession.SessionId, "%08x-%04x-%04x-%04x-%04x%08x", GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
 	//hasNewSessionIdFromCloud = true;
-	ESP_LOGI(TAG, "GUID: %s", chargeSession.SessionId);
+	strcpy(sidOrigin, "local");
+	ESP_LOGI(TAG, "GUID: %s (%s)", chargeSession.SessionId, sidOrigin);
 
+	hasNewSessionIdFromCloud = false;
 }
+
+void chargeSession_PrintSession()
+{
+	ESP_LOGW(TAG,"\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
+}
+
 
 char * chargeSession_GetSessionId()
 {
@@ -91,7 +101,10 @@ void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 
 	strcpy(chargeSession.SessionId, sessionIdFromCloud);
 	hasNewSessionIdFromCloud = true;
-	ESP_LOGI(TAG, "SessionId: %s , len: %d\n", chargeSession.SessionId, strlen(chargeSession.SessionId));
+
+	strcpy(sidOrigin, "cloud");
+
+	ESP_LOGI(TAG, "SessionId: %s (%s), len: %d\n", chargeSession.SessionId, sidOrigin, strlen(chargeSession.SessionId));
 
 	if(chargeSession.StartTime[0] == '\0')
 	{
@@ -123,6 +136,7 @@ void chargeSession_Start()
 	if((strlen(chargeSession.SessionId) == 36) && (readErr == ESP_OK))
 	{
 		ESP_LOGI(TAG, "chargeSession_Start() using resetSession");
+		strcpy(sidOrigin, "file ");
 	}
 	else
 	{
@@ -202,6 +216,7 @@ void chargeSession_Clear()
 	memset(&chargeSession, 0, sizeof(chargeSession));
 	ESP_LOGI(TAG, "Clearing csResetSession file");
 
+	strcpy(sidOrigin, "     ");
 	hasNewSessionIdFromCloud = false;
 }
 

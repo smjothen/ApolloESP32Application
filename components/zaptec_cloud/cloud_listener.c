@@ -1004,6 +1004,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			if(ret == MsgCommandAck)
 			{
 				ESP_LOGI(TAG, "MCU ResetSession command OK");
+				sessionHandler_SetStoppedByCloud(true);
+
 				return 200;
 			}
 			else
@@ -1055,6 +1057,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				MessageType ret = MCU_SendCommandId(CommandResetSession);
 				if(ret == MsgCommandAck)
 				{
+					chargeSession_ClearAuthenticationCode();
 					ESP_LOGI(TAG, "MCU ResetSession command OK");
 					return 200;
 				}
@@ -1070,8 +1073,22 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					char newAuthCode[37] = {0};
 					strncpy(newAuthCode, &commandEvent->data[2], commandEvent->data_len-4);
-					chargeSession_SetAuthenticationCode(newAuthCode);
-					publish_debug_telemetry_observation_NFC_tag_id(newAuthCode);
+					MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+					if(ret == MsgCommandAck)
+					{
+						//chargeSession_SetAuthenticationCode(newAuthCode);
+						SetPendingRFIDTag(newAuthCode);
+						SetAuthorized(true);
+						publish_debug_telemetry_observation_NFC_tag_id(newAuthCode);
+						publish_debug_telemetry_observation_ChargingStateParameters();
+						ESP_LOGI(TAG, "MCU AuthorizationGranted command OK");
+						return 200;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU AuthorizationGranted command FAILED");
+						return 400;
+					}
 				}
 			}
 		}

@@ -36,7 +36,7 @@
 
 		TransmitInterval = 145,
 		TransmitChangeLevel = 146,
-
+		PulseInterval = 147,
 		CommunicationMode  = 150,
 		PermanentCableLock = 151,
 		ProductCode = 152,
