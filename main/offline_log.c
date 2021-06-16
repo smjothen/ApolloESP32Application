@@ -57,6 +57,25 @@ bool mount_tmp()
 	return mounted;
 }
 
+int update_header(FILE *fp, int start, int end){
+    struct LogHeader new_header = {.start=start, .end=end, .crc=0};
+    uint32_t crc =  crc32_normal(0, &new_header, sizeof(new_header));
+    new_header.crc = crc;
+    fseek(fp, 0, SEEK_SET);
+    ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
+    int write_result = fwrite(&new_header, 1,  sizeof(new_header), fp);
+    ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
+    ESP_LOGI(TAG, "writing header %d %d %u (s:%d, res:%d)    <<<<   ", 
+        new_header.start, new_header.end, new_header.crc, sizeof(new_header), write_result
+    );
+
+    if(write_result!=sizeof(new_header)){
+        return -1;
+    }
+
+    return 0;
+}
+
 int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     struct LogHeader head_in_file = {0};
     fseek(fp, 0, SEEK_SET);
@@ -78,21 +97,13 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     }else{
         ESP_LOGE(TAG, "INVALID HEAD, staring log anew");
 
-        struct LogHeader new_header = {.start=0, .end=0, .crc=0};
-        uint32_t crc =  crc32_normal(0, &new_header, sizeof(new_header));
-        new_header.crc = crc;
-        fseek(fp, 0, SEEK_SET);
-        ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-        int write_result = fwrite(&new_header, 1,  sizeof(new_header), fp);
-        ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-        ESP_LOGI(TAG, "writing header %d %d %u (s:%d, res:%d)    <<<<   ", 
-            new_header.start, new_header.end, new_header.crc, sizeof(new_header), write_result
-        );
-
-
-
+        int new_header_result = update_header(fp, 0, 0);
         *start_out = 0;
         *end_out = 0;
+
+        if(new_header_result<0){
+            return -1;
+        }
     }
 
     return 0;
@@ -158,8 +169,16 @@ void append_offline_energy(int timestamp, double energy){
 
     ESP_LOGI(TAG, "writing to file with crc=%u", line.crc);
 
-    //fwrite(&line, sizeof(struct LogLine), 1, fp);
+    int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_end);
+    fseek(fp, start_of_line, SEEK_SET);
+    int bytes_written = fwrite(&line, 1, sizeof(line), fp);
+    log_end++;
+    update_header(fp, log_start, log_end);
+    ESP_LOGI(TAG, "wrote %d bytes @ %d; updated header to (%d, %d)",
+        bytes_written, start_of_line, log_start, log_end
+    );
 
+ 
     int close_result = fclose(fp);
     ESP_LOGI(TAG, "closed log file %d", close_result);
 }
