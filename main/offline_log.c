@@ -162,6 +162,13 @@ void append_offline_energy(int timestamp, double energy){
     if(fp==NULL)
         return;
 
+    int new_log_end = (log_end+1) % max_log_items;
+    if(new_log_end == log_start){
+        // insertion would fill the buffer, and cant tell if it is full or empty
+        // move first item idx to compensate
+        log_start = (log_start+1) % max_log_items;
+    }
+
     struct LogLine line = {.energy = energy, .timestamp = timestamp, .crc = 0};
 
     uint32_t crc = crc32_normal(0, &line, sizeof(struct LogLine));
@@ -172,13 +179,46 @@ void append_offline_energy(int timestamp, double energy){
     int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_end);
     fseek(fp, start_of_line, SEEK_SET);
     int bytes_written = fwrite(&line, 1, sizeof(line), fp);
-    log_end++;
-    update_header(fp, log_start, log_end);
+
+    update_header(fp, log_start, new_log_end);
     ESP_LOGI(TAG, "wrote %d bytes @ %d; updated header to (%d, %d)",
-        bytes_written, start_of_line, log_start, log_end
+        bytes_written, start_of_line, log_start, new_log_end
     );
 
  
     int close_result = fclose(fp);
     ESP_LOGI(TAG, "closed log file %d", close_result);
+}
+
+int attempt_log_send(void){
+    ESP_LOGI(TAG, "log data:");
+    
+    int log_start;
+    int log_end;
+    FILE *fp = init_log(&log_start, &log_end);
+
+    while(log_start!=log_end){
+        struct LogLine line;
+        int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_start);
+        fseek(fp, start_of_line, SEEK_SET);
+        int read_result = fread(&line, 1,sizeof(line),  fp);
+
+        uint32_t crc_on_file = line.crc;
+        line.crc = 0;
+        uint32_t calculated_crc = crc32_normal(0, &line, sizeof(line));
+
+
+        ESP_LOGI(TAG, "LogLine@%d>%d: E=%f, t=%d, crc=%d, valid=%d, read=%d", 
+            log_start, start_of_line,
+            line.energy, line.timestamp,
+            crc_on_file, crc_on_file==calculated_crc, read_result
+        );
+
+        log_start = (log_start+1) % max_log_items;        
+    }
+
+    
+	int close_result = fclose(fp);
+    ESP_LOGI(TAG, "closed log file %d", close_result);
+    return 0;
 }
