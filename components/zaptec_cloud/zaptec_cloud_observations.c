@@ -490,6 +490,9 @@ static float warningValue = 0;
 static uint8_t maxRTCSend = 0;
 static uint8_t previousFinalStopActiveStatus = 0xff;
 
+static uint32_t previousTransmitInterval = 0;
+static uint32_t previousPulseInterval = 0;
+
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
 
@@ -745,6 +748,22 @@ int publish_telemetry_observation_on_change(){
 		previousFinalStopActiveStatus = finalStopActiveStatus;
 		isChange = true;
 	}
+
+    uint32_t transmitInterval = storage_Get_TransmitInterval();
+    if(previousTransmitInterval != transmitInterval)
+    {
+    	add_observation_to_collection(observations, create_uint32_t_observation(TransmitInterval, transmitInterval));
+    	previousTransmitInterval = transmitInterval;
+    	isChange = true;
+    }
+
+     uint32_t pulseInterval = storage_Get_PulseInterval();
+	 if(previousPulseInterval != pulseInterval)
+	 {
+		add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
+		previousPulseInterval = pulseInterval;
+		isChange = true;
+	 }
 
 	//Check ret and retry?
     int ret = 0;

@@ -23,7 +23,7 @@
 
 static const char *TAG = "SESSION    ";
 
-static uint32_t dataTestInterval = 0;
+//static uint32_t dataTestInterval = 0;
 #define RESEND_REQUEST_TIMER_LIMIT 150
 
 
@@ -49,10 +49,10 @@ void on_send_signed_meter_value()
 }
 
 
-void SetDataInterval(int newDataInterval)
+/*void SetDataInterval(int newDataInterval)
 {
 	dataTestInterval = newDataInterval;
-}
+}*/
 
 static bool authorizationRequired = true;
 static bool pendingCloudAuthorization = false;
@@ -397,7 +397,11 @@ static void sessionHandler_task()
 
 		if(isOnline)
 		{
-			publish_telemetry_observation_on_change();
+			//Allow disabling send on change in standalone when TransmitInterval is 0
+			if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
+				publish_telemetry_observation_on_change();
+			else
+				ESP_LOGE(TAG, "TransmitInterval = 0 in Standalone");
 
 			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
 			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
@@ -602,7 +606,7 @@ static void sessionHandler_task()
 			if (networkInterface == eCONNECTION_WIFI)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 3600;	//When car is disconnected or not charging
+					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
 				else
 					dataInterval = 900;	//When car is in charging state
 
@@ -610,7 +614,7 @@ static void sessionHandler_task()
 			else if (networkInterface == eCONNECTION_LTE)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = 3600;	//When car is disconnected or not charging
+					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
 				else
 					dataInterval = 900;	//When car is in charging state
 
@@ -620,10 +624,10 @@ static void sessionHandler_task()
 		}
 
 		//Test-mode overrides default
-		if(dataTestInterval != 0)
-			dataInterval = dataTestInterval;
+		//if(dataTestInterval != 0)
+		//	dataInterval = dataTestInterval;
 
-		if(dataCounter >= dataInterval)
+		if((dataCounter >= dataInterval) && (storage_Get_TransmitInterval() > 0))
 		{
 
 			if (isMqttConnected() == true)
@@ -668,7 +672,7 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		if(pulseCounter >= 60)
+		if((pulseCounter >= storage_Get_PulseInterval()) || (!previousIsOnline && isOnline))
 		{
 			if (isMqttConnected() == true)
 			{
@@ -684,7 +688,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d *******", GetCellularQuality(), dataInterval);
+				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  Pulse: %d *******", GetCellularQuality(), dataInterval, storage_Get_PulseInterval());
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -693,7 +697,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  *******", rssi, dataInterval);
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, storage_Get_PulseInterval());
 			}
 
 			chargeSession_PrintSession();

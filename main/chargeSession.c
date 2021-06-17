@@ -46,7 +46,8 @@ static void ChargeSession_Set_GUID()
 
 void chargeSession_PrintSession()
 {
-	ESP_LOGW(TAG,"\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
+	//ESP_LOGW(TAG," %s - %s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH");
+	ESP_LOGW(TAG," %s - %s\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
 }
 
 

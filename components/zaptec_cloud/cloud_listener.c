@@ -1293,10 +1293,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"LogInterval ") != NULL)
 				{
 					char *endptr;
-					int interval = (int)strtol(commandString+14, &endptr, 10);
-					if((86400 > interval) && (interval > 0))
+					uint32_t interval = (uint32_t)strtol(commandString+14, &endptr, 10);
+					if(((86400 > interval) && (interval > 10)) || (interval == 0))
 					{
-						SetDataInterval(interval);
+						//SetDataInterval(interval);
+						storage_Set_TransmitInterval(interval);
+						storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
 						responseStatus = 200;
 					}
@@ -1306,12 +1308,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 				}
 				// Logging interval
-				else if(strstr(commandString,"LogInterval") != NULL)
+				/*else if(strstr(commandString,"LogInterval") != NULL)
 				{
-					SetDataInterval(0);
+					//SetDataInterval(0);
+					storage_Set_TransmitInterval(3600);
 					ESP_LOGI(TAG, "Using default LogInterval");
 					responseStatus = 200;
-				}
+				}*/
 				else if(strstr(commandString,"ClearServoCalibration") != NULL)
 				{
 					ESP_LOGI(TAG, "ClearServoCalibration");
@@ -1592,6 +1595,22 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"RTC") != NULL)
 				{
 					SetSendRTC();
+				}
+				else if(strstr(commandString,"PulseInterval ") != NULL)
+				{
+					char *endptr;
+					uint32_t interval = (uint32_t)strtol(commandString+16, &endptr, 10);
+					if((3600 >= interval) && (interval >= 10))
+					{
+						storage_Set_PulseInterval(interval);
+						storage_SaveConfiguration();
+						ESP_LOGI(TAG, "Setting Pulse interval %d", interval);
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
 				}
 
 			}

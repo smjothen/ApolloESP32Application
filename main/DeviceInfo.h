@@ -98,6 +98,7 @@ struct Configuration
     uint32_t diagnosticsMode;
 	uint32_t transmitInterval;
 	float transmitChangeLevel;
+	uint32_t pulseInterval;
 
 
 	// Local settings

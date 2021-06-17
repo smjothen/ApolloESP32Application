@@ -71,7 +71,7 @@ void storage_Init_Configuration()
 
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 
-	configurationStruct.transmitInterval 			= 120;
+	configurationStruct.transmitInterval 			= 3600;
 	configurationStruct.transmitChangeLevel 		= 1.0;
 	configurationStruct.diagnosticsMode				= 0;
 
@@ -89,6 +89,7 @@ void storage_Init_Configuration()
 	configurationStruct.phaseRotation				= 1;
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
+	configurationStruct.pulseInterval				= 27;
 }
 
 
@@ -221,6 +222,10 @@ void storage_Set_NetworkTypeOverride(uint8_t newValue)
 	configurationStruct.networkTypeOverride = newValue;
 }
 
+void storage_Set_PulseInterval(uint32_t newValue)
+{
+	configurationStruct.pulseInterval = newValue;
+}
 
 
 //****************************************************
@@ -291,6 +296,17 @@ uint32_t storage_Get_DiagnosticsMode()
 
 uint32_t storage_Get_TransmitInterval()
 {
+	//Sanity check. On old chargers the default is 120. Don't use this frequent defaults when updated with nvs read parameter.
+	if (configurationStruct.transmitInterval == 120)
+		configurationStruct.transmitInterval = 3600;
+	//If 0, return (disable logging)
+	else if(configurationStruct.transmitInterval == 0)
+		return configurationStruct.transmitInterval;
+	else if (configurationStruct.transmitInterval < 10)
+		configurationStruct.transmitInterval = 10;
+	else if (configurationStruct.transmitInterval > 86400)
+		configurationStruct.transmitInterval = 86400;
+
 	return configurationStruct.transmitInterval;
 }
 
@@ -361,6 +377,18 @@ uint8_t storage_Get_NetworkTypeOverride()
 	return configurationStruct.networkTypeOverride;
 }
 
+uint32_t storage_Get_PulseInterval()
+{
+	//Sanity check. 0 is default on new chargers. Set it to 60 as default for now.
+	if (configurationStruct.pulseInterval == 0)
+		configurationStruct.pulseInterval = 60;
+	else if (configurationStruct.pulseInterval < 10)
+		configurationStruct.pulseInterval = 10;
+	else if (configurationStruct.pulseInterval > 3600)
+		configurationStruct.pulseInterval = 3600;
+
+	return configurationStruct.pulseInterval;
+}
 
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
 {
@@ -433,6 +461,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "PhaseRotation", configurationStruct.phaseRotation);
 	err += nvs_set_u8(configuration_handle, "NetworkType", configurationStruct.networkType);
 	err += nvs_set_u8(configuration_handle, "NetworkTypeOv", configurationStruct.networkTypeOverride);
+	err += nvs_set_u32(configuration_handle, "PulseInterval", configurationStruct.pulseInterval);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -480,12 +509,20 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_zfloat(configuration_handle, "maxInstCurrConf", &configurationStruct.maxInstallationCurrentConfig);
 	err += nvs_get_u8(configuration_handle, "PhaseRotation", &configurationStruct.phaseRotation);
 	err += nvs_get_u8(configuration_handle, "NetworkType", &configurationStruct.networkType);
+
+	//Do not return error;
 	nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
+	nvs_get_u32(configuration_handle, "PulseInterval", &configurationStruct.pulseInterval);
+
+	ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
+	ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+
 
 	//When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
 
+	//Do not make changes that return error;
 	return err;
 }
 
@@ -512,6 +549,9 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
+
+	ESP_LOGI(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
+	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 
 
 	//ESP_LOGW(TAG, "*********************************");
