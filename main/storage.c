@@ -89,7 +89,7 @@ void storage_Init_Configuration()
 	configurationStruct.phaseRotation				= 1;
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
-	configurationStruct.pulseInterval				= 27;
+	configurationStruct.pulseInterval				= 60;
 }
 
 
@@ -550,7 +550,7 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
 
-	ESP_LOGI(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
+	ESP_LOGI(TAG, "TransmitInterval: 			\t%i", configurationStruct.transmitInterval);
 	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 
 
