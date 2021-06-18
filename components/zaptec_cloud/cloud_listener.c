@@ -1686,6 +1686,7 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 
 static int ridNr = 4199;
 static bool isFirstConnection = false;
+static int incrementalRefreshTimeout = 0;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     mqtt_client = event->client;
@@ -1747,6 +1748,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         resetCounter = 0;
 
         mqttConnected = true;
+        //When connected, reset connection timeout to default
+        mqtt_config.reconnect_timeout_ms = 10000;
+        esp_mqtt_set_config(mqtt_client, &mqtt_config);
+        incrementalRefreshTimeout = 0;
 
         break;
     case MQTT_EVENT_DISCONNECTED:
@@ -1918,6 +1923,11 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
+    		incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error.
+    		mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
+    		esp_mqtt_set_config(mqtt_client, &mqtt_config);
+    		ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
+
     		if(resetCounter == 5)
 			{
     			ESP_LOGI(TAG, "Refreshing Wifi Connected");
@@ -1926,6 +1936,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 			if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 70) || (resetCounter == 90))
 			{
+
 
 				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
 				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
