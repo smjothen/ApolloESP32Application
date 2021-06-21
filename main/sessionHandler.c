@@ -24,7 +24,7 @@
 static const char *TAG = "SESSION    ";
 
 //static uint32_t dataTestInterval = 0;
-#define RESEND_REQUEST_TIMER_LIMIT 150
+#define RESEND_REQUEST_TIMER_LIMIT 90//150
 
 
 static char * completedSessionString = NULL;

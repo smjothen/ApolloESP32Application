@@ -834,20 +834,6 @@ void HOLD_SetPhases(int setPhases)
 }
 int HOLD_GetSetPhases()
 {
-	//On IT-indicate number of used phases based on current measurement
-	if((mcuNetworkType == NETWORK_3P3W) && (holdSetPhases == 9))
-	{
-		if((currents[0] > 2.0) && ((currents[1] <= 2.0) || (currents[2] <= 2.0)))
-		{
-			if(storage_Get_PhaseRotation() == 13)
-				return 5;
-			else if(storage_Get_PhaseRotation() == 14)
-				return 6;
-			else if(storage_Get_PhaseRotation() == 15)
-				return 8;
-		}
-	}
-
 	//In system mode the holdPhases is set from Cloud.
 	//In standalone the charging ID must be based on network type and phase rotation
 	if(storage_Get_Standalone())
@@ -862,6 +848,13 @@ int HOLD_GetSetPhases()
 			else if(storage_Get_PhaseRotation() == 12)	//L1-L2
 				return 5;
 		}
+
+		//Return charging ID for 3P3W
+		else if(mcuNetworkType == NETWORK_3P3W)
+		{
+			return 9;
+		}
+
 		//Return charging ID for 1P4W
 		else if(mcuNetworkType == NETWORK_1P4W)
 		{
@@ -875,9 +868,9 @@ int HOLD_GetSetPhases()
 		//Return charging ID for 3P4W
 		else if(mcuNetworkType == NETWORK_3P4W)
 		{
-			if((storage_Get_PhaseRotation() == 4) || (storage_Get_PhaseRotation() == 5) || (storage_Get_PhaseRotation() == 6))		//L1-N
-				return 4;
+			return 4;
 		}
+
 		else
 		{
 			return 0;
