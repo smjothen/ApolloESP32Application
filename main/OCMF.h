@@ -11,6 +11,7 @@ extern "C" {
 
 void OCMF_Init();
 int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out);
+int  OCMF_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in);
 char * OCMF_CreateNewOCMFLog();
 cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st);
 int OCMF_FinalizeOCMFLog();

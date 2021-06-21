@@ -7,6 +7,10 @@
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 
+#include "OCMF.h"
+#include "zaptec_cloud_observations.h"
+#include "zaptec_protocol_serialisation.h"
+
 const char *tmp_path = "/tmp";
 const char *log_path = "/tmp/log554.bin";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
@@ -192,10 +196,14 @@ void append_offline_energy(int timestamp, double energy){
 
 int attempt_log_send(void){
     ESP_LOGI(TAG, "log data:");
+
+    int result = -1;
     
     int log_start;
     int log_end;
     FILE *fp = init_log(&log_start, &log_end);
+
+    char ocmf_text[200] = {0};
 
     while(log_start!=log_end){
         struct LogLine line;
@@ -214,11 +222,39 @@ int attempt_log_send(void){
             crc_on_file, crc_on_file==calculated_crc, read_result
         );
 
+        if(crc_on_file==calculated_crc){
+            OCMF_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
+            int publish_result = publish_string_observation_blocked(
+			    SignedMeterValue, ocmf_text, 2000
+		    );
+
+            if(publish_result<0){
+                ESP_LOGI(TAG, "publishing line failed, aborting log dump");
+                break;
+            }
+
+            int new_log_start = (log_start + 1) % max_log_items;
+            update_header(fp, new_log_start, log_end);
+            fflush(fp);
+            
+
+            ESP_LOGI(TAG, "line published");
+
+
+        }else{
+            ESP_LOGI(TAG, "skipped corrupt line");
+        }
+
         log_start = (log_start+1) % max_log_items;        
     }
 
+    if(log_start==log_end){
+        result = 0;
+        if(log_start!=0)
+            update_header(fp, 0, 0);
+    }
     
 	int close_result = fclose(fp);
     ESP_LOGI(TAG, "closed log file %d", close_result);
-    return 0;
+    return result;
 }
