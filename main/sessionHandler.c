@@ -20,6 +20,7 @@
 #include "OCMF.h"
 #include "freertos/event_groups.h"
 #include "../components/ntp/zntp.h"
+#include "offline_log.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -34,16 +35,44 @@ TimerHandle_t signedMeterValues_timer;
 //Send every 15 minutes - at XX:00, XX:15, XX:30 and XX:45.
 void on_send_signed_meter_value()
 {
-	if(MCU_GetchargeMode() == eCAR_CHARGING)
-	{
-		ESP_LOGW(TAG, "***** Sending signed meter values *****");
+	char OCMPMessage[200] = {0};
+	time_t time;
+	double energy;
 
-		char OCMPMessage[200] = {0};
-		OCMF_CreateNewOCMFMessage(OCMPMessage);
+	bool state_charging = MCU_GetchargeMode() == eCAR_CHARGING;
+	bool state_log_empty = false;
+	int publish_result = -1;
 
-		if (isMqttConnected() == true)
-			publish_string_observation(SignedMeterValue, OCMPMessage);
+	if(state_charging){
+		// sample energy now, dumping the log may be to slow to get the time aligned energy
+		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
+	}
 
+	ESP_LOGI(TAG, "***** Clearing energy log *****");
+
+	if(!isMqttConnected()){
+		// do not attempt sending data when we know that the system is offline
+	}else if(attempt_log_send()==0){
+		ESP_LOGI(TAG, "energy log empty");
+		state_log_empty = true;
+	}
+
+	if (state_charging && state_log_empty){
+		publish_result = publish_string_observation_blocked(
+			SignedMeterValue, OCMPMessage, 2000
+		);
+
+		if(publish_result<0){
+			append_offline_energy(time, energy);
+		}
+
+	}else if(state_charging){
+		ESP_LOGI(TAG, "failed to empty log, appending new measure");
+		append_offline_energy(time, energy);
+	}
+
+	if(state_charging){
+		// add to log late to increase chance of consistent logs across observation types
 		OCMF_AddElementToOCMFLog("T", "G");
 	}
 }
@@ -208,6 +237,25 @@ void PrintSession()
 	ESP_LOGW(TAG,"\n SessionId: \t\t%s\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", chargeSession_GetSessionId(), chargeSession_Get().Energy, chargeSession_Get().StartTime, chargeSession_Get().EndTime, chargeSession_Get().ReliableClock, chargeSession_Get().StoppedByRFID, chargeSession_Get().AuthenticationCode);
 }
 
+SemaphoreHandle_t ocmf_sync_semaphore;
+
+void ocmf_sync_task(void * pvParameters){
+	while(true){
+		if( xSemaphoreTake( ocmf_sync_semaphore, portMAX_DELAY ) == pdTRUE ){
+			ESP_LOGI(TAG, "triggered 15 min sync with semaphore");
+			on_send_signed_meter_value();
+		}else{
+			ESP_LOGE(TAG, "bad semaphore??");
+		}
+	}
+
+}
+
+void on_ocmf_sync_time(TimerHandle_t xTimer){
+	xSemaphoreGive(ocmf_sync_semaphore);
+}
+
+
 
 bool startupSent = false;
 bool setTimerSyncronization = false;
@@ -254,18 +302,18 @@ static void sessionHandler_task()
     uint32_t secondsSinceSync = 0;
 
     TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
-    signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_send_signed_meter_value );
+    signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
 	{
 
-		if((!setTimerSyncronization) && zntp_IsSynced())
+		if((!setTimerSyncronization))
 		{
 			if(zntp_Get15MinutePoint())
 			{
 				ESP_LOGW(TAG, " 15 Min sync!");
 				xTimerReset( signedMeterValues_timer, portMAX_DELAY );
-				on_send_signed_meter_value();
+				on_ocmf_sync_time(NULL);
 
 				setTimerSyncronization = true;
 				secondsSinceSync = 0;
@@ -870,7 +918,11 @@ int sessionHandler_GetStackWatermark()
 
 void sessionHandler_init(){
 
+	ocmf_sync_semaphore = xSemaphoreCreateBinary();
+	xTaskCreate(ocmf_sync_task, "ocmf", 3000, NULL, 3, NULL);
+
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000
 	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
+
 }

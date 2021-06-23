@@ -71,20 +71,28 @@ struct tm zntp_GetLatestNTPTime()
 	return timeinfo;
 }
 
+void zntp_format_time(char *buffer, time_t time_in){
+	struct tm time_elements = { 0 };
+	localtime_r(&time_in, &time_elements);
+
+	setenv("TZ", "UTC-0", 1);
+	tzset();
+	localtime_r(&time_in, &time_elements);
+	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &time_elements);
+}
+
 static struct tm systemTime = { 0 };
-void zntp_GetSystemTime(char * buffer)
+void zntp_GetSystemTime(char * buffer, time_t *now_out)
 {
 	time_t now = 0;
 
 	time(&now);
-	localtime_r(&now, &systemTime);
-
-	//char strftime_buf[64];
-	setenv("TZ", "UTC-0", 1);
-	tzset();
-	localtime_r(&now, &systemTime);
-	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
+	zntp_format_time(buffer, now);
 	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+
+	if(now_out != NULL){
+		*now_out = now;
+	}
 
 }
 

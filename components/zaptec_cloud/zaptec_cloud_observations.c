@@ -770,6 +770,10 @@ int publish_string_observation(int observationId, char *message){
     return publish_json(create_observation(observationId, message));
 }
 
+int publish_string_observation_blocked(int observationId, char *message, int timeout_ms){
+    return publish_json_blocked(create_observation(observationId, message), timeout_ms);
+}
+
 int publish_diagnostics_observation(char *message){
     return publish_json(create_observation(808, message));
 }
