@@ -15,7 +15,7 @@ const char *tmp_path = "/tmp";
 const char *log_path = "/tmp/log554.bin";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
-static const int max_log_items = 10;
+static const int max_log_items = 1000;
 
 struct LogHeader {
     int start;

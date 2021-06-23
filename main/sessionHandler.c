@@ -288,15 +288,13 @@ static void sessionHandler_task()
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
 
-    TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //15 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
-	
-	xTimerStart(signedMeterValues_timer, refresh_ticks);//dev only
 
 	while (1)
 	{
 
-		if((!setTimerSyncronization) && zntp_IsSynced())
+		if((!setTimerSyncronization))
 		{
 			if(zntp_Get15MinutePoint())
 			{
