@@ -13,6 +13,8 @@ struct DeviceInfo i2cGetLoadedDeviceInfo();
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo);
 bool i2CDeviceInfoIsLoaded();
 void I2CDevicesInit();
+uint8_t i2cIsAuthenticated();
+void i2cClearAuthentication();
 
 esp_err_t i2cWriteDeviceInfoToEEPROM(struct DeviceInfo newDeviceInfo);
 struct DeviceInfo i2cReadDeviceInfoFromEEPROM();

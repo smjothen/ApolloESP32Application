@@ -160,6 +160,7 @@ int publish_debug_telemetry_observation_cloud_settings()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, storage_Get_AuthenticationRequired()));
+    add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, storage_ReadNrofTagsOnFile()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMaximum, storage_Get_CurrentInMaximum()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMinimum, storage_Get_CurrentInMinimum()));
 

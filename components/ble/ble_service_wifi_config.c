@@ -1266,8 +1266,24 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		int command = atoi((char*)COMMAND_val);
 		if(command == CommandUpgradeFirmware)
 		{
+    	    //Blink with LED
+			ESP_LOGI(TAG, "MCU CommandIndicateOk command");
+			MessageType ret = MCU_SendCommandId(CommandIndicateOk);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU CommandIndicateOk OK. ");
+			}
+			else
+			{
+				ESP_LOGI(TAG, "MCU CommandIndicateOk FAILED");
+			}
+
 			ESP_LOGI(TAG, "Update firmware command %i", command);
-			start_segmented_ota_if_new_version();
+			ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+			if(ret == MsgCommandAck)
+			{
+				start_segmented_ota_if_new_version();
+			}
 		}
 		else if(command == CommandSwReboot)
 		{
@@ -1306,6 +1322,20 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 			pinRetryCounter = 0;
 			AUTH_SERV_CHAR_val[0] = '1';
+
+
+			//Blink with LED
+			ESP_LOGI(TAG, "App connected command");
+			MessageType ret = MCU_SendCommandId(CommandIndicateAppConnect);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU App connected command OK. ");
+			}
+			else
+			{
+				ESP_LOGI(TAG, "MCU App connected command FAILED");
+			}
+
 		}
 		else
 		{

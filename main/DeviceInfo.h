@@ -29,7 +29,7 @@ char * GetSoftwareVersionBLE();
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"
 
-#define MAX_NR_OF_RFID_TAGS 20
+#define MAX_NR_OF_RFID_TAGS 12
 
 struct RFIDTokens{
 	char *Tag;//[37];

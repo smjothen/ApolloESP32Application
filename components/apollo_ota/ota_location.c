@@ -166,6 +166,7 @@ int get_image_location(char *location, int buffersize, char * version)
 {
     char url [100];
     snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    //snprintf ( url, 100, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);
 
@@ -179,6 +180,7 @@ int get_image_location(char *location, int buffersize, char * version)
         .user_data = local_response_buffer,
 		.use_global_ca_store = true,
         //.cert_pem = (char *)server_cert_pem_start,
+		//.transport_type = HTTP_TRANSPORT_OVER_SSL,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
     };

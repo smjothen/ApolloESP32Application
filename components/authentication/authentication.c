@@ -9,13 +9,15 @@
 
 static const char *TAG = "AUTH     ";
 
-#define MAX_NR_OF_TAGS 11
-
 int nrOfUsedTags = 0;
+
+static uint8_t isAuthenticationSet = 0;
+static uint8_t previousIsAuthenticationSet = 0;
 
 void authentication_Init()
 {
-	//storage_ReadIDTags();
+	isAuthenticationSet = storage_Get_AuthenticationRequired();
+	previousIsAuthenticationSet = isAuthenticationSet;
 }
 
 
@@ -48,7 +50,7 @@ void authentication_DeleteTag(struct TagItem tagItem)
 
 int authentication_GetNrOfFreeTags()
 {
-	return (MAX_NR_OF_TAGS - nrOfUsedTags);
+	return (MAX_NR_OF_RFID_TAGS - nrOfUsedTags);
 }
 
 
@@ -94,10 +96,23 @@ int authentication_ParseOfflineList(char * message, int message_len)
 		if(token_array_size > 11)
 			token_array_size = 11;
 
-		bool emptyList = false;
+		//bool emptyList = false;
 
 		if(token_array_size > 0)
 		{
+
+			isAuthenticationSet = storage_Get_AuthenticationRequired();
+			if((isAuthenticationSet == 1) && (previousIsAuthenticationSet == 0))
+			{
+				esp_err_t err = storage_clearAllRFIDTagsOnFile();
+				if(err == ESP_OK)
+					ESP_LOGW(TAG, "Setting Auth -> remove [*]. Erase OK: %d ", err);
+				else
+					ESP_LOGE(TAG, "Setting Auth -> remove [*]. Erase ERROR: %d when erasing all tags", err);
+			}
+			previousIsAuthenticationSet = isAuthenticationSet;
+
+
 			cJSON *arrayItem = NULL;
 			for (int i=0;i<token_array_size;i++) {
 				arrayItem = cJSON_GetArrayItem(tokens,i);
@@ -107,7 +122,10 @@ int authentication_ParseOfflineList(char * message, int message_len)
 					rfidTokens[i].Tag = cJSON_GetObjectItem(arrayItem,"Tag")->valuestring;
 
 					//Check for clear message
-					if((strcmp(rfidTokens[i].Tag, "*") == 0) && (token_array_size == 1))
+					//if((strcmp(rfidTokens[i].Tag, "*") == 0) && (token_array_size == 1))
+
+					//Ensure that if a single tag is added or removed, that the '*' tag is not cleared when "Disable authorization in offline" is set in portal"
+					if((token_array_size == 1) && (type == 0))
 					{
 						esp_err_t err = storage_clearAllRFIDTagsOnFile();
 						if(err == ESP_OK)
@@ -115,7 +133,7 @@ int authentication_ParseOfflineList(char * message, int message_len)
 						else
 							ESP_LOGE(TAG, "Erase ERROR: %d when erasing all tags", err);
 
-						emptyList = true;
+						//emptyList = true;
 
 						break;
 					}
@@ -135,12 +153,12 @@ int authentication_ParseOfflineList(char * message, int message_len)
 				}
 			}
 
-			if(!emptyList)
-			{
+			//if(!emptyList)
+			//{
 				storage_printRFIDTagsOnFile(false);
 				storage_updateRFIDTagsToFile(rfidTokens, token_array_size);
 				storage_printRFIDTagsOnFile(false);
-			}
+			//}
 		}
 
 		//if(array != NULL)

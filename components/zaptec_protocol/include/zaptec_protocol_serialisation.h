@@ -121,6 +121,7 @@
 		DebugCounter = 731,
 		ParamWarningValue = 732,
 
+		NrOfChargeCards = 749,
 	    NewChargeCard = 750,
 	    AuthenticationListVersion = 751,
 		EnabledNfcTechnologies = 752,
@@ -220,6 +221,7 @@
         CommandIndicateAppConnect = 603,
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
+		CommandIndicateOk = 606,
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,

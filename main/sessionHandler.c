@@ -20,6 +20,8 @@
 #include "OCMF.h"
 #include "freertos/event_groups.h"
 #include "../components/ntp/zntp.h"
+#include "../components/authentication/authentication.h"
+#include "../components/i2c/include/i2cDevices.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -257,6 +259,7 @@ static void sessionHandler_task()
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
     uint8_t nrOfResendRetries = 0;
 
+    authentication_Init();
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
 
@@ -486,12 +489,12 @@ static void sessionHandler_task()
 			sessionIDClearedByCloud = false;
 			chargeSession_Start();
 		}
-		else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
+		/*else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
 		{
 			ESP_LOGW(TAG, "New session due to tag");
 			chargeSession_Start();
 			//NFCTagInfoClearValid();
-		}
+		}*/
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
@@ -512,9 +515,20 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_ChargingStateParameters();
 				}
 
-				pendingCloudAuthorization = true;
-				strcpy(pendingRFIDTag,NFCGetTagInfo().idAsString);
-				//chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+				//System - wait for cloud confirmation before setting RFID-tag
+				if(storage_Get_Standalone() == 0)
+				{
+					pendingCloudAuthorization = true;
+					strcpy(pendingRFIDTag,NFCGetTagInfo().idAsString);
+				}
+				//Standalone - set RFID-tag directly
+				else
+				{
+					//Only allow if no tag is set before and tag has been validated
+					if((chargeSession_Get().AuthenticationCode[0] == '\0') && (i2cIsAuthenticated() == 1))
+						chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+				}
+
 				NFCTagInfoClearValid();
 
 			}
@@ -582,6 +596,9 @@ static void sessionHandler_task()
 			chargeSession_Clear();
 
 			NFCClearTag();
+
+			//Ensure the authentication status is cleared at disconnect
+			i2cClearAuthentication();
 		}
 		
 		//If the FinalStopActive bit is set when a car disconnect, make sure to clear the status value used by Cloud
@@ -712,6 +729,11 @@ static void sessionHandler_task()
 			{
 				if((networkInterface == eCONNECTION_WIFI))
 				{
+					if (esp_wifi_sta_get_ap_info(&wifidata)==0)
+						rssi = wifidata.rssi;
+					else
+						rssi = 0;
+
 					publish_debug_telemetry_observation_WifiParameters();
 				}
 				if (networkInterface == eCONNECTION_LTE)

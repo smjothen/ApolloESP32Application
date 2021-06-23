@@ -272,6 +272,9 @@ void certificate_task(void* tlsErrorCause)
 			if(backoffDelay < (3600 * 6)) //Backoff maximum 6 hours
 				backoffDelay += 10;
 
+			esp_http_client_close(client);
+			esp_http_client_cleanup(client);
+
 			continue;
 		}
 

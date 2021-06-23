@@ -1049,7 +1049,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
 		//Clear user UUID
-		if(storage_Get_AuthenticationRequired() == 1)
+		if((storage_Get_AuthenticationRequired() == 1) && (storage_Get_Standalone() == 0))//Only in system mode
 		{
 			char * ptr = strnstr(commandEvent->data, "null", commandEvent->data_len);
 			if((ptr != NULL) && (ptr != commandEvent->data) && (commandEvent->data_len < 37))
@@ -1136,34 +1136,49 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/601/"))
 	{
 		//ESP_LOGI(TAG, "Charging granted!");
-
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-		if(ret == MsgCommandAck)
+		//Only in system mode
+		if(storage_Get_Standalone() == 0)
 		{
-			responseStatus = 200;
-			SetAuthorized(true);
-			ESP_LOGI(TAG, "MCU Granted command OK");
+			MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+			if(ret == MsgCommandAck)
+			{
+				responseStatus = 200;
+				SetAuthorized(true);
+				ESP_LOGI(TAG, "MCU Granted command OK");
+			}
+			else
+			{
+				responseStatus = 400;
+				ESP_LOGI(TAG, "MCU Granted command FAILED");
+			}
 		}
 		else
 		{
 			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU Granted command FAILED");
 		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
 	{
 		//ESP_LOGI(TAG, "Charging denied!");
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-		if(ret == MsgCommandAck)
+		//Only in system mode
+		if(storage_Get_Standalone() == 0)
 		{
-			responseStatus = 200;
-			SetAuthorized(false);
-			ESP_LOGI(TAG, "MCU Granted command OK");
+			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+			if(ret == MsgCommandAck)
+			{
+				responseStatus = 200;
+				SetAuthorized(false);
+				ESP_LOGI(TAG, "MCU Granted command OK");
+			}
+			else
+			{
+				responseStatus = 400;
+				ESP_LOGI(TAG, "MCU Granted command FAILED");
+			}
 		}
 		else
 		{
 			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU Granted command FAILED");
 		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
@@ -2021,6 +2036,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.client_id = cloudDeviceInfo.serialNumber;
     //mqtt_config.cert_pem = cert;
     mqtt_config.use_global_ca_store = true;
+    mqtt_config.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
 
     mqtt_config.lwt_qos = 1;
     mqtt_config.lwt_topic = event_topic;
