@@ -74,7 +74,8 @@ enum DiagnosticsModes
 	eSWAP_COMMUNICATION_MODE 		= 2,
 	eSWAP_COMMUNICATION_MODE_BACK 	= 3,
 	eACTIVATE_LOGGING				= 4,
-	eACTIVATE_TCP_PORT				= 5
+	eACTIVATE_TCP_PORT				= 5,
+	eDISABLE_CERTIFICATE			= 6
 };
 
 struct Configuration

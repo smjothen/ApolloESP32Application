@@ -244,6 +244,11 @@ static void connectivity_task()
 				storage_SaveConfiguration();
 			}
 		}
+		else if(storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE)
+		{
+			storage_Set_DiagnosticsMode(eCLEAR_DIAGNOSTICS_MODE);
+			storage_SaveConfiguration();
+		}
 
 		//For testing
 		//if(wifiInitialized == true)

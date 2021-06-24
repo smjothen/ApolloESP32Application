@@ -229,6 +229,12 @@ void app_main(void)
 		esp_log_level_set("*", ESP_LOG_INFO);
 	}
 
+	else if(storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE)
+	{
+		certificate_SetUsage(false);
+		ESP_LOGE(TAG_MAIN, "Certificates temporarily disabled");
+	}
+
 	storage_PrintConfiguration();
 
 	//Init to read device ID from EEPROM

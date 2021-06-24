@@ -48,6 +48,18 @@ static char sign[200] = {0};
 static unsigned int signLength = 0;
 char *certificate_bundle = NULL;
 
+static bool useCertificateBundle = false;
+
+void certificate_SetUsage(bool usage)
+{
+	useCertificateBundle = usage;
+}
+
+bool certificate_GetUsage()
+{
+	return useCertificateBundle;
+}
+
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     static char *output_buffer;  // Buffer to store response of http request from event handler
@@ -211,6 +223,12 @@ int certificate_GetCurrentBundleVersion()
 	return currentBundleVersion;
 }
 
+static int overrideVersion = 0;
+void certifcate_setOverrideVersion(int override)
+{
+	overrideVersion = override;
+}
+
 
 void certificate_task(void* tlsErrorCause)
 {
@@ -253,8 +271,20 @@ void certificate_task(void* tlsErrorCause)
 
 		// POST
 		char post_data [100] = {0};
-		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\", \"fw\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion()); //Todo ver 7 on release
-		snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\"}", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError); //Todo ver 7 on release
+		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\", \"fw\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion());
+		if(overrideVersion > 0)
+		{
+			snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\", \"override\":%d }", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError, overrideVersion);
+		}
+		else
+		{
+			snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\"}", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError);
+		}
+
+		overrideVersion = 0;
+
+		ESP_LOGW(TAG, "post_data: %s", post_data);
+
 		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber);
 		//char * post_data = "{\"ver\":7, \"serial\": \"}";
 

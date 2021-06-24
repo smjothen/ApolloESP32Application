@@ -12,6 +12,7 @@
 #include "pic_update.h"
 #include "ota_log.h"
 #include "DeviceInfo.h"
+#include "certificate.h"
 
 #define TAG "OTA"
 
@@ -74,10 +75,17 @@ bool otaIsRunning()
 }
 
 void _do_sdk_ota(char *image_location){
+
+	bool useCert = certificate_GetUsage();
+
+	if(!useCert)
+		ESP_LOGE(TAG, "CERTIFICATES NOT USED");
+
     esp_http_client_config_t config = {
         .url = image_location,
         //.cert_pem = (char *)server_cert_pem_start,
-        .use_global_ca_store = true,
+        .use_global_ca_store = useCert,
+		.transport_type = HTTP_TRANSPORT_OVER_SSL,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
@@ -137,10 +145,22 @@ static void ota_task(void *pvParameters){
 
         ota_log_location_fetch();
 
-        get_image_location(image_location,sizeof(image_location), image_version);
+        int ret = get_image_location(image_location,sizeof(image_location), image_version);
         // strcpy( image_location,"http://api.zaptec.com/api/firmware/6476103f-7ef9-4600-9450-e72a282c192b/download");
         // strcpy( image_location,"https://api.zaptec.com/api/firmware/ZAP000001/current");
-        ESP_LOGI(TAG, "image location to use: %s", image_location);
+        ESP_LOGI(TAG, "image location to use: %s, err: %d", image_location, ret);
+
+        if(ret == 0x2700)
+        {
+        	otaRunning = false;
+			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+			log_message("OTA certificate error 0x2700, downloading new");
+			ESP_LOGW(TAG, "Updating certificate, expired at OTA");
+			//certifcate_setOverrideVersion(8);//TODO REMOVE, for testing certificate update.
+			certificate_update(0);
+			continue;
+        }
 
         ESP_LOGI(TAG, "Charger version: %s Cloud version: %s", GetSoftwareVersion(), image_version);
         if(updateOnlyIfNewVersion == true)

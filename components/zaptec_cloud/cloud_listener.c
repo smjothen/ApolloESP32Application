@@ -1373,6 +1373,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+
+				else if(strstr(commandString,"Override ") != NULL)
+				{
+					char *endptr;
+					int overrideVersion = strtol(commandString+11, &endptr, 10);
+					if((1000 > overrideVersion) && (overrideVersion >=0))
+					{
+						certifcate_setOverrideVersion(overrideVersion); //Fake old version for test
+						certificate_update(0);
+
+						ESP_LOGI(TAG, "Update to override version: %d", overrideVersion);
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
+
 				else if(strstr(commandString,"SetMaxInstallationCurrent ") != NULL)
 				{
 					char *endptr;
@@ -2035,7 +2054,17 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.username = username;
     mqtt_config.client_id = cloudDeviceInfo.serialNumber;
     //mqtt_config.cert_pem = cert;
-    mqtt_config.use_global_ca_store = true;
+
+    if(certificate_GetUsage())
+    {
+    	mqtt_config.use_global_ca_store = true;
+    }
+    else
+    {
+    	mqtt_config.use_global_ca_store = false;
+    	ESP_LOGE(TAG, "*** CERTIFICATES NOT USED ***");
+    }
+
     mqtt_config.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
 
     mqtt_config.lwt_qos = 1;

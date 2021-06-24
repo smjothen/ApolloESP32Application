@@ -1,6 +1,7 @@
 #ifndef OTA_LOG_H
 #define OTA_LOG_H
 
+int log_message(char *msg);
 int ota_log_location_fetch();
 int ota_log_download_start(char *location);
 int ota_log_download_progress_debounced(uint32_t bytes_received);

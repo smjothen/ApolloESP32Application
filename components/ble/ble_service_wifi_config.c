@@ -1283,6 +1283,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			if(ret == MsgCommandAck)
 			{
 				start_segmented_ota_if_new_version();
+				//start_ota();//TODO remove
 			}
 		}
 		else if(command == CommandSwReboot)

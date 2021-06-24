@@ -15,11 +15,13 @@
 //#define MAX_HTTP_OUTPUT_BUFFER 2048
 
 //extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+static int mbedtls_err = 0;
 
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     static char *output_buffer;  // Buffer to store response of http request from event handler
     static int output_len;       // Stores number of bytes read
+
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
             ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
@@ -70,7 +72,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             break;
         case HTTP_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
-            int mbedtls_err = 0;
+
             //esp_err_t err = 0;
             esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
             if (err != 0) {
@@ -165,8 +167,8 @@ static void log_task_info(void)
 int get_image_location(char *location, int buffersize, char * version)
 {
     char url [100];
-    snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
-    //snprintf ( url, 100, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    //snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    snprintf ( url, 100, "https://dev-api2.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);
 
@@ -180,7 +182,7 @@ int get_image_location(char *location, int buffersize, char * version)
         .user_data = local_response_buffer,
 		.use_global_ca_store = true,
         //.cert_pem = (char *)server_cert_pem_start,
-		//.transport_type = HTTP_TRANSPORT_OVER_SSL,
+		.transport_type = HTTP_TRANSPORT_OVER_SSL,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
     };
@@ -202,6 +204,7 @@ int get_image_location(char *location, int buffersize, char * version)
     log_task_info();
 
     esp_err_t err = esp_http_client_perform(client);
+
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
                 esp_http_client_get_status_code(client),
@@ -231,10 +234,22 @@ int get_image_location(char *location, int buffersize, char * version)
         }
     } else {
         ESP_LOGE(TAG, "HTTP POST request failed: %s", esp_err_to_name(err));
+        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+                        esp_http_client_get_status_code(client),
+                        esp_http_client_get_content_length(client));
+                ESP_LOGI(TAG, "Body: %s", local_response_buffer);
     }
+
+    //If certificate has expired, flag return the error code
+    int ret = 0;
 
     esp_http_client_cleanup(client);
     log_task_info();
 
-    return 0;
+    if(mbedtls_err == 0x2700)
+	{
+		ret = mbedtls_err;
+	}
+
+    return ret;
 }

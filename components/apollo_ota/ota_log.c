@@ -8,7 +8,7 @@
 static const char *TAG = "ota_metrics";
 static time_t last_start_time = 0;
 
-static int log_message(char *msg){
+int log_message(char *msg){
     time_t now = 0;
     struct tm timeinfo = { 0 };
 

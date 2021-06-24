@@ -7,6 +7,7 @@
 
 #include "ota_log.h"
 #include "esp_log.h"
+#include "certificate.h"
 
 static const char *TAG = "segmented_ota";
 
@@ -14,7 +15,7 @@ int total_size = 0;
 esp_ota_handle_t update_handle = { 0 };
 
 
-extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+//extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 
 static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -77,10 +78,17 @@ void do_segmented_ota(char *image_location){
     
     int flash_error = 0;
 
+    bool useCert = certificate_GetUsage();
+
+    if(!useCert)
+    	ESP_LOGE(TAG, "CERTIFICATES NOT USED");
+
+
     esp_http_client_config_t config = {
         .url = image_location,
-        .cert_pem = (char *)server_cert_pem_start,
-        // .use_global_ca_store = true,
+        //.cert_pem = (char *)server_cert_pem_start,
+        .use_global_ca_store = useCert,
+		.transport_type = HTTP_TRANSPORT_OVER_SSL,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
