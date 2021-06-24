@@ -48,7 +48,7 @@ static char sign[200] = {0};
 static unsigned int signLength = 0;
 char *certificate_bundle = NULL;
 
-static bool useCertificateBundle = false;
+static bool useCertificateBundle = true;
 
 void certificate_SetUsage(bool usage)
 {
