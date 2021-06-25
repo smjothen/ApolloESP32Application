@@ -17,7 +17,7 @@
 static const char *TAG = "PPP_TASK";
 
 
-#define CELLULAR_RX_SIZE 256 * 4 * 3
+//#define CELLULAR_RX_SIZE 256 * 4 * 3
 #define CELLULAR_RX_SIZE 5744*2 // Default TCP receive window size is 5744
 #define CELLULAR_TX_SIZE 1024
 #define CELLULAR_QUEUE_SIZE 40
@@ -470,6 +470,13 @@ int configure_modem_for_ppp(void){
     {
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
+
+
+    int lteOK = at_command_set_LTE_M_only();
+    if(lteOK == 0)
+    	ESP_LOGI(TAG, "Set to LTE-M only");
+    else
+    	ESP_LOGE(TAG, "Failed to set LTE-M only");
 
     char name[20];
     at_command_get_model_name(name, 20);

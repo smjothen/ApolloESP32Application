@@ -8,7 +8,7 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define DISABLE_LOGGING
+//#define DISABLE_LOGGING
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -75,7 +75,8 @@ enum DiagnosticsModes
 	eSWAP_COMMUNICATION_MODE_BACK 	= 3,
 	eACTIVATE_LOGGING				= 4,
 	eACTIVATE_TCP_PORT				= 5,
-	eDISABLE_CERTIFICATE			= 6
+	eDISABLE_CERTIFICATE_ONCE		= 6,
+	eDISABLE_CERTIFICATE_ALWAYS		= 7,
 };
 
 struct Configuration

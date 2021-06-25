@@ -8,6 +8,7 @@
 #include "cJSON.h"
 #include "i2cDevices.h"
 #include "string.h"
+#include "certificate.h"
 
 #define TAG "OTA_LOCATION"
 
@@ -172,6 +173,12 @@ int get_image_location(char *location, int buffersize, char * version)
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);
 
+    bool useCert = certificate_GetUsage();
+
+	if(!useCert)
+		ESP_LOGE(TAG, "CERTIFICATES NOT USED");
+
+
     char local_response_buffer[MAX_HTTP_RECV_BUFFER] = {0};
     esp_http_client_config_t config = {
     	.url = url,
@@ -180,7 +187,7 @@ int get_image_location(char *location, int buffersize, char * version)
         //.query = "esp",
         .event_handler = _http_event_handler,
         .user_data = local_response_buffer,
-		.use_global_ca_store = true,
+		.use_global_ca_store = useCert,
         //.cert_pem = (char *)server_cert_pem_start,
 		.transport_type = HTTP_TRANSPORT_OVER_SSL,
 		.timeout_ms = 20000,

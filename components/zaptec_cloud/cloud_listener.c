@@ -1206,6 +1206,18 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"DiagnosticsMode 6") != NULL)
+				{
+					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ONCE);
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"DiagnosticsMode 7") != NULL)
+				{
+					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
 
 				// Connectivity
 				else if(strstr(commandString,"Set LTE") != NULL)

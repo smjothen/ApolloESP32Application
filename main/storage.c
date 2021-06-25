@@ -58,7 +58,7 @@ void storage_Init_Configuration()
 	configurationStruct.saveCounter 				= 1;
 
 	// Cloud settings
-	configurationStruct.authenticationRequired		= 1;
+	configurationStruct.authenticationRequired		= 0;
 	configurationStruct.currentInMaximum 			= 32.0;
 	configurationStruct.currentInMinimum			= 6.0;
 	configurationStruct.maxPhases 					= 3;
@@ -514,8 +514,8 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
 	nvs_get_u32(configuration_handle, "PulseInterval", &configurationStruct.pulseInterval);
 
-	ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
-	ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
+	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 
 
 	//When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
@@ -626,6 +626,34 @@ esp_err_t storage_clearSessionResetInfo()
 	nvs_close(session_reset_handle);
 
 	return err;
+}
+
+void storage_Verify_AuthenticationSetting()
+{
+	esp_err_t err = nvs_open("RFIDTags", NVS_READWRITE, &rfid_tag_handle);
+
+	//Check if tag-file don't exist  - clear authentication
+	if((configurationStruct.authenticationRequired == 1) && (err != ESP_OK))
+	{
+		configurationStruct.authenticationRequired = 0;
+		storage_SaveConfiguration();
+		ESP_LOGW(TAG, "No valid tag-file -> clearing authorization");
+	}
+	//If tag-file exist but has no valid tags - clear authentication
+	else if((configurationStruct.authenticationRequired == 1) && (err == ESP_OK))
+	{
+		uint32_t nrOfTagsOnFile = 0;
+		err = nvs_get_u32(rfid_tag_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
+		//Key don't exist or value not set
+		if((err != ESP_OK) || (nrOfTagsOnFile == 0))
+		{
+			configurationStruct.authenticationRequired = 0;
+			storage_SaveConfiguration();
+			ESP_LOGW(TAG, "No valid nrOftagsOnFile -> clearing authorization");
+		}
+	}
+
+	nvs_close(rfid_tag_handle);
 }
 
 

@@ -229,11 +229,14 @@ void app_main(void)
 		esp_log_level_set("*", ESP_LOG_INFO);
 	}
 
-	else if(storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE)
+	else if((storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE_ONCE) || (storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE_ALWAYS))
 	{
 		certificate_SetUsage(false);
-		ESP_LOGE(TAG_MAIN, "Certificates temporarily disabled");
+		ESP_LOGE(TAG_MAIN, "Certificates disabled");
 	}
+
+	//Ensure previous versions not supporting RFID requires authentication if set incorrectly
+	storage_Verify_AuthenticationSetting();
 
 	storage_PrintConfiguration();
 

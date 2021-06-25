@@ -229,6 +229,9 @@
 		CommandITSelect = 806,
 		CommandActivateWatchdog = 810,
 
+		CommandDisableCertificateOnce = 820,
+		CommandDisableCertificateAlways = 821
+
     } CommandNo;
 
     typedef enum

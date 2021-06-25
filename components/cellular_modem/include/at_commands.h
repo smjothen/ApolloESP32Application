@@ -37,4 +37,6 @@ int at_command_deactivate_pdp_context(void);
 int at_command_http_test(void);
 int at_command_ping_test(int *sent, int *rcvd, int *lost, int *min, int *max, int *avg);
 
+int at_command_set_LTE_M_only(void);
+
 #endif /* AT_COMMANDS_H */

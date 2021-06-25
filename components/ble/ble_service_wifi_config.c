@@ -1301,6 +1301,17 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				ESP_LOGI(TAG, "MCU Start command FAILED");
 			}
 		}
+		else if(command == CommandDisableCertificateOnce)
+		{
+			storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ONCE);
+			storage_SaveConfiguration();
+		}
+		else if(command == CommandDisableCertificateAlways)
+		{
+			storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
+			storage_SaveConfiguration();
+		}
+
 		//else if(command == CommandFactoryReset)
 		else
 			ESP_LOGI(TAG, "BLE command not supported: %i", command);

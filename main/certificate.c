@@ -257,6 +257,8 @@ void certificate_task(void* tlsErrorCause)
 
 		ESP_LOGI(TAG, "Get cert from: %s", url);
 
+		//Certificate override is not used on this http config since it does not use the certificate bundle.
+
 		esp_http_client_config_t config = {
 			.url = url,
 			.transport_type = HTTP_TRANSPORT_OVER_SSL,

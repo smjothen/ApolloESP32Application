@@ -79,6 +79,7 @@ void storage_CreateRFIDbuffer();
 char * storage_GetRFIDbuffer();
 void storage_FreeRFIDbuffer();
 
+void storage_Verify_AuthenticationSetting();
 esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens);
 esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match);
 uint32_t storage_ReadNrofTagsOnFile();
