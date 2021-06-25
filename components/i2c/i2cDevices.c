@@ -332,7 +332,7 @@ static void i2cDevice_task(void *pvParameters)
 
 		if((storage_Get_AuthenticationRequired() == 1) || prodtest_active())
 		{
-			if(nfcCardDetected > 0){
+			if((nfcCardDetected > 0) && prodtest_active()){
 				prodtest_on_nfc_read();
 			}else if(nfcCardDetected > 0)
 			{

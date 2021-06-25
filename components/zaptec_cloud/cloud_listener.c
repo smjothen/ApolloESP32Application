@@ -1565,11 +1565,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 
 				}
-				else if(strstr(commandString,"Simulate offline") != NULL)
+				else if(strstr(commandString,"Simulate offline ") != NULL)
 				{
-					sessionHandler_simulateOffline();
+					char *endptr;
+					int offlineTime = (int)strtol(commandString+19, &endptr, 10);
+					if((offlineTime <= 86400) && (offlineTime > 0))
+						sessionHandler_simulateOffline(offlineTime);
 
-					ESP_LOGI(TAG, "Simulate offline");
+					ESP_LOGI(TAG, "Simulate offline %d", offlineTime);
 					responseStatus = 200;
 				}
 

@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "stddef.h"
 #include "OCMF.h"
@@ -17,12 +18,16 @@ static char * formatVersion = "1.0";
 
 static char * logString = NULL;
 
-//static size_t logStringSize = 15000;
+static SemaphoreHandle_t ocmf_lock;
+static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st);
 
 
 void OCMF_Init()
 {
 	logString = calloc(LOG_STRING_SIZE, 1);
+	ocmf_lock = xSemaphoreCreateMutex();
+	xSemaphoreGive(ocmf_lock);
 }
 
 double get_accumulated_energy(){
@@ -42,7 +47,7 @@ double get_accumulated_energy(){
 	return accumulated_energy;
 }
 
-int OCMF_CreateNewOCMFMessage(char * newMessage)
+int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
 {
 	cJSON *OCMFObject = cJSON_CreateObject();
 	if(OCMFObject == NULL){return -10;}
@@ -56,11 +61,8 @@ int OCMF_CreateNewOCMFMessage(char * newMessage)
 	cJSON * readerArray = cJSON_CreateArray();
 	cJSON * readerObject = cJSON_CreateObject();
 
-	char timeBuffer[50] = {0};
-	zntp_GetSystemTime(timeBuffer);
-
-	cJSON_AddStringToObject(readerObject, "TM", timeBuffer);	//TimeAndSyncState
-	cJSON_AddNumberToObject(readerObject, "RV", get_accumulated_energy());	//ReadingValue
+	cJSON_AddStringToObject(readerObject, "TM", time_buffer);	//TimeAndSyncState
+	cJSON_AddNumberToObject(readerObject, "RV", energy);	//ReadingValue
 	cJSON_AddStringToObject(readerObject, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 	cJSON_AddStringToObject(readerObject, "RU", "kWh");			//ReadingUnit
 	cJSON_AddStringToObject(readerObject, "RT", "AC");			//ReadingCurrentType
@@ -83,6 +85,22 @@ int OCMF_CreateNewOCMFMessage(char * newMessage)
 	return 0;
 }
 
+int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out){
+	char timeBuffer[50] = {0};
+	zntp_GetSystemTime(timeBuffer, time_out);
+	*energy_out = get_accumulated_energy();
+
+	return _OCMF_CreateNewOCMFMessage(newMessage, timeBuffer, *energy_out);
+
+}
+
+int  OCMF_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in){
+	char time_buffer[50] = {0};
+	zntp_format_time(time_buffer, time_in);
+
+	return _OCMF_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
+}
+
 
 static cJSON *logRoot = NULL;
 static cJSON * logReaderArray = NULL;
@@ -92,6 +110,15 @@ static cJSON * logReaderArray = NULL;
 char * OCMF_CreateNewOCMFLog()
 {
 	memset(logString, 0, LOG_STRING_SIZE);
+
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during log create");
+		goto err;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_CreateNewOCMFLog");
+	}
+
 
 	//if(logRoot != NULL){return -9;}
 
@@ -118,7 +145,7 @@ char * OCMF_CreateNewOCMFLog()
 	cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
 	cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState*/
 
-	logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
+	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G");
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 
@@ -140,12 +167,15 @@ char * OCMF_CreateNewOCMFLog()
 		OCMF_AddElementToOCMFLog("T", "G");
 	*/
 
+	xSemaphoreGive(ocmf_lock);
+
+	err:
 	return logString;
 }
 
-
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st)
 {
+
 	if(logReaderArray != NULL)
 	{
 		int arrayLength = cJSON_GetArraySize(logReaderArray);
@@ -155,7 +185,7 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 		{
 			cJSON * logArrayElement = cJSON_CreateObject();
 			char timeBuffer[50] = {0};
-			zntp_GetSystemTime(timeBuffer);
+			zntp_GetSystemTime(timeBuffer, NULL);
 
 			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
 			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
@@ -174,16 +204,42 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 			ESP_LOGW(TAG, "MAX OCMF Array size reached");
 		}
 	}
-
 	return logReaderArray;
 }
 
 
+cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+{
+	cJSON * result = NULL;
+
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during element add");
+		goto err;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_AddElementToOCMFLog");
+	}
+
+	result = OCMF_AddElementToOCMFLog_no_lock(tx, st);
+
+	xSemaphoreGive(ocmf_lock);
+	err:
+	return result;
+}
+
 int OCMF_FinalizeOCMFLog()
 {
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
+	}
+
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog("E", "G");
+		OCMF_AddElementToOCMFLog_no_lock("E", "G");
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -207,5 +263,6 @@ int OCMF_FinalizeOCMFLog()
 		ESP_LOGW(TAG, "Nothing to finalize");
 	}
 
+	xSemaphoreGive(ocmf_lock);
 	return 0;
 }

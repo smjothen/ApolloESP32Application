@@ -40,7 +40,7 @@ void sessionHandler_init();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
 void sessionHandler_ClearOfflineCurrentSent();
-void sessionHandler_simulateOffline();
+void sessionHandler_simulateOffline(int offlineTime);
 int sessionHandler_GetStackWatermark();
 void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);
