@@ -330,9 +330,9 @@ static void i2cDevice_task(void *pvParameters)
 		//if(!nfcCardDetected)
 		//	NFCClearTag();
 
-		if(storage_Get_AuthenticationRequired() == 1)
+		if((storage_Get_AuthenticationRequired() == 1) || prodtest_active())
 		{
-			if(prodtest_active() && (nfcCardDetected > 0)){
+			if(nfcCardDetected > 0){
 				prodtest_on_nfc_read();
 			}else if(nfcCardDetected > 0)
 			{

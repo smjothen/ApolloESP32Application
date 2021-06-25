@@ -265,7 +265,7 @@ static void start(void)
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6, &on_got_ipv6, NULL));
 #endif
 
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
     wifi_config_t wifi_config = {
         .sta = {
             .ssid = {0x0},
@@ -299,8 +299,8 @@ static void start(void)
     //}
 
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
 
 /*    while(wifiScan == true)
     {
@@ -308,8 +308,8 @@ static void start(void)
     	vTaskDelay(pdMS_TO_TICKS(1000));
     }
     */
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_connect());
+    esp_wifi_start();
+    esp_wifi_connect();
     s_connection_name = "Wifi";
     wifiStarted = true;
 }
@@ -371,8 +371,8 @@ static void startScan(void)
     }*/
 
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
 
 /*    while(wifiScan == true)
     {
@@ -380,7 +380,7 @@ static void startScan(void)
     	vTaskDelay(pdMS_TO_TICKS(1000));
     }
     */
-    ESP_ERROR_CHECK(esp_wifi_start());
+    esp_wifi_start();
     //ESP_ERROR_CHECK(esp_wifi_connect());
     s_connection_name = "Wifi";
     //wifiStarted = true;
@@ -626,10 +626,10 @@ void network_updateWifi()
 			memcpy(wifi_config.sta.password, WifiPSK, strlen(WifiPSK));
 
 			ESP_LOGI(TAG, "Setting WiFi configuration SSID %s PSK %s", (char*)wifi_config.sta.ssid, (char*)wifi_config.sta.password);
-			ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
-			ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-			ESP_ERROR_CHECK( esp_wifi_start() );
-			ESP_ERROR_CHECK(esp_wifi_connect());
+			esp_wifi_set_mode(WIFI_MODE_STA);
+			esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
+			esp_wifi_start();
+			esp_wifi_connect();
 
 			//Hold the new values
 			memcpy(previousWifiSSID, WifiSSID, 32);
