@@ -35,8 +35,8 @@ static bool taskRunning = false;
 extern const uint8_t zap_cert_pem_start[] asm("_binary_zaptec_ca_cer_start");
 extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 
-extern const uint8_t bundle7_crt_start[] asm("_binary_bundle7_crt_start");
-extern const uint8_t bundle7_crt_end[] asm("_binary_bundle7_crt_end");
+extern const uint8_t bundle_crt_start[] asm("_binary_bundle8_crt_start");
+extern const uint8_t bundle_crt_end[] asm("_binary_bundle8_crt_end");
 
 static const char zaptecPublicKey[] = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvTEC5cEvbSNkBksOwRItuhBUf3my\n7Eo0EO9Z784bTQ01PkUZcT5JnkFkGRVTzvLlMqNYZvZIGQLfkJqffSFMZA==\n-----END PUBLIC KEY-----\0";
 
@@ -192,7 +192,7 @@ uint8_t ParseCertificateBundle(char * certificateBundle)
 			if(err != ESP_OK)
 				ESP_LOGE(TAG,"Creating store failed: %i", err);
 
-			//err = esp_tls_set_global_ca_store(bundle7_crt_start, bundle7_crt_end - bundle7_crt_start);
+			//err = esp_tls_set_global_ca_store(bundle_crt_start, bundle_crt_end - bundle_crt_start);
 			err = esp_tls_set_global_ca_store((unsigned char*)certificate, certificateLength+1);
 			if(err != ESP_OK)
 			{
@@ -490,7 +490,7 @@ void certificate_init()
 		if(err != ESP_OK)
 			ESP_LOGE(TAG,"Creating store failed: %i", err);
 
-		err = esp_tls_set_global_ca_store(bundle7_crt_start, bundle7_crt_end - bundle7_crt_start);
+		err = esp_tls_set_global_ca_store(bundle_crt_start, bundle_crt_end - bundle_crt_start);
 		if(err != ESP_OK)
 		{
 			certificateIsOk = false;

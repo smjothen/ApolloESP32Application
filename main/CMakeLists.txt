@@ -12,7 +12,7 @@ idf_component_register(SRCS
 					"offline_log.c"
 					"crc32.c"
 					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
-					EMBED_TXTFILES ${project_dir}/main/cert/bundle7.crt 
+					EMBED_TXTFILES ${project_dir}/main/cert/bundle8.crt 
 
 					INCLUDE_DIRS "./"
 					)

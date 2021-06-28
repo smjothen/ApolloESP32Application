@@ -1983,17 +1983,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     			network_updateWifi();
 			}
 
-			if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 70) || (resetCounter == 90))
+			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 35))
 			{
-
-
 				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
 				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
 			}
     	}
     	else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
     	{
-    		if((resetCounter == 2) || (resetCounter == 10))
+    		if((resetCounter == 2) || (resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30))
 			{
 				ESP_LOGI(TAG, "Refreshing Wifi UnConnected");
 				network_updateWifi();
@@ -2004,7 +2002,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		ESP_LOGI(TAG, "No Wifi or LTE");
     	}
 
-    	if(resetCounter == 100)
+    	if(resetCounter == 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
 		{
 			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 			esp_restart();

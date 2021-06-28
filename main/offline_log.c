@@ -203,6 +203,10 @@ int attempt_log_send(void){
     int log_end;
     FILE *fp = init_log(&log_start, &log_end);
 
+    //If file or partition is now available, indicate empty file
+    if(fp == NULL)
+    	return 0;
+
     char ocmf_text[200] = {0};
 
     while(log_start!=log_end){
