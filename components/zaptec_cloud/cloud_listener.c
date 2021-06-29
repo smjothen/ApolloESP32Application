@@ -947,6 +947,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "MCU Start command OK");
 
 					HOLD_SetPhases(phaseFromCloud);
+					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
 					//cloudCommandCurrentUpdated = true;
 				}
 				else
@@ -1660,6 +1661,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						responseStatus = 400;
 					}
+				}
+				else if(strstr(commandString,"PowerOff4GAndReset") != NULL)
+				{
+					cellularPinsOff();
+
+					//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
+					//The 4G module will be powered on automatically if 4G is active communication mode
+					esp_restart();
 				}
 
 			}

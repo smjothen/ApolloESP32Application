@@ -317,7 +317,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
     add_observation_to_collection(observations, create_observation(SourceVersion, esp_ota_get_app_description()->version));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
-    add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, (uint32_t)certificate_GetCurrentBundleVersion()));
+    //add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, (uint32_t)certificate_GetCurrentBundleVersion()));
 
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
@@ -493,6 +493,7 @@ static uint8_t previousFinalStopActiveStatus = 0xff;
 
 static uint32_t previousTransmitInterval = 0;
 static uint32_t previousPulseInterval = 0;
+static uint32_t previousCertificateVersion = 0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -763,6 +764,14 @@ int publish_telemetry_observation_on_change(){
 	 {
 		add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
 		previousPulseInterval = pulseInterval;
+		isChange = true;
+	 }
+
+	 uint32_t certificateVersion = (uint32_t)certificate_GetCurrentBundleVersion();
+	 if(previousCertificateVersion != certificateVersion)
+	 {
+		add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, certificateVersion));
+		previousCertificateVersion = certificateVersion;
 		isChange = true;
 	 }
 

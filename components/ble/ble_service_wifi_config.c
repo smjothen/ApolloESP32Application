@@ -333,6 +333,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		AUTH_SERV_CHAR_val[0] = '1';
 
 
+	//ESP_LOGW(TAG, "**** AUTH: %s, cs: %d ****", AUTH_SERV_CHAR_val, configSession); //For debug
+
 #ifdef USE_PIN
 	//Check authentication before allowing most reads. Some exceptions.
 	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_DEVICE_MID_UUID) && (attrIndex != CHARGER_FIRMWARE_VERSION_UUID) && (attrIndex != CHARGER_WARNINGS_UUID) && (attrIndex != CHARGER_AUTH_UUID))
@@ -1442,6 +1444,7 @@ void ClearAuthValue()
 {
 		AUTH_SERV_CHAR_val[0] = '0';
 		SAVE_SERV_CHAR_val[0] = '0';
+		configSession = false;
 		ESP_LOGW(TAG, "Cleared Auth");
 
 		statusSegmentCount = 0;

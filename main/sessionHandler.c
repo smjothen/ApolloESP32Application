@@ -267,6 +267,34 @@ void on_ocmf_sync_time(TimerHandle_t xTimer){
 	xSemaphoreGive(ocmf_sync_semaphore);
 }
 
+//For diagnostics and developement
+static float currentSetFromCloud = 0.0;
+static int phasesSetFromCloud = 0;
+void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases)
+{
+	currentSetFromCloud = newCurrent;
+	phasesSetFromCloud = newPhases;
+}
+
+//For diagnostics and developement
+static void sessionHandler_PrintParametersFromCloud()
+{
+	float pilot = 0.0;
+	float actualCurrentSet = 0.0;
+	if(storage_Get_MaxInstallationCurrentConfig() < currentSetFromCloud)
+	{
+		pilot = storage_Get_MaxInstallationCurrentConfig() / 0.6;
+		actualCurrentSet = storage_Get_MaxInstallationCurrentConfig();
+	}
+	else
+	{
+		pilot = currentSetFromCloud / 0.6;
+		actualCurrentSet = currentSetFromCloud;
+	}
+
+	ESP_LOGW(TAG,"******** FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A **************", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
+}
+
 
 static void sessionHandler_task()
 {
@@ -763,6 +791,18 @@ static void sessionHandler_task()
 					rssi = 0;
 
 				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, storage_Get_PulseInterval());
+			}
+
+			//This is to make cloud settings visible during developement
+			if(storage_Get_Standalone() == false)
+			{
+				sessionHandler_PrintParametersFromCloud();
+				if((MCU_GetchargeMode() == 12))
+				{
+					//Clear if car is disconnected
+					currentSetFromCloud = 0.0;
+					phasesSetFromCloud = 0;
+				}
 			}
 
 			chargeSession_PrintSession();
