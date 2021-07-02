@@ -999,7 +999,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
-		if((commandEvent->data_len == 4) && (strncmp(commandEvent->data, "null", 4) == 0))
+		//Suport null, [null] and "" formatting of empty session
+		ESP_LOGW(TAG, "504: Len: %d, %s", commandEvent->data_len, commandEvent->data);
+		if(((commandEvent->data_len == 2) && (strncmp(commandEvent->data, "\"\"", 2) == 0)) ||
+			((commandEvent->data_len == 4) && (strncmp(commandEvent->data, "[\"\"]", 4) == 0)))
 		{
 			MessageType ret = MCU_SendCommandId(CommandResetSession);
 			if(ret == MsgCommandAck)
@@ -1022,8 +1025,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 			if(strncmp(commandEvent->data, "[null]",commandEvent->data_len) == 0)
 			{
-				ESP_LOGE(TAG, "Session cleared");
-				return 200;
+				ESP_LOGE(TAG, "No session");
+				return 400;
 			}
 			else
 			{

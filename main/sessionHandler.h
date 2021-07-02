@@ -39,6 +39,7 @@ enum ChargerOperatingMode
 void sessionHandler_init();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
+bool SessionHandler_IsOfflineMode();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
 void sessionHandler_ClearOfflineCurrentSent();
 void sessionHandler_simulateOffline(int offlineTime);

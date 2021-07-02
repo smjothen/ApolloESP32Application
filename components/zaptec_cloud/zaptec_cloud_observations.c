@@ -324,6 +324,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+    ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
     add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
 
@@ -346,6 +347,7 @@ int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_REQUESTING));
+    ESP_LOGE(TAG, "\n ************* 2 Sending OperatingMode %d ***************\n", CHARGE_OPERATION_STATE_REQUESTING);
 
     return publish_json(observations);
 }
@@ -359,6 +361,8 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)MCU_GetCableType()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+
+    ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
 
     return publish_json(observations);
 }
@@ -465,6 +469,12 @@ void SetSendRTC()
 	sendRTC = true;
 }
 
+static bool clearSessionFlag = false;
+void SetClearSessionFlag()
+{
+	clearSessionFlag = true;
+}
+
 static uint32_t previousWarnings = 0;
 static uint32_t previousNotifications = 0;
 static uint8_t previousNetworkType = 0xff;
@@ -528,9 +538,17 @@ int publish_telemetry_observation_on_change(){
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));*/
 
     uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
-	if ((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0))
+	if (((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0)) || (clearSessionFlag == true))
 	{
+		//If we have received command SetSessionId = null from cloud, fake car disconnect to clear session and user id in cloud
+		if(clearSessionFlag == true)
+		{
+			chargeOperatingMode = CHARGE_OPERATION_STATE_DISCONNECTED;
+			clearSessionFlag = false;
+		}
+
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
+		ESP_LOGE(TAG, "\n ************* 4 Sending OperatingMode %d ***************\n", chargeOperatingMode);
 		previousChargeOperatingMode = chargeOperatingMode;
 		isChange = true;
 	}

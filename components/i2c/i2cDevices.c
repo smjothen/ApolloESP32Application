@@ -21,6 +21,7 @@
 #include "production_test.h"
 #include "../../main/connectivity.h"
 #include "../../main/chargeSession.h"
+#include "../../main/sessionHandler.h"
 #include "../ntp/zntp.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
@@ -348,7 +349,8 @@ static void i2cDevice_task(void *pvParameters)
 				if(storage_Get_Standalone() == 0)
 				{
 					//Charger online authentication
-					if(isMqttConnected() == true)
+					//if(isMqttConnected() == true)
+					if(SessionHandler_IsOfflineMode() == false)
 					{
 						//Is there already a session
 						if(chargeSession_Get().AuthenticationCode[0] == '\0')
@@ -389,6 +391,7 @@ static void i2cDevice_task(void *pvParameters)
 							MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 							if(ret == MsgCommandAck)
 							{
+								chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
 								ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
 							}
 						}

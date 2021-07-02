@@ -160,6 +160,9 @@ void OfflineHandler()
 	//Handle charge session started offline
 	if((activeSessionId > 0) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))//2 = Requesting, add definitions
 	{
+		//Wait until a valid tag is registered.
+		if((storage_Get_AuthenticationRequired() == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
+			return;
 
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 		if(ret == MsgCommandAck)
@@ -247,6 +250,7 @@ static bool stoppedByCloud = false;
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud)
 {
 	stoppedByCloud = stateFromCloud;
+	SetClearSessionFlag();
 }
 
 SemaphoreHandle_t ocmf_sync_semaphore;
@@ -295,6 +299,11 @@ static void sessionHandler_PrintParametersFromCloud()
 	ESP_LOGW(TAG,"******** FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A **************", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
 }
 
+static bool offlineMode = false;
+bool SessionHandler_IsOfflineMode()
+{
+	return offlineMode;
+}
 
 static void sessionHandler_task()
 {
@@ -516,6 +525,7 @@ static void sessionHandler_task()
 
 
 			offlineTime = 0;
+			offlineMode = false;
 		}
 		else
 		{
@@ -532,12 +542,18 @@ static void sessionHandler_task()
 					{
 						OfflineHandler();
 						secondsSinceLastCheck = 0;
+						offlineMode = true;
 					}
 				}
 				else
 				{
 					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d", offlineTime);
 				}
+			}
+			else
+			{
+				//OfflineMode is only for System use
+				offlineMode = false;
 			}
 		}
 

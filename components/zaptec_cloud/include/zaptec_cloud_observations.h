@@ -36,6 +36,8 @@ int publish_debug_telemetry_observation_LteParameters();
 
 int publish_debug_telemetry_observation_all(double rssi);
 
+void SetClearSessionFlag();
+
 int publish_telemetry_observation_on_change();
 
 void SetSendRTC();
