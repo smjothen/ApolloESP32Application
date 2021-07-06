@@ -646,6 +646,7 @@ int test_bg(){
 	}
 
 	if(
+		strstr(version, "BG95M6LAR02A02_01.004.01.004")||
 		strstr(version, "BG95M6LAR02A02_01.002.01.002")||
 		strstr(version, "BG95M6LAR02A02_01.001.01.001")
 	){
