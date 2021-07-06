@@ -27,6 +27,7 @@
 #include "../../main/certificate.h"
 
 #include "esp_tls.h"
+#include "base64.h"
 
 #define TAG "Cloud Listener"
 
@@ -2028,6 +2029,95 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     return ESP_OK;
 }
 
+uint8_t* hex_decode(const char *in, size_t len,uint8_t *out)
+{
+        unsigned int i, t, hn, ln;
+
+        for (t = 0,i = 0; i < len; i+=2,++t) {
+
+                hn = in[i] > '9' ? in[i] - 'a' + 10 : in[i] - '0';
+                ln = in[i+1] > '9' ? in[i+1] - 'a' + 10 : in[i+1] - '0';
+
+                out[t] = (hn << 4 ) | ln;
+        }
+
+        return out;
+}
+
+void GetInstallationIdBase64(char * instId, char *encodedString)
+{
+
+	/// Remove the '-' to only have the GUID-numbers
+	char instIdFormatted[37] = {0};
+	int c;
+	int nextValid = 0;
+	for (c = 0; c < 36; c++)
+	{
+		if(instId[c] != '-')
+		{
+			instIdFormatted[nextValid] = instId[c];
+			nextValid++;
+		}
+	}
+
+	ESP_LOGW(TAG,"%s -> %s", instId, instIdFormatted);
+
+	uint8_t hex;
+	char substring[3] = {0};
+	uint8_t hexString[20] = {0};
+
+
+	/// Must do special byte swapping due to the defined format of the GUID datatype.
+	/// https://stackoverflow.com/questions/9195551/why-does-guid-tobytearray-order-the-bytes-the-way-it-does
+	int i;
+	int j = 0;
+	for (i = 0; i < 16; i++)
+	{
+		memcpy(substring, &instIdFormatted[j], 2);
+
+		/// Convert from char to bytes to save data as defined for Pro.
+		hex_decode(substring, 2, &hex);
+
+		if(i == 0)
+			hexString[3] = hex;
+		else if(i == 1)
+		    hexString[2] = hex;
+		else if(i == 2)
+		    hexString[1] = hex;
+		else if(i == 3)
+		    hexString[0] = hex;
+
+		else if(i == 4)
+			hexString[5] = hex;
+		else if(i == 5)
+		    hexString[4] = hex;
+
+		else if(i == 6)
+			hexString[7] = hex;
+		else if(i == 7)
+		    hexString[6] = hex;
+
+		else if(i == 8)
+			hexString[8] = hex;
+		else if(i == 9)
+			hexString[9] = hex;
+
+		else if(i >= 10)
+			hexString[i] = hex;
+
+		j +=2;
+	}
+
+	/// Base64 encode the installationId
+	size_t token_len;
+	size_t mac_len = 16; //!= 0 and modulo 4 == 0 (base64_encode gives error if not)
+	char * encoded = base64_url_encode(hexString, mac_len, &token_len);
+
+	strncpy(encodedString, encoded, 22);
+
+	ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
+}
+
 
 void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
@@ -2035,29 +2125,31 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 	ESP_LOGI(TAG, "Connecting to IotHub");
 
-	/*esp_err_t err = esp_tls_init_global_ca_store();
-	if(err != ESP_OK)
-		printf("Creating store failed: %i\n", err);
-
-	int certlen = sizeof(cert)/sizeof(cert[0]);
-	err = esp_tls_set_global_ca_store(cert, certlen);
-	if(err != ESP_OK)
-		printf("Creating store failed: %i\n", err);
-*/
     static char broker_url[128] = {0};
     sprintf(broker_url, "mqtts://%s", MQTT_HOST);
 
     static char username[128];
     sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
 
-    char * instId = storage_Get_InstallationId();
-    //volatile int instIdLen = strlen(instId);
 
+    char * instId = storage_Get_InstallationId();
     int compare = strncmp(instId, INSTALLATION_ID, 36);
+
+
     if(compare != 0)
-    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), storage_Get_InstallationId());
+    {
+    	//strcpy(instId, "a200c784-e914-491d-99ad-4e0fb5da229b"); // For testing
+    	/// strcpy(instId, "00000000-0000-0000-0000-000000000000"); // For testing
+
+    	char instIdEncoded[37] = {0};
+    	GetInstallationIdBase64(instId, instIdEncoded);
+
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded);
+    }
     else
-        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID);
+    {
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID_BASE64);
+    }
 
     ESP_LOGW(TAG,"event_topic: %s ", event_topic);
 
@@ -2127,9 +2219,16 @@ void update_installationId()
 
     int compare = strncmp(instId, INSTALLATION_ID, 36);
     if(compare != 0)
-    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), storage_Get_InstallationId());
+    {
+
+    	char instIdEncoded[37] = {0};
+    	GetInstallationIdBase64(instId, instIdEncoded);
+    	sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded);
+    }
     else
-        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID);
+    {
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID_BASE64);
+    }
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 

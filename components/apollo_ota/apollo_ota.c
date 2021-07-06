@@ -198,6 +198,8 @@ static void ota_task(void *pvParameters){
     }
 }
 
+static bool hasBeenUpdated = false;
+
 void validate_booted_image(void){
     const esp_partition_t * partition = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Checking if VALID on partition %s ", partition->label);
@@ -226,6 +228,7 @@ void validate_booted_image(void){
                 ESP_LOGE(TAG, "marking partition as valid failed with: %d", ret);
             }else{
                 ESP_LOGI(TAG, "partition marked as valid");
+                hasBeenUpdated = true;
             }
 
         }
@@ -237,6 +240,10 @@ void validate_booted_image(void){
     }
 }
 
+bool ota_CheckIfHasBeenUpdated()
+{
+	return hasBeenUpdated;
+}
 
 
 void start_ota_task(void){

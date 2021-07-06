@@ -11,5 +11,6 @@ const char* OTAReadRunningPartition();
 void ota_rollback();
 void ota_rollback_to_factory();
 bool otaIsRunning();
+bool ota_CheckIfHasBeenUpdated();
 
 #endif /* APOLLO_OTA_H */
