@@ -85,7 +85,7 @@ void _do_sdk_ota(char *image_location){
         .url = image_location,
         //.cert_pem = (char *)server_cert_pem_start,
         .use_global_ca_store = useCert,
-		.transport_type = HTTP_TRANSPORT_OVER_SSL,
+		//.transport_type = HTTP_TRANSPORT_OVER_SSL,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,

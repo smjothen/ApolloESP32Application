@@ -189,7 +189,7 @@ int get_image_location(char *location, int buffersize, char * version)
         .user_data = local_response_buffer,
 		.use_global_ca_store = useCert,
         //.cert_pem = (char *)server_cert_pem_start,
-		.transport_type = HTTP_TRANSPORT_OVER_SSL,
+		//.transport_type = HTTP_TRANSPORT_OVER_SSL,
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
     };

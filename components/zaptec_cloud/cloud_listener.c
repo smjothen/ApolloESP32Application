@@ -1980,12 +1980,12 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_ERROR:
     	resetCounter++;
 
-    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: %d/100, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
+    	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: #%d, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
 
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
-    		incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error.
+    		incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
     		mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
     		esp_mqtt_set_config(mqtt_client, &mqtt_config);
     		ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
@@ -2004,7 +2004,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	}
     	else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
     	{
-    		if((resetCounter == 2) || (resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30))
+    		if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 60) || (resetCounter == 90))
 			{
 				ESP_LOGI(TAG, "Refreshing Wifi UnConnected");
 				network_updateWifi();
@@ -2015,10 +2015,24 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		ESP_LOGI(TAG, "No Wifi or LTE");
     	}
 
-    	if(resetCounter == 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
-		{
-			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
-			esp_restart();
+    	//Case if the Wifi router is not accessible. incrementalRefreshTimeout is not being changed
+    	if((storage_Get_CommunicationMode() == eCONNECTION_WIFI) && (network_WifiIsConnected() == false))
+    	{
+    		ESP_LOGI(TAG, "Wifi not connected");
+
+    		if(resetCounter >= 720) //With 10-sec timeout without increase 720 * 10 = 2 hours
+			{
+				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+				esp_restart();
+			}
+    	}
+    	else
+    	{
+    		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
+    		{
+    			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
+				esp_restart();
+    		}
 		}
 
         break;
@@ -2235,11 +2249,11 @@ void update_installationId()
     //mqtt_config.cert_pem = cert;
 
     mqtt_config.lwt_topic = event_topic;
-    /*esp_mqtt_client_disconnect(mqtt_client);
-    esp_mqtt_client_stop(mqtt_client);
+    //esp_mqtt_client_disconnect(mqtt_client);
+    //esp_mqtt_client_stop(mqtt_client);
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
-	esp_mqtt_client_start(mqtt_client);
-	refresh_token(&mqtt_config);*/
+	//esp_mqtt_client_start(mqtt_client);
+	//refresh_token(&mqtt_config);
 }
 
 void periodic_refresh_token()

@@ -324,7 +324,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
-    ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
+    //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
     add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
 
@@ -347,7 +347,7 @@ int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_REQUESTING));
-    ESP_LOGE(TAG, "\n ************* 2 Sending OperatingMode %d ***************\n", CHARGE_OPERATION_STATE_REQUESTING);
+    //ESP_LOGE(TAG, "\n ************* 2 Sending OperatingMode %d ***************\n", CHARGE_OPERATION_STATE_REQUESTING);
 
     return publish_json(observations);
 }
@@ -362,7 +362,7 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
-    ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
+    //ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
 
     return publish_json(observations);
 }
@@ -548,7 +548,7 @@ int publish_telemetry_observation_on_change(){
 		}
 
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
-		ESP_LOGE(TAG, "\n ************* 4 Sending OperatingMode %d ***************\n", chargeOperatingMode);
+		//ESP_LOGE(TAG, "\n ************* 4 Sending OperatingMode %d ***************\n", chargeOperatingMode);
 		previousChargeOperatingMode = chargeOperatingMode;
 		isChange = true;
 	}

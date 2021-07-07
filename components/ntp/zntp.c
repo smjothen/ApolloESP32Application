@@ -88,7 +88,7 @@ void zntp_GetSystemTime(char * buffer, time_t *now_out)
 
 	time(&now);
 	zntp_format_time(buffer, now);
-	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+	//ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
 
 	if(now_out != NULL){
 		*now_out = now;
@@ -105,7 +105,7 @@ bool zntp_Get15MinutePoint()
 
 	char buffer[50];
 	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
-	ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+	//ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
 
 
 	//Find correct quarterly minute
