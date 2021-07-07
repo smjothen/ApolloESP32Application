@@ -13,6 +13,7 @@
 #include "ota_log.h"
 #include "DeviceInfo.h"
 #include "certificate.h"
+#include "protocol_task.h"
 
 #define TAG "OTA"
 
@@ -174,6 +175,11 @@ static void ota_task(void *pvParameters){
         	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
         	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
         		continue;
+        	}
+        	else
+        	{
+        		// Must send command to MCU to set purple led on charger
+        		MCU_SendCommandId(CommandHostFwUpdateStart);
         	}
         }
 

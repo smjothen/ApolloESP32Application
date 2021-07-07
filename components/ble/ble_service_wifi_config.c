@@ -1281,12 +1281,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			}
 
 			ESP_LOGI(TAG, "Update firmware command %i", command);
-			ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-			if(ret == MsgCommandAck)
-			{
-				start_segmented_ota_if_new_version();
-				//start_ota();//TODO remove
-			}
+
+			start_segmented_ota_if_new_version();
+
+
 		}
 		else if(command == CommandSwReboot)
 		{
