@@ -365,7 +365,7 @@ void app_main(void)
 
     char onTimeString[20]= {0};
 
-    bool hasBeenOnline = false;
+    //bool hasBeenOnline = false;
 
 	while (true)
     {
