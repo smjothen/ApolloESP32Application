@@ -1,8 +1,11 @@
+import sys
 
 from azure.cosmosdb.table.tableservice import TableService
 from azure.cosmosdb.table.models import Entity
 import json
 from pprint import pprint
+
+zapno = sys.argv[1]
 
 table_service = TableService(
     account_name='zapcloudprod',
@@ -12,7 +15,7 @@ table_service = TableService(
 
 ocmf_observations = table_service.query_entities(
     'Observations',
-    filter="PartitionKey eq 'ZAP000301' and RowKey lt '555_' and RowKey ge '554_' "
+    filter=f"PartitionKey eq '{zapno}' and RowKey lt '555_' and RowKey ge '554_' "
 )
 
 ocmf_observations = list(ocmf_observations)
