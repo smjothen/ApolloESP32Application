@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.1.12";
+char softwareVersion[] = "0.0.1.13";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -224,9 +224,18 @@ void app_main(void)
 		storage_SaveConfiguration();
 	}
 
+
 	if(storage_Get_DiagnosticsMode() == eACTIVATE_LOGGING)
 	{
 		esp_log_level_set("*", ESP_LOG_INFO);
+	}
+
+	if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+	{
+		//Toggling 4G to ensure a clean 4G initialization
+		//If it was ON at restart it will be power OFF now and ON again later.
+		//If it was OFF this will effectively power it ON so it is ready for later.
+		cellularPinsOff();
 	}
 
 	else if((storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE_ONCE) || (storage_Get_DiagnosticsMode() == eDISABLE_CERTIFICATE_ALWAYS))
@@ -397,7 +406,7 @@ void app_main(void)
     	//On rare occasions we have not been able to get online after firmware update on 4G. This sequence checks if we are not online after a 4G firware update and does a full
     	//4G and ESP restart to try and get back online. The 4G module will be powered on automatically if 4G is active communication mode.
     	//The effekt can be tested with the Debug command "PowerOff4GAndReset"
-    	if((storage_Get_CommunicationMode() == eCONNECTION_LTE))
+    	/*if((storage_Get_CommunicationMode() == eCONNECTION_LTE))
     	{
 			if(onTimeCounter < 600)
 			{
@@ -415,7 +424,7 @@ void app_main(void)
 					esp_restart();
 				}
 			}
-    	}
+    	}*/
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

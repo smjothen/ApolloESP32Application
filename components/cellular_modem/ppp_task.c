@@ -82,7 +82,7 @@ void cellularPinsOn()
 {
 	  //BG95 power on sequence
 	    //gpio_set_level(GPIO_OUTPUT_DTR, 0);//1
-		ESP_LOGI(TAG, "BG ON...");
+		ESP_LOGI(TAG, "BG ON");
 
 	    gpio_set_level(GPIO_OUTPUT_RESET, 0);	//Low - Ensure off
 	    gpio_set_level(GPIO_OUTPUT_PWRKEY, 0);
@@ -104,7 +104,7 @@ void cellularPinsOn()
 
 void cellularPinsOff()
 {
-	ESP_LOGI(TAG, "BG OFF...");
+	ESP_LOGI(TAG, "BG Toggle");
 
     gpio_set_level(GPIO_OUTPUT_RESET, 1);	//Low 1500 > x > 650 ms
     gpio_set_level(GPIO_OUTPUT_PWRKEY, 1);
@@ -477,6 +477,13 @@ int configure_modem_for_ppp(void){
     	ESP_LOGI(TAG, "Set to LTE-M only");
     else
     	ESP_LOGE(TAG, "Failed to set LTE-M only");
+
+
+    int lteBandOK = at_command_set_LTE_band();
+	if(lteBandOK == 0)
+		ESP_LOGI(TAG, "Set to LTE-M band");
+	else
+		ESP_LOGE(TAG, "Failed to set LTE-M band");
 
     char name[20];
     at_command_get_model_name(name, 20);

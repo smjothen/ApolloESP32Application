@@ -442,3 +442,8 @@ int at_command_http_test(void){
 int at_command_set_LTE_M_only(void){
     return at_command_with_ok_ack("AT+QCFG=\"iotopmode\",0,1", 300);
 }
+
+
+int at_command_set_LTE_band(void){
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,80080,0,1", 300);
+}
