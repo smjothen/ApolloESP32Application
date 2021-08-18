@@ -472,7 +472,7 @@ int configure_modem_for_ppp(void){
     }
 
 
-    /*
+
     int lteOK = at_command_set_LTE_M_only();
     if(lteOK == 0)
     	ESP_LOGI(TAG, "Set to LTE-M only");
@@ -485,7 +485,7 @@ int configure_modem_for_ppp(void){
 		ESP_LOGI(TAG, "Set to LTE-M band");
 	else
 		ESP_LOGE(TAG, "Failed to set LTE-M band");
-	*/
+
 
     char name[20];
     at_command_get_model_name(name, 20);
