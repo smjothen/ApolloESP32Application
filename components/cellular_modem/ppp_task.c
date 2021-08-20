@@ -471,22 +471,107 @@ int configure_modem_for_ppp(void){
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
+    //Check if correct Band setting
+    char response[100]={0};
+    at_command_get_LTE_band(response);
+    if(response != NULL)
+    {
+    	ESP_LOGI(TAG, "LTE Band: %s", response);
+
+    	char * bandSet = strstr(response, ",0x8080080,");
+    	if(bandSet == NULL)
+    	{
+    		ESP_LOGI(TAG, "Band not set, writing and soft restarting");
+
+    	    int lteOK = at_command_set_LTE_M_only();
+    	    if(lteOK == 0)
+    	    	ESP_LOGI(TAG, "Set to LTE-M only");
+    	    else
+    	    	ESP_LOGE(TAG, "Failed to set LTE-M only");
 
 
-    int lteOK = at_command_set_LTE_M_only();
-    if(lteOK == 0)
-    	ESP_LOGI(TAG, "Set to LTE-M only");
-    else
-    	ESP_LOGE(TAG, "Failed to set LTE-M only");
+    	    int lteBandOK = at_command_set_LTE_band();
+    		if(lteBandOK == 0)
+    			ESP_LOGI(TAG, "Set to LTE-M band");
+    		else
+    			ESP_LOGE(TAG, "Failed to set LTE-M band");
 
+    		ESP_LOGW(TAG, "Soft restarting BG");
+    		at_command_soft_restart();
+    		vTaskDelay(pdMS_TO_TICKS(5000));
+    	}
+    }
 
-    int lteBandOK = at_command_set_LTE_band();
-	if(lteBandOK == 0)
-		ESP_LOGI(TAG, "Set to LTE-M band");
-	else
-		ESP_LOGE(TAG, "Failed to set LTE-M band");
+    ESP_LOGI(TAG, "checking CREG");
+    char reply[20] = {0};
+    at_command_network_registration_status(reply);
 
+    //Checking both CREG and Operator is redundant. Now just checking operator as before.
 
+ /* CREG Definitions
+ 	0 Not registered. MT is not currently searching an operator to register to.
+    1 Registered, home network.
+    2 Not registered, but MT is currently trying to attach or searching an operator to
+    3 Registration denied
+    4 Unknown
+    5 Registered, roaming
+  */
+    //Check for valid CREG response
+    /*if(strstr(reply, "CREG"))
+    {
+    	//Check for valid CREG state
+		char *cregHome = strstr(reply, ",1");
+		char *cregRoam = strstr(reply, ",5");
+
+		if(cregHome != NULL)
+			ESP_LOGI(TAG, "cregHome %s", cregHome);
+
+		if(cregRoam != NULL)
+			ESP_LOGI(TAG, "cregRoam %s", cregRoam);
+
+		while ((cregHome == NULL) && (cregRoam == NULL))
+		{
+			//Repeat checking for valid CREG state
+			at_command_network_registration_status(reply);
+			if(strstr(reply, "CREG"))
+			{
+				//Repeat checking for valid CREG response
+				cregHome = strstr(reply, ",1");
+				cregRoam = strstr(reply, ",5");
+
+				if(cregHome != NULL)
+				{
+					ESP_LOGI(TAG, "cregHome %s", cregHome);
+				}
+				else if(cregRoam != NULL)
+				{
+					ESP_LOGI(TAG, "cregRoam %s", cregRoam);
+				}
+				else
+				{
+					ESP_LOGW(TAG, "No matching CREG values");
+					vTaskDelay(pdMS_TO_TICKS(3000));
+				}
+			}
+			else
+			{
+				ESP_LOGW(TAG, "No matching CREG label");
+				vTaskDelay(pdMS_TO_TICKS(3000));
+			}
+		}
+    }*/
+
+    char op[30];
+    at_command_get_operator(op, 30);
+    while (strlen(op) < 12)
+    {
+    	vTaskDelay(pdMS_TO_TICKS(3000));
+    	at_command_get_operator(op, 30);
+    }
+
+    strcpy(modemOperator, op);
+    ESP_LOGI(TAG, "got operator %s", modemOperator);
+    
     char name[20];
     at_command_get_model_name(name, 20);
     strcpy(modemName, name);
@@ -507,20 +592,7 @@ int configure_modem_for_ppp(void){
     GetNumberAsString(imsi, modemImsi, 20);
     ESP_LOGI(TAG, "got imsi %s", modemImsi);
 
-    char op[30];
-    at_command_get_operator(op, 30);
-    while (strlen(op) < 12)
-    {
-    	vTaskDelay(pdMS_TO_TICKS(3000));
-    	at_command_get_operator(op, 30);
-    }
 
-    strcpy(modemOperator, op);
-    ESP_LOGI(TAG, "got operator %s", modemOperator);
-
-    ESP_LOGD(TAG, "checking CREG");
-    at_command_network_registration_status();
-    
 	ESP_LOGI(TAG, "dialing(?)");
 	at_command_pdp_define();
 	at_command_dial();
@@ -848,6 +920,84 @@ int ppp_disconnect()
 	esp_netif_destroy(ppp_netif);
 
 	return 0;
+}
+
+
+static char stringBuffer[300];
+static bool hasNewData = false;
+int TunnelATCommand(char * unformattedCommand, bool changeMode){
+
+	ClearATBuffer();
+
+	char atCommand[100] = {0};
+
+	if(strstr(unformattedCommand,"+++"))
+	{
+		strcpy(atCommand,"+++");
+		changeMode = 0;
+	}
+	else
+	{
+
+		char * start = strstr(unformattedCommand,"[");
+
+		int nextChar = 0;
+		for (int i = 2; i < 98; i++)
+		{
+			if(start[i] != '\\')
+			{
+				atCommand[nextChar] = start[i];
+				nextChar++;
+			}
+			if(start[i] == ']')
+				break;
+		}
+		atCommand[nextChar-2] = '\0';
+	}
+
+	int enter_command_mode_result = 0;
+
+	if(changeMode)
+	{
+		enter_command_mode_result = enter_command_mode();
+
+		if(enter_command_mode_result<0){
+			ESP_LOGW(TAG, "failed to enter command mode");
+			vTaskDelay(pdMS_TO_TICKS(500));// wait to make sure all logs are flushed
+		}
+	}
+
+	char response[150] = {0};
+	at_command_generic(atCommand, response, 150);
+
+	//char stringbuffer[300];
+	sprintf(stringBuffer, "cmd: %s, res: %s", atCommand, response);
+	ESP_LOGI(TAG, "AT tunnel: %s", stringBuffer );
+
+	if(changeMode)
+	{
+		int enter_data_mode_result = enter_data_mode();
+		ESP_LOGI(TAG, "at command poll:[%d];[%d];", enter_command_mode_result, enter_data_mode_result);
+	}
+
+	hasNewData = true;
+	return 1;
+}
+
+bool HasNewData()
+{
+	return hasNewData;
+}
+
+char * GetATBuffer()
+{
+	return stringBuffer;
+}
+
+void ClearATBuffer()
+{
+	hasNewData = false;
+	memset(stringBuffer, 0, 300);
 }
 
 static int rssiLTE_percent = 0;

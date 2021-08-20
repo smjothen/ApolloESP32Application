@@ -40,4 +40,9 @@ int at_command_ping_test(int *sent, int *rcvd, int *lost, int *min, int *max, in
 int at_command_set_LTE_M_only(void);
 int at_command_set_LTE_band(void);
 
+int at_command_get_LTE_band(char * reply);
+int at_command_soft_restart(void);
+
+int at_command_generic(char *atCommand, char * response, int buff_len);
+
 #endif /* AT_COMMANDS_H */
