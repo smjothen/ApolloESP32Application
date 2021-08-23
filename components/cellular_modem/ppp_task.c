@@ -925,12 +925,28 @@ int ppp_disconnect()
 	return 0;
 }
 
+void ATOnly()
+{
+	event_group = xEventGroupCreate();
+	ESP_LOGI(TAG, "Configuring BG9x for prodtest");
+	xEventGroupSetBits(event_group, UART_TO_LINES);
+	xTaskCreate(uart_event_task, "uart_event_task", 2048*2, NULL, 7, &eventTaskHandle);
+
+	xEventGroupClearBits(event_group, UART_TO_PPP);
+	xEventGroupSetBits(event_group, UART_TO_LINES);
+
+	uart_set_baudrate( UART_NUM_1, 921600);
+	clear_lines();
+}
+
 
 static char stringBuffer[300];
 static bool hasNewData = false;
 int TunnelATCommand(char * unformattedCommand, bool changeMode){
 
 	ClearATBuffer();
+
+	clear_lines();
 
 	char atCommand[100] = {0};
 
