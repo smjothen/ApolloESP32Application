@@ -683,6 +683,9 @@ int test_bg(){
 		goto err;
 	}
 
+	sprintf(payload, "LTE_STATE: %s\r\n", LTEStateReply);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
 	// Set and verify LTE-M band limitation
 	at_command_set_LTE_band_immediate();
 	char LTEBandReply[100];
@@ -691,6 +694,9 @@ int test_bg(){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "LTE band error");
 		goto err;
 	}
+
+	sprintf(payload, "LTE_BAND: %s\r\n", LTEBandReply);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	// deactivate incase there already is a context
 	int preventive_deactivate_result = at_command_deactivate_pdp_context();
