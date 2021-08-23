@@ -473,7 +473,7 @@ int configure_modem_for_ppp(void){
 
     //Check if correct Band setting
     char response[100]={0};
-    at_command_get_LTE_band(response);
+    at_command_get_LTE_band(response, 100);
     if(response != NULL)
     {
     	ESP_LOGI(TAG, "LTE Band: %s", response);
@@ -483,14 +483,14 @@ int configure_modem_for_ppp(void){
     	{
     		ESP_LOGI(TAG, "Band not set, writing and soft restarting");
 
-    	    int lteOK = at_command_set_LTE_M_only();
+    	    int lteOK = at_command_set_LTE_M_only_at_boot();
     	    if(lteOK == 0)
     	    	ESP_LOGI(TAG, "Set to LTE-M only");
     	    else
     	    	ESP_LOGE(TAG, "Failed to set LTE-M only");
 
 
-    	    int lteBandOK = at_command_set_LTE_band();
+    	    int lteBandOK = at_command_set_LTE_band_at_boot();
     		if(lteBandOK == 0)
     			ESP_LOGI(TAG, "Set to LTE-M band");
     		else
@@ -502,9 +502,6 @@ int configure_modem_for_ppp(void){
     	}
     }
 
-    ESP_LOGI(TAG, "checking CREG");
-    char reply[20] = {0};
-    at_command_network_registration_status(reply);
 
     //Checking both CREG and Operator is redundant. Now just checking operator as before.
 
@@ -572,6 +569,12 @@ int configure_modem_for_ppp(void){
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
     
+
+    ESP_LOGI(TAG, "checking CREG");
+    char reply[20] = {0};
+    at_command_network_registration_status(reply);
+    ESP_LOGI(TAG, "CREG: %s", reply);
+
     char name[20];
     at_command_get_model_name(name, 20);
     strcpy(modemName, name);

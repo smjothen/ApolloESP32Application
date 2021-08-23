@@ -438,17 +438,31 @@ int at_command_http_test(void){
 }
 
 
-int at_command_set_LTE_M_only(void){
+
+int at_command_set_LTE_M_only_at_boot(void){
     return at_command_with_ok_ack("AT+QCFG=\"iotopmode\",0,0", 300);
 }
 
 
-int at_command_set_LTE_band(void){
+int at_command_set_LTE_M_only_immediate(void){
+    return at_command_with_ok_ack("AT+QCFG=\"iotopmode\",0,1", 300);
+}
+
+int at_command_get_LTE_M_only(char * reply, int buf_len){
+	    return at_command_two_line_response("AT+QCFG=\"iotopmode\"", reply, buf_len, 300, 100);
+}
+
+
+int at_command_set_LTE_band_at_boot(void){
     return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,0", 300);
 }
 
-int at_command_get_LTE_band(char * reply){
-	    return at_command_two_line_response("AT+QCFG=\"band\"", reply, 100, 300, 100);
+int at_command_set_LTE_band_immediate(void){
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,1", 300);
+}
+
+int at_command_get_LTE_band(char * reply, int buf_len){
+	    return at_command_two_line_response("AT+QCFG=\"band\"", reply, buf_len, 300, 100);
 }
 
 int at_command_soft_restart(void){

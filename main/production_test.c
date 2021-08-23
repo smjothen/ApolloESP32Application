@@ -674,6 +674,24 @@ int test_bg(){
 	sprintf(payload, "CCID: %s\r\n", ccid);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	// Set and verify LTE-M only mode
+	at_command_set_LTE_M_only_immediate();
+	char LTEStateReply[30];
+	if(at_command_get_LTE_M_only(LTEStateReply, 30) < 0)
+	{
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "LTE mode error");
+		goto err;
+	}
+
+	// Set and verify LTE-M band limitation
+	at_command_set_LTE_band_immediate();
+	char LTEBandReply[100];
+	if(at_command_get_LTE_band(LTEBandReply, 100) < 0)
+	{
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "LTE band error");
+		goto err;
+	}
+
 	// deactivate incase there already is a context
 	int preventive_deactivate_result = at_command_deactivate_pdp_context();
 	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
