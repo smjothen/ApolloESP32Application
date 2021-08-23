@@ -149,7 +149,7 @@ static void connectivity_task()
 			else if(localNewInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "LTE interface activating");
-				configure_uart(921600);
+				configure_uart();
 				ppp_task_start();
 				interfaceChange = false;
 			}

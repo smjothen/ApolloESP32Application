@@ -1677,10 +1677,16 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 
 				//For testing AT on BG while on Wifi
+				else if(strstr(commandString,"PowerToggle4G") != NULL)
+				{
+					cellularPinsOff();
+				}
+
+				//For testing AT on BG while on Wifi
 				else if(strstr(commandString,"PowerOn4G") != NULL)
 				{
 					cellularPinsOn();
-					configure_uart(921600);
+					ATOnly();
 				}
 
 				//AT command tunneling - do not change command mode
