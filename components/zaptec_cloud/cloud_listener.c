@@ -28,6 +28,7 @@
 
 #include "esp_tls.h"
 #include "base64.h"
+#include "main.h"
 
 #define TAG "Cloud Listener"
 
@@ -1673,6 +1674,30 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
 					//The 4G module will be powered on automatically if 4G is active communication mode
 					esp_restart();
+				}
+
+				//For testing AT on BG while on Wifi
+				else if(strstr(commandString,"PowerOn4G") != NULL)
+				{
+					cellularPinsOn();
+					configure_uart(921600);
+				}
+
+				//AT command tunneling - do not change command mode
+				else if(strstr(commandString,"AT") != NULL)
+				{
+					//Don't change data mode when on wifi
+					if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+						TunnelATCommand(commandString, 0);
+
+					//Change data mode when on LTE
+					if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+						TunnelATCommand(commandString, 1);
+				}
+				//AT command tunneling - do change command mode
+				else if(strstr(commandString,"OnlineWD") != NULL)
+				{
+					SetOnlineWatchdog();
 				}
 
 			}

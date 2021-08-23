@@ -169,8 +169,7 @@ int at_command_flow_ctrl_enable(void){
     return at_command_with_ok_ack("AT+IFC=2,2", 600);
 }
 
-int at_command_network_registration_status(){
-    char reply[20];
+int at_command_network_registration_status(char * reply){
     return at_command_two_line_response("AT+CREG?", reply, 20, 300, 100);
 }
 
@@ -439,6 +438,37 @@ int at_command_http_test(void){
 }
 
 
-int at_command_set_LTE_M_only(void){
+
+int at_command_set_LTE_M_only_at_boot(void){
+    return at_command_with_ok_ack("AT+QCFG=\"iotopmode\",0,0", 300);
+}
+
+
+int at_command_set_LTE_M_only_immediate(void){
     return at_command_with_ok_ack("AT+QCFG=\"iotopmode\",0,1", 300);
+}
+
+int at_command_get_LTE_M_only(char * reply, int buf_len){
+	    return at_command_two_line_response("AT+QCFG=\"iotopmode\"", reply, buf_len, 300, 100);
+}
+
+
+int at_command_set_LTE_band_at_boot(void){
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,0", 300);
+}
+
+int at_command_set_LTE_band_immediate(void){
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,1", 300);
+}
+
+int at_command_get_LTE_band(char * reply, int buf_len){
+	    return at_command_two_line_response("AT+QCFG=\"band\"", reply, buf_len, 300, 100);
+}
+
+int at_command_soft_restart(void){
+    return at_command_with_ok_ack("AT+CFUN=1,1", 300);
+}
+
+int at_command_generic(char *atCommand, char * response, int buff_len){
+    return at_command_two_line_response(atCommand, response, buff_len, 300, 300);
 }

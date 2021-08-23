@@ -37,6 +37,17 @@ int at_command_deactivate_pdp_context(void);
 int at_command_http_test(void);
 int at_command_ping_test(int *sent, int *rcvd, int *lost, int *min, int *max, int *avg);
 
-int at_command_set_LTE_M_only(void);
+int at_command_set_LTE_M_only_at_boot(void);
+int at_command_set_LTE_M_only_immediate(void);
+
+int at_command_get_LTE_M_only(char * reply, int buf_len);
+
+int at_command_set_LTE_band_at_boot(void);
+int at_command_set_LTE_band_immediate(void);
+
+int at_command_get_LTE_band(char * reply, int buf_len);
+int at_command_soft_restart(void);
+
+int at_command_generic(char *atCommand, char * response, int buff_len);
 
 #endif /* AT_COMMANDS_H */

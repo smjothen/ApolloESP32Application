@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.1.12";
+char softwareVersion[] = "0.0.1.16";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -187,6 +187,14 @@ void cJSON_Init_Memory()
 }
 
 
+static bool onlineWatchdog = false;
+static uint32_t onlineWatchdogCounter = 0;
+
+void SetOnlineWatchdog()
+{
+	onlineWatchdog = true;
+}
+
 void app_main(void)
 {
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
@@ -223,6 +231,7 @@ void app_main(void)
 		storage_Init_Configuration();
 		storage_SaveConfiguration();
 	}
+
 
 	if(storage_Get_DiagnosticsMode() == eACTIVATE_LOGGING)
 	{
@@ -296,11 +305,19 @@ void app_main(void)
 
 	i2cReadDeviceInfoFromEEPROM();
 	I2CDevicesStartTask();
-	connectivity_init();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-	//bool new_id = false;
+
+	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished))
+	{
+		//Toggling 4G to ensure a clean 4G initialization
+		//If it was ON at restart it will be power OFF now and ON again later.
+		//If it was OFF this will effectively power it ON so it is ready for later.
+		cellularPinsOff();
+	}
 	
+	connectivity_init();
+
 	if(devInfo.EEPROMFormatVersion == 0xFF)
 	{
 		//Invalid EEPROM content
@@ -356,8 +373,6 @@ void app_main(void)
 
     char onTimeString[20]= {0};
 
-    bool hasBeenOnline = false;
-
 	while (true)
     {
 		onTimeCounter++;
@@ -389,33 +404,22 @@ void app_main(void)
     		periodic_refresh_token();
     	}*/
 
+    	//For 4G testing - activated with command
+    	if(onlineWatchdog == true)
+    	{
+    		if(isMqttConnected() == false)
+    		{
+    			onlineWatchdogCounter++;
+    			ESP_LOGI(TAG_MAIN, "OnlineWatchdogCounter : %d", onlineWatchdogCounter);
+    		}
+    		if(onlineWatchdogCounter == 300)
+    			esp_restart();
+    	}
+
+
 	#ifdef useConsole
     	HandleCommands();
 	#endif
-
-
-    	//On rare occasions we have not been able to get online after firmware update on 4G. This sequence checks if we are not online after a 4G firware update and does a full
-    	//4G and ESP restart to try and get back online. The 4G module will be powered on automatically if 4G is active communication mode.
-    	//The effekt can be tested with the Debug command "PowerOff4GAndReset"
-    	if((storage_Get_CommunicationMode() == eCONNECTION_LTE))
-    	{
-			if(onTimeCounter < 600)
-			{
-				if(isMqttConnected() == true)
-				{
-					hasBeenOnline = true;
-				}
-			}
-			if(onTimeCounter == 600)
-			{
-				if((ota_CheckIfHasBeenUpdated() == true) && (hasBeenOnline == false))
-				{
-					ESP_LOGW(TAG_MAIN, "Not able to get back online after firmware update, powering off 4G and restarting");
-					cellularPinsOff();
-					esp_restart();
-				}
-			}
-    	}
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

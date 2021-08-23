@@ -976,6 +976,16 @@ static void sessionHandler_task()
 			}
 
 
+			if(HasNewData() == true)
+			{
+				int published = publish_diagnostics_observation(GetATBuffer());
+
+				if (published == 0)
+				{
+					ClearATBuffer();
+				}
+			}
+
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
 				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);

@@ -11,7 +11,7 @@ extern "C" {
 #include "DeviceInfo.h"
 
 void GetTimeOnString(char * onTimeString);
-
+void SetOnlineWatchdog();
 
 #ifdef __cplusplus
 }
