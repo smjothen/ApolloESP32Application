@@ -571,14 +571,18 @@ int configure_modem_for_ppp(void){
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
     
+    vTaskDelay(pdMS_TO_TICKS(500));
+
     clear_lines();
 
+    /*
+    //May not work properly on old BG firmware: BG95M6LAR02A01_01.002.01.002
     ESP_LOGI(TAG, "checking CREG");
     char reply[20] = {0};
     at_command_network_registration_status(reply);
     ESP_LOGI(TAG, "CREG: %s", reply);
 
-    clear_lines();
+    clear_lines();*/
 
     char name[20] = {0};
     at_command_get_model_name(name, 20);
@@ -599,6 +603,8 @@ int configure_modem_for_ppp(void){
     at_command_get_imsi(imsi, 20);
     GetNumberAsString(imsi, modemImsi, 20);
     ESP_LOGI(TAG, "got imsi %s", modemImsi);
+
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     clear_lines();
 
