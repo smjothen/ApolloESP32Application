@@ -472,7 +472,7 @@ int configure_modem_for_ppp(void){
     }
 
     //Check if correct Band setting
-    char response[100]={0};
+    char response[100] = {0};
     at_command_get_LTE_band(response, 100);
     if(response != NULL)
     {
@@ -558,7 +558,9 @@ int configure_modem_for_ppp(void){
 		}
     }*/
 
-    char op[30];
+    clear_lines();
+
+    char op[30] = {0};
     at_command_get_operator(op, 30);
     while (strlen(op) < 12)
     {
@@ -569,32 +571,36 @@ int configure_modem_for_ppp(void){
     strcpy(modemOperator, op);
     ESP_LOGI(TAG, "got operator %s", modemOperator);
     
+    clear_lines();
 
     ESP_LOGI(TAG, "checking CREG");
     char reply[20] = {0};
     at_command_network_registration_status(reply);
     ESP_LOGI(TAG, "CREG: %s", reply);
 
-    char name[20];
+    clear_lines();
+
+    char name[20] = {0};
     at_command_get_model_name(name, 20);
     strcpy(modemName, name);
     ESP_LOGI(TAG, "got name %s", modemName);
 
-    char imei[20];
+    char imei[20] = {0};
     at_command_get_imei(imei, 20);
     GetNumberAsString(imei, modemImei, 20);
     ESP_LOGI(TAG, "got imei %s", modemImei);
 
-    char Iccid[30];
+    char Iccid[30] = {0};
 	at_command_get_ccid(Iccid, 30);
 	GetNumberAsString(Iccid, modemIccid, 30);
 	ESP_LOGI(TAG, "got Iccid %s", modemIccid);
 
-    char imsi[20];
+    char imsi[20] = {0};
     at_command_get_imsi(imsi, 20);
     GetNumberAsString(imsi, modemImsi, 20);
     ESP_LOGI(TAG, "got imsi %s", modemImsi);
 
+    clear_lines();
 
 	ESP_LOGI(TAG, "dialing(?)");
 	at_command_pdp_define();

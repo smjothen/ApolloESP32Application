@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.1.16";
+char softwareVersion[] = "0.0.1.17";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -373,6 +373,8 @@ void app_main(void)
 
     char onTimeString[20]= {0};
 
+    bool hasBeenOnline = false;
+
 	while (true)
     {
 		onTimeCounter++;
@@ -415,6 +417,30 @@ void app_main(void)
     		if(onlineWatchdogCounter == 300)
     			esp_restart();
     	}
+
+
+    	//On rare occasions we have not been able to get online after firmware update on 4G. This sequence checks if we are not online after a 4G firware update and does a full
+		//4G and ESP restart to try and get back online. The 4G module will be powered on automatically if 4G is active communication mode.
+		//The effekt can be tested with the Debug command "PowerOff4GAndReset"
+		if((storage_Get_CommunicationMode() == eCONNECTION_LTE))
+		{
+			if(onTimeCounter < 600)
+			{
+				if(isMqttConnected() == true)
+				{
+					hasBeenOnline = true;
+				}
+			}
+			if(onTimeCounter == 600)
+			{
+				if((ota_CheckIfHasBeenUpdated() == true) && (hasBeenOnline == false))
+				{
+					ESP_LOGW(TAG_MAIN, "Not able to get back online after firmware update, powering off 4G and restarting");
+					cellularPinsOff();
+					esp_restart();
+				}
+			}
+		}
 
 
 	#ifdef useConsole
