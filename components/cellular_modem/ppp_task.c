@@ -498,7 +498,7 @@ int configure_modem_for_ppp(void){
 
     		ESP_LOGW(TAG, "Soft restarting BG");
     		at_command_soft_restart();
-    		vTaskDelay(pdMS_TO_TICKS(15000));
+    		vTaskDelay(pdMS_TO_TICKS(10000));
     	}
     }
 
@@ -565,6 +565,14 @@ int configure_modem_for_ppp(void){
     at_command_network_registration_status(reply);
     ESP_LOGI(TAG, "CREG: %s", reply);
     */
+
+    int i;
+    for (i = 0; i <= 4; i++)
+    {
+    	memset(at_buffer,0,LINE_BUFFER_SIZE);
+    	await_line(at_buffer, pdMS_TO_TICKS(1000));
+    	ESP_LOGI(TAG, "Clearing line buffer %s", at_buffer);
+    }
 
     char name[20] = {0};
     at_command_get_model_name(name, 20);
