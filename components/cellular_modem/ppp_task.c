@@ -567,17 +567,39 @@ int configure_modem_for_ppp(void){
     */
 
     int i;
-    for (i = 0; i <= 4; i++)
+    for (i = 0; i <= 3; i++)
     {
     	memset(at_buffer,0,LINE_BUFFER_SIZE);
     	await_line(at_buffer, pdMS_TO_TICKS(1000));
     	ESP_LOGI(TAG, "Clearing line buffer %s", at_buffer);
     }
 
-    char name[20] = {0};
-    at_command_get_model_name(name, 20);
-    strcpy(modemName, name);
-    ESP_LOGI(TAG, "got name %s", modemName);
+    //Detect BG9x-model string to ensure AT-commands are in sync before we continue
+    char name[20];
+    char *pName = NULL;
+    uint8_t nTimeout = 10;
+    while ((pName == NULL) && (nTimeout > 0))
+    {
+    	memset(name, 0, 20);
+    	at_command_get_model_name(name, 20);
+    	if(strlen(name) > 0)
+    	{
+    		pName = strstr(name, "BG9");
+    		if(pName != NULL)
+    		{
+    			strcpy(modemName, name);
+   			    ESP_LOGW(TAG, "got name %s", modemName);
+    			break;
+    		}
+    		else
+    		{
+    			ESP_LOGE(TAG, "got name %s", modemName);
+    		}
+    	}
+
+    	vTaskDelay(pdMS_TO_TICKS(2000));
+    	nTimeout--;
+    }
 
     char imei[20] = {0};
     at_command_get_imei(imei, 20);
