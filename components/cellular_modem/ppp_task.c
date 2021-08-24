@@ -498,7 +498,8 @@ int configure_modem_for_ppp(void){
 
     		ESP_LOGW(TAG, "Soft restarting BG");
     		at_command_soft_restart();
-    		vTaskDelay(pdMS_TO_TICKS(10000));
+
+    		vTaskDelay(pdMS_TO_TICKS(15000));
     	}
     }
 
@@ -573,6 +574,8 @@ int configure_modem_for_ppp(void){
     	await_line(at_buffer, pdMS_TO_TICKS(1000));
     	ESP_LOGI(TAG, "Clearing line buffer %s", at_buffer);
     }
+
+    at_command_echo_set(false);
 
     //Detect BG9x-model string to ensure AT-commands are in sync before we continue
     char name[20];
