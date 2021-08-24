@@ -498,7 +498,7 @@ int configure_modem_for_ppp(void){
 
     		ESP_LOGW(TAG, "Soft restarting BG");
     		at_command_soft_restart();
-    		vTaskDelay(pdMS_TO_TICKS(5000));
+    		vTaskDelay(pdMS_TO_TICKS(15000));
     	}
     }
 
@@ -558,31 +558,13 @@ int configure_modem_for_ppp(void){
 		}
     }*/
 
-    clear_lines();
-
-    char op[30] = {0};
-    at_command_get_operator(op, 30);
-    while (strlen(op) < 12)
-    {
-    	vTaskDelay(pdMS_TO_TICKS(3000));
-    	at_command_get_operator(op, 30);
-    }
-
-    strcpy(modemOperator, op);
-    ESP_LOGI(TAG, "got operator %s", modemOperator);
-    
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    clear_lines();
 
     /*
-    //May not work properly on old BG firmware: BG95M6LAR02A01_01.002.01.002
     ESP_LOGI(TAG, "checking CREG");
     char reply[20] = {0};
     at_command_network_registration_status(reply);
     ESP_LOGI(TAG, "CREG: %s", reply);
-
-    clear_lines();*/
+    */
 
     char name[20] = {0};
     at_command_get_model_name(name, 20);
@@ -604,9 +586,18 @@ int configure_modem_for_ppp(void){
     GetNumberAsString(imsi, modemImsi, 20);
     ESP_LOGI(TAG, "got imsi %s", modemImsi);
 
-    vTaskDelay(pdMS_TO_TICKS(500));
 
-    clear_lines();
+    char op[30] = {0};
+    at_command_get_operator(op, 30);
+    while (strlen(op) < 12)
+    {
+    	vTaskDelay(pdMS_TO_TICKS(3000));
+    	at_command_get_operator(op, 30);
+    }
+
+    strcpy(modemOperator, op);
+    ESP_LOGI(TAG, "got operator %s", modemOperator);
+
 
 	ESP_LOGI(TAG, "dialing(?)");
 	at_command_pdp_define();
