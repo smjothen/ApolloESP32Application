@@ -42,6 +42,7 @@
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
 #define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
+#define MQTT_EVENT_PATTERN_PING_REPLY "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s&pi=%s"
 
 int resetCounter = 0;
 
@@ -2286,6 +2287,40 @@ void update_installationId()
 	//esp_mqtt_client_start(mqtt_client);
 	//refresh_token(&mqtt_config);
 }
+
+
+void update_mqtt_event_pattern(bool usePingReply)
+{
+    char * instId = storage_Get_InstallationId();
+
+    int compare = strncmp(instId, INSTALLATION_ID, 36);
+    if(compare != 0)
+    {
+
+    	char instIdEncoded[37] = {0};
+    	GetInstallationIdBase64(instId, instIdEncoded);
+    	if(usePingReply)
+    		sprintf(event_topic, MQTT_EVENT_PATTERN_PING_REPLY, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded, "PR");
+    	else
+    		sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded);
+    }
+    else
+    {
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID_BASE64);
+    }
+
+    ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
+
+    //mqtt_config.cert_pem = cert;
+
+    mqtt_config.lwt_topic = event_topic;
+    //esp_mqtt_client_disconnect(mqtt_client);
+    //esp_mqtt_client_stop(mqtt_client);
+	esp_mqtt_set_config(mqtt_client, &mqtt_config);
+	//esp_mqtt_client_start(mqtt_client);
+	//refresh_token(&mqtt_config);
+}
+
 
 void periodic_refresh_token()
 {
