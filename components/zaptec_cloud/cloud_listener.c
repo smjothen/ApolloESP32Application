@@ -252,109 +252,145 @@ bool GetNewInstallationIdFlag()
 	return newInstallationIdFlag;
 }
 
-
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
 	if ((message[0] != '{') || (message[message_len-1] != '}'))
 		return;
 
-	char recvString[message_len];
-	strncpy(recvString, message+1, message_len-2);
-	recvString[message_len-2] = '\0';
+	ESP_LOGW(TAG, "message: %s", message);
 
-	//Replace apostrophe with space for sscanf() to work
-	for (int i = 0; i < message_len; i++)
-	{
-		if(recvString[i] == '"')
-			recvString[i] = ' ';
-	}
-
-	char const separator[2] = ",";
-	char * stringPart;
-
-	stringPart = strtok(recvString, separator);
+	ESP_LOGI(TAG, "***** Start parsing of Cloud settings *****\n");
 
 	bool doSave = false;
 	int nrOfParameters = 0;
 
-	while(stringPart != NULL)
-	{
-		nrOfParameters++;
+	cJSON *cloudObject = cJSON_Parse(message);//"{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"ble-f9f25dee-29c9-4eb2-af37-9f8e821ba0d9\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"ble-8b06fc14-aa7c-462d-a5d7-a7c943f2c4e0\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-5237AB3B\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-530796E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-034095E7\",\"Action\":0,\"ExpiryDate\":null},{\"Tag\":\"nfc-04C31102F84D80\",\"Action\":0,\"ExpiryDate\":null}]}");
+	cJSON *desiredObject = NULL;
+	cJSON *settings = NULL;
 
-		char * pos = strstr(stringPart, " 120 : ");
-		if(pos != NULL)
+	//The settings in the message may start on two different levels, handle both
+	if(cJSON_HasObjectItem(cloudObject, "desired"))
+	{
+		desiredObject = cJSON_GetObjectItem(cloudObject,"desired");
+		if(cJSON_HasObjectItem(desiredObject, "Settings"))
+			settings = cJSON_GetObjectItem(desiredObject,"Settings");
+	}
+	else if(cJSON_HasObjectItem(cloudObject, "Settings"))
+	{
+		settings = cJSON_GetObjectItem(cloudObject,"Settings");
+	}
+
+	if(settings != NULL)
+	{
+
+		//Authorization
+		if(cJSON_HasObjectItem(settings, "120"))
 		{
-			int useAuthorization = 0;
-			sscanf(pos+strlen(" 120 : "),"%d", &useAuthorization);
-			ESP_LOGI(TAG, "120 useAuthorization: %d \n", useAuthorization);
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"120")->valuestring;
+			//ESP_LOGI(TAG, "120 Authorization=%s", valueString);
+
+			int useAuthorization = atoi(valueString);
+
+			//ESP_LOGI(TAG, "120 useAuthorization: %d", useAuthorization);
 
 			if((useAuthorization == 0) || (useAuthorization == 1))
 			{
-				MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, (uint8_t)useAuthorization);
-				if(ret == MsgWriteAck)
+				//Only save if different from value on file
+				if(useAuthorization != (int)storage_Get_AuthenticationRequired())
 				{
-					storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
-					ESP_LOGI(TAG, "DoSave AuthenticationRequired=%d", useAuthorization);
-					doSave = true;
+					MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, (uint8_t)useAuthorization);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_AuthenticationRequired((uint8_t)useAuthorization);
+						ESP_LOGW(TAG, "New: 120 AuthenticationRequired=%d", useAuthorization);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU useAuthorization parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU useAuthorization parameter error");
+					ESP_LOGI(TAG, "Old: 120 Authorization %d", storage_Get_AuthenticationRequired());
 				}
 			}
 			else
 			{
 				ESP_LOGI(TAG, "Invalid useAuthorization: %d \n", useAuthorization);
 			}
-
 		}
 
-		pos = strstr(stringPart, " 510 : ");
-		if(pos != NULL)
+
+		//Maximum current
+		if(cJSON_HasObjectItem(settings, "510"))
 		{
-			float currentInMaximum = 0.0;
-			sscanf(pos+strlen(" 510 : "),"%f", &currentInMaximum);
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"510")->valuestring;
+			//ESP_LOGI(TAG, "510 MaxCurrent=%s", valueString);
+
+			float currentInMaximum = atof(valueString);
 
 			if((32.0 >= currentInMaximum) && (currentInMaximum >= 0.0))
 			{
-				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
-				if(ret == MsgWriteAck)
+				if(currentInMaximum != storage_Get_CurrentInMaximum())
 				{
-					storage_Set_CurrentInMaximum(currentInMaximum);
-					ESP_LOGI(TAG, "DoSave 510 currentInMaximum: %f \n", currentInMaximum);
-					doSave = true;
+					MessageType ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_CurrentInMaximum(currentInMaximum);
+						ESP_LOGW(TAG, "New: 510 currentInMaximum: %f \n", currentInMaximum);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU currentInMaximum parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU currentInMaximum parameter error");
+					ESP_LOGI(TAG, "Old: 510 Maximum current: %f", storage_Get_CurrentInMaximum());
 				}
 			}
 			else
 			{
 				ESP_LOGI(TAG, "Invalid currentInMaximum: %f \n", currentInMaximum);
 			}
-
 		}
 
-		pos = strstr(stringPart, " 511 : ");
-		if(pos != NULL)
-		{
 
-			float currentInMinimum = 0.0;
-			sscanf(pos+strlen(" 511 : "),"%f", &currentInMinimum);
+		///Minimum current
+		if(cJSON_HasObjectItem(settings, "511"))
+		{
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"511")->valuestring;
+			//ESP_LOGI(TAG, "511 MinCurrent=%s", valueString);
+
+			float currentInMinimum = atof(valueString);
 
 			if((32.0 >= currentInMinimum) && (currentInMinimum >= 0.0))
 			{
-				MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, currentInMinimum);
-				if(ret == MsgWriteAck)
+				if(currentInMinimum != storage_Get_CurrentInMinimum())
 				{
-					storage_Set_CurrentInMinimum(currentInMinimum);
-					ESP_LOGI(TAG, "DoSave 511 currentInMinimum: %f \n", currentInMinimum);
-					doSave = true;
+					MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, currentInMinimum);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_CurrentInMinimum(currentInMinimum);
+						ESP_LOGW(TAG, "New: 511 currentInMinimum: %f \n", currentInMinimum);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU currentInMinimum parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU currentInMinimum parameter error");
+					ESP_LOGI(TAG, "Old: 511 Minimum current: %f", storage_Get_CurrentInMinimum());
 				}
 			}
 			else
@@ -363,47 +399,84 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			}
 		}
 
-		pos = strstr(stringPart, " 520 : ");
-		if(pos != NULL)
-		{
-			int maxPhases = 0;
-			sscanf(pos+strlen(" 520 : "),"%d", &maxPhases);
 
-			if((3 >= maxPhases) && (maxPhases >= 1))
+		//MaxPhases
+		if(cJSON_HasObjectItem(settings, "520"))
+		{
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"520")->valuestring;
+			//ESP_LOGI(TAG, "520 MaxPhases=%s", valueString);
+
+			int maxPhases = atoi(valueString);
+
+			//Since this is not a setting like on Pro, but a measurement Go sends to cloud, we don't need to save it or send to MCU
+			//Just compare and see if measured value matches value received from Cloud.
+
+			if(maxPhases != GetMaxPhases())
 			{
-				MessageType ret = MCU_SendUint8Parameter(MaxPhases, (uint8_t)maxPhases);
-				if(ret == MsgWriteAck)
+				ESP_LOGE(TAG, "520 MaxPhases: %d !=%d -> Differ!!!", maxPhases, GetMaxPhases());
+			}
+			else
+			{
+				ESP_LOGI(TAG, "NA : 520 MaxPhases: %d == %d -> OK", maxPhases, GetMaxPhases());
+			}
+
+			/*if((3 >= maxPhases) && (maxPhases >= 1))
+			{
+				if(maxPhases != (int)storage_Get_MaxPhases())
 				{
-					storage_Set_MaxPhases((uint8_t)maxPhases);
-					ESP_LOGI(TAG, "DoSave 520 maxPhases=%d\n", maxPhases);
-					doSave = true;
+					MessageType ret = MCU_SendUint8Parameter(MaxPhases, (uint8_t)maxPhases);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_MaxPhases((uint8_t)maxPhases);
+						ESP_LOGW(TAG, "New: 520 maxPhases=%d\n", maxPhases);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU maxPhases parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU maxPhases parameter error");
+					ESP_LOGI(TAG, "Old: 520 MaxPhases: %d", storage_Get_MaxPhases());
 				}
 			}
 			else
 			{
 				ESP_LOGI(TAG, "Invalid maxPhases: %d \n", maxPhases);
-			}
+			}*/
+
 		}
 
-		pos = strstr(stringPart, " 522 : ");
-		if(pos != NULL)
+		//DefaultOfflinePhase
+		if(cJSON_HasObjectItem(settings, "522"))
 		{
-			int defaultOfflinePhase = 0;
-			sscanf(pos+strlen(" 522 : "),"%d", &defaultOfflinePhase);
-			ESP_LOGE(TAG, "522 defaultOfflinePhase=%d  - Not used\n", defaultOfflinePhase);
-			//if((3 >= defaultOfflinePhase) && (defaultOfflinePhase > 1))
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"522")->valuestring;
+			//ESP_LOGI(TAG, "522 DefaultOfflinePhase=%s", valueString);
+
+			int defaultOfflinePhase = atoi(valueString);
+
+			//ESP_LOGE(TAG, "522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
+
 			if((9 >= defaultOfflinePhase) && (defaultOfflinePhase >= 1))
 			{
 				//MessageType ret = MCU_SendUint8Parameter(ChargerOfflinePhase, (uint8_t)defaultOfflinePhase);
 				//if(ret == MsgWriteAck)
 				//{
+				if(defaultOfflinePhase != (int)storage_Get_DefaultOfflinePhase())
+				{
 					storage_Set_DefaultOfflinePhase((uint8_t)defaultOfflinePhase);
-					ESP_LOGI(TAG, "DoSave 522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
+					ESP_LOGW(TAG, "New: 522 defaultOfflinePhase=%d\n", defaultOfflinePhase);
 					doSave = true;
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Old: 522 OfflinePhase: %d", storage_Get_DefaultOfflinePhase());
+				}
 				//}
 				//else
 				//{
@@ -414,22 +487,34 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid defaultOfflinePhase: %d \n", defaultOfflinePhase);
 			}
+
 		}
 
-		pos = strstr(stringPart, " 523 : ");
-		if(pos != NULL)
+		//DefaultOfflineCurrent
+		if(cJSON_HasObjectItem(settings, "523"))
 		{
-			float defaultOfflineCurrent = 0.0;
-			sscanf(pos+strlen(" 523 : "),"%f", &defaultOfflineCurrent);
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"523")->valuestring;
+			//ESP_LOGI(TAG, "523 DefaultOfflineCurrent=%s", valueString);
+
+			float defaultOfflineCurrent = atof(valueString);
 
 			if((32.0 >= defaultOfflineCurrent) && (defaultOfflineCurrent >= 0.0))
 			{
 				//MessageType ret = MCU_SendFloatParameter(ChargerOfflineCurrent, defaultOfflineCurrent);
 				//if(ret == MsgWriteAck)
 				//{
-				storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
-				ESP_LOGI(TAG, "DoSave 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
-				doSave = true;
+				if(defaultOfflineCurrent != storage_Get_DefaultOfflineCurrent())
+				{
+					storage_Set_DefaultOfflineCurrent(defaultOfflineCurrent);
+					ESP_LOGW(TAG, "New: 523 defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
+					doSave = true;
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Old: 523 OfflineCurrent: %f", storage_Get_DefaultOfflineCurrent());
+				}
 				//}
 				//else
 				//{
@@ -442,53 +527,77 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			}
 		}
 
-		pos = strstr(stringPart, " 711 : ");
-		if(pos != NULL)
+		//IsEnable
+		if(cJSON_HasObjectItem(settings, "711"))
 		{
-			int isEnabled = 0;
-			sscanf(pos+strlen(" 711 : "),"%d", &isEnabled);
-			ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"711")->valuestring;
+			//ESP_LOGI(TAG, "711 Isenabled=%s", valueString);
+
+			int isEnabled = atoi(valueString);
+			//ESP_LOGI(TAG, "711 isEnabled: %d \n", isEnabled);
 
 			if((isEnabled == 0) || (isEnabled == 1))
 			{
-				MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, (uint8_t)isEnabled);
-				if(ret == MsgWriteAck)
+				if(isEnabled != (int)storage_Get_IsEnabled())
 				{
-					storage_Set_IsEnabled((uint8_t)isEnabled);
-					ESP_LOGI(TAG, "DoSave 711 isEnabled=%d\n", isEnabled);
-					doSave = true;
+					MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, (uint8_t)isEnabled);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_IsEnabled((uint8_t)isEnabled);
+						ESP_LOGW(TAG, "New: 711 isEnabled=%d\n", isEnabled);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU isEnabled parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU isEnabled parameter error");
+					ESP_LOGI(TAG, "Old: 711 IsEnabled: %d ", storage_Get_IsEnabled());
 				}
 			}
 			else
 			{
 				ESP_LOGI(TAG, "Invalid isEnabled: %d \n", isEnabled);
 			}
+
+
 		}
 
-		pos = strstr(stringPart, " 712 : ");
-		if(pos != NULL)
+		//Standalone
+		if(cJSON_HasObjectItem(settings, "712"))
 		{
-			int standalone = 0;
-			sscanf(pos+strlen(" 712 : "),"%d", &standalone);
-			ESP_LOGI(TAG, "712 standalone: %d \n", standalone);
+			nrOfParameters++;
 
+			char * valueString = cJSON_GetObjectItem(settings,"712")->valuestring;
+			//ESP_LOGI(TAG, "712 Standalone=%s", valueString);
+
+			int standalone = atoi(valueString);
+
+			//ESP_LOGI(TAG, "712 standalone: %d \n", standalone);
 
 			if((standalone == 0) || (standalone == 1))
 			{
-				MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
-				if(ret == MsgWriteAck)
+				if(standalone != (int)storage_Get_Standalone())
 				{
-					storage_Set_Standalone((uint8_t)standalone);
-					ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
-					doSave = true;
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+					if(ret == MsgWriteAck)
+					{
+						storage_Set_Standalone((uint8_t)standalone);
+						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone parameter error");
+					}
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU standalone parameter error");
+					ESP_LOGI(TAG, "Old: 712 Standalone: %d", storage_Get_Standalone());
 				}
 			}
 			else
@@ -497,73 +606,121 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			}
 		}
 
-		pos = strstr(stringPart, " 800 : ");
-		if(pos != NULL)
+		//InstallationId
+		if(cJSON_HasObjectItem(settings, "800"))
 		{
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"800")->valuestring;
+			//ESP_LOGI(TAG, "800 InstallationId=%s", valueString);
 
 			char installationId[DEFAULT_STR_SIZE] = {0};
-			sscanf(pos+strlen(" 800 : "),"%36s", installationId);//Read Max 36 characters
-			ESP_LOGI(TAG, "800 installationId: %s \n", installationId);
-			storage_Set_InstallationId(installationId);
-			doSave = true;
 
-			newInstallationIdFlag = true;
-			//continue;
-		}
+			//Ensure string is not longer than buffer
+			if(strlen(valueString) < DEFAULT_STR_SIZE)
+				strcpy(installationId, valueString);
 
-		pos = strstr(stringPart, " 801 : ");
-		if(pos != NULL)
-		{
-
-			char routingId[DEFAULT_STR_SIZE] = {0};
-			sscanf(pos+strlen(" 801 : "),"%36s", routingId);//Read Max 36 characters
-			ESP_LOGI(TAG, "801 routingId: %s \n", routingId);
-			storage_Set_RoutingId(routingId);
-			doSave = true;
-
-			newInstallationIdFlag = true;
-			//continue;
-		}
-
-		pos = strstr(stringPart, " 802 : ");
-		if(pos != NULL)
-		{
-			char * nameEnd = strstr(stringPart, " }");
-			if(nameEnd != NULL)
+			int instLen = strlen(installationId);
+			if(instLen < DEFAULT_STR_SIZE)
 			{
-				char chargerName[DEFAULT_STR_SIZE] = {0};
-				char * nameStart = pos+strlen(" 802 : ");
-				int nameLen = nameEnd - nameStart;
-				if(nameLen <= 36)
+				int cmpResult = strcmp(installationId, storage_Get_InstallationId());
+				if(cmpResult != 0)
 				{
-					strncpy(chargerName, nameStart, nameLen);
-
-				//sscanf(pos+strlen(" 802 : "),"%36s", chargerName);//Read Max 36 characters %[^\0]
-					ESP_LOGI(TAG, "802 chargerName: %s \n", chargerName);
-					storage_Set_ChargerName(chargerName);
+					ESP_LOGW(TAG, "800 installationId: %s \n", installationId);
+					storage_Set_InstallationId(installationId);
 					doSave = true;
+
+					newInstallationIdFlag = true;
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Old: 800 InstallationId: %s", storage_Get_InstallationId());
 				}
 			}
-			//continue;
+
 		}
 
-		pos = strstr(stringPart, " 805 : ");
-		if(pos != NULL)
+		//RoutingId
+		if(cJSON_HasObjectItem(settings, "801"))
 		{
-			uint32_t diagnosticsMode = 0;
-			sscanf(pos+strlen(" 805 : "),"%d", &diagnosticsMode);
-			ESP_LOGI(TAG, "805 diagnosticsMode: %u \n", diagnosticsMode);
-			storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE);
-			doSave = true;
-			//continue;
+			nrOfParameters++;
+
+			char * valueString = cJSON_GetObjectItem(settings,"801")->valuestring;
+			//ESP_LOGI(TAG, "801 RoutingId=%s", valueString);
+
+			char routingId[DEFAULT_STR_SIZE] = {0};
+
+			//Ensure string is not longer than buffer
+			if(strlen(valueString) < DEFAULT_STR_SIZE)
+				strcpy(routingId, valueString);
+
+			int riLen = strlen(routingId);
+			if(riLen < DEFAULT_STR_SIZE)
+			{
+				int cmpResult = strcmp(routingId, storage_Get_RoutingId());
+				if(cmpResult != 0)
+				{
+					ESP_LOGW(TAG, "New: 801 RoutingId: %s", routingId);
+					storage_Set_RoutingId(routingId);
+					doSave = true;
+
+					newInstallationIdFlag = true;
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Old: 801 RoutingId: %s", storage_Get_RoutingId());
+				}
+			}
 		}
 
-		stringPart = strtok(NULL, separator);
-		if(stringPart != NULL)
-			ESP_LOGI(TAG, "Str: %s \n", stringPart);
+		//ChargerName
+		if(cJSON_HasObjectItem(settings, "802"))
+		{
+			nrOfParameters++;
 
+			char * valueString = cJSON_GetObjectItem(settings,"802")->valuestring;
+			//ESP_LOGI(TAG, "802 ChargerName=%s", valueString);
+
+
+			if(valueString != NULL)
+			{
+				char chargerName[DEFAULT_STR_SIZE] = {0};
+
+				//Ensure string is not longer than buffer
+				if(strlen(valueString) < DEFAULT_STR_SIZE)
+					strcpy(chargerName, valueString);
+
+				int nameLen = strlen(chargerName);
+				if(nameLen < DEFAULT_STR_SIZE)
+				{
+					int cmpResult = strcmp(chargerName, storage_Get_ChargerName());
+					if(cmpResult != 0)
+					{
+						ESP_LOGW(TAG, "New: 802 ChargerName: %s", chargerName);
+						storage_Set_ChargerName(chargerName);
+						doSave = true;
+					}
+					else
+					{
+						ESP_LOGI(TAG, "Old: 802 ChargerName: %s", storage_Get_ChargerName());
+					}
+				}
+			}
+		}
+
+		//Due to this being set to SWAP_COMMUNICATION_MODE in earlier versions up to 0.0.1.22,
+		//diagnosticsMode must never be set as Cloud parameter, only through command.
+
+
+		if(cJSON_HasObjectItem(settings, "805"))
+		{
+			nrOfParameters++;
+
+			ESP_LOGE(TAG, "#### 805 DiagnosticsMode: DO NOT USE ####");
+		}
+
+		ESP_LOGI(TAG, "***** End parsing of Cloud settings *****\n");
 	}
-
 
 	ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
 
@@ -578,7 +735,10 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		ESP_LOGI(TAG, "CloudSettings: Nothing to save");
 	}
 
+	if(cloudObject != NULL)
+		cJSON_Delete(cloudObject);
 }
+
 
 void ParseLocalSettingsFromCloud(char * message, int message_len)
 {
@@ -992,7 +1152,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/503/"))
 	{
 		ESP_LOGI(TAG, "Received \"ReportChargingState\"-command");
-		ClearStartupSent();
+		ClearStartupSent();				//Trig resend of general and local settings
+		cloudSettingsAreUpdated = true; //Trig resend of cloud parameters
 		responseStatus = 200;
 	}
 	/// SetSessionId
@@ -1778,7 +1939,7 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 
 
 static int ridNr = 4199;
-static bool isFirstConnection = false;
+static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
@@ -1883,6 +2044,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         if(strstr(event->topic, "iothub/twin/res/200/"))
         {
         	ParseCloudSettingsFromCloud(event->data, event->data_len);
+        	cloudSettingsAreUpdated = true; //Ensure Current settings are transmitted at boot.
         }
 
         if(strstr(event->topic, "iothub/methods/POST/300/"))

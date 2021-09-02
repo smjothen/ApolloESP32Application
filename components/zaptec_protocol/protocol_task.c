@@ -727,7 +727,11 @@ float MCU_GetCurrents(uint8_t phase)
 
 float MCU_GetPower()
 {
-	return totalChargePower;
+	//Do not allow negative power, have seen small fluctuations when ~0A
+	if(totalChargePower >= 0.0)	//Watts
+		return totalChargePower;
+	else
+		return 0.0;
 }
 
 float MCU_GetEnergy()

@@ -134,19 +134,19 @@ void storage_Set_IsEnabled(uint8_t newValue)
 	configurationStruct.isEnabled = newValue;
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_InstallationId(char * newValue)
 {
 	strcpy(configurationStruct.installationId, newValue);
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_RoutingId(char * newValue)
 {
 	strcpy(configurationStruct.routingId, newValue);
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_ChargerName(char * newValue)
 {
 	strcpy(configurationStruct.chargerName, newValue);
@@ -278,7 +278,7 @@ char * storage_Get_RoutingId()
 {
 	//Sanity check
 	int len = strlen(configurationStruct.routingId);
-	if((len == 0) || ( len < 50))
+	if(len == 0)
 		strcpy(configurationStruct.routingId, ROUTING_ID);
 
 	return configurationStruct.routingId;

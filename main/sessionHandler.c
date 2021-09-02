@@ -852,7 +852,8 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
-				publish_debug_telemetry_observation_cloud_settings();
+				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
+				//publish_debug_telemetry_observation_cloud_settings();
 
 				startupSent = true;
 			}
