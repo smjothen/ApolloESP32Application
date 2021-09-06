@@ -62,6 +62,7 @@ void SetEspNotification(uint16_t notification);
 uint32_t GetCombinedNotifications();
 void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
+bool MCU_IsReady();
 
 
 #endif /* PROTOCOL_TASK_H */
