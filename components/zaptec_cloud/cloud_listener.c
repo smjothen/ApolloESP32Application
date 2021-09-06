@@ -257,7 +257,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 	if ((message[0] != '{') || (message[message_len-1] != '}'))
 		return;
 
-	ESP_LOGW(TAG, "message: %s", message);
+	ESP_LOGW(TAG, "message: %.*s", message_len, message);
 
 	ESP_LOGI(TAG, "***** Start parsing of Cloud settings *****\n");
 
