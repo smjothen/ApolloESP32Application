@@ -100,7 +100,11 @@ void SetAuthorized(bool authFromCloud)
 	isAuthorized = authFromCloud;
 
 	if(isAuthorized == true)
+	{
 		chargeSession_SetAuthenticationCode(pendingRFIDTag);
+		//Update session on file with RFID-info
+		chargeSession_SaveSessionResetInfo();
+	}
 
 	pendingCloudAuthorization = false;
 	memset(pendingRFIDTag, 0, DEFAULT_STR_SIZE);
