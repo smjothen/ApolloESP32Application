@@ -622,7 +622,11 @@ static void sessionHandler_task()
 				{
 					//Only allow if no tag is set before and tag has been validated
 					if((chargeSession_Get().AuthenticationCode[0] == '\0') && (i2cIsAuthenticated() == 1))
+					{
 						chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+						//Update session on file with RFID-info
+						chargeSession_SaveSessionResetInfo();
+					}
 				}
 
 				NFCTagInfoClearValid();
