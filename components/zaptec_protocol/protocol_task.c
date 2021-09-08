@@ -290,6 +290,13 @@ void ActivateMCUWatchdog()
 	}
 }
 
+bool isMCUReady = false;
+
+//Call this to see if all MCU parametes has been received at start, before communicating to cloud
+bool MCU_IsReady()
+{
+	return isMCUReady;
+}
 
 uint32_t mcuComErrorCount = 0;
 
@@ -538,7 +545,10 @@ void uartSendTask(void *pvParameters){
 			mcuChargeCurrentInstallationMaxLimit =  GetFloat(rxMsg.data);
 			//mcuPilotAvg = (rxMsg.data[0] << 8) | rxMsg.data[1];
 		else if(rxMsg.identifier == StandAloneCurrent)
+		{
 			mcuStandAloneCurrent =  GetFloat(rxMsg.data);
+			isMCUReady = true;
+		}
 			//mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
 
 
@@ -727,7 +737,11 @@ float MCU_GetCurrents(uint8_t phase)
 
 float MCU_GetPower()
 {
-	return totalChargePower;
+	//Do not allow negative power, have seen small fluctuations when ~0A
+	if(totalChargePower >= 0.0)	//Watts
+		return totalChargePower;
+	else
+		return 0.0;
 }
 
 float MCU_GetEnergy()

@@ -15,6 +15,7 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "sessionHandler.h"
 #include "certificate.h"
+#include "protocol_task.h"
 
 static const char *TAG = "CONNECTIVITY: ";
 
@@ -76,6 +77,18 @@ static void connectivity_task()
 
 	bool interfaceChange = false;
 	bool zntpIsRunning = false;
+
+	//Ensure that the MCU parameters are available before connecting or syncing with cloud,
+	//otherwise we may send uninitialized values
+	uint8_t mcuTimeout = 30;
+	while((MCU_IsReady() == false) && (mcuTimeout > 0))
+	{
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		mcuTimeout--;
+		ESP_LOGW(TAG, "Waiting for MCU: %d", mcuTimeout);
+	}
+	ESP_LOGI(TAG, "MCU is ready");
+
 
 	while (1) {
 

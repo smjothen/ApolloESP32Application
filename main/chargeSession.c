@@ -95,6 +95,12 @@ static void ChargeSession_Set_StartTime()
 
 void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 {
+	if(strcmp(sessionIdFromCloud, chargeSession.SessionId) == 0)
+	{
+		ESP_LOGI(TAG, "SessionId already set");
+		return;
+	}
+
 	if(strlen(chargeSession.SessionId) > 0)
 	{
 		ESP_LOGE(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
@@ -112,6 +118,9 @@ void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 		ESP_LOGI(TAG, "Setting cloud start time");
 		ChargeSession_Set_StartTime();
 	}
+
+	//Save
+	chargeSession_SaveSessionResetInfo();
 }
 
 

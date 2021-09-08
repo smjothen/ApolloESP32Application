@@ -291,17 +291,19 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_observation(InstallationId, storage_Get_InstallationId()));
-    add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
+    //Sent at startup as Cloud settings
+    //add_observation_to_collection(observations, create_observation(InstallationId, storage_Get_InstallationId()));
+    //add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
 
     add_observation_to_collection(observations, create_double_observation(ParamChargeCurrentUserMax, MCU_GetChargeCurrentUserMax()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSetPhases, (uint32_t)HOLD_GetSetPhases()));
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
+    //Sent at startup as Cloud settings
+    //add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
 	//add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)GetMaxPhases()));
-	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
+	//add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
 
     /*These are sent at startup with localsettings.
     if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
@@ -326,7 +328,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
-    add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
+    //add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
 
     char buf[256];
     GetTimeOnString(buf);
@@ -697,9 +699,6 @@ int publish_telemetry_observation_on_change(){
 	float power = MCU_GetPower();
 	if((power > previousPower + 500) || (power < (previousPower - 500))) //500W
 	{
-		if(power < 0.0)
-			power = 0.0;
-
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 
 		//When power changes also update currents to be responsive

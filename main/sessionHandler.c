@@ -100,7 +100,11 @@ void SetAuthorized(bool authFromCloud)
 	isAuthorized = authFromCloud;
 
 	if(isAuthorized == true)
+	{
 		chargeSession_SetAuthenticationCode(pendingRFIDTag);
+		//Update session on file with RFID-info
+		chargeSession_SaveSessionResetInfo();
+	}
 
 	pendingCloudAuthorization = false;
 	memset(pendingRFIDTag, 0, DEFAULT_STR_SIZE);
@@ -618,7 +622,11 @@ static void sessionHandler_task()
 				{
 					//Only allow if no tag is set before and tag has been validated
 					if((chargeSession_Get().AuthenticationCode[0] == '\0') && (i2cIsAuthenticated() == 1))
+					{
 						chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
+						//Update session on file with RFID-info
+						chargeSession_SaveSessionResetInfo();
+					}
 				}
 
 				NFCTagInfoClearValid();
@@ -852,7 +860,8 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
-				publish_debug_telemetry_observation_cloud_settings();
+				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
+				//publish_debug_telemetry_observation_cloud_settings();
 
 				startupSent = true;
 			}

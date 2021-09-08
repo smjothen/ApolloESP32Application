@@ -134,19 +134,19 @@ void storage_Set_IsEnabled(uint8_t newValue)
 	configurationStruct.isEnabled = newValue;
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_InstallationId(char * newValue)
 {
 	strcpy(configurationStruct.installationId, newValue);
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_RoutingId(char * newValue)
 {
 	strcpy(configurationStruct.routingId, newValue);
 }
 
-//Max string length 32 characters
+//Max string length 37 characters
 void storage_Set_ChargerName(char * newValue)
 {
 	strcpy(configurationStruct.chargerName, newValue);
@@ -278,7 +278,7 @@ char * storage_Get_RoutingId()
 {
 	//Sanity check
 	int len = strlen(configurationStruct.routingId);
-	if((len == 0) || ( len < 50))
+	if(len == 0)
 		strcpy(configurationStruct.routingId, ROUTING_ID);
 
 	return configurationStruct.routingId;
@@ -628,6 +628,24 @@ esp_err_t storage_clearSessionResetInfo()
 	return err;
 }
 
+
+/*
+ * If Authorization is set but no valid RFID-tag file is present this function should be called
+ * to set the wildcard tag to allow all charging when offline. This will be held until Cloud performs a periodic
+ * Tag-sync with the correct list.
+ */
+void storageSetWildCardTag()
+{
+	struct RFIDTokens rfidTokens[2];
+	memset(rfidTokens,0,sizeof(rfidTokens));
+
+	char wildTag[] = "*";
+	rfidTokens[0].Tag = wildTag;
+	rfidTokens[0].Action = 0; //Add tag
+
+	storage_updateRFIDTagsToFile(rfidTokens, 1);
+}
+
 void storage_Verify_AuthenticationSetting()
 {
 	esp_err_t err = nvs_open("RFIDTags", NVS_READWRITE, &rfid_tag_handle);
@@ -635,9 +653,8 @@ void storage_Verify_AuthenticationSetting()
 	//Check if tag-file don't exist  - clear authentication
 	if((configurationStruct.authenticationRequired == 1) && (err != ESP_OK))
 	{
-		configurationStruct.authenticationRequired = 0;
-		storage_SaveConfiguration();
-		ESP_LOGW(TAG, "No valid tag-file -> clearing authorization");
+		storageSetWildCardTag();
+		ESP_LOGW(TAG, "Auth set but no valid tag-file -> saving wildcard flag");
 	}
 	//If tag-file exist but has no valid tags - clear authentication
 	else if((configurationStruct.authenticationRequired == 1) && (err == ESP_OK))
@@ -647,9 +664,8 @@ void storage_Verify_AuthenticationSetting()
 		//Key don't exist or value not set
 		if((err != ESP_OK) || (nrOfTagsOnFile == 0))
 		{
-			configurationStruct.authenticationRequired = 0;
-			storage_SaveConfiguration();
-			ESP_LOGW(TAG, "No valid nrOftagsOnFile -> clearing authorization");
+			storageSetWildCardTag();
+			ESP_LOGW(TAG, "Auth set but 0 tags on file -> saving wildcard flag");
 		}
 	}
 
