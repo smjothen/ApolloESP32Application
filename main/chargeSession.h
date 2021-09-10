@@ -41,6 +41,8 @@ int chargeSession_GetSessionAsString(char * message);
 esp_err_t chargeSession_SaveSessionResetInfo();
 esp_err_t chargeSession_ReadSessionResetInfo();
 
+bool chargeSession_IsAuthenticated();
+
 #ifdef __cplusplus
 }
 #endif

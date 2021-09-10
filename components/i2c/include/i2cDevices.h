@@ -31,6 +31,7 @@ uint32_t GetPassedDetectedCounter();
 uint32_t GetFailedDetectedCounter();
 
 void i2cFlagNewTimeWrite();
+void i2cSetNFCTagPairing(bool pairingState);
 
 #ifdef __cplusplus
 }

@@ -249,6 +249,12 @@ void i2cClearAuthentication()
 	isAuthenticated = 0;
 }
 
+static bool isNfcTagPairing;
+void i2cSetNFCTagPairing(bool pairingState)
+{
+	isNfcTagPairing = pairingState;
+}
+
 static void i2cDevice_task(void *pvParameters)
 {
 	RTCVerifyControlRegisters();
@@ -279,9 +285,14 @@ static void i2cDevice_task(void *pvParameters)
 	while (true)
 	{
 		// Continuously read NFC in custom modes
-		if(prodtest_active() || (storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT) || (storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT))
+		if(prodtest_active() || (storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT) || (storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT) || isNfcTagPairing)
 		{
 			nfcCardDetected = NFCReadTag();
+
+			//If a card is detected when nfc pairing is ongoing, disable the pairing mode once a tag is read.
+			if((nfcCardDetected == true) && (isNfcTagPairing == true))
+				isNfcTagPairing = false;
+
 		}
 		else if(storage_Get_AuthenticationRequired() == 1)
 		{

@@ -123,5 +123,18 @@ void audio_play_nfc_card_accepted_debug()
 
 }
 
+void audio_play_single_biip()
+{
+	uint32_t duty = 4000;
+	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+
+	ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, 1500);
+	vTaskDelay(200 / portTICK_PERIOD_MS);
+
+	duty = 0;
+	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+}
 
 

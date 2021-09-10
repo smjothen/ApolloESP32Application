@@ -230,6 +230,18 @@ int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
 }
 
 
+int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardString)
+{
+    ESP_LOGD(TAG, "sending AddNewChargeCard telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(NewChargeCard, NewChargeCardString));
+
+    return publish_json(observations);
+}
+
+
 int publish_debug_telemetry_observation_CompletedSession(char * CompletedSessionString)
 {
     ESP_LOGD(TAG, "sending CompletedSession");

@@ -25,6 +25,7 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
 #include "../../main/certificate.h"
+#include "../ble/ble_service_wifi_config.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -1348,6 +1349,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			responseStatus = 400;
 		}
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/750/"))
+	{
+		SetNFCPairingStateOK();
+		ESP_LOGW(TAG, "Command NFC pairing OK");
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
 	{

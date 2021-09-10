@@ -329,3 +329,12 @@ esp_err_t chargeSession_ReadSessionResetInfo()
 	}
 	return err;
 }
+
+
+bool chargeSession_IsAuthenticated()
+{
+	if(chargeSession.AuthenticationCode[0] != '\0')
+		return true;
+	else
+		return false;
+}
