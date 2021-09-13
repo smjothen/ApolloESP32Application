@@ -166,8 +166,6 @@ static uint8_t COMMAND_val[32]          				= {0x00};
 //static char wifiPackage[500] = {0}; //TODO: Evaluate size
 static char * wifiPackage = NULL;
 
-
-
 const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 {
 	[WIFI_SERV_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &primary_service_uuid, ESP_GATT_PERM_READ, sizeof(uint16_t), sizeof(WIFI_SERV_uuid), (uint8_t *)&WIFI_SERV_uuid}},
@@ -354,6 +352,11 @@ static bool configSession = false;
 static int statusSegmentCount = 0;
 char *jsonString = NULL;
 cJSON *jsonObject = NULL;
+
+static char userIdBuf[40+1+1] = {0};
+static char tagIdBuf[26] = {0};
+static char tagNameBuf[33] = {0};
+
 
 enum NFCPairingState
 {
@@ -1142,7 +1145,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	if(nfcPairingState == ePairing_Reading)
     	{
     		//Either a new value is written from the App as a ble-id
-    		if(param->write.len == 36)
+    		/*if(param->write.len == 36)
 			{
 				char buf[41] = {0};
 				strcpy(buf, "ble-");
@@ -1151,16 +1154,23 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				//audio_play_single_biip();
 				publish_debug_telemetry_observation_AddNewChargeCard(buf);
 				nfcPairingState = ePairing_Uploading;//Uploading
-			}
-			//..Or a tag is scanned giving an nfc-id
-			else if(NFCGetTagInfo().tagIsValid == true)
+			}*/
+			//Check if a tag is scanned giving an nfc-id
+			if(NFCGetTagInfo().tagIsValid == true)
 			{
-				char buf[41] = {0};
-				strcpy(buf, "nfc-");
-				sprintf(buf+4, "%s", NFCGetTagInfo().idAsString);
-				ESP_LOGI(TAG, "New RFID-UUID %s", buf);
+				//char buf[41] = {0};
+				memset(tagIdBuf, 0, 26);
+				strcpy(tagIdBuf, "nfc-");
+				sprintf(tagIdBuf+4, "%s;", NFCGetTagInfo().idAsString);
+				ESP_LOGI(TAG, "New RFID-UUID %s", tagIdBuf);
 				//audio_play_single_biip();
-				publish_debug_telemetry_observation_AddNewChargeCard(buf);
+				char concatenate[100] = {0};
+				strcpy(concatenate, userIdBuf);
+				strcat(concatenate, tagIdBuf);
+				strcat(concatenate, tagNameBuf);
+
+				ESP_LOGW(TAG, "Concatenated: %s", concatenate);
+				publish_debug_telemetry_observation_AddNewChargeCard(concatenate);
 				nfcPairingState = ePairing_Uploading;//Uploading
 
 				NFCTagInfoClearValid();
@@ -1175,12 +1185,13 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	{
     		if(param->write.len == 36)
 			{
-				char buf[41] = {0};
-				strcpy(buf, "ble-");
-				sprintf(buf+4, "%s", param->write.value);
-				ESP_LOGI(TAG, "Auth UUID %s", buf);
+				//char buf[41] = {0};
+				strcpy(userIdBuf, "ble-");
+				sprintf(userIdBuf+4, "%s;", param->write.value);
+				ESP_LOGI(TAG, "Auth UUID %s", userIdBuf);
 
-				publish_debug_telemetry_observation_NFC_tag_id(buf);
+
+				//publish_debug_telemetry_observation_NFC_tag_id(buf);
 			}
 			else
 			{
@@ -1307,6 +1318,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		ESP_LOGE(TAG, "To long NFC tag string");
     		break;
     	}
+
+    	memset(tagNameBuf, 0, 33);
+    	memcpy(tagNameBuf, param->write.value, param->write.len);
 
     	nfcPairingState = ePairing_Reading;
     	i2cSetNFCTagPairing(true);
