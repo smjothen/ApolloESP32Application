@@ -26,6 +26,7 @@
 #include "diagnostics_port.h"
 #include "../components/i2c/include/i2cDevices.h"
 #include "../components/i2c/include/CLRC661.h"
+#include "../components/wifi/include/network.h"
 
 //#include "mdns.h"
 //#include <sys/socket.h>
@@ -173,6 +174,12 @@ static void tcp_server_task(void *pvParameters)
     int listen_sock;
 
     unsigned int byteCount = 0;
+
+    while(network_WifiIsConnected() == false)
+    {
+    	ESP_LOGI(TAG, "Waiting for Wifi to connect");
+    	vTaskDelay(3000 / portTICK_PERIOD_MS);
+    }
 
     while (1) {
 #define  CONFIG_EXAMPLE_IPV4
