@@ -21,10 +21,10 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../apollo_ota/include/apollo_ota.h"
 #include "../zaptec_cloud/include/zaptec_cloud_observations.h"
+#include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 #include "../../main/chargeSession.h"
-#include "../audiobuzzer/audioBuzzer.h"
-#include "../../components/i2c/include/CLRC661.h"
-#include "../../components/i2c/include/i2cDevices.h"
+#include "../../components/authentication/rfidPairing.h"
+#include "../../components/authentication/authentication.h"
 
 
 static const char *TAG = "BLE SERVICE";
@@ -353,24 +353,18 @@ static int statusSegmentCount = 0;
 char *jsonString = NULL;
 cJSON *jsonObject = NULL;
 
-static char userIdBuf[40+1+1] = {0};
+/*static char userIdBuf[40+1+1] = {0};
 static char tagIdBuf[26] = {0};
 static char tagNameBuf[33] = {0};
 
 
-enum NFCPairingState
-{
-	ePairing_Inactive = 0,
-	ePairing_Reading = 1,
-	ePairing_Uploading = 2,
-	ePairing_AddedOk = 3,
-	ePairing_AddingFailed = 4
-};
+
 
 #define NFC_PAIR_TIMEOUT 15
 enum NFCPairingState nfcPairingState = ePairing_Inactive;
 enum NFCPairingState previousNfcPairingState = ePairing_Inactive;
 uint32_t nfcPairTimeout = NFC_PAIR_TIMEOUT;
+*/
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
@@ -743,9 +737,10 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_PAIR_NFC_TAG_UUID:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		char NFCPairState = '0';
+		char NFCPairState[2] = {0};//'0';
 
-		if (nfcPairingState == ePairing_Inactive)
+		rfidPairing_GetStateAsChar(NFCPairState);
+		/*if (nfcPairingState == ePairing_Inactive)
 		{
 			NFCPairState = '0';
 		}
@@ -790,17 +785,19 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		}
 
 
-		ESP_LOGI(TAG, "Reading Pair NFC State: %c: timeout: %d", NFCPairState, nfcPairTimeout);
+		ESP_LOGI(TAG, "Reading Pair NFC State: %c: timeout: %d", NFCPairState, nfcPairTimeout);*/
 
-		memcpy(rsp->attr_value.value, &NFCPairState, 1);
+		memcpy(rsp->attr_value.value, NFCPairState, 1);
 		rsp->attr_value.len = 1;
 
-		previousNfcPairingState = nfcPairingState;
+		//previousNfcPairingState = nfcPairingState;
 
+		/*
 		//Clear final states after BLE readout
 		if((nfcPairingState == ePairing_AddedOk) || (nfcPairingState == ePairing_AddingFailed))
 			nfcPairingState = ePairing_Inactive;
-
+		 */
+		rfidPairing_ClearState();
 		break;
 
     case CHARGER_OCCUPIED_STATE_UUID:
@@ -825,14 +822,14 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     	char authorizationResult[41] = {0};
 
     	//Return empty string
-    	if(nfcPairingState == ePairing_Reading)
+    	if(rfidPairing_GetState() == ePairing_Reading)
     	{
     		ESP_LOGI(TAG, "Reading Authorization result: %s", authorizationResult);
     		memcpy(rsp->attr_value.value, &authorizationResult, 1);
     		rsp->attr_value.len = 1;
     		break;
     	}
-    	else if(nfcPairingState == ePairing_Inactive)
+    	else if(rfidPairing_GetState() == ePairing_Inactive)
     	{
     		//if(chargeSession_IsAuthenticated() )
     		//{
@@ -1142,8 +1139,19 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_AUTH_UUID_UUID:
 
-    	if(nfcPairingState == ePairing_Reading)
+    	if((rfidPairing_GetState() == ePairing_Inactive) && (NFCGetTagInfo().tagIsValid == false))
     	{
+    		char bleId[50] = {0};
+    		strcpy(bleId, "ble-");
+    		memcpy(bleId+4, param->write.value, param->write.len);
+    		ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
+
+    		if(isMqttConnected())
+    			publish_debug_telemetry_observation_NFC_tag_id(bleId);
+    		else
+    			authentication_CheckBLEId(bleId);
+    	}
+    	//{
     		//Either a new value is written from the App as a ble-id
     		/*if(param->write.len == 36)
 			{
@@ -1156,40 +1164,47 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				nfcPairingState = ePairing_Uploading;//Uploading
 			}*/
 			//Check if a tag is scanned giving an nfc-id
-			if(NFCGetTagInfo().tagIsValid == true)
-			{
+			//if(NFCGetTagInfo().tagIsValid == true)
+			//{
+				//string pairingMessage = userId + ";" + nfcUid + ";" + pairingName;
 				//char buf[41] = {0};
-				memset(tagIdBuf, 0, 26);
+
+				/*memset(tagIdBuf, 0, 26);
 				strcpy(tagIdBuf, "nfc-");
 				sprintf(tagIdBuf+4, "%s;", NFCGetTagInfo().idAsString);
-				ESP_LOGI(TAG, "New RFID-UUID %s", tagIdBuf);
+				ESP_LOGI(TAG, "New RFID-UUID %s", tagIdBuf);*/
 				//audio_play_single_biip();
-				char concatenate[100] = {0};
-				strcpy(concatenate, userIdBuf);
+				//char concatenate[100] = {0};
+				/*strcpy(concatenate, userIdBuf);
 				strcat(concatenate, tagIdBuf);
-				strcat(concatenate, tagNameBuf);
+				strcat(concatenate, tagNameBuf);*/
 
-				ESP_LOGW(TAG, "Concatenated: %s", concatenate);
-				publish_debug_telemetry_observation_AddNewChargeCard(concatenate);
-				nfcPairingState = ePairing_Uploading;//Uploading
+    		//rfidPairing_SetNewTagId(param->write.value, param->write.len);
 
-				NFCTagInfoClearValid();
-			}
+			///char * combinedChargeCardString = rfidPairing_GetConcatenatedString();
+			//ESP_LOGW(TAG, "Concatenated: %s", combinedChargeCardString);
+			///publish_debug_telemetry_observation_AddNewChargeCard(combinedChargeCardString);
+			//nfcPairingState = ePairing_Uploading;//Uploading
+			//rfidPairing_SetState(ePairing_Uploading);
+
+			///NFCTagInfoClearValid();
+			/*}
 
 			else
 			{
 				ESP_LOGI(TAG, "Incorrect Auth UUID length %d", param->write.len);
-			}
-    	}
-    	else if(nfcPairingState == ePairing_Inactive)
+			}*/
+    	//}
+    	if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))
     	{
     		if(param->write.len == 36)
 			{
 				//char buf[41] = {0};
-				strcpy(userIdBuf, "ble-");
+				/*strcpy(userIdBuf, "ble-");
 				sprintf(userIdBuf+4, "%s;", param->write.value);
 				ESP_LOGI(TAG, "Auth UUID %s", userIdBuf);
-
+				*/
+    			rfidPairing_SetNewUserId(param->write.value, param->write.len);
 
 				//publish_debug_telemetry_observation_NFC_tag_id(buf);
 			}
@@ -1313,17 +1328,20 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     case CHARGER_PAIR_NFC_TAG_UUID:
 
     	ESP_LOGI(TAG, "Pair NFC characteristic received with %s", param->write.value);
-    	if(param->write.len >= 32)
+    	if(param->write.len >= 26)
     	{
     		ESP_LOGE(TAG, "To long NFC tag string");
     		break;
     	}
 
-    	memset(tagNameBuf, 0, 33);
-    	memcpy(tagNameBuf, param->write.value, param->write.len);
+    	//memset(tagNameBuf, 0, 33);
+    	//memcpy(tagNameBuf, param->write.value, param->write.len);
 
-    	nfcPairingState = ePairing_Reading;
-    	i2cSetNFCTagPairing(true);
+    	//nfcPairingState = ePairing_Reading;
+    	rfidPairing_SetNewTagName(param->write.value, param->write.len);
+    	rfidPairing_SetState(ePairing_Reading);
+
+    	//i2cSetNFCTagPairing(true);
     	//memset(PAIR_NFC_TAG_val,0, sizeof(PAIR_NFC_TAG_val));
 		//memcpy(PAIR_NFC_TAG_val,param->write.value, param->write.len);
 		//ESP_LOGI(TAG, "New NFC tag string %s", PAIR_NFC_TAG_val);
@@ -1688,9 +1706,10 @@ void ClearAuthValue()
 		ESP_LOGW(TAG, "Cleared Auth");
 
 		statusSegmentCount = 0;
+		rfidPairing_SetState(ePairing_Inactive);
 }
 
-void SetNFCPairingStateOK()
+/*void SetNFCPairingStateOK()
 {
 	nfcPairingState = ePairing_AddedOk;
-}
+}*/

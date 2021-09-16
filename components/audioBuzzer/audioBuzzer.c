@@ -72,6 +72,8 @@ void audioInit()
 
 void audio_play_nfc_card_accepted()
 {
+	return;
+
 	uint32_t duty = 4000;
 	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
 	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
@@ -93,6 +95,8 @@ void audio_play_nfc_card_accepted()
 
 void audio_play_nfc_card_denied()
 {
+	return;
+
 	uint32_t duty = 4000;
 	ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
 	ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);

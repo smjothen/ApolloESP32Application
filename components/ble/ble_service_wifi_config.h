@@ -159,6 +159,6 @@
     void charInit();
 
     void ClearAuthValue();
-    void SetNFCPairingStateOK();
+    //void SetNFCPairingStateOK();
 
 #endif /* WIFI_CONFIG_SERVICE_H_ */

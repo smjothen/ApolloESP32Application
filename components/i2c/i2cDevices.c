@@ -395,16 +395,17 @@ static void i2cDevice_task(void *pvParameters)
 						//Always allow charging when offline. Requires '*' to be set in tag-list
 						isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 
-						if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
+						if(isAuthenticated == 1)
 						{
-							audio_play_nfc_card_accepted();
+							/*audio_play_nfc_card_accepted();
 							ESP_LOGI(TAG, "Offline: NFC ACCEPTED - Local authentication");
 							MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 							if(ret == MsgCommandAck)
 							{
 								chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
 								ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
-							}
+							}*/
+							authentication_Execute(NFCGetTagInfo().idAsString);
 						}
 
 						/*else if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] != '\0'))
