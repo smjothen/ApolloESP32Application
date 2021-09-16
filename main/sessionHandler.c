@@ -33,6 +33,8 @@ static const char *TAG = "SESSION    ";
 static char * completedSessionString = NULL;
 
 TimerHandle_t signedMeterValues_timer;
+static bool hasRemainingEnergy = false;
+static bool hasCharged = false;
 
 //Send every 15 minutes - at XX:00, XX:15, XX:30 and XX:45.
 void on_send_signed_meter_value()
@@ -45,10 +47,19 @@ void on_send_signed_meter_value()
 	bool state_log_empty = false;
 	int publish_result = -1;
 
-	if(state_charging){
+	if((state_charging == true) || (hasCharged == true))
+	{
+		hasRemainingEnergy = true;
+		hasCharged = false;
+	}
+
+	if(state_charging || hasRemainingEnergy){
 		// sample energy now, dumping the log may be to slow to get the time aligned energy
 		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
 	}
+
+	if(hasRemainingEnergy)
+		ESP_LOGW(TAG, "#### Remaining energy: %f #####", energy);
 
 	ESP_LOGI(TAG, "***** Clearing energy log *****");
 
@@ -59,7 +70,7 @@ void on_send_signed_meter_value()
 		state_log_empty = true;
 	}
 
-	if (state_charging && state_log_empty){
+	if ((state_charging && state_log_empty) || (hasRemainingEnergy && state_log_empty)){
 		publish_result = publish_string_observation_blocked(
 			SignedMeterValue, OCMPMessage, 2000
 		);
@@ -68,15 +79,23 @@ void on_send_signed_meter_value()
 			append_offline_energy(time, energy);
 		}
 
-	}else if(state_charging){
+	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
 		append_offline_energy(time, energy);
 	}
 
-	if(state_charging){
+	if(state_charging || hasRemainingEnergy){
 		// add to log late to increase chance of consistent logs across observation types
 		OCMF_AddElementToOCMFLog("T", "G");
 	}
+
+	//If this is the case, remaining energy has been sent -> clear the flag
+	if((state_charging == false) && (hasRemainingEnergy == true))
+	{
+		hasRemainingEnergy = false;
+		ESP_LOGW(TAG, "#### Cleared remaining energy flag ####");
+	}
+
 }
 
 
@@ -352,7 +371,8 @@ static void sessionHandler_task()
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
 
-    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //15 minutes
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
@@ -477,6 +497,11 @@ static void sessionHandler_task()
 
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 		currentCarChargeMode = MCU_GetchargeMode();
+
+		//Set flag for the 15 minute OCMF message to show that charging has occured within an
+		// interval so that energy message must be sent
+		if(currentCarChargeMode == eCAR_CHARGING)
+			hasCharged = true;
 
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
@@ -681,6 +706,7 @@ static void sessionHandler_task()
 							ESP_LOGE(TAG," CompletedSession failed %i/3", i);
 					}
 				}
+
 			}
 
 			//Reset if set
