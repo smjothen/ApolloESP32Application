@@ -67,6 +67,10 @@ void rfidPairing_SetState(enum NFCPairingState state)
 {
 	previousNfcPairingState = nfcPairingState;
 	nfcPairingState = state;
+
+	//Ensure NFC does not stay in pairing mode if bluetooth disconnects
+	if(state == ePairing_Inactive)
+		i2cSetNFCTagPairing(false);
 }
 
 void rfidPairing_GetStateAsChar(char * stateAsChar)
@@ -79,9 +83,14 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 	{
 		*stateAsChar = '1';
 		if(NFCGetTagInfo().tagIsValid == false)
+		{
 			i2cSetNFCTagPairing(true);
+		}
 		else
+		{
+			audio_play_single_biip();
 			nfcPairingState = ePairing_Uploading;
+		}
 	}
 
 	if(nfcPairingState == ePairing_Uploading)
