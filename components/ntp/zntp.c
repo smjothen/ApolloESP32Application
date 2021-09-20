@@ -130,12 +130,12 @@ bool zntp_Get15MinutePoint()
 
 		if(oneSecAway == true)
 		{
-			ESP_LOGW(TAG, "...looking %i", timeout);
+			ESP_LOGW(TAG, "Syncing... %i", timeout);
 			vTaskDelay(100 / portTICK_PERIOD_MS);
 		}
 		else
 		{
-			ESP_LOGI(TAG, "...found");
+			ESP_LOGW(TAG, "SYNCED!");
 		}
 	}
 
