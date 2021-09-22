@@ -6,7 +6,7 @@
 #include "rfidPairing.h"
 #include "../i2c/include/CLRC661.h"
 #include "../../main/storage.h"
-#include "../audiobuzzer/audioBuzzer.h"
+#include "../audioBuzzer/audioBuzzer.h"
 #include "../../components/i2c/include/i2cDevices.h"
 #include "../zaptec_cloud/include/zaptec_cloud_observations.h"
 
