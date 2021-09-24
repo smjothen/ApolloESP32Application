@@ -22,6 +22,7 @@
 #include "../apollo_ota/include/apollo_ota.h"
 #include "../zaptec_cloud/include/zaptec_cloud_observations.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
+#include "../../main/sessionHandler.h"
 #include "../../main/chargeSession.h"
 #include "../../components/authentication/rfidPairing.h"
 #include "../../components/authentication/authentication.h"
@@ -96,7 +97,7 @@ const uint8_t OperationState_uid128[ESP_UUID_LEN_128]  = {0xdc, 0xfc, 0xb5, 0xc0
 
 const uint8_t PairNFCTag_uid128[ESP_UUID_LEN_128] = 	{0xe4, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t PAIR_NFC_TAG_CHAR_descr[]   		= "Pair NFC Tag";
-static uint8_t PAIR_NFC_TAG_val[32]          			= {0x00};
+//static uint8_t PAIR_NFC_TAG_val[32]          			= {0x00};
 
 
 const uint8_t AuthResult_uid128[ESP_UUID_LEN_128] 		= {0xde, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -1070,10 +1071,21 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     		memcpy(bleId+4, param->write.value, param->write.len);
     		ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
 
-    		if(isMqttConnected())
+    		if((isMqttConnected()) && (storage_Get_Standalone() == false))
+    		{
+    			ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
+    			SetPendingRFIDTag(bleId);
     			publish_debug_telemetry_observation_NFC_tag_id(bleId);
+    		}
     		else
-    			authentication_CheckBLEId(bleId);
+    		{
+    			ESP_LOGW(TAG, "Local authentication, setting to chargeSession if Ok");
+    			uint8_t match = authentication_CheckBLEId(bleId);
+    			if(match == 1)
+    			{
+    				chargeSession_SetAuthenticationCode(bleId);
+    			}
+    		}
     	}
 
     	if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))

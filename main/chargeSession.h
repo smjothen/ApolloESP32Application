@@ -14,7 +14,7 @@ struct ChargeSession
 	char EndTime[32]; //27
 	bool ReliableClock;
 	bool StoppedByRFID;
-	char AuthenticationCode[37];//Up to GUID string.
+	char AuthenticationCode[41];//Up to GUID string.
 	uint32_t unixStartTime;
 	char * SignedSession;//[1000];//8
 };

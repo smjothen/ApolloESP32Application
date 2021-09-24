@@ -87,27 +87,27 @@ void on_send_signed_meter_value()
 
 static bool authorizationRequired = true;
 static bool pendingCloudAuthorization = false;
-static char pendingRFIDTag[DEFAULT_STR_SIZE]= {0};
+static char pendingAuthID[PREFIX_GUID]= {0}; //BLE- + GUID
 static bool isAuthorized = false;
 
 void SetPendingRFIDTag(char * pendingTag)
 {
-	strcpy(pendingRFIDTag, pendingTag);
+	strcpy(pendingAuthID, pendingTag);
 }
 
 void SetAuthorized(bool authFromCloud)
 {
 	isAuthorized = authFromCloud;
 
-	if(isAuthorized == true)
+	if((isAuthorized == true) && (pendingAuthID[0] !='\0'))
 	{
-		chargeSession_SetAuthenticationCode(pendingRFIDTag);
+		chargeSession_SetAuthenticationCode(pendingAuthID);
 		//Update session on file with RFID-info
 		chargeSession_SaveSessionResetInfo();
 	}
 
 	pendingCloudAuthorization = false;
-	memset(pendingRFIDTag, 0, DEFAULT_STR_SIZE);
+	memset(pendingAuthID, 0, PREFIX_GUID);
 }
 
 void log_task_info(void){
@@ -612,10 +612,10 @@ static void sessionHandler_task()
 				}
 
 				//System - wait for cloud confirmation before setting RFID-tag
-				if(storage_Get_Standalone() == 0)
+				if((storage_Get_Standalone() == 0) && NFCGetTagInfo().tagIsValid)
 				{
 					pendingCloudAuthorization = true;
-					strcpy(pendingRFIDTag,NFCGetTagInfo().idAsString);
+					strcpy(pendingAuthID, NFCGetTagInfo().idAsString);
 				}
 				//Standalone - set RFID-tag directly
 				else

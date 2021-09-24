@@ -43,6 +43,7 @@ struct RFIDTokens{
 #define MAX_CERTIFICATE_BUNDLE_SIZE 51000
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
+#define PREFIX_GUID 41
 
 // Network IDs
 #define NETWORK_1P3W 1
