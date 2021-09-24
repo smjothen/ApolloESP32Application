@@ -23,7 +23,7 @@ static bool hasNewSessionIdFromCloud = false;
 
 static char * basicOCMF = "OCMF|{}";
 
-static char sidOrigin[6] = "     \0";
+static char sidOrigin[6] = {0};
 
 static void ChargeSession_Set_GUID()
 {
@@ -215,16 +215,16 @@ void chargeSession_Finalize()
 
 void chargeSession_Clear()
 {
-	esp_err_t clearErr = storage_clearSessionResetInfo();
 	ESP_LOGI(TAG, "Clearing csResetSession file");
+	esp_err_t clearErr = storage_clearSessionResetInfo();
 
 	if (clearErr != ESP_OK)
 	{
 		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
 	}
 
+	ESP_LOGI(TAG, "Clearing chargeSession");
 	memset(&chargeSession, 0, sizeof(chargeSession));
-	ESP_LOGI(TAG, "Clearing csResetSession file");
 
 	strcpy(sidOrigin, "     ");
 	hasNewSessionIdFromCloud = false;

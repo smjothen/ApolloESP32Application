@@ -343,12 +343,13 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
 int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
 {
-    ESP_LOGD(TAG, "sending Request start command telemetry");
+    ESP_LOGI(TAG, "sending Request start command telemetry");
 
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_REQUESTING));
+
     //ESP_LOGE(TAG, "\n ************* 2 Sending OperatingMode %d ***************\n", CHARGE_OPERATION_STATE_REQUESTING);
 
     return publish_json(observations);

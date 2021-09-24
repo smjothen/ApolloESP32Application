@@ -1321,7 +1321,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		}
 		else
 		{
-			responseStatus = 400;
+			ESP_LOGI(TAG, "Granted from Cloud in standalone");
+			responseStatus = 200; //For standalone - don't do anything, just return this responseStatus to make the cloud happy
 		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))

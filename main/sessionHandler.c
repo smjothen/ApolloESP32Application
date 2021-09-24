@@ -59,7 +59,7 @@ void on_send_signed_meter_value()
 	}
 
 	if(hasRemainingEnergy)
-		ESP_LOGW(TAG, "#### Remaining energy: %f #####", energy);
+		ESP_LOGW(TAG, "#### Set to report any remaining energy. RV=%f #####", energy);
 
 	ESP_LOGI(TAG, "***** Clearing energy log *****");
 
@@ -172,7 +172,7 @@ void sessionHandler_simulateOffline(int offlineTime)
 	simulateOfflineTimeout = offlineTime;
 }
 
-
+static bool requestCurrentWhenOnline = false;
 static bool offlineCurrentSent = false;
 void OfflineHandler()
 {
@@ -186,6 +186,8 @@ void OfflineHandler()
 		//Wait until a valid tag is registered.
 		if((storage_Get_AuthenticationRequired() == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
 			return;
+
+		requestCurrentWhenOnline = true;
 
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 		if(ret == MsgCommandAck)
@@ -233,6 +235,8 @@ void OfflineHandler()
 			offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
 
 		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
+
+		requestCurrentWhenOnline = true;
 
 		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 		if(ret == MsgWriteAck)
@@ -351,6 +355,8 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
+    uint8_t previousChargeOperatingMode = 0;
+
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
@@ -371,8 +377,8 @@ static void sessionHandler_task()
     OCMF_Init();
     uint32_t secondsSinceSync = 0;
 
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
-    TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //15 minutes
+    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //15 minutes for testing( also change line in zntp.c for minute sync)
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
@@ -498,17 +504,13 @@ static void sessionHandler_task()
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 		currentCarChargeMode = MCU_GetchargeMode();
 
-		//Set flag for the 15 minute OCMF message to show that charging has occured within an
-		// interval so that energy message must be sent
-		if(currentCarChargeMode == eCAR_CHARGING)
-			hasCharged = true;
-
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
-		//Check the offline time to ensure we don't send at every token refresh.
-		if(((previousIsOnline == false) && (isOnline == true) && (offlineTime > 120) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)))
+		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh.
+		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && requestCurrentWhenOnline)
 		{
 			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
+			requestCurrentWhenOnline = false;
 		}
 
 
@@ -739,7 +741,18 @@ static void sessionHandler_task()
 			sessionIDClearedByCloud = false;
 		}
 
+
+		//Set flag for the 15 minute OCMF message to show that charging has occured within an
+		// interval so that energy message must be sent
+		if((chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING))
+		{
+			hasCharged = true;
+			ESP_LOGW(TAG, " ### No longer charging but must report remaining energy ###");
+		}
+
+
 		previousCarChargeMode = currentCarChargeMode;
+		previousChargeOperatingMode = chargeOperatingMode;
 
 		onTime++;
 		dataCounter++;
