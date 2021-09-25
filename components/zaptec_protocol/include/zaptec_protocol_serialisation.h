@@ -81,7 +81,7 @@
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
-
+		MaxCurrentConfigurationSource = 544,
 		SwitchPosition = 545,
 		ChargeCurrentInstallationMaxLimit = 546,
 		StandAloneCurrent = 547,

@@ -813,7 +813,7 @@ float MCU_GetMaxInstallationCurrentSwitch()
             maxCurrent = 32.0;
             break;
         case 8:
-            maxCurrent = 32.0;
+            maxCurrent = 0.0;
             break;
         case 9:
             maxCurrent = 0.0;
@@ -923,9 +923,34 @@ uint16_t MCU_ProximityInst()
 	return mcuProximityInst;
 }
 
+//This is used to show if the switch or BLE was used to configure the max current
+uint8_t maxCurrentConfiguredBy = 0;
+
 float MCU_ChargeCurrentInstallationMaxLimit()
 {
-	return mcuChargeCurrentInstallationMaxLimit;
+	float switchCurrent = MCU_GetMaxInstallationCurrentSwitch();
+
+	if(mcuChargeCurrentInstallationMaxLimit > 0.0)
+	{
+		maxCurrentConfiguredBy = 2; //2 = BLE
+		return mcuChargeCurrentInstallationMaxLimit;
+	}
+	else if(switchCurrent > 0.0)
+	{
+		maxCurrentConfiguredBy = 1;	//1 = Switch
+		return switchCurrent;
+	}
+	else
+	{
+		maxCurrentConfiguredBy = 0; //0 = Unconfigured
+		return 0.0;
+	}
+}
+
+
+uint8_t GetMaxCurrentConfigurationSource()
+{
+	return maxCurrentConfiguredBy;
 }
 
 float MCU_StandAloneCurrent()
