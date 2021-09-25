@@ -59,7 +59,7 @@ void on_send_signed_meter_value()
 	}
 
 	if(hasRemainingEnergy)
-		ESP_LOGW(TAG, "#### Set to report any remaining energy. RV=%f #####", energy);
+		ESP_LOGW(TAG, "### Set to report any remaining energy. RV=%f ###", energy);
 
 	ESP_LOGI(TAG, "***** Clearing energy log *****");
 
@@ -93,7 +93,7 @@ void on_send_signed_meter_value()
 	if((state_charging == false) && (hasRemainingEnergy == true))
 	{
 		hasRemainingEnergy = false;
-		ESP_LOGW(TAG, "#### Cleared remaining energy flag ####");
+		ESP_LOGW(TAG, "### Cleared remaining energy flag ###");
 	}
 
 }
