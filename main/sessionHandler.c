@@ -196,7 +196,7 @@ void OfflineHandler()
 
 			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 
-			if(storage_Get_NetworkType() == NETWORK_3P3W)
+			if(MCU_GetGridType() == NETWORK_3P3W)
 				offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
 
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
@@ -231,7 +231,7 @@ void OfflineHandler()
 	{
 		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 
-		if(storage_Get_NetworkType() == NETWORK_3P3W)
+		if(MCU_GetGridType() == NETWORK_3P3W)
 			offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
 
 		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
@@ -944,6 +944,23 @@ static void sessionHandler_task()
 				}
 			}
 
+
+			if(RFIDListIsUpdated() >= 0)
+			{
+				//Give some time to ensure it is sendt after cloud has received command-ack
+				vTaskDelay(pdMS_TO_TICKS(1000));
+
+				int published = publish_uint32_observation(AuthenticationListVersion, (uint32_t)RFIDListIsUpdated());
+				if (published == 0)
+				{
+					ClearRfidListIsUpdated();
+					ESP_LOGW(TAG,"RFID version value cleared");
+				}
+				else
+				{
+					ESP_LOGE(TAG,"RFID version value NOT cleared");
+				}
+			}
 
 			if(GetReportGridTestResults() == true)
 			{
