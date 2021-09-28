@@ -196,8 +196,9 @@ void OfflineHandler()
 
 			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 
-			if(MCU_GetGridType() == NETWORK_3P3W)
-				offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
+			//Scaling is done in MCU
+			//if(MCU_GetGridType() == NETWORK_3P3W)
+			//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
 
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 			if(ret == MsgWriteAck)
@@ -231,8 +232,9 @@ void OfflineHandler()
 	{
 		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 
-		if(MCU_GetGridType() == NETWORK_3P3W)
-			offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
+		//Scaling is done in MCU
+		//if(MCU_GetGridType() == NETWORK_3P3W)
+		//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
 
 		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
 
