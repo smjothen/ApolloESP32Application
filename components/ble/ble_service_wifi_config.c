@@ -490,12 +490,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 					if(duplicateDetected == true)
 						continue;
 
-					wifiPackage[nextIndex++] = ap_records[apNr].rssi;
+					wifiPackage[nextIndex++] = ap_records[i].rssi;
 
-					if(ap_records[i].authmode == WIFI_AUTH_OPEN)
+					//Try always require password to avoid wifi-lib problem with WPA2/WPA3-Personal APs
+					/*if(ap_records[i].authmode == WIFI_AUTH_OPEN)
 						wifiPackage[nextIndex++] = 0;
-					else
-						wifiPackage[nextIndex++] = 1;
+					else*/
+					wifiPackage[nextIndex++] = 1;
 
 					//Add SSID length to package
 					int ssidLen = strlen((char*)ap_records[i].ssid);

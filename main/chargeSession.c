@@ -25,6 +25,8 @@ static char * basicOCMF = "OCMF|{}";
 
 static char sidOrigin[6] = {0};
 
+static bool isCarConnected = false;
+
 static void ChargeSession_Set_GUID()
 {
 	volatile uint32_t GUID[4] = {0};
@@ -50,6 +52,10 @@ void chargeSession_PrintSession()
 	ESP_LOGW(TAG," %s - %s\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
 }
 
+void SetCarConnectedState(bool connectedState)
+{
+	isCarConnected = connectedState;
+}
 
 char * chargeSession_GetSessionId()
 {
@@ -93,12 +99,22 @@ static void ChargeSession_Set_StartTime()
 	ESP_LOGI(TAG, "Start time is: %s", chargeSession.StartTime);
 }
 
-void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
+int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 {
+	if(isCarConnected == false)
+	{
+		ESP_LOGE(TAG, "#### Tried setting Cloud SessionId with car disconnected: %d ####", isCarConnected);
+		return -1;
+	}
+	else
+	{
+		ESP_LOGW(TAG, "**** Car connected: %d ***", isCarConnected);
+	}
+
 	if(strcmp(sessionIdFromCloud, chargeSession.SessionId) == 0)
 	{
 		ESP_LOGI(TAG, "SessionId already set");
-		return;
+		return 1;
 	}
 
 	if(strlen(chargeSession.SessionId) > 0)
@@ -121,6 +137,8 @@ void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 
 	//Save
 	chargeSession_SaveSessionResetInfo();
+
+	return 0;
 }
 
 

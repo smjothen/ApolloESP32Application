@@ -1216,8 +1216,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		sessionIdString[commandEvent->data_len-4] = '\0';
 
 		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
-		chargeSession_SetSessionIdFromCloud(sessionIdString);
-		responseStatus = 200;
+		int8_t ret = chargeSession_SetSessionIdFromCloud(sessionIdString);
+
+		//Return error if the Session was received with no car connected. Can happen in race-condition with short connect-disconnect
+		if(ret == -1)
+			responseStatus = 400;
+		else
+			responseStatus = 200;
 	}
 	/// SetUserUuid
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/505/"))

@@ -506,6 +506,13 @@ static void sessionHandler_task()
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 		currentCarChargeMode = MCU_GetchargeMode();
 
+		//We need to inform the ChargeSession if a car is connected.
+		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
+		if((currentCarChargeMode == eCAR_DISCONNECTED) || (currentCarChargeMode == eCAR_UNINITIALIZED))
+			SetCarConnectedState(false);
+		else
+			SetCarConnectedState(true);
+
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh.

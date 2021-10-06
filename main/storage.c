@@ -1149,9 +1149,11 @@ double storage_update_accumulated_energy(float session_energy){
 		// we may loose some energy in this calculation,
 		// tough normally this should be fine
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
+		//SetEspNotification(eNOTIFICATION_ENERGY);
 	}else if (session_energy < previous_session_energy){
 		// dspic has started new session
-		result = previous_accumulated_energy + session_energy;
+		result = previous_accumulated_energy;// + session_energy;
+		SetEspNotification(eNOTIFICATION_ENERGY);
 	}else{
 		if(accumulator_initialised == true){
 			result = 0.0;
