@@ -963,6 +963,11 @@ void SetEspNotification(uint16_t notification)
 	espNotifications |= notification;
 }
 
+void ClearNotifications()
+{
+	espNotifications = 0;
+}
+
 uint32_t GetCombinedNotifications()
 {
 	return (uint32_t)((espNotifications << 16) + mcuNotifications);

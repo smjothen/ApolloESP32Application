@@ -1882,6 +1882,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SetOnlineWatchdog();
 				}
+				//AT command tunneling - do change command mode
+				else if(strstr(commandString,"ClearNotifications") != NULL)
+				{
+					ClearNotifications();
+				}
 
 			}
 	}
