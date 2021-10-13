@@ -27,7 +27,7 @@ static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
 static bool updateOnlyIfNewVersion = false;
 
 const uint OTA_TIMEOUT_MINUTES = 12;
-const uint OTA_GLOBAL_TIMEOUT_MINUTES = 30;
+const uint OTA_GLOBAL_TIMEOUT_MINUTES = 60;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
 
