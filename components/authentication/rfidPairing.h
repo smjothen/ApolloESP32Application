@@ -27,7 +27,7 @@ void rfidPairing_SetState(enum NFCPairingState state);
 
 void rfidPairing_GetStateAsChar(char * stateAsChar);
 
-void rfidPairing_ClearState();
+bool rfidPairing_ClearState();
 
 
 #ifdef __cplusplus

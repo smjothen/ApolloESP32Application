@@ -355,12 +355,13 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
 int publish_debug_telemetry_observation_RequestNewStartChargingCommand()
 {
-    ESP_LOGD(TAG, "sending Request start command telemetry");
+    ESP_LOGI(TAG, "sending Request start command telemetry");
 
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_REQUESTING));
+
     //ESP_LOGE(TAG, "\n ************* 2 Sending OperatingMode %d ***************\n", CHARGE_OPERATION_STATE_REQUESTING);
 
     return publish_json(observations);
@@ -518,6 +519,7 @@ static uint8_t previousFinalStopActiveStatus = 0xff;
 static uint32_t previousTransmitInterval = 0;
 static uint32_t previousPulseInterval = 0;
 static uint32_t previousCertificateVersion = 0;
+static uint8_t previousMaxCurrentConfigSource = 0xff;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -662,7 +664,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-	float maxInstallationCurrentConfig = MCU_ChargeCurrentInstallationMaxLimit();//storage_Get_MaxInstallationCurrentConfig();
+	float maxInstallationCurrentConfig = MCU_ChargeCurrentInstallationMaxLimit();
 	float maxInstallationCurrentOnFile = storage_Get_MaxInstallationCurrentConfig();
 	if((previousMaxInstallationCurrentConfig != maxInstallationCurrentConfig) || (previousMaxInstallationCurrentOnFile != maxInstallationCurrentOnFile))
 	{
@@ -788,21 +790,30 @@ int publish_telemetry_observation_on_change(){
     	isChange = true;
     }
 
-     uint32_t pulseInterval = storage_Get_PulseInterval();
-	 if(previousPulseInterval != pulseInterval)
-	 {
+	uint32_t pulseInterval = storage_Get_PulseInterval();
+	if(previousPulseInterval != pulseInterval)
+	{
 		add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
 		previousPulseInterval = pulseInterval;
 		isChange = true;
-	 }
+	}
 
-	 uint32_t certificateVersion = (uint32_t)certificate_GetCurrentBundleVersion();
-	 if(previousCertificateVersion != certificateVersion)
-	 {
+	uint32_t certificateVersion = (uint32_t)certificate_GetCurrentBundleVersion();
+	if(previousCertificateVersion != certificateVersion)
+	{
 		add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, certificateVersion));
 		previousCertificateVersion = certificateVersion;
 		isChange = true;
-	 }
+	}
+
+	uint8_t maxCurrentConfigSource = GetMaxCurrentConfigurationSource();
+	if(previousMaxCurrentConfigSource != maxCurrentConfigSource)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(MaxCurrentConfigurationSource, (uint32_t)maxCurrentConfigSource));
+		previousMaxCurrentConfigSource = maxCurrentConfigSource;
+		isChange = true;
+	}
+
 
 	//Check ret and retry?
     int ret = 0;

@@ -524,10 +524,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 					wifiPackage[nextIndex++] = ap_records[i].rssi;
 
-					if(ap_records[i].authmode == WIFI_AUTH_OPEN)
+					//Try always require password to avoid wifi-lib problem with WPA2/WPA3-Personal APs
+					/*if(ap_records[i].authmode == WIFI_AUTH_OPEN)
 						wifiPackage[nextIndex++] = 0;
-					else
-						wifiPackage[nextIndex++] = 1;
+					else*/
+					wifiPackage[nextIndex++] = 1;
 
 					//Add SSID length to package
 					int ssidLen = strlen((char*)ap_records[i].ssid);
@@ -726,7 +727,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		memcpy(rsp->attr_value.value, NFCPairState, 1);
 		rsp->attr_value.len = 1;
 
-		rfidPairing_ClearState();
+		bool hasSetInactiveState = rfidPairing_ClearState();
+		if(hasSetInactiveState == true)
+		{
+	    	MCU_StopLedOverride();
+		}
 		break;
 
     case CHARGER_OCCUPIED_STATE_UUID:
@@ -1223,6 +1228,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	rfidPairing_SetNewTagName(param->write.value, param->write.len);
     	rfidPairing_SetState(ePairing_Reading);
 
+    	MCU_StartLedOverride();
+
+
+
 		//ESP_LOGI(TAG, "New NFC tag string %s", PAIR_NFC_TAG_val);
 
    		break;
@@ -1586,5 +1595,6 @@ void ClearAuthValue()
 
 		statusSegmentCount = 0;
 		rfidPairing_SetState(ePairing_Inactive);
+		MCU_StopLedOverride();
 }
 

@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.1.31";
+char softwareVersion[] = "0.0.2.4";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -195,6 +195,7 @@ void SetOnlineWatchdog()
 	onlineWatchdog = true;
 }
 
+
 void app_main(void)
 {
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
@@ -260,7 +261,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-	validate_booted_image();
+    //validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -313,7 +314,7 @@ void app_main(void)
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
 		//If it was OFF this will effectively power it ON so it is ready for later.
-		cellularPinsOff();
+		//cellularPinsOff();
 	}
 	
 	connectivity_init();

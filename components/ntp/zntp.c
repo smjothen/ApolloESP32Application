@@ -109,9 +109,9 @@ bool zntp_Get15MinutePoint()
 
 
 	//Find correct quarterly minute
-	//if(!((systemTime.tm_sec >= 58)))	//For testing
+	if(!((systemTime.tm_sec >= 58)))	//For testing
 
-	if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
+	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
 			return false;
 
 
@@ -130,12 +130,12 @@ bool zntp_Get15MinutePoint()
 
 		if(oneSecAway == true)
 		{
-			ESP_LOGW(TAG, "...looking %i", timeout);
+			ESP_LOGW(TAG, "Syncing... %i", timeout);
 			vTaskDelay(100 / portTICK_PERIOD_MS);
 		}
 		else
 		{
-			ESP_LOGI(TAG, "...found");
+			ESP_LOGW(TAG, "SYNCED!");
 		}
 	}
 

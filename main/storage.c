@@ -86,7 +86,7 @@ void storage_Init_Configuration()
 	configurationStruct.standaloneCurrent			= 6;	//A
 	configurationStruct.maxInstallationCurrentConfig = 0.0;
 
-	configurationStruct.phaseRotation				= 1;
+	configurationStruct.phaseRotation				= 0;
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
 	configurationStruct.pulseInterval				= 60;
@@ -355,6 +355,31 @@ float storage_Get_MaxInstallationCurrentConfig()
 
 uint8_t storage_Get_PhaseRotation()
 {
+	//For new chargers with no PhaseRotation = 0, set default if configured with switch
+	if(configurationStruct.phaseRotation == 0)
+	{
+		if(MCU_GetGridType() == NETWORK_1P4W)
+			return 1;
+		if(MCU_GetGridType() == NETWORK_3P4W)
+			return 4;
+		if(MCU_GetGridType() == NETWORK_1P3W)
+			return 10;
+		if(MCU_GetGridType() == NETWORK_3P3W)
+			return 13;
+	}
+	//Previous incorrect default value (1) is used on previous chargers
+	else if(configurationStruct.phaseRotation == 1)
+	{
+		//For the various grid types not matching phase rotation 1, set default for grid type
+		if(MCU_GetGridType() == NETWORK_3P4W)
+			return 4;
+		if(MCU_GetGridType() == NETWORK_1P3W)
+			return 10;
+		if(MCU_GetGridType() == NETWORK_3P3W)
+			return 13;
+	}
+
+	//For chargers configured with App -> use configuration
 	return configurationStruct.phaseRotation;
 }
 
@@ -1124,9 +1149,11 @@ double storage_update_accumulated_energy(float session_energy){
 		// we may loose some energy in this calculation,
 		// tough normally this should be fine
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
-	}else if (session_energy < previous_session_energy){
+	}else if ((session_energy < previous_session_energy) && (session_energy > 0.01)){	//Avoid occurence on every new session when session_Energy is ~0.0.
 		// dspic has started new session
-		result = previous_accumulated_energy + session_energy;
+		result = previous_accumulated_energy;// + session_energy; //Commented out because this occur and causes incorrect accumulation in some cases
+		SetEspNotification(eNOTIFICATION_ENERGY);
+		ESP_LOGE(TAG, "### Energy reset? ### %f < %f", session_energy, previous_session_energy);
 	}else{
 		if(accumulator_initialised == true){
 			result = 0.0;

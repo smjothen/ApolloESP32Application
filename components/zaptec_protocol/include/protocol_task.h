@@ -20,6 +20,9 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);
 
+void MCU_StartLedOverride();
+void MCU_StopLedOverride();
+
 int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
@@ -58,7 +61,9 @@ float MCU_ChargeCurrentInstallationMaxLimit();
 float MCU_StandAloneCurrent();
 
 float MCU_GetMaxInstallationCurrentSwitch();
+uint8_t GetMaxCurrentConfigurationSource();
 void SetEspNotification(uint16_t notification);
+void ClearNotifications();
 uint32_t GetCombinedNotifications();
 void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();

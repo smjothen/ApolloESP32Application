@@ -28,7 +28,7 @@ void chargeSession_Start();
 void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();
 void chargeSession_Clear();
-void chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
+int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
 void chargeSession_ClearAuthenticationCode();
 void chargeSession_SetEnergy(float energy);
@@ -42,6 +42,7 @@ esp_err_t chargeSession_SaveSessionResetInfo();
 esp_err_t chargeSession_ReadSessionResetInfo();
 
 bool chargeSession_IsAuthenticated();
+void SetCarConnectedState(bool connectedState);
 
 #ifdef __cplusplus
 }

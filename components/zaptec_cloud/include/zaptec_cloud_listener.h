@@ -13,6 +13,8 @@ bool CloudSettingsAreUpdated();
 void ClearCloudSettingsAreUpdated();
 bool LocalSettingsAreUpdated();
 void ClearLocalSettingsAreUpdated();
+int RFIDListIsUpdated();
+void ClearRfidListIsUpdated();
 
 void ClearCloudCommandCurrentUpdated();
 bool CloudCommandCurrentUpdated();

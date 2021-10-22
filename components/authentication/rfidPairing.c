@@ -9,6 +9,7 @@
 #include "../audioBuzzer/audioBuzzer.h"
 #include "../../components/i2c/include/i2cDevices.h"
 #include "../zaptec_cloud/include/zaptec_cloud_observations.h"
+#include "../../components/zaptec_protocol/include/protocol_task.h"
 
 static const char *TAG = "RFID-PAIRING     ";
 
@@ -81,6 +82,8 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 	}
 	else if(nfcPairingState == ePairing_Reading)
 	{
+
+
 		*stateAsChar = '1';
 		if(NFCGetTagInfo().tagIsValid == false)
 		{
@@ -137,6 +140,7 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 		if(nfcPairTimeout == 0)
 		{
 			nfcPairingState = ePairing_AddingFailed;
+			MCU_StopLedOverride();
 		}
 
 	}
@@ -150,11 +154,16 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 }
 
 
-void rfidPairing_ClearState()
+bool rfidPairing_ClearState()
 {
 	//Clear final states after BLE readout
 	if((nfcPairingState == ePairing_AddedOk) || (nfcPairingState == ePairing_AddingFailed))
+	{
 		nfcPairingState = ePairing_Inactive;
+		return true;
+	}
+
+	return false;
 }
 
 

@@ -53,6 +53,9 @@
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
 
+		ParamLedOverride = 290,
+		ParamLedOverrideClear = 291,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -81,7 +84,7 @@
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
-
+		MaxCurrentConfigurationSource = 544,
 		SwitchPosition = 545,
 		ChargeCurrentInstallationMaxLimit = 546,
 		StandAloneCurrent = 547,
@@ -222,6 +225,8 @@
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
 		CommandIndicateOk = 606,
+		CommandBlinkWhite = 607,
+
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,

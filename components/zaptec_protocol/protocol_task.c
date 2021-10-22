@@ -692,6 +692,34 @@ ZapMessage MCU_ReadParameter(uint16_t paramIdentifier)
 }
 
 
+void MCU_StartLedOverride()
+{
+	ESP_LOGI(TAG, "Send white pulsing command to MCU");
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverride, LED_CLEAR_WHITE_PULSING);
+	if(ret == MsgWriteAck)
+	{
+		ESP_LOGI(TAG, "MCU white pulsing OK. ");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU white pulsing FAILED");
+	}
+}
+
+void MCU_StopLedOverride()
+{
+	ESP_LOGI(TAG, "Clear overriding LED on MCU");
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);
+	if(ret == MsgWriteAck)
+	{
+		ESP_LOGI(TAG, "MCU Cleared ledoverride OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU clearing ledoverride FAILED");
+	}
+}
+
 char * MCU_GetSwVersionString()
 {
 	return mcuSwVersionString;
@@ -813,7 +841,7 @@ float MCU_GetMaxInstallationCurrentSwitch()
             maxCurrent = 32.0;
             break;
         case 8:
-            maxCurrent = 32.0;
+            maxCurrent = 0.0;
             break;
         case 9:
             maxCurrent = 0.0;
@@ -923,9 +951,34 @@ uint16_t MCU_ProximityInst()
 	return mcuProximityInst;
 }
 
+//This is used to show if the switch or BLE was used to configure the max current
+uint8_t maxCurrentConfiguredBy = 0;
+
 float MCU_ChargeCurrentInstallationMaxLimit()
 {
-	return mcuChargeCurrentInstallationMaxLimit;
+	float switchCurrent = MCU_GetMaxInstallationCurrentSwitch();
+
+	if(mcuChargeCurrentInstallationMaxLimit > 0.0)
+	{
+		maxCurrentConfiguredBy = 2; //2 = BLE
+		return mcuChargeCurrentInstallationMaxLimit;
+	}
+	else if(switchCurrent > 0.0)
+	{
+		maxCurrentConfiguredBy = 1;	//1 = Switch
+		return switchCurrent;
+	}
+	else
+	{
+		maxCurrentConfiguredBy = 0; //0 = Unconfigured
+		return 0.0;
+	}
+}
+
+
+uint8_t GetMaxCurrentConfigurationSource()
+{
+	return maxCurrentConfiguredBy;
 }
 
 float MCU_StandAloneCurrent()
@@ -936,6 +989,11 @@ float MCU_StandAloneCurrent()
 void SetEspNotification(uint16_t notification)
 {
 	espNotifications |= notification;
+}
+
+void ClearNotifications()
+{
+	espNotifications = 0;
 }
 
 uint32_t GetCombinedNotifications()

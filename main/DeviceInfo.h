@@ -66,7 +66,8 @@ enum ESPNotifications
 	eNOTIFICATION_NVS_ERROR 			= 0x1,
 	eNOTIFICATION_CERT_BUNDLE_REQUESTED = 0x2,
 	eNOTIFICATION_NETWORK_TYPE_OVERRIDE = 0x4,
-	eNOTIFICATION_MCU_WATCHDOG			= 0x8
+	eNOTIFICATION_MCU_WATCHDOG			= 0x8,
+	eNOTIFICATION_ENERGY				= 0x10,
 };
 
 enum DiagnosticsModes
@@ -118,5 +119,33 @@ struct Configuration
 	uint8_t networkType;
 	uint8_t networkTypeOverride;
 };
+
+
+typedef enum {
+    LED_STATE_OFF           = 0,
+    LED_REQUESTING          = 1,
+
+
+    LED_ORANGE_BLINKING     = 2,
+    LED_ORANGE_CONTINUOUS   = 3,
+
+    LED_GREEN_CONTINUOUS    = 4,
+
+    LED_YELLOW_PULSING      = 5,
+    LED_YELLOW_CONTINUOUS   = 6,
+
+    LED_BLUE_CONTINUOUS     = 7,
+    LED_BLUE_PULSING        = 8,
+
+    LED_WHITE_CONTINUOUS    = 9,
+    LED_CLEAR_WHITE         = 10,
+    LED_CLEAR_WHITE_PULSING = 11,
+
+    LED_RED                 = 12,
+
+    LED_PURPLE_PULSE_FAST   = 13,
+    LED_PURPLE_PULSE_SLOW   = 14,
+    LED_MULTI_COLOR         = 15
+} led_state;
 
 #endif /* DEVICEINFO_H_ */

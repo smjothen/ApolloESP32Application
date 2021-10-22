@@ -61,7 +61,7 @@ bool ESPDiagnosticsResults = false;
 bool reportInstallationConfigOnFile = false;
 bool simulateTlsError = false;
 
-
+static int rfidListIsUpdated = -1;
 
 
 /*const char cert[] =
@@ -199,6 +199,16 @@ bool LocalSettingsAreUpdated()
 void ClearLocalSettingsAreUpdated()
 {
 	localSettingsAreUpdated = false;
+}
+
+int RFIDListIsUpdated()
+{
+	return rfidListIsUpdated;
+}
+
+void ClearRfidListIsUpdated()
+{
+	rfidListIsUpdated = -1;
 }
 
 
@@ -1209,8 +1219,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		sessionIdString[commandEvent->data_len-4] = '\0';
 
 		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
-		chargeSession_SetSessionIdFromCloud(sessionIdString);
-		responseStatus = 200;
+		int8_t ret = chargeSession_SetSessionIdFromCloud(sessionIdString);
+
+		//Return error if the Session was received with no car connected. Can happen in race-condition with short connect-disconnect
+		if(ret == -1)
+			responseStatus = 400;
+		else
+			responseStatus = 200;
 	}
 	/// SetUserUuid
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/505/"))
@@ -1324,7 +1339,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		}
 		else
 		{
-			responseStatus = 400;
+			ESP_LOGI(TAG, "Granted from Cloud in standalone");
+			responseStatus = 200; //For standalone - don't do anything, just return this responseStatus to make the cloud happy
 		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/602/"))
@@ -1875,6 +1891,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SetOnlineWatchdog();
 				}
+				//AT command tunneling - do change command mode
+				else if(strstr(commandString,"ClearNotifications") != NULL)
+				{
+					ClearNotifications();
+				}
 
 			}
 	}
@@ -2101,12 +2122,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         		int version = authentication_ParseOfflineList(rfidList, strlen(rfidList));
 
-        		if(version > 0)
+        		ESP_LOGI(TAG, "***** AuthenticationListVersion: %d *****", version);
+
+        		if(version >= 0)
         		{
-        			int ret = publish_uint32_observation(AuthenticationListVersion, version);
-        			ESP_LOGI(TAG, "***** AuthenticationListVersion ret: %d *****", ret);
+        			//Set flag value to trig sending of AuthenticationListVersion from SessionHandler
+        			rfidListIsUpdated = version;
         		}
-//				Debug - for testing authentication
+
+        		//				Debug - for testing authentication
 //        		char * messageZer = "{\"Version\":1,\"Package\":0,\"PackageCount\":1,\"Type\":0,\"Tokens\":[{\"Tag\":\"*\",\"Action\":0,\"ExpiryDate\":null}]}";
 //
 //        		//Add 6
