@@ -74,6 +74,7 @@ void rfidPairing_SetState(enum NFCPairingState state)
 		i2cSetNFCTagPairing(false);
 }
 
+
 void rfidPairing_GetStateAsChar(char * stateAsChar)
 {
 	if (nfcPairingState == ePairing_Inactive)

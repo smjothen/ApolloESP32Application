@@ -109,9 +109,9 @@ bool zntp_Get15MinutePoint()
 
 
 	//Find correct quarterly minute
-	if(!((systemTime.tm_sec >= 58)))	//For testing
+	//if(!((systemTime.tm_sec >= 58)))	//For testing
 
-	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
+	if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
 			return false;
 
 

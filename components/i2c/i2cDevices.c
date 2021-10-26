@@ -319,7 +319,6 @@ static void i2cDevice_task(void *pvParameters)
 				}
 			}
 
-
 		}
 
 		//Test function for checking successful NFC reading under certain conditions
