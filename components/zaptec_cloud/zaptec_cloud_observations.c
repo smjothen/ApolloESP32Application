@@ -160,7 +160,7 @@ int publish_debug_telemetry_observation_cloud_settings()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, storage_Get_AuthenticationRequired()));
-    add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, storage_ReadNrofTagsOnFile()));
+    add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, storage_ReadNrOfTagsOnFile()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMaximum, storage_Get_CurrentInMaximum()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMinimum, storage_Get_CurrentInMinimum()));
 
@@ -520,6 +520,8 @@ static uint32_t previousTransmitInterval = 0;
 static uint32_t previousPulseInterval = 0;
 static uint32_t previousCertificateVersion = 0;
 static uint8_t previousMaxCurrentConfigSource = 0xff;
+static uint32_t previousNumberOfTagsCount = 0;
+
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -811,6 +813,14 @@ int publish_telemetry_observation_on_change(){
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(MaxCurrentConfigurationSource, (uint32_t)maxCurrentConfigSource));
 		previousMaxCurrentConfigSource = maxCurrentConfigSource;
+		isChange = true;
+	}
+
+	uint32_t nrOfTagsCount = storage_GetNrOfTagsCounter();
+	if(previousNumberOfTagsCount != nrOfTagsCount)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, nrOfTagsCount));
+		previousNumberOfTagsCount = nrOfTagsCount;
 		isChange = true;
 	}
 

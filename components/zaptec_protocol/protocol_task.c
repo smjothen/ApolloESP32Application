@@ -695,7 +695,7 @@ ZapMessage MCU_ReadParameter(uint16_t paramIdentifier)
 void MCU_StartLedOverride()
 {
 	ESP_LOGI(TAG, "Send white pulsing command to MCU");
-	MessageType ret = MCU_SendUint8Parameter(ParamLedOverride, LED_CLEAR_WHITE_PULSING);
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverride, LED_CLEAR_WHITE_BLINKING);
 	if(ret == MsgWriteAck)
 	{
 		ESP_LOGI(TAG, "MCU white pulsing OK. ");

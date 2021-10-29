@@ -30,7 +30,7 @@ char * GetSoftwareVersionBLE();
 #define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"
 #define INSTALLATION_ID_BASE64 "AAAAAAAAAAAAAAAAAAAAAA"
 
-#define MAX_NR_OF_RFID_TAGS 12
+#define MAX_NR_OF_RFID_TAGS 20
 
 struct RFIDTokens{
 	char *Tag;//[37];
@@ -139,7 +139,7 @@ typedef enum {
 
     LED_WHITE_CONTINUOUS    = 9,
     LED_CLEAR_WHITE         = 10,
-    LED_CLEAR_WHITE_PULSING = 11,
+    LED_CLEAR_WHITE_BLINKING = 11,
 
     LED_RED                 = 12,
 

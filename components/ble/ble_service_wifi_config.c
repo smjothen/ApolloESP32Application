@@ -312,6 +312,20 @@ void charInit()
 }
 
 
+void PulseLedAtConnect()
+{
+	MessageType ret = MCU_SendCommandId(CommandIndicateAppConnect);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU CommandIndicateAppConnect OK. ");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU CommandIndicateAppConnect FAILED");
+	}
+}
+
+
 void setDeviceNameAsChar(char * devName)
 {
 	memcpy(CHARGER_SERV_CHAR_CHARGER_MID_val, devName, 9);

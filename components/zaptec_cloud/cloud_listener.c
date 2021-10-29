@@ -27,6 +27,7 @@
 #include "../../main/certificate.h"
 #include "../ble/ble_service_wifi_config.h"
 #include "../authentication/rfidPairing.h"
+#include "../../main/offline_log.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -1897,6 +1898,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ClearNotifications();
 				}
 
+				else if(strstr(commandString,"PrintStat") != NULL)
+				{
+					char stat[100] = {0};
+					storage_GetStats(stat);
+					publish_debug_telemetry_observation_Diagnostics(stat);
+				}
+
+				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
+				{
+					int ret = deleteOfflineLog();
+					if(ret == 1)
+						publish_debug_telemetry_observation_Diagnostics("Delete OK");
+					else
+						publish_debug_telemetry_observation_Diagnostics("Delete failed");
+				}
+
+
+
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -2105,10 +2125,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //Handle incoming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
-        	if(event->data_len > 10)
+
+        	ESP_LOGW(TAG, "***** Data len: %d *****", event->data_len);
+
+        	//Limit max size since we have not testet with large data size(many tags in package)
+        	if((3000 > event->data_len) && (event->data_len > 10))
         	{
         		//Remove '\\' escape character due to uint8_t->char conversion
-        		char rfidList[event->data_len];
+        		//char rfidList[event->data_len];
+        		char * rfidList = calloc(event->data_len, 1);
         		int nextChar = 0;
         		for (int i = 0; i < event->data_len; i++)
         		{
@@ -2121,6 +2146,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         		rfidList[nextChar] = '\0';
 
         		int version = authentication_ParseOfflineList(rfidList, strlen(rfidList));
+
+        		free(rfidList);
 
         		ESP_LOGI(TAG, "***** AuthenticationListVersion: %d *****", version);
 

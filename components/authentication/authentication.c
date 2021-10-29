@@ -130,10 +130,8 @@ int authentication_ParseOfflineList(char * message, int message_len)
 
 		ESP_LOGI(TAG, "token_array_size=%d", token_array_size);
 
-		if(token_array_size > 11)
-			token_array_size = 11;
-
-		//bool emptyList = false;
+		if(token_array_size > MAX_NR_OF_RFID_TAGS)
+			token_array_size = MAX_NR_OF_RFID_TAGS;
 
 		if(token_array_size > 0)
 		{
@@ -170,8 +168,6 @@ int authentication_ParseOfflineList(char * message, int message_len)
 						else
 							ESP_LOGE(TAG, "Erase ERROR: %d when erasing all tags", err);
 
-						//emptyList = true;
-
 						break;
 					}
 
@@ -198,12 +194,9 @@ int authentication_ParseOfflineList(char * message, int message_len)
 			//}
 		}
 
-		//if(array != NULL)
-			//cJSON_Delete(array);
+		//if(tokens != NULL)
+			//ESP_LOGI(TAG, "tokens: ");
 
-		if(tokens != NULL)
-			ESP_LOGI(TAG, "tokens: ");
-			//cJSON_Delete(tokens);
 	}
 
 	if(tagPackage != NULL)
