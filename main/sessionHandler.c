@@ -26,9 +26,8 @@
 
 static const char *TAG = "SESSION    ";
 
-//static uint32_t dataTestInterval = 0;
-#define RESEND_REQUEST_TIMER_LIMIT 90//150
-
+#define RESEND_REQUEST_TIMER_LIMIT 90
+#define OCMF_INTERVAL_TIME 3600
 
 static char * completedSessionString = NULL;
 
@@ -36,9 +35,18 @@ TimerHandle_t signedMeterValues_timer;
 static bool hasRemainingEnergy = false;
 static bool hasCharged = false;
 
-//Send every 15 minutes - at XX:00, XX:15, XX:30 and XX:45.
+static uint32_t secSinceLastOCMFMessage = 0;
+
+//Send every clock aligned hour
 void on_send_signed_meter_value()
 {
+	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustement.
+	if(secSinceLastOCMFMessage <= 30)
+	{
+		ESP_LOGE(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
+		return;
+	}
+
 	char OCMPMessage[200] = {0};
 	time_t time;
 	double energy;
@@ -96,6 +104,8 @@ void on_send_signed_meter_value()
 		ESP_LOGW(TAG, "### Cleared remaining energy flag ###");
 	}
 
+	//ESP_LOGE(TAG, "********** OCMF INTERVAL ***********");
+	secSinceLastOCMFMessage = 0;
 }
 
 
@@ -287,7 +297,7 @@ SemaphoreHandle_t ocmf_sync_semaphore;
 void ocmf_sync_task(void * pvParameters){
 	while(true){
 		if( xSemaphoreTake( ocmf_sync_semaphore, portMAX_DELAY ) == pdTRUE ){
-			ESP_LOGI(TAG, "triggered 15 min sync with semaphore");
+			ESP_LOGI(TAG, "triggered periodic sync with semaphore");
 			on_send_signed_meter_value();
 		}else{
 			ESP_LOGE(TAG, "bad semaphore??");
@@ -377,10 +387,10 @@ static void sessionHandler_task()
 
     authentication_Init();
     OCMF_Init();
-    uint32_t secondsSinceSync = 0;
+    uint32_t secondsSinceSync = OCMF_INTERVAL_TIME;
 
-    TickType_t refresh_ticks = pdMS_TO_TICKS(15*60*1000); //15 minutes
-    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //15 minutes for testing( also change line in zntp.c for minute sync)
+    TickType_t refresh_ticks = pdMS_TO_TICKS(60*60*1000); //60 minutes
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
@@ -388,10 +398,11 @@ static void sessionHandler_task()
 
 		if((!setTimerSyncronization))
 		{
-			if(zntp_Get15MinutePoint())
+			if(zntp_GetTimeAlignementPoint())
 			{
-				ESP_LOGW(TAG, " 15 Min sync!");
+				ESP_LOGW(TAG, " 1 hour sync!");
 				xTimerReset( signedMeterValues_timer, portMAX_DELAY );
+
 				on_ocmf_sync_time(NULL);
 
 				setTimerSyncronization = true;
@@ -401,7 +412,12 @@ static void sessionHandler_task()
 
 		//The timer must be resynced regularly with the clock to avoid deviation since the clock is updated through NTP.
 		secondsSinceSync++;
-		if((setTimerSyncronization == true) && (secondsSinceSync > 3400) && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
+		secSinceLastOCMFMessage++;
+
+		//Enable resyncronization of timer interrupt with NTP clock on every interval
+		//Either sync or timer event will cause trig. If double trig due to clock drifting, only the first one will be completed
+		if((setTimerSyncronization == true) && (secondsSinceSync > 1800))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
+		//if((setTimerSyncronization == true) && (secondsSinceSync > 30))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		{
 			ESP_LOGW(TAG, " Trig new OCMF timer sync");
 			setTimerSyncronization = false;
@@ -751,7 +767,7 @@ static void sessionHandler_task()
 		}
 
 
-		//Set flag for the 15 minute OCMF message to show that charging has occured within an
+		//Set flag for the periodic OCMF message to show that charging has occured within an
 		// interval so that energy message must be sent
 		if((chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING))
 		{

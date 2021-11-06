@@ -96,7 +96,7 @@ void zntp_GetSystemTime(char * buffer, time_t *now_out)
 
 }
 
-bool zntp_Get15MinutePoint()
+bool zntp_GetTimeAlignementPoint()
 {
 	time_t now = 0;
 
@@ -111,8 +111,16 @@ bool zntp_Get15MinutePoint()
 	//Find correct quarterly minute
 	//if(!((systemTime.tm_sec >= 58)))	//For testing
 
-	if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
-			return false;
+	//First check if we are within the last minute of the hour
+	if(systemTime.tm_min < 59)
+		return false;
+
+	//For 15-minute sync
+	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
+
+	//Check if we are within the last two seconds to have some margin
+	if(systemTime.tm_sec < 58)
+		return false;
 
 
 	bool oneSecAway = true;

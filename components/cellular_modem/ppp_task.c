@@ -478,7 +478,7 @@ int configure_modem_for_ppp(void){
     {
     	ESP_LOGI(TAG, "LTE Band: %s", response);
 
-    	char * bandSet = strstr(response, ",0x8080080,");
+    	char * bandSet = strstr(response, ",0x8080084,");
     	if(bandSet == NULL)
     	{
     		ESP_LOGI(TAG, "Band not set, writing and soft restarting");

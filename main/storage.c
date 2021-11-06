@@ -1144,17 +1144,20 @@ double storage_update_accumulated_energy(float session_energy){
 		);
 		result = previous_accumulated_energy;
 		goto err;
-	}else if(session_energy > previous_session_energy){
+	}
+	else if(session_energy > previous_session_energy){
 		//if the energy count from the dspic has reset and passed previous_session_energy
 		// we may loose some energy in this calculation,
 		// tough normally this should be fine
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
-	}else if ((session_energy < previous_session_energy) && (session_energy > 0.01)){	//Avoid occurence on every new session when session_Energy is ~0.0.
+	}
+	/*else if ((session_energy < previous_session_energy) && (session_energy > 0.01)){	//Avoid occurence on every new session when session_Energy is ~0.0.
 		// dspic has started new session
 		result = previous_accumulated_energy;// + session_energy; //Commented out because this occur and causes incorrect accumulation in some cases
 		SetEspNotification(eNOTIFICATION_ENERGY);
 		ESP_LOGE(TAG, "### Energy reset? ### %f < %f", session_energy, previous_session_energy);
-	}else{
+	}*/
+	else{
 		if(accumulator_initialised == true){
 			result = 0.0;
 		}else{
