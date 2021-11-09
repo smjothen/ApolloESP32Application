@@ -1153,7 +1153,7 @@ double storage_update_accumulated_energy(float session_energy){
 	}
 	else if (session_energy < previous_session_energy){
 		// dspic has started new session
-		result = previous_accumulated_energy + session_energy; //Commented out because this occur and causes incorrect accumulation in some cases
+		result = previous_accumulated_energy + session_energy;
 		ESP_LOGW(TAG, "### Energy reset - new session ### %f < %f", session_energy, previous_session_energy);
 	}
 	else{
