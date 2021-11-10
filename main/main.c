@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.2.6";
+char softwareVersion[] = "0.0.2.7";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -391,7 +391,7 @@ void app_main(void)
 
     	if(onTimeCounter % 15 == 0)//15
     	{
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+    		ESP_LOGE(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);

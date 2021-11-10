@@ -105,23 +105,14 @@ bool zntp_GetTimeAlignementPoint()
 
 	char buffer[50];
 	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
-	//ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
-
-
-	//Find correct quarterly minute
-	//if(!((systemTime.tm_sec >= 58)))	//For testing
 
 	//First check if we are within the last minute of the hour
 	if(systemTime.tm_min < 59)
 		return false;
 
-	//For 15-minute sync
-	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
-
 	//Check if we are within the last two seconds to have some margin
 	if(systemTime.tm_sec < 58)
 		return false;
-
 
 	bool oneSecAway = true;
 	uint8_t timeout = 21;
@@ -144,6 +135,61 @@ bool zntp_GetTimeAlignementPoint()
 		else
 		{
 			ESP_LOGW(TAG, "SYNCED!");
+		}
+	}
+
+	return true;
+}
+
+
+bool zntp_GetTimeAlignementPointDEBUG()
+{
+	time_t now = 0;
+
+	time(&now);
+	localtime_r(&now, &systemTime);
+
+	char buffer[50];
+	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
+	//ESP_LOGI(TAG, "The 15-min time is: %s", buffer);
+
+
+	//Find correct quarterly minute
+	//if(!((systemTime.tm_sec >= 58)))	//For testing
+
+	//First check if we are within the last minute of the hour
+	//if(systemTime.tm_min < 59)
+	//	return false;
+
+	//For 15-minute sync
+	//if(!((systemTime.tm_sec >= 58) && ((systemTime.tm_min == 14) || (systemTime.tm_min == 29) || (systemTime.tm_min == 44) || (systemTime.tm_min == 59))))
+
+	//Check if we are within the last two seconds to have some margin
+	if((systemTime.tm_sec < 58))// || (systemTime.tm_sec < 28))
+		return false;
+
+
+	bool oneSecAway = true;
+	uint8_t timeout = 21;
+
+	while((oneSecAway == true) && (timeout > 0))
+	{
+		timeout--;
+
+		time(&now);
+		localtime_r(&now, &systemTime);
+
+		if((systemTime.tm_sec == 0))// || (systemTime.tm_sec == 30))
+			oneSecAway = false;
+
+		if(oneSecAway == true)
+		{
+			ESP_LOGW(TAG, "Syncing... %i", timeout);
+			vTaskDelay(100 / portTICK_PERIOD_MS);
+		}
+		else
+		{
+			ESP_LOGW(TAG, "DEBUG SYNCED!");
 		}
 	}
 

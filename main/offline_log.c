@@ -262,3 +262,40 @@ int attempt_log_send(void){
     ESP_LOGI(TAG, "closed log file %d", close_result);
     return result;
 }
+
+
+int deleteOfflineLog()
+{
+	int ret = 0;
+
+	if(!mount_tmp()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
+		return ret;
+	}
+
+	FILE *fp = fopen(log_path, "r");
+	if(fp==NULL)
+		ESP_LOGE(TAG, "Before remove: logfile can't be opened ");
+	else
+		ESP_LOGE(TAG, "Before remove: logfile can be opened ");
+
+	fclose(fp);
+
+	remove(log_path);
+
+	fp = fopen(log_path, "r");
+	if(fp==NULL)
+	{
+		ESP_LOGE(TAG, "After remove: logfile can't be opened ");
+		ret = 1;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "After remove: logfile can be opened ");
+		ret = 2;
+	}
+
+	fclose(fp);
+
+	return ret;
+}

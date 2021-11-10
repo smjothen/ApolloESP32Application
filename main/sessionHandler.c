@@ -47,7 +47,9 @@ void on_send_signed_meter_value()
 		return;
 	}
 
-	char OCMPMessage[200] = {0};
+	secSinceLastOCMFMessage = 0;
+
+	char OCMPMessage[220] = {0};
 	time_t time;
 	double energy;
 
@@ -105,7 +107,6 @@ void on_send_signed_meter_value()
 	}
 
 	//ESP_LOGE(TAG, "********** OCMF INTERVAL ***********");
-	secSinceLastOCMFMessage = 0;
 }
 
 
@@ -344,6 +345,8 @@ bool SessionHandler_IsOfflineMode()
 	return offlineMode;
 }
 
+static bool stackDiagnostics = false;
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -391,6 +394,7 @@ static void sessionHandler_task()
 
     TickType_t refresh_ticks = pdMS_TO_TICKS(60*60*1000); //60 minutes
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(1*5*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
 	while (1)
@@ -398,6 +402,7 @@ static void sessionHandler_task()
 
 		if((!setTimerSyncronization))
 		{
+			//if(zntp_GetTimeAlignementPointDEBUG())
 			if(zntp_GetTimeAlignementPoint())
 			{
 				ESP_LOGW(TAG, " 1 hour sync!");
@@ -406,7 +411,7 @@ static void sessionHandler_task()
 				on_ocmf_sync_time(NULL);
 
 				setTimerSyncronization = true;
-				secondsSinceSync = 0;
+				//secondsSinceSync = 0;
 			}
 		}
 
@@ -416,7 +421,8 @@ static void sessionHandler_task()
 
 		//Enable resyncronization of timer interrupt with NTP clock on every interval
 		//Either sync or timer event will cause trig. If double trig due to clock drifting, only the first one will be completed
-		if((setTimerSyncronization == true) && (secondsSinceSync > 1800))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
+		//if((setTimerSyncronization == true) && (secondsSinceSync > 1800))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
+		if((setTimerSyncronization == true) && (secondsSinceSync > 15))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		//if((setTimerSyncronization == true) && (secondsSinceSync > 30))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		{
 			ESP_LOGW(TAG, " Trig new OCMF timer sync");
@@ -826,7 +832,12 @@ static void sessionHandler_task()
 				}
 
 				if(otaIsRunning() == false)
+				{
 					publish_debug_telemetry_observation_all(rssi);
+
+					if(stackDiagnostics)
+						SendStacks();
+				}
 			}
 			else
 			{
@@ -1106,6 +1117,11 @@ static void sessionHandler_task()
 	}
 }
 
+void StackDiagnostics(bool state)
+{
+	stackDiagnostics = state;
+}
+
 
 /*
  * Call this function to resend startup parameters
@@ -1114,6 +1130,17 @@ void ClearStartupSent()
 {
 	startupSent = false;
 }
+
+
+static TaskHandle_t taskSessionHandleOCMF = NULL;
+int sessionHandler_GetStackWatermarkOCMF()
+{
+	if(taskSessionHandleOCMF != NULL)
+		return uxTaskGetStackHighWaterMark(taskSessionHandleOCMF);
+	else
+		return -1;
+}
+
 
 static TaskHandle_t taskSessionHandle = NULL;
 int sessionHandler_GetStackWatermark()
@@ -1127,7 +1154,7 @@ int sessionHandler_GetStackWatermark()
 void sessionHandler_init(){
 
 	ocmf_sync_semaphore = xSemaphoreCreateBinary();
-	xTaskCreate(ocmf_sync_task, "ocmf", 3000, NULL, 3, NULL);
+	xTaskCreate(ocmf_sync_task, "ocmf", 5000, NULL, 3, &taskSessionHandleOCMF);
 
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000

@@ -7,5 +7,6 @@ void append_offline_energy(int timestamp, double energy);
 int attempt_log_send(void);
 
 uint32_t crc32_normal(uint32_t crc, const void *buf, size_t size);
+int deleteOfflineLog();
 
 #endif /* OFFLINE_LOG */

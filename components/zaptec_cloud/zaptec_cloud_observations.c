@@ -21,6 +21,8 @@
 #include "../apollo_ota/include/pic_update.h"
 #include "../../main/certificate.h"
 #include "sessionHandler.h"
+#include "../components/adc/adc_control.h"
+#include "../../main/connectivity.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -812,6 +814,14 @@ int publish_telemetry_observation_on_change(){
     	cJSON_Delete(observations);
 
     return ret;
+}
+
+
+void SendStacks()
+{
+	char buf[150] = {0};
+	sprintf(buf, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+	publish_debug_telemetry_observation_Diagnostics(buf);
 }
 
 

@@ -25,6 +25,7 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
 #include "../../main/certificate.h"
+#include "../../main/offline_log.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -1886,6 +1887,33 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"ClearNotifications") != NULL)
 				{
 					ClearNotifications();
+				}
+
+				else if(strstr(commandString,"PrintStat") != NULL)
+				{
+					char stat[100] = {0};
+					storage_GetStats(stat);
+					publish_debug_telemetry_observation_Diagnostics(stat);
+				}
+
+				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
+				{
+					int ret = deleteOfflineLog();
+					if(ret == 1)
+						publish_debug_telemetry_observation_Diagnostics("Delete OK");
+					else
+						publish_debug_telemetry_observation_Diagnostics("Delete failed");
+				}
+
+				else if(strstr(commandString,"StartStack") != NULL)
+				{
+					//Also send instantly when activated
+					SendStacks();
+					StackDiagnostics(true);
+				}
+				else if(strstr(commandString,"StopStack") != NULL)
+				{
+					StackDiagnostics(false);
 				}
 
 			}

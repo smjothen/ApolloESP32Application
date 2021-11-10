@@ -40,6 +40,8 @@ void SetClearSessionFlag();
 
 int publish_telemetry_observation_on_change();
 
+void SendStacks();
+
 void SetSendRTC();
 
 typedef enum {
