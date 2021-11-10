@@ -1915,6 +1915,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					StackDiagnostics(false);
 				}
+				else if(strstr(commandString,"OCMFHigh") != NULL)
+				{
+					SessionHandler_SetOCMFHighInterval();
+				}
 
 			}
 	}

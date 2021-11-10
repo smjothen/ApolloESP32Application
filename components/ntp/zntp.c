@@ -96,7 +96,7 @@ void zntp_GetSystemTime(char * buffer, time_t *now_out)
 
 }
 
-bool zntp_GetTimeAlignementPoint()
+bool zntp_GetTimeAlignementPoint(bool highInterval)
 {
 	time_t now = 0;
 
@@ -107,8 +107,11 @@ bool zntp_GetTimeAlignementPoint()
 	strftime(buffer, 50, "%Y-%m-%dT%H:%M:%S,000+00:00 R", &systemTime);
 
 	//First check if we are within the last minute of the hour
-	if(systemTime.tm_min < 59)
-		return false;
+	if(highInterval == false)
+	{
+		if(systemTime.tm_min < 59)
+			return false;
+	}
 
 	//Check if we are within the last two seconds to have some margin
 	if(systemTime.tm_sec < 58)

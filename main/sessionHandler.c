@@ -35,12 +35,12 @@ TimerHandle_t signedMeterValues_timer;
 static bool hasRemainingEnergy = false;
 static bool hasCharged = false;
 
-static uint32_t secSinceLastOCMFMessage = 0;
+static uint32_t secSinceLastOCMFMessage = OCMF_INTERVAL_TIME; //Ensure we send a message at first occurence
 
 //Send every clock aligned hour
 void on_send_signed_meter_value()
 {
-	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustement.
+	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustment.
 	if(secSinceLastOCMFMessage <= 30)
 	{
 		ESP_LOGE(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
@@ -347,6 +347,16 @@ bool SessionHandler_IsOfflineMode()
 
 static bool stackDiagnostics = false;
 
+static bool OCMFHighInterval = false;
+void SessionHandler_SetOCMFHighInterval()
+{
+	ESP_LOGW(TAG, "Setting 60 sec interval");
+	TickType_t periode = pdMS_TO_TICKS(60*1000);
+	xTimerChangePeriod(signedMeterValues_timer, periode, portMAX_DELAY);
+	setTimerSyncronization = false;
+	OCMFHighInterval = true;
+}
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -403,7 +413,7 @@ static void sessionHandler_task()
 		if((!setTimerSyncronization))
 		{
 			//if(zntp_GetTimeAlignementPointDEBUG())
-			if(zntp_GetTimeAlignementPoint())
+			if(zntp_GetTimeAlignementPoint(OCMFHighInterval))
 			{
 				ESP_LOGW(TAG, " 1 hour sync!");
 				xTimerReset( signedMeterValues_timer, portMAX_DELAY );
@@ -411,7 +421,7 @@ static void sessionHandler_task()
 				on_ocmf_sync_time(NULL);
 
 				setTimerSyncronization = true;
-				//secondsSinceSync = 0;
+				secondsSinceSync = 0;
 			}
 		}
 

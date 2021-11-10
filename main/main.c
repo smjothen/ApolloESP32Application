@@ -391,7 +391,7 @@ void app_main(void)
 
     	if(onTimeCounter % 15 == 0)//15
     	{
-    		ESP_LOGE(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+    		ESP_LOGW(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
