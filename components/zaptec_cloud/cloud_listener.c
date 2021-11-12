@@ -1913,8 +1913,20 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					else
 						publish_debug_telemetry_observation_Diagnostics("Delete failed");
 				}
-
-
+				else if(strstr(commandString,"StartStack") != NULL)
+				{
+					//Also send instantly when activated
+					SendStacks();
+					StackDiagnostics(true);
+				}
+				else if(strstr(commandString,"StopStack") != NULL)
+				{
+					StackDiagnostics(false);
+				}
+				else if(strstr(commandString,"OCMFHigh") != NULL)
+				{
+					SessionHandler_SetOCMFHighInterval();
+				}
 
 
 			}
