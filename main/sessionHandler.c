@@ -675,6 +675,12 @@ static void sessionHandler_task()
 
 				if (isMqttConnected() == true)
 				{
+					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+					if(ret == MsgWriteAck)
+						ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+					else
+						ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
 					publish_debug_telemetry_observation_NFC_tag_id(NFCGetTagInfo().idAsString);
 					publish_debug_telemetry_observation_ChargingStateParameters();
 				}
@@ -1126,6 +1132,16 @@ static void sessionHandler_task()
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
+}
+
+/*
+ * If we have received an already set SesssionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
+ * This indicates that cloud does not have the correct chargeOperatingMode recorded.
+*/
+void ChargeModeUpdateToCloudNeeded()
+{
+	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_CHARGING)
+		publish_debug_telemetry_observation_ChargingStateParameters();
 }
 
 void StackDiagnostics(bool state)

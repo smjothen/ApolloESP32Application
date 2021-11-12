@@ -46,6 +46,7 @@ void sessionHandler_ClearOfflineCurrentSent();
 void sessionHandler_simulateOffline(int offlineTime);
 int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
+void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);

@@ -121,6 +121,8 @@
         ChargerCurrentUserUuid = 722,
         CompletedSession = 723,
 
+		ParamAuthState = 726,//This is numbered 723 on Pro(conflicts with CompletedSession here when using same file for Cloud and MCU numbering)
+
 		DebugCounter = 731,
 		ParamWarningValue = 732,
 

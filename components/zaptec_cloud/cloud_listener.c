@@ -1222,6 +1222,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
 		int8_t ret = chargeSession_SetSessionIdFromCloud(sessionIdString);
 
+		//If SessionId has been set before, check if Cloud needs an update of chargerOperatingMode
+		if(ret == 1)
+			ChargeModeUpdateToCloudNeeded();
+
 		//Return error if the Session was received with no car connected. Can happen in race-condition with short connect-disconnect
 		if(ret == -1)
 			responseStatus = 400;

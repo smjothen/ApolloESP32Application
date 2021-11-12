@@ -1092,6 +1092,13 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     		if((isMqttConnected()) && (storage_Get_Standalone() == false))
     		{
+
+    			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+				if(ret == MsgWriteAck)
+					ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+				else
+					ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
     			ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
     			SetPendingRFIDTag(bleId);
     			publish_debug_telemetry_observation_NFC_tag_id(bleId);

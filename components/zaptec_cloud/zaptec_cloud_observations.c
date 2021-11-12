@@ -576,8 +576,8 @@ int publish_telemetry_observation_on_change(){
     uint8_t chargeMode = MCU_GetchargeMode();
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
 	{
-		if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
-			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
+		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
 		previousChargeMode = chargeMode;
 		isChange = true;
 	}

@@ -293,8 +293,8 @@ static void i2cDevice_task(void *pvParameters)
 		else if(storage_Get_AuthenticationRequired() == 1)
 		{
 			//Normally don't read NFC unless a car is connected
-			if(MCU_GetchargeMode() != 12)
-			{
+			//if(MCU_GetchargeMode() != 12)
+			//{
 
 				if(blockReRead == 8)
 				{
@@ -317,7 +317,7 @@ static void i2cDevice_task(void *pvParameters)
 						ESP_LOGI(TAG, "NFC UnBlocking");
 					}
 				}
-			}
+			//}
 
 		}
 
@@ -339,9 +339,17 @@ static void i2cDevice_task(void *pvParameters)
 
 		if((storage_Get_AuthenticationRequired() == 1) || prodtest_active())
 		{
-			if((nfcCardDetected > 0) && prodtest_active()){
+			if((nfcCardDetected > 0) && prodtest_active())
+			{
 				prodtest_on_nfc_read();
-			}else if(nfcCardDetected > 0)
+			}
+			else if((nfcCardDetected > 0) && (MCU_GetchargeMode() == 12) && (isNfcTagPairing == false))
+			{
+				audio_play_single_biip();
+				ESP_LOGW(TAG, "Card working, clearing...");
+				NFCClearTag();
+			}
+			else if(nfcCardDetected > 0)
 			{
 				//isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 

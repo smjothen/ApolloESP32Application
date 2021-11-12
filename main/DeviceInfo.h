@@ -132,20 +132,27 @@ typedef enum {
     LED_GREEN_CONTINUOUS    = 4,
 
     LED_YELLOW_PULSING      = 5,
-    LED_YELLOW_CONTINUOUS   = 6,
+    LED_YELLOW_PULSING_FAST = 6,
+    LED_YELLOW_CONTINUOUS   = 7,
 
-    LED_BLUE_CONTINUOUS     = 7,
-    LED_BLUE_PULSING        = 8,
+    LED_BLUE_CONTINUOUS     = 8,
+    LED_BLUE_PULSING        = 9,
 
-    LED_WHITE_CONTINUOUS    = 9,
-    LED_CLEAR_WHITE         = 10,
-    LED_CLEAR_WHITE_BLINKING = 11,
+    LED_WHITE_CONTINUOUS    = 10,
+    LED_CLEAR_WHITE         = 11,
+    LED_CLEAR_WHITE_BLINKING = 12,
 
-    LED_RED                 = 12,
+    LED_RED                 = 13,
 
-    LED_PURPLE_PULSE_FAST   = 13,
-    LED_PURPLE_PULSE_SLOW   = 14,
-    LED_MULTI_COLOR         = 15
+    LED_PURPLE_PULSE_FAST   = 14,
+    LED_PURPLE_PULSE_SLOW   = 15,
+    LED_MULTI_COLOR         = 16
 } led_state;
+
+typedef enum {
+    SESSION_NOT_AUTHORIZED = 0,
+    SESSION_AUTHORIZING = 1,
+    SESSION_AUTHORIZED = 2,
+} session_auth_state;
 
 #endif /* DEVICEINFO_H_ */
