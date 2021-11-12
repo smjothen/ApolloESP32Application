@@ -82,7 +82,7 @@ void on_send_signed_meter_value()
 
 	if ((state_charging && state_log_empty) || (hasRemainingEnergy && state_log_empty)){
 		publish_result = publish_string_observation_blocked(
-			SignedMeterValue, OCMPMessage, 2000
+			SignedMeterValue, OCMPMessage, 10000
 		);
 
 		if(publish_result<0){
