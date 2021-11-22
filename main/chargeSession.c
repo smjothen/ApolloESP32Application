@@ -114,6 +114,7 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 	if(strcmp(sessionIdFromCloud, chargeSession.SessionId) == 0)
 	{
 		ESP_LOGI(TAG, "SessionId already set");
+		hasNewSessionIdFromCloud = true;
 		return 1;
 	}
 
