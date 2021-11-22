@@ -1798,12 +1798,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
-				else if(strstr(commandString,"ITMode") != NULL)
+				else if(strstr(commandString,"ITDiag") != NULL)
 				{
-					ESP_LOGI(TAG, "ITMode");
-					MessageType ret = MCU_SendCommandId(CommandITSelect);
+					ESP_LOGI(TAG, "IT diagnostics mode");
+					MessageType ret = MCU_SendCommandId(CommandITDiagnostics);
 					if(ret == MsgCommandAck)
 					{
+						MCUDiagnosticsResults = true;
 						responseStatus = 200;
 						ESP_LOGI(TAG, "MCU IT mode switched");
 					}

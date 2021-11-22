@@ -476,7 +476,7 @@ static void sessionHandler_task()
 	 	// Not instantly, let mcu upgrade and start
 		// Not when OTA in progress
 		// Only after given nr of consecutive faults
-		int mcuCOMErrors = GetMCUComErrors();
+		/*int mcuCOMErrors = GetMCUComErrors();
 		if((onCounter > 30) && (otaIsRunning() == false) && (mcuCOMErrors > 20))
 		{
 			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
@@ -507,7 +507,7 @@ static void sessionHandler_task()
 
 				esp_restart();
 			}
-		}
+		}*/
 
 		if(networkInterface == eCONNECTION_NONE)
 		{
@@ -1058,18 +1058,19 @@ static void sessionHandler_task()
 
 					if (published == 0)
 					{
-						ClearMCUDiagnosicsResults();
-						ESP_LOGW(TAG,"Diagnostics flag cleared");
+						//ClearMCUDiagnosicsResults();
+						//ESP_LOGW(TAG,"Diagnostics flag cleared");
+						ESP_LOGW(TAG,"Diagnostics sent");
 					}
 					else
 					{
-						ESP_LOGE(TAG,"Diagnostics flag NOT cleared");
+						ESP_LOGE(TAG,"Diagnostics not sent");
 					}
 				}
 				else
 				{
-					ESP_LOGW(TAG,"Diagnostics length = 0");
-					ClearMCUDiagnosicsResults();
+					//ESP_LOGW(TAG,"Diagnostics length = 0");
+					//ClearMCUDiagnosicsResults();
 				}
 			}
 

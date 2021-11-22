@@ -233,7 +233,7 @@
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
-		CommandITSelect = 806,
+		CommandITDiagnostics = 806,
 		CommandActivateWatchdog = 810,
 
 		CommandDisableCertificateOnce = 820,
