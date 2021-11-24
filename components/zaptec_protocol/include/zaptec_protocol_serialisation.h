@@ -92,6 +92,7 @@
 
         ParamTotalChargePowerSession = 553,
 		SignedMeterValue = 554,
+		SignedMeterValueInterval = 555,
         ParamSessionEnergyCountActive = 560,
         ParamSessionEnergyCountReactive = 561,
         ParamSessionEnergyCountImportActive = 562,

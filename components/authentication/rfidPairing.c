@@ -13,7 +13,7 @@
 
 static const char *TAG = "RFID-PAIRING     ";
 
-#define NFC_PAIR_TIMEOUT 15
+#define NFC_PAIR_TIMEOUT 20
 
 enum NFCPairingState nfcPairingState = ePairing_Inactive;
 enum NFCPairingState previousNfcPairingState = ePairing_Inactive;
@@ -27,16 +27,14 @@ static char concatenatedString[100] = {0};
 
 void rfidPairing_SetNewUserId(uint8_t * newUserId, uint16_t userIdLen)
 {
-	//strcpy(userIdBuf, "ble-");
-	//snprintf(userIdBuf+4, userIdLen+2, "%s;", newUserId);
+	memset(userIdBuf, 0, 42);
 	snprintf(userIdBuf, userIdLen+2, "%s;", newUserId);
 	ESP_LOGI(TAG, "Auth UUID %s", userIdBuf);
 }
 
-void rfidPairing_SetNewTagId()//uint8_t * newTagId, uint16_t tagIdLen)
+void rfidPairing_SetNewTagId()
 {
 	memset(tagIdBuf, 0, 26);
-	//strcpy(tagIdBuf, "nfc-");
 	sprintf(tagIdBuf, "%s;", NFCGetTagInfo().idAsString);
 	ESP_LOGI(TAG, "New RFID-UUID %s", tagIdBuf);
 }
@@ -54,9 +52,19 @@ char * rfidPairing_GetConcatenatedString()
 	strcat(concatenatedString, &tagIdBuf[4]);
 	strcat(concatenatedString, tagNameBuf);
 
+	//Ensure buffer are cleared after use
+	rfidPairing_ClearBuffers();
+
 	ESP_LOGW(TAG, "Concatenated: %s", concatenatedString);
 
 	return concatenatedString;
+}
+
+void rfidPairing_ClearBuffers()
+{
+	memset(userIdBuf, 0, 42);
+	memset(tagIdBuf, 0, 26);
+	memset(tagNameBuf, 0, 33);
 }
 
 enum NFCPairingState rfidPairing_GetState()
@@ -103,8 +111,13 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 		{
 			rfidPairing_SetNewTagId();
 			char * combinedChargeCardString = rfidPairing_GetConcatenatedString();
-			publish_debug_telemetry_observation_AddNewChargeCard(combinedChargeCardString);
-			NFCTagInfoClearValid();
+
+			//Ensure we don't public empty strings
+			if(*combinedChargeCardString !='\0')
+				publish_debug_telemetry_observation_AddNewChargeCard(combinedChargeCardString);
+
+			memset(concatenatedString, 0, 100);
+			NFCClearTag();
 		}
 
 		*stateAsChar = '2';
@@ -133,6 +146,7 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 			*stateAsChar = '4';
 			nfcPairTimeout = NFC_PAIR_TIMEOUT;
 			audio_play_nfc_card_denied();
+			ESP_LOGE(TAG, "Pairing timed out");
 		}
 	}
 	else if((nfcPairingState == ePairing_Reading) && (nfcPairTimeout > 0))
@@ -161,6 +175,7 @@ bool rfidPairing_ClearState()
 	if((nfcPairingState == ePairing_AddedOk) || (nfcPairingState == ePairing_AddingFailed))
 	{
 		nfcPairingState = ePairing_Inactive;
+		NFCClearTag();
 		return true;
 	}
 

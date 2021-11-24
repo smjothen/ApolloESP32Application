@@ -21,6 +21,7 @@ void rfidPairing_SetNewUserId(uint8_t * newUserId, uint16_t idLen);
 void rfidPairing_SetNewTagId();//uint8_t * newName, uint16_t nameLen);
 void rfidPairing_SetNewTagName(uint8_t * newTagId, uint16_t tagIdLen);
 char * rfidPairing_GetConcatenatedString();
+void rfidPairing_ClearBuffers();
 
 enum NFCPairingState rfidPairing_GetState();
 void rfidPairing_SetState(enum NFCPairingState state);

@@ -1239,13 +1239,15 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_PAIR_NFC_TAG_UUID:
 
-    	ESP_LOGI(TAG, "Pair NFC characteristic received with %s", param->write.value);
+    	ESP_LOGI(TAG, "Pair NFC tag name received: %s", param->write.value);
     	if(param->write.len >= 26)
     	{
     		ESP_LOGE(TAG, "To long NFC tag string");
     		break;
     	}
 
+    	NFCClearTag();
+    	rfidPairing_ClearBuffers();
     	rfidPairing_SetNewTagName(param->write.value, param->write.len);
     	rfidPairing_SetState(ePairing_Reading);
 
