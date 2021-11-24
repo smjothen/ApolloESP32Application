@@ -37,6 +37,8 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 
+#include "IT3PCalculator.h"
+
 const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
@@ -401,6 +403,18 @@ void app_main(void)
 
     		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
+
+
+    	if(onTimeCounter % 5 == 0)//15
+    	{
+
+    		ESP_LOGW(TAG_MAIN, "ThreePhase");
+
+    		struct ThreePhaseResult result = CalculatePhasePairCurrentFromPhaseCurrent(15.0, 16.0, 17.0);
+
+			ESP_LOGW(TAG_MAIN, "ThreePhase: %2.2f %2.2f %2.2f %d", result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
+    	}
+
 
     	/*if(onTimeCounter % 100 == 0)
     	{
