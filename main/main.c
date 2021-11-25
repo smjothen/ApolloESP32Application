@@ -196,6 +196,7 @@ void SetOnlineWatchdog()
 }
 
 
+
 void app_main(void)
 {
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
