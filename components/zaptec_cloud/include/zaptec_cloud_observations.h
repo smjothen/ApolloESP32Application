@@ -16,6 +16,8 @@ int publish_debug_telemetry_observation_local_settings();
 
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
 
+int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardString);
+
 int publish_debug_telemetry_observation_CompletedSession(char * CompletedSessionString);
 
 int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
@@ -39,6 +41,8 @@ int publish_debug_telemetry_observation_all(double rssi);
 void SetClearSessionFlag();
 
 int publish_telemetry_observation_on_change();
+
+void SendStacks();
 
 void SetSendRTC();
 

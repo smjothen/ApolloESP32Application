@@ -14,13 +14,12 @@ struct ChargeSession
 	char EndTime[32]; //27
 	bool ReliableClock;
 	bool StoppedByRFID;
-	char AuthenticationCode[41];//Up to [BLE-(+)GUID] string.
+	char AuthenticationCode[41];//Up to GUID string.
 	uint32_t unixStartTime;
-	char * SignedSession;
+	char * SignedSession;//[1000];//8
 };
 
 void chargeSession_PrintSession();
-void SetCarConnectedState(bool connectedState);
 char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
@@ -41,6 +40,10 @@ int chargeSession_GetSessionAsString(char * message);
 
 esp_err_t chargeSession_SaveSessionResetInfo();
 esp_err_t chargeSession_ReadSessionResetInfo();
+
+bool chargeSession_IsAuthenticated();
+void SetCarConnectedState(bool connectedState);
+void chargeSession_SetReceivedStartChargingCommand();
 
 #ifdef __cplusplus
 }

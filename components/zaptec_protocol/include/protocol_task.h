@@ -20,6 +20,9 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);
 
+void MCU_StartLedOverride();
+void MCU_StopLedOverride();
+
 int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 

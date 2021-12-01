@@ -18,6 +18,8 @@ struct TagItem
 
 void authentication_Init();
 uint8_t authentication_CheckId(struct TagInfo tagInfo);
+uint8_t authentication_CheckBLEId(char * bleUUID);
+void authentication_Execute(char * authId);
 void authentication_AddTag(struct TagItem tagItem);
 void authentication_DeleteTag(struct TagItem tagItem);
 int authentication_GetNrOfFreeTags();

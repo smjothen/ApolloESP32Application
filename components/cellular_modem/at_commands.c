@@ -454,11 +454,11 @@ int at_command_get_LTE_M_only(char * reply, int buf_len){
 
 
 int at_command_set_LTE_band_at_boot(void){
-    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,0", 300);
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080084,0,0", 300);
 }
 
 int at_command_set_LTE_band_immediate(void){
-    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080080,0,1", 300);
+    return at_command_with_ok_ack("AT+QCFG=\"band\",0,8080084,0,1", 300);
 }
 
 int at_command_get_LTE_band(char * reply, int buf_len){

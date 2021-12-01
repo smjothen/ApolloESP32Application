@@ -692,6 +692,34 @@ ZapMessage MCU_ReadParameter(uint16_t paramIdentifier)
 }
 
 
+void MCU_StartLedOverride()
+{
+	ESP_LOGI(TAG, "Send white pulsing command to MCU");
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverride, LED_CLEAR_WHITE_BLINKING);
+	if(ret == MsgWriteAck)
+	{
+		ESP_LOGI(TAG, "MCU white pulsing OK. ");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU white pulsing FAILED");
+	}
+}
+
+void MCU_StopLedOverride()
+{
+	ESP_LOGI(TAG, "Clear overriding LED on MCU");
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);
+	if(ret == MsgWriteAck)
+	{
+		ESP_LOGI(TAG, "MCU Cleared ledoverride OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU clearing ledoverride FAILED");
+	}
+}
+
 char * MCU_GetSwVersionString()
 {
 	return mcuSwVersionString;

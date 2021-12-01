@@ -53,6 +53,9 @@
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
 
+		ParamLedOverride = 290,
+		ParamLedOverrideClear = 291,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -89,6 +92,7 @@
 
         ParamTotalChargePowerSession = 553,
 		SignedMeterValue = 554,
+		SignedMeterValueInterval = 555,
         ParamSessionEnergyCountActive = 560,
         ParamSessionEnergyCountReactive = 561,
         ParamSessionEnergyCountImportActive = 562,
@@ -117,6 +121,8 @@
 
         ChargerCurrentUserUuid = 722,
         CompletedSession = 723,
+
+		ParamAuthState = 726,//This is numbered 723 on Pro(conflicts with CompletedSession here when using same file for Cloud and MCU numbering)
 
 		DebugCounter = 731,
 		ParamWarningValue = 732,
@@ -222,6 +228,8 @@
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
 		CommandIndicateOk = 606,
+		CommandBlinkWhite = 607,
+
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,

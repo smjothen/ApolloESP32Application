@@ -249,6 +249,12 @@ void i2cClearAuthentication()
 	isAuthenticated = 0;
 }
 
+static bool isNfcTagPairing;
+void i2cSetNFCTagPairing(bool pairingState)
+{
+	isNfcTagPairing = pairingState;
+}
+
 static void i2cDevice_task(void *pvParameters)
 {
 	RTCVerifyControlRegisters();
@@ -279,15 +285,16 @@ static void i2cDevice_task(void *pvParameters)
 	while (true)
 	{
 		// Continuously read NFC in custom modes
-		if(prodtest_active() || (storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT) || (storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT))
+		if(prodtest_active() || (storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT) || (storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT) || isNfcTagPairing)
 		{
 			nfcCardDetected = NFCReadTag();
+
 		}
 		else if(storage_Get_AuthenticationRequired() == 1)
 		{
 			//Normally don't read NFC unless a car is connected
-			if(MCU_GetchargeMode() != 12)
-			{
+			//if(MCU_GetchargeMode() != 12)
+			//{
 
 				if(blockReRead == 8)
 				{
@@ -310,8 +317,7 @@ static void i2cDevice_task(void *pvParameters)
 						ESP_LOGI(TAG, "NFC UnBlocking");
 					}
 				}
-			}
-
+			//}
 
 		}
 
@@ -333,9 +339,17 @@ static void i2cDevice_task(void *pvParameters)
 
 		if((storage_Get_AuthenticationRequired() == 1) || prodtest_active())
 		{
-			if((nfcCardDetected > 0) && prodtest_active()){
+			if((nfcCardDetected > 0) && prodtest_active())
+			{
 				prodtest_on_nfc_read();
-			}else if(nfcCardDetected > 0)
+			}
+			else if((nfcCardDetected > 0) && (MCU_GetchargeMode() == 12) && (isNfcTagPairing == false))
+			{
+				audio_play_single_biip();
+				ESP_LOGW(TAG, "Card working, clearing...");
+				NFCClearTag();
+			}
+			else if(nfcCardDetected > 0)
 			{
 				//isAuthenticated = authentication_CheckId(NFCGetTagInfo());
 
@@ -350,83 +364,38 @@ static void i2cDevice_task(void *pvParameters)
 				{
 					//Charger online authentication
 					//if(isMqttConnected() == true)
-					if(SessionHandler_IsOfflineMode() == false)
+					if(isNfcTagPairing == false)
 					{
-						//Is there already a session
-						if(chargeSession_Get().AuthenticationCode[0] == '\0')
+						if(SessionHandler_IsOfflineMode() == false)
 						{
-							audio_play_nfc_card_accepted();
-							ESP_LOGW(TAG, "Online: Authenticate by Cloud");
-						}
-						/*else
-						{
-							ESP_LOGW(TAG, "Online: Charging stopped by RFID-tag");
-
-							chargeSession_SetStoppedByRFID(true);
-
-							MessageType ret = MCU_SendCommandId(CommandResetSession);
-							if(ret == MsgCommandAck)
-							{
-								ESP_LOGI(TAG, "MCU Reset command OK");
-							}
-							else
-							{
-								ESP_LOGE(TAG, "MCU Reset command FAILED");
-							}
-
-							audio_play_nfc_card_accepted();
-						}*/
-					}
-					//Charger offline authentication
-					else
-					{
-
-						//Always allow charging when offline. Requires '*' to be set in tag-list
-						isAuthenticated = authentication_CheckId(NFCGetTagInfo());
-
-						if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
-						{
-							audio_play_nfc_card_accepted();
-							ESP_LOGI(TAG, "Offline: NFC ACCEPTED - Local authentication");
-							MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-							if(ret == MsgCommandAck)
-							{
-								chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
-								ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
-							}
-						}
-
-						/*else if((isAuthenticated == 1) && (chargeSession_Get().AuthenticationCode[0] != '\0'))
-						{
-
-							ESP_LOGW(TAG, "Offline: Local stop using RFID-tag");
-
-							if(strcmp(chargeSession_Get().AuthenticationCode, NFCGetTagInfo().idAsString) == 0)
+							//Is there already a session
+							if(chargeSession_Get().AuthenticationCode[0] == '\0')
 							{
 								audio_play_nfc_card_accepted();
-								ESP_LOGI(TAG, "Offline: NFC ACCEPTED - Stop using RFID");
-
-								chargeSession_SetStoppedByRFID(true);
-
-								MessageType ret = MCU_SendCommandId(CommandResetSession);
-								if(ret == MsgCommandAck)
-								{
-									ESP_LOGI(TAG, "MCU Reset command OK");
-								}
-								else
-								{
-									ESP_LOGE(TAG, "MCU Reset command FAILED");
-								}
+								ESP_LOGW(TAG, "Online: Authenticate by Cloud");
 							}
-						}*/
+						}
+						//Charger offline authentication
 						else
 						{
-							audio_play_nfc_card_denied();
-							ESP_LOGE(TAG, "ESP32: NFC DENIED! - Not same charge card!");
-							MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-							if(ret == MsgCommandAck)
+
+							//Always allow charging when offline. Requires '*' to be set in tag-list
+							isAuthenticated = authentication_CheckId(NFCGetTagInfo());
+
+							if(isAuthenticated == 1)
 							{
-								ESP_LOGI(TAG, "MCU: NFC DENIED!");
+								authentication_Execute(NFCGetTagInfo().idAsString);
+							}
+
+							else
+							{
+								audio_play_nfc_card_denied();
+								ESP_LOGE(TAG, "ESP32: NFC DENIED! - Not same charge card!");
+								MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+								if(ret == MsgCommandAck)
+								{
+									ESP_LOGI(TAG, "MCU: NFC DENIED!");
+								}
 							}
 						}
 					}
@@ -467,71 +436,10 @@ static void i2cDevice_task(void *pvParameters)
 
 				}
 
-
-				/*if((isAuthenticated == 1) && (isMqttConnected() == false))
-				{
-					if(chargeSession_Get().AuthenticationCode[0] == '\0')
-					{
-						audio_play_nfc_card_accepted();
-						ESP_LOGI(TAG, "EPS32: NFC ACCEPTED! - New Session");
-						MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-						if(ret == MsgCommandAck)
-						{
-							ESP_LOGI(TAG, "MCU: NFC ACCEPTED!");
-						}
-					}
-
-					else if(chargeSession_Get().AuthenticationCode[0] != '\0')
-					{
-						if(strcmp(chargeSession_Get().AuthenticationCode, NFCGetTagInfo().idAsString) == 0)
-						{
-							audio_play_nfc_card_accepted();
-							ESP_LOGI(TAG, "EPS32: NFC ACCEPTED! - Stop session");
-
-							chargeSession_SetStoppedByRFID(true);
-
-							MessageType ret = MCU_SendCommandId(CommandResetSession);
-							if(ret == MsgCommandAck)
-							{
-								ESP_LOGI(TAG, "MCU Reset command OK");
-							}
-							else
-							{
-								ESP_LOGE(TAG, "MCU Reset command FAILED");
-							}
-						}
-					}
-					else
-					{
-						audio_play_nfc_card_denied();
-						ESP_LOGE(TAG, "ESP32: NFC DENIED! - Not same charge card!");
-						MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-						if(ret == MsgCommandAck)
-						{
-							ESP_LOGI(TAG, "MCU: NFC DENIED!");
-						}
-					}
-				}
-
-				else if((isAuthenticated == 1) && (isMqttConnected() == true))
-				{
-					ESP_LOGW(TAG, "Authentication by Cloud");
-					audio_play_nfc_card_accepted();
-				}*/
-
-				/*else
-				{
-					audio_play_nfc_card_denied();
-					ESP_LOGE(TAG, "ESP32: NFC DENIED! - Auth: 0");
-					MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-					if(ret == MsgCommandAck)
-					{
-						ESP_LOGI(TAG, "MCU: NFC DENIED!");
-					}
-				}*/
 			}
 
 		}
+
 
 		//Clear detection status before next loop
 		nfcCardDetected = 0;

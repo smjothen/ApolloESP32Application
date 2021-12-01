@@ -2,7 +2,7 @@
 set(COMPONENT_REQUIRES "json")
 #set(COMPONENT_PRIV_REQUIRES )
 
-set(COMPONENT_SRCS "authentication.c")
+set(COMPONENT_SRCS "authentication.c" "rfidPairing.c")
 
 set(COMPONENT_ADD_INCLUDEDIRS "")
 

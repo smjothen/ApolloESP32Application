@@ -21,6 +21,8 @@
 #include "../apollo_ota/include/pic_update.h"
 #include "../../main/certificate.h"
 #include "sessionHandler.h"
+#include "../components/adc/adc_control.h"
+#include "../../main/connectivity.h"
 
 #define TAG "OBSERVATIONS POSTER"
 
@@ -160,7 +162,7 @@ int publish_debug_telemetry_observation_cloud_settings()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, storage_Get_AuthenticationRequired()));
-    add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, storage_ReadNrofTagsOnFile()));
+    add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, storage_ReadNrOfTagsOnFile()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMaximum, storage_Get_CurrentInMaximum()));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentInMinimum, storage_Get_CurrentInMinimum()));
 
@@ -225,6 +227,18 @@ int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(ChargerCurrentUserUuid, NFCHexString));
+
+    return publish_json(observations);
+}
+
+
+int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardString)
+{
+    ESP_LOGD(TAG, "sending AddNewChargeCard telemetry");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(NewChargeCard, NewChargeCardString));
 
     return publish_json(observations);
 }
@@ -508,6 +522,8 @@ static uint32_t previousTransmitInterval = 0;
 static uint32_t previousPulseInterval = 0;
 static uint32_t previousCertificateVersion = 0;
 static uint8_t previousMaxCurrentConfigSource = 0xff;
+static uint32_t previousNumberOfTagsCount = 0;
+
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -560,8 +576,8 @@ int publish_telemetry_observation_on_change(){
     uint8_t chargeMode = MCU_GetchargeMode();
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
 	{
-		if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
-			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
+		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
 		previousChargeMode = chargeMode;
 		isChange = true;
 	}
@@ -802,6 +818,14 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+	uint32_t nrOfTagsCount = storage_GetNrOfTagsCounter();
+	if(previousNumberOfTagsCount != nrOfTagsCount)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(NrOfChargeCards, nrOfTagsCount));
+		previousNumberOfTagsCount = nrOfTagsCount;
+		isChange = true;
+	}
+
 
 	//Check ret and retry?
     int ret = 0;
@@ -812,6 +836,14 @@ int publish_telemetry_observation_on_change(){
     	cJSON_Delete(observations);
 
     return ret;
+}
+
+
+void SendStacks()
+{
+	char buf[150] = {0};
+	sprintf(buf, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+	publish_debug_telemetry_observation_Diagnostics(buf);
 }
 
 

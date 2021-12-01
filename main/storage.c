@@ -697,6 +697,7 @@ void storage_Verify_AuthenticationSetting()
 	nvs_close(rfid_tag_handle);
 }
 
+static uint32_t nrOfTagsCounter = 0;
 
 esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], uint32_t nrOfTokens)
 {
@@ -847,8 +848,12 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 				//Error more than MAX_NR_OF_RFID_TAGS //TODO: Communicate to Cloud and app
 				ESP_LOGE(TAG, "More tokens than allowed: %d", nrOfTagsOnFile);
 			}
+
+
 		}
 	}
+
+	nrOfTagsCounter = nrOfTagsOnFile;
 
 	//Update nr of NrOfTagsSaved
 	err += nvs_set_u32(rfid_tag_handle, "NrOfTagsSaved", nrOfTagsOnFile);
@@ -952,7 +957,8 @@ void storage_FreeRFIDbuffer()
 }
 
 
-uint32_t storage_ReadNrofTagsOnFile()
+//Read from file
+uint32_t storage_ReadNrOfTagsOnFile()
 {
 	err = nvs_open("RFIDTags", NVS_READONLY, &rfid_tag_handle);
 
@@ -960,7 +966,16 @@ uint32_t storage_ReadNrofTagsOnFile()
 	uint32_t nrOfTagsOnFile = 0;
 	err += nvs_get_u32(rfid_tag_handle, "NrOfTagsSaved", &nrOfTagsOnFile);
 	nvs_close(rfid_tag_handle);
+
+	nrOfTagsCounter = nrOfTagsOnFile;
+
 	return nrOfTagsOnFile;
+}
+
+//Get from memory to avoid file access every second in case of change
+uint32_t storage_GetNrOfTagsCounter()
+{
+	return nrOfTagsCounter;
 }
 
 esp_err_t storage_printRFIDTagsOnFile(bool writeToBuffer)
@@ -1018,6 +1033,8 @@ esp_err_t storage_clearAllRFIDTagsOnFile()
 	err += nvs_erase_all(rfid_tag_handle);
 	err += nvs_commit(rfid_tag_handle);
 	nvs_close(rfid_tag_handle);
+
+	nrOfTagsCounter = 0;
 
 	return err;
 }
@@ -1093,11 +1110,12 @@ esp_err_t storage_clearWifiParameters()
 }
 
 
-void storage_GetStats()
+void storage_GetStats(char * stat)
 {
 	nvs_stats_t nvs_stats;
 	nvs_get_stats(NULL, &nvs_stats);
-	ESP_LOGI(TAG, "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)\n", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
+	sprintf(stat, "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
+	ESP_LOGI(TAG, "%s", stat);
 }
 
 double storage_update_accumulated_energy(float session_energy){
@@ -1144,17 +1162,19 @@ double storage_update_accumulated_energy(float session_energy){
 		);
 		result = previous_accumulated_energy;
 		goto err;
-	}else if(session_energy > previous_session_energy){
+	}
+	else if(session_energy > previous_session_energy){
 		//if the energy count from the dspic has reset and passed previous_session_energy
 		// we may loose some energy in this calculation,
 		// tough normally this should be fine
 		result = previous_accumulated_energy + (session_energy - previous_session_energy);
-	}else if ((session_energy < previous_session_energy) && (session_energy > 0.01)){	//Avoid occurence on every new session when session_Energy is ~0.0.
+	}
+	else if (session_energy < previous_session_energy){
 		// dspic has started new session
-		result = previous_accumulated_energy;// + session_energy; //Commented out because this occur and causes incorrect accumulation in some cases
-		SetEspNotification(eNOTIFICATION_ENERGY);
-		ESP_LOGE(TAG, "### Energy reset? ### %f < %f", session_energy, previous_session_energy);
-	}else{
+		result = previous_accumulated_energy + session_energy;
+		ESP_LOGW(TAG, "### Energy reset - new session ### %f < %f", session_energy, previous_session_energy);
+	}
+	else{
 		if(accumulator_initialised == true){
 			result = 0.0;
 		}else{

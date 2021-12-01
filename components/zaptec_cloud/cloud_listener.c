@@ -25,6 +25,9 @@
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
 #include "../../main/certificate.h"
+#include "../ble/ble_service_wifi_config.h"
+#include "../authentication/rfidPairing.h"
+#include "../../main/offline_log.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -42,6 +45,7 @@
 
 #define MQTT_USERNAME_PATTERN "%s/%s/?api-version=2018-06-30"
 #define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
+#define MQTT_EVENT_PATTERN_PING_REPLY "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s&pi=%s"
 
 int resetCounter = 0;
 
@@ -1120,7 +1124,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					HOLD_SetPhases(phaseFromCloud);
 					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
-					//cloudCommandCurrentUpdated = true;
+
+					//This must be set to stop replying the same SessionIds to cloud
+					chargeSession_SetReceivedStartChargingCommand();
 				}
 				else
 				{
@@ -1217,6 +1223,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 		//ESP_LOGI(TAG, "SessionId: %s , len: %d\n", sessionIdString, strlen(sessionIdString));
 		int8_t ret = chargeSession_SetSessionIdFromCloud(sessionIdString);
+
+		//If SessionId has been set before, check if Cloud needs an update of chargerOperatingMode
+		if(ret == 1)
+			ChargeModeUpdateToCloudNeeded();
 
 		//Return error if the Session was received with no car connected. Can happen in race-condition with short connect-disconnect
 		if(ret == -1)
@@ -1363,6 +1373,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			responseStatus = 400;
 		}
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/750/"))
+	{
+		rfidPairing_SetState(ePairing_AddedOk);
+		ESP_LOGW(TAG, "Command NFC pairing OK");
+		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
 	{
@@ -1888,6 +1904,37 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ClearNotifications();
 				}
 
+				else if(strstr(commandString,"PrintStat") != NULL)
+				{
+					char stat[100] = {0};
+					storage_GetStats(stat);
+					publish_debug_telemetry_observation_Diagnostics(stat);
+				}
+
+				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
+				{
+					int ret = deleteOfflineLog();
+					if(ret == 1)
+						publish_debug_telemetry_observation_Diagnostics("Delete OK");
+					else
+						publish_debug_telemetry_observation_Diagnostics("Delete failed");
+				}
+				else if(strstr(commandString,"StartStack") != NULL)
+				{
+					//Also send instantly when activated
+					SendStacks();
+					StackDiagnostics(true);
+				}
+				else if(strstr(commandString,"StopStack") != NULL)
+				{
+					StackDiagnostics(false);
+				}
+				else if(strstr(commandString,"OCMFHigh") != NULL)
+				{
+					SessionHandler_SetOCMFHighInterval();
+				}
+
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -2096,10 +2143,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //Handle incoming offline AuthenticationList
         if(strstr(event->topic, "iothub/methods/POST/751/"))
         {
-        	if(event->data_len > 10)
+
+        	ESP_LOGW(TAG, "***** Data len: %d *****", event->data_len);
+
+        	//Limit max size since we have not testet with large data size(many tags in package)
+        	if((3000 > event->data_len) && (event->data_len > 10))
         	{
         		//Remove '\\' escape character due to uint8_t->char conversion
-        		char rfidList[event->data_len];
+        		//char rfidList[event->data_len];
+        		char * rfidList = calloc(event->data_len, 1);
         		int nextChar = 0;
         		for (int i = 0; i < event->data_len; i++)
         		{
@@ -2112,6 +2164,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         		rfidList[nextChar] = '\0';
 
         		int version = authentication_ParseOfflineList(rfidList, strlen(rfidList));
+
+        		free(rfidList);
 
         		ESP_LOGI(TAG, "***** AuthenticationListVersion: %d *****", version);
 
@@ -2472,6 +2526,40 @@ void update_installationId()
 	//esp_mqtt_client_start(mqtt_client);
 	//refresh_token(&mqtt_config);
 }
+
+
+void update_mqtt_event_pattern(bool usePingReply)
+{
+    char * instId = storage_Get_InstallationId();
+
+    int compare = strncmp(instId, INSTALLATION_ID, 36);
+    if(compare != 0)
+    {
+
+    	char instIdEncoded[37] = {0};
+    	GetInstallationIdBase64(instId, instIdEncoded);
+    	if(usePingReply)
+    		sprintf(event_topic, MQTT_EVENT_PATTERN_PING_REPLY, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded, "PR");
+    	else
+    		sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, storage_Get_RoutingId(), instIdEncoded);
+    }
+    else
+    {
+        sprintf(event_topic, MQTT_EVENT_PATTERN, cloudDeviceInfo.serialNumber, ROUTING_ID, INSTALLATION_ID_BASE64);
+    }
+
+    ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
+
+    //mqtt_config.cert_pem = cert;
+
+    mqtt_config.lwt_topic = event_topic;
+    //esp_mqtt_client_disconnect(mqtt_client);
+    //esp_mqtt_client_stop(mqtt_client);
+	esp_mqtt_set_config(mqtt_client, &mqtt_config);
+	//esp_mqtt_client_start(mqtt_client);
+	//refresh_token(&mqtt_config);
+}
+
 
 void periodic_refresh_token()
 {

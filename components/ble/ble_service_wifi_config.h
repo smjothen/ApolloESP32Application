@@ -70,11 +70,20 @@
 		//CHARGER_FIRMWARE_VERSION_CFG,
 
 		CHARGER_OPERATION_STATE_CHAR,
-		CHARGER_OPERATION_STATE_VERSION_UUID,
-		CHARGER_OPERATION_STATE_VERSION_DESCR,
+		CHARGER_OPERATION_STATE_UUID,
+		CHARGER_OPERATION_STATE_DESCR,
 
 		CHARGER_PAIR_NFC_TAG_CHAR,
 		CHARGER_PAIR_NFC_TAG_UUID,
+
+		CHARGER_AUTHORIZATION_RESULT_CHAR,
+		CHARGER_AUTHORIZATION_RESULT_UUID,
+
+		CHARGER_AUTH_UUID_CHAR,
+		CHARGER_AUTH_UUID_UUID,
+
+		CHARGER_OCCUPIED_STATE_CHAR,
+		CHARGER_OCCUPIED_STATE_UUID,
 
 		CHARGER_NETWORK_TYPE_CHAR,
 		CHARGER_NETWORK_TYPE_UUID,
@@ -125,6 +134,7 @@
 		CHARGER_PHASE_ROTATION_DESCR,
 		//CHARGER_PHASE_ROTATION_CFG,
 
+
 		CHARGER_RUN_COMMAND_CHAR,
 		CHARGER_RUN_COMMAND_UUID,
 
@@ -144,6 +154,7 @@
     uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle);
     void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp);
     void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp);
+    void PulseLedAtConnect();
     void setDeviceNameAsChar(char * devName);
     void setPinAsChar(char * pin);
     void charInit();
