@@ -44,7 +44,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.0";
+char softwareVersion[] = "0.0.3.1";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -315,7 +315,7 @@ void app_main(void)
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
 		//If it was OFF this will effectively power it ON so it is ready for later.
-		cellularPinsOff();
+		//cellularPinsOff();
 	}
 	
 	connectivity_init();

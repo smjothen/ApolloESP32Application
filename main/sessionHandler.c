@@ -488,7 +488,7 @@ static void sessionHandler_task()
 		}
 
 		//Check if debugCounter from MCU stops incrementing - reset if persistent
-		if((onCounter > 30) && (otaIsRunning() == false))
+		/*if((onCounter > 30) && (otaIsRunning() == false))
 		{
 			previousDebugCounter = mcuDebugCounter;
 			mcuDebugCounter = MCU_GetDebugCounter();
@@ -507,7 +507,7 @@ static void sessionHandler_task()
 
 				esp_restart();
 			}
-		}
+		}*/
 
 		if(networkInterface == eCONNECTION_NONE)
 		{
