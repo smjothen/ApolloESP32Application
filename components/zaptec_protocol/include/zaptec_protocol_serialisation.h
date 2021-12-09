@@ -193,6 +193,7 @@
 
     } ParamNo;
 
+    //Cloud command numbers
     typedef enum
     {
         CommandSwReboot    = 102,
@@ -234,13 +235,22 @@
 		CommandServoClearCalibration = 702,
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
-		CommandITSelect = 806,
+		CommandITDiagnosticsStart = 806,
+		CommandITDiagnosticsStop = 807,
 		CommandActivateWatchdog = 810,
 
 		CommandDisableCertificateOnce = 820,
 		CommandDisableCertificateAlways = 821
 
     } CommandNo;
+
+
+    //Custome - MCU Command numbers - Some are overlapping
+    typedef enum
+    {
+    	MCUCommandRestartCarInterface = 507,
+    } MCUCommandNo;
+
 
     typedef enum
     {

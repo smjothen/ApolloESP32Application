@@ -357,6 +357,21 @@ void SessionHandler_SetOCMFHighInterval()
 	OCMFHighInterval = true;
 }
 
+static bool logCurrents = false;
+static uint16_t logCurrentsCounter = 0;
+void SessionHandler_SetLogCurrents()
+{
+	if(logCurrents == false)
+	{
+		logCurrents = true;
+		logCurrentsCounter = 0;
+	}
+	else
+	{
+		logCurrents = false;
+	}
+}
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -380,7 +395,7 @@ static void sessionHandler_task()
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
-    uint8_t previousChargeOperatingMode = 0;
+    enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
@@ -397,6 +412,9 @@ static void sessionHandler_task()
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
     uint8_t nrOfResendRetries = 0;
+
+    uint8_t activeWithoutChargingDuration = 0;
+    bool carInterfaceRestartTried = false;
 
     authentication_Init();
     OCMF_Init();
@@ -488,7 +506,7 @@ static void sessionHandler_task()
 		}
 
 		//Check if debugCounter from MCU stops incrementing - reset if persistent
-		/*if((onCounter > 30) && (otaIsRunning() == false))
+		if((onCounter > 30) && (otaIsRunning() == false))
 		{
 			previousDebugCounter = mcuDebugCounter;
 			mcuDebugCounter = MCU_GetDebugCounter();
@@ -507,7 +525,7 @@ static void sessionHandler_task()
 
 				esp_restart();
 			}
-		}*/
+		}
 
 		if(networkInterface == eCONNECTION_NONE)
 		{
@@ -540,7 +558,7 @@ static void sessionHandler_task()
 
 		//We need to inform the ChargeSession if a car is connected.
 		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
-		if((currentCarChargeMode == eCAR_DISCONNECTED) || (currentCarChargeMode == eCAR_UNINITIALIZED))
+		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
 			SetCarConnectedState(false);
 		else
 			SetCarConnectedState(true);
@@ -644,11 +662,11 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((currentCarChargeMode < eCAR_DISCONNECTED) && (previousCarChargeMode >= eCAR_DISCONNECTED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_UNINITIALIZED))
 		{
 			chargeSession_Start();
 		}
-		else if((currentCarChargeMode < eCAR_DISCONNECTED) && (sessionIDClearedByCloud == true))
+		else if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionIDClearedByCloud == true))
 		{
 			sessionIDClearedByCloud = false;
 			chargeSession_Start();
@@ -662,7 +680,7 @@ static void sessionHandler_task()
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
-		if((currentCarChargeMode < eCAR_DISCONNECTED) && (authorizationRequired == true))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true))
 		{
 
 			if((NFCGetTagInfo().tagIsValid == true) && (stoppedByRfid == false))
@@ -722,11 +740,47 @@ static void sessionHandler_task()
 		}
 
 
-		if(currentCarChargeMode < eCAR_DISCONNECTED)
+		//If the car has not responded to charging being available for 30 seconds, run car interface reset sequence once - like Pro
+		if((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && (currentCarChargeMode != eCAR_CHARGING)  && (carInterfaceRestartTried == false))
+		{
+			if(activeWithoutChargingDuration <=30)
+				activeWithoutChargingDuration++;
+
+			if(activeWithoutChargingDuration == 30)
+			{
+				MessageType ret = MCU_SendCommandId(MCUCommandRestartCarInterface);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU Restart car OK");
+					carInterfaceRestartTried = true;
+				}
+				else
+				{
+					ESP_LOGI(TAG, "MCU Restart car FAILED");
+				}
+			}
+		}
+		else if(chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING)
+		{
+			if(currentCarChargeMode != eCAR_STATE_F)
+			{
+				carInterfaceRestartTried = false;
+				activeWithoutChargingDuration = 0;
+			}
+		}
+		else if((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && (currentCarChargeMode == eCAR_CHARGING))
+		{
+			activeWithoutChargingDuration = 0;
+			carInterfaceRestartTried = false;
+		}
+
+
+
+		if(chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)
 			chargeSession_UpdateEnergy();
 
 		// Check if car connecting -> start a new session
-		if(((currentCarChargeMode == eCAR_DISCONNECTED) && (previousCarChargeMode < eCAR_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
+		if(((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
 		{
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
@@ -777,13 +831,13 @@ static void sessionHandler_task()
 		}
 		
 		//If the FinalStopActive bit is set when a car disconnect, make sure to clear the status value used by Cloud
-		if((currentCarChargeMode == eCAR_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
+		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
 		{
 			SetFinalStopActiveStatus(0);
 		}
 
 		//If session is cleared while car is disconnecting, ensure a new session is not generated incorrectly
-		if(currentCarChargeMode == eCAR_DISCONNECTED)
+		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
 		{
 			sessionIDClearedByCloud = false;
 		}
@@ -822,7 +876,7 @@ static void sessionHandler_task()
 					dataInterval = 900;	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
-				signalInterval = 3600;
+				signalInterval = 7200;
 			}
 		}
 
@@ -1058,18 +1112,19 @@ static void sessionHandler_task()
 
 					if (published == 0)
 					{
-						ClearMCUDiagnosicsResults();
-						ESP_LOGW(TAG,"Diagnostics flag cleared");
+						//ClearMCUDiagnosicsResults();
+						//ESP_LOGW(TAG,"Diagnostics flag cleared");
+						ESP_LOGW(TAG,"Diagnostics sent");
 					}
 					else
 					{
-						ESP_LOGE(TAG,"Diagnostics flag NOT cleared");
+						ESP_LOGE(TAG,"Diagnostics not sent");
 					}
 				}
 				else
 				{
-					ESP_LOGW(TAG,"Diagnostics length = 0");
-					ClearMCUDiagnosicsResults();
+					//ESP_LOGW(TAG,"Diagnostics length = 0");
+					//ClearMCUDiagnosicsResults();
 				}
 			}
 
@@ -1102,6 +1157,17 @@ static void sessionHandler_task()
 				{
 					ClearATBuffer();
 				}
+			}
+
+			if(logCurrents == true)
+			{
+				if(logCurrentsCounter < 1000)
+					logCurrentsCounter++;
+				if(logCurrentsCounter == 1000)
+					logCurrents = false;
+
+				if(logCurrentsCounter % 2 == 0)
+					publish_debug_telemetry_observation_power();
 			}
 
 			/*if(CloudCommandCurrentUpdated() == true)

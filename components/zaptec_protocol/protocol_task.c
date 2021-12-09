@@ -181,7 +181,7 @@ static float totalChargePower = 0.0;
 static float totalChargePowerSession = -1.0;
 static float max_reported_energy = -1.0;
 
-static uint8_t chargeMode = eCAR_UNINITIALIZED;
+static int8_t chargeMode = eCAR_UNINITIALIZED;
 static uint8_t chargeOperationMode = 0;
 
 static uint32_t mcuDebugCounter = 0;
@@ -786,8 +786,11 @@ void MCU_ClearMaximumEnergy(){
 	max_reported_energy = totalChargePowerSession;
 }
 
-uint8_t MCU_GetchargeMode()
+int8_t MCU_GetchargeMode()
 {
+	//if(chargeMode > 12)
+	//	chargeMode = 12;
+
 	return chargeMode;
 }
 

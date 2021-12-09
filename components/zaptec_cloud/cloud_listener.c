@@ -1800,12 +1800,29 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
-				else if(strstr(commandString,"ITMode") != NULL)
+				else if(strstr(commandString,"ITStart") != NULL)
 				{
-					ESP_LOGI(TAG, "ITMode");
-					MessageType ret = MCU_SendCommandId(CommandITSelect);
+					ESP_LOGI(TAG, "IT diagnostics stop");
+					MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStart);
 					if(ret == MsgCommandAck)
 					{
+						MCUDiagnosticsResults = true;
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU IT diag ON");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU IT diag FAILED");
+					}
+				}
+				else if(strstr(commandString,"ITStop") != NULL)
+				{
+					ESP_LOGI(TAG, "IT diagnostics stop");
+					MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStop);
+					if(ret == MsgCommandAck)
+					{
+						MCUDiagnosticsResults = false;
 						responseStatus = 200;
 						ESP_LOGI(TAG, "MCU IT mode switched");
 					}
@@ -1933,6 +1950,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SessionHandler_SetOCMFHighInterval();
 				}
+				else if(strstr(commandString,"LogCurrent") != NULL)
+				{
+					SessionHandler_SetLogCurrents();
+				}
+				else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
+				{
+					MessageType ret = MCU_SendCommandId(MCUCommandRestartCarInterface);
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU Restart car OK");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGI(TAG, "MCU Restart car FAILED");
+					}
+				}
+
 
 
 			}
@@ -2212,11 +2248,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 			sprintf(devicetwin_topic, "$iothub/methods/res/200/?%s", ridSubString);
 
-			char responseBuffer[500]={0};//TODO: check length
+			/*char responseBuffer[500]={0};//TODO: check length ~400
 			BuildLocalSettingsResponse(responseBuffer);
 			ESP_LOGW(TAG, "responseStringLength: %d, responseBuffer: %s", strlen(responseBuffer), responseBuffer);
 
-			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, responseBuffer, 0, 1, 0);*/
+			char * data = NULL;
+			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, data, 0, 1, 0);
         }
 
         //Handle incoming commands

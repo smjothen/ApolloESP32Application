@@ -37,6 +37,8 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 
+//#include "IT3PCalculator.h"
+
 const char *TAG_MAIN = "MAIN     ";
 
 //OUTPUT PIN
@@ -44,7 +46,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.1";
+char softwareVersion[] = "0.0.0.90";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -262,7 +264,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    //validate_booted_image();
+    validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -315,7 +317,7 @@ void app_main(void)
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
 		//If it was OFF this will effectively power it ON so it is ready for later.
-		//cellularPinsOff();
+		cellularPinsOff();
 	}
 	
 	connectivity_init();
@@ -402,6 +404,18 @@ void app_main(void)
 
     		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
+
+
+    	/*if(onTimeCounter % 5 == 0)//15
+    	{
+
+    		ESP_LOGW(TAG_MAIN, "ThreePhase");
+
+    		struct ThreePhaseResult result = CalculatePhasePairCurrentFromPhaseCurrent(15.0, 15.0, 15.0);
+
+			ESP_LOGW(TAG_MAIN, "ThreePhase: %2.2f %2.2f %2.2f %d", result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
+    	}*/
+
 
     	/*if(onTimeCounter % 100 == 0)
     	{

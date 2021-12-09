@@ -5,10 +5,7 @@ int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter, double rssi
 );
 
-int publish_debug_telemetry_observation_power(
-    double voltage_l1, double voltage_l2, double voltage_l3,
-    double current_l1, double current_l2, double current_l3
-);
+int publish_debug_telemetry_observation_power();
 
 int publish_debug_telemetry_observation_cloud_settings();
 

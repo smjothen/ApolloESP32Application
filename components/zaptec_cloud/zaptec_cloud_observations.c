@@ -24,6 +24,8 @@
 #include "../components/adc/adc_control.h"
 #include "../../main/connectivity.h"
 
+#include "../../main/IT3PCalculator.h"
+
 #define TAG "OBSERVATIONS POSTER"
 
 static bool startupMessage = true;
@@ -101,6 +103,12 @@ cJSON *create_uint32_t_observation(int observation_id, uint32_t value){
     return create_observation(observation_id, value_string);
 }
 
+cJSON *create_int32_t_observation(int observation_id, int32_t value){
+    char value_string[32];
+    sprintf(value_string, "%d", value);
+    return create_observation(observation_id, value_string);
+}
+
 cJSON *create_observation_collection(void){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
@@ -135,21 +143,18 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
     return publish_json(observations);
 }*/
 
-int publish_debug_telemetry_observation_power(
-    double voltage_l1, double voltage_l2, double voltage_l3,
-    double current_l1, double current_l2, double current_l3
-){
+int publish_debug_telemetry_observation_power(){
     ESP_LOGD(TAG, "sending charging telemetry");
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
+    /*add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
     add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
-    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));
+    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));*/
 
-    add_observation_to_collection(observations, create_double_observation(507, current_l1));
-    add_observation_to_collection(observations, create_double_observation(508, current_l2));
-    add_observation_to_collection(observations, create_double_observation(509, current_l2));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, MCU_GetCurrents(1)));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));
 
     return publish_json(observations);
 }
@@ -338,7 +343,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
@@ -376,7 +381,7 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)MCU_GetCableType()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
     //ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
@@ -434,17 +439,17 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
 
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
+    /*add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, MCU_GetCurrents(1)));
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));
+    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));*/
 
-    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
     //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
 
 
     //add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
 
-    //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    //add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
     //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
@@ -498,7 +503,7 @@ static uint8_t previousNetworkType = 0xff;
 static float previousChargeCurrentUserMax = 0.0;
 static int previousSetPhases = 0;
 static uint8_t previousPhaseRotation = 0;
-static uint8_t previousChargeMode = 0;
+static int8_t previousChargeMode = 0;
 static uint8_t previousChargeOperatingMode = 0;
 static uint8_t previousIsStandalone = 0xff;
 static float previousStandaloneCurrent = -1.0;
@@ -552,7 +557,7 @@ int publish_telemetry_observation_on_change(){
 
     add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
     add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));*/
@@ -573,11 +578,11 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-    uint8_t chargeMode = MCU_GetchargeMode();
-	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != 0xff))
+    int8_t chargeMode = MCU_GetchargeMode();
+	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != -1))
 	{
 		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeMode, (uint32_t)chargeMode));
+		add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)chargeMode));
 		previousChargeMode = chargeMode;
 		isChange = true;
 	}
@@ -715,14 +720,31 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	if((power > previousPower + 500) || (power < (previousPower - 500))) //500W
+	//Send on change larger than 500 W, or if power changes from down to 0W.
+	if((power > previousPower + 500) || (power < (previousPower - 500)) || ((power == 0) && (previousPower > 0)))
 	{
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 
-		//When power changes also update currents to be responsive
-		add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
-		add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, MCU_GetCurrents(1)));
-		add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));
+		float currents[3] = {0};
+		currents[0] = MCU_GetCurrents(0);
+		currents[1] = MCU_GetCurrents(1);
+		currents[2] = MCU_GetCurrents(2);
+
+		if(MCU_GetGridType() == NETWORK_3P3W)
+		{
+			struct ThreePhaseResult result = CalculatePhasePairCurrentFromPhaseCurrent(currents[0], currents[1], currents[2]);
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, result.L3_L1));
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, result.L3_L2));
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, result.L1_L2));
+			ESP_LOGW(TAG, "IT3-Phase: Meas: %2.2f %2.2f %2.2f  Calc: %2.2f %2.2f %2.2f  %d", currents[0],currents[1],currents[2], result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
+		}
+		else
+		{
+			//When power changes also update currents to be responsive
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, currents[0]));
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
+		}
 		previousPower = power;
 		isChange = true;
 	}

@@ -12,6 +12,7 @@ enum CarChargeMode
 	eCAR_DISCONNECTED 	= 12,
 	eCAR_CONNECTED 		= 9,
 	eCAR_CHARGING 		= 6,
+	eCAR_STATE_F 		= -12,
 };
 
 
@@ -26,6 +27,7 @@ enum CarChargeMode
 
 enum ChargerOperatingMode
 {
+	CHARGE_OPERATION_STATE_UNINITIALIZED    = 0,
     CHARGE_OPERATION_STATE_DISCONNECTED     = 1,
     CHARGE_OPERATION_STATE_REQUESTING       = 2,
     CHARGE_OPERATION_STATE_ACTIVE           = 10,
@@ -41,6 +43,7 @@ void sessionHandler_init();
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
 bool SessionHandler_IsOfflineMode();
 void SessionHandler_SetOCMFHighInterval();
+void SessionHandler_SetLogCurrents();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
 void sessionHandler_ClearOfflineCurrentSent();
 void sessionHandler_simulateOffline(int offlineTime);

@@ -40,7 +40,7 @@ float MCU_GetEnergy();
 float MCU_GetMaximumEnergy();
 void MCU_ClearMaximumEnergy();
 
-uint8_t MCU_GetchargeMode();
+int8_t MCU_GetchargeMode();
 uint8_t MCU_GetChargeOperatingMode();
 
 uint32_t MCU_GetDebugCounter();
