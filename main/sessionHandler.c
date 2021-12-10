@@ -415,6 +415,7 @@ static void sessionHandler_task()
 
     uint8_t activeWithoutChargingDuration = 0;
     bool carInterfaceRestartTried = false;
+    bool hasSeenCarStateC = false;
 
     authentication_Init();
     OCMF_Init();
@@ -741,7 +742,7 @@ static void sessionHandler_task()
 
 
 		//If the car has not responded to charging being available for 30 seconds, run car interface reset sequence once - like Pro
-		if((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && (currentCarChargeMode != eCAR_CHARGING)  && (carInterfaceRestartTried == false))
+		if((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && (currentCarChargeMode != eCAR_CHARGING)  && (carInterfaceRestartTried == false) && (hasSeenCarStateC == false))
 		{
 			if(activeWithoutChargingDuration <=30)
 				activeWithoutChargingDuration++;
@@ -773,6 +774,12 @@ static void sessionHandler_task()
 			activeWithoutChargingDuration = 0;
 			carInterfaceRestartTried = false;
 		}
+
+		//If charging state has occured, do not do carInterface resets
+		if(currentCarChargeMode == eCAR_CHARGING)
+			hasSeenCarStateC = true;
+		else if(currentCarChargeMode == eCAR_DISCONNECTED)
+			hasSeenCarStateC = false;
 
 
 
