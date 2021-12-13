@@ -737,6 +737,13 @@ int publish_telemetry_observation_on_change(){
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, result.L3_L2));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, result.L1_L2));
 			ESP_LOGW(TAG, "IT3-Phase: Meas: %2.2f %2.2f %2.2f  Calc: %2.2f %2.2f %2.2f  %d", currents[0],currents[1],currents[2], result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
+
+			char buf[256];
+			sprintf(buf, "IT3-Phase: %2.fW Meas: %2.2f %2.2f %2.2f  Calc: %2.2f %2.2f %2.2f  %d", power, currents[0],currents[1],currents[2], result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
+			//ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
+			add_observation_to_collection(observations, create_observation(808, buf));
+
+
 		}
 		else
 		{
