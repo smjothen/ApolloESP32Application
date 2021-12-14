@@ -1520,7 +1520,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					char *endptr;
 					uint32_t interval = (uint32_t)strtol(commandString+14, &endptr, 10);
-					if(((86400 > interval) && (interval > 10)) || (interval == 0))
+					if(((86400 >= interval) && (interval > 10)) || (interval == 0))
 					{
 						//SetDataInterval(interval);
 						storage_Set_TransmitInterval(interval);

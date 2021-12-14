@@ -452,7 +452,6 @@ static void sessionHandler_task()
 		//Either sync or timer event will cause trig. If double trig due to clock drifting, only the first one will be completed
 		//if((setTimerSyncronization == true) && (secondsSinceSync > 1800))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		if((setTimerSyncronization == true) && (secondsSinceSync > 15))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
-		//if((setTimerSyncronization == true) && (secondsSinceSync > 30))// && MCU_GetchargeMode() != eCAR_CHARGING)	//Try to resync in less than an hour (3400 sec)
 		{
 			ESP_LOGW(TAG, " Trig new OCMF timer sync");
 			setTimerSyncronization = false;
