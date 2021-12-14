@@ -730,12 +730,24 @@ int publish_telemetry_observation_on_change(){
 		currents[1] = MCU_GetCurrents(1);
 		currents[2] = MCU_GetCurrents(2);
 
+		//On Pro the IT3 wiring is described as PE, N=L3, L1, L2
+		//On Go  the IT3 wiring is described as PE, N=L1, L2, L3
+		//To make the currents reported on correct phase seen from main fuse/APM/AMS they must be
+		// remapped for IT3-phase on Go.
+		//This means load on Type 2s L1 and L2 will show the combined emeter current on N which is wired to L1 on main fuse
 		if(MCU_GetGridType() == NETWORK_3P3W)
 		{
 			struct ThreePhaseResult result = CalculatePhasePairCurrentFromPhaseCurrent(currents[0], currents[1], currents[2]);
+			/* Original "Pro" mapping
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, result.L3_L1));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, result.L3_L2));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, result.L1_L2));
+			*/
+			//Mapping because of Go wiring
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, result.L1_L2)); //The value measured on N(L3) must be shown on L1;
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, result.L3_L1)); //The value measured on L1 must be shown on L2;
+			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, result.L3_L2)); //The value measured on L2 must be shown on L3;
+
 			ESP_LOGW(TAG, "IT3-Phase: Meas: %2.2f %2.2f %2.2f  Calc: %2.2f %2.2f %2.2f  %d", currents[0],currents[1],currents[2], result.L3_L1, result.L3_L2, result.L1_L2, result.usedAlgorithm);
 
 			char buf[256];
