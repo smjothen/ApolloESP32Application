@@ -37,7 +37,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 
-//#include "IT3PCalculator.h"
+#include "IT3PCalculator.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -46,7 +46,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.1";
+char softwareVersion[] = "0.0.0.92";
 
 uint8_t GetEEPROMFormatVersion()
 {

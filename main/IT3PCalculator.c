@@ -1,5 +1,6 @@
 ﻿#include "IT3PCalculator.h"
 #include <math.h>
+#include "string.h"
 
 
 const double dt = 1.0;
@@ -38,14 +39,14 @@ struct ThreePhaseResult SearchForPhasePairCurrentFromPhaseCurrent(double L1, dou
 
 	double bestDiff = 0.0;
 	struct ThreePhaseResult threePhaseResultSearch = {0};
+	memset(&bestMatch,0, sizeof(bestMatch));
 
-
-	for(int A = 0; A<=32; A++) {
-		for(int B = 0; B<=32; B++) {
+	for(int A = 1; A<=32; A++) {
+		for(int B = 1; B<=32; B++) {
 
 			double testL2 = L2Peak((double)A, (double)B);
-			if(isnan(testL2) > 0)
-				continue;
+			//if(isnan(testL2) > 0)
+			//	continue;
 
 			if(testL2 > (L2 - dt) && testL2 < (L2 + dt)) {
 
@@ -64,9 +65,23 @@ struct ThreePhaseResult SearchForPhasePairCurrentFromPhaseCurrent(double L1, dou
 						if((testL3 > (L3 - dt) && testL3 < (L3 + dt)) && (fabs(diffSum) <= bestDiff || bestMatch.usedAlgorithm == 0)) {
 
 							bestDiff = fabs(diffSum);
-							threePhaseResultSearch.L3_L1 = (double)C;
-							threePhaseResultSearch.L3_L2 = (double)B;
-							threePhaseResultSearch.L1_L2 = (double)A;
+
+							/// Since we start at 1 to avoid NaN, round down if 1
+							if(A == 1)
+								threePhaseResultSearch.L1_L2 = 0.0;
+							else
+								threePhaseResultSearch.L1_L2 = (double)A;
+
+							if(B == 1)
+								threePhaseResultSearch.L3_L2 = 0.0;
+							else
+								threePhaseResultSearch.L3_L2 = (double)B;
+
+							if(C == 1)
+								threePhaseResultSearch.L3_L1 = 0.0;
+							else
+								threePhaseResultSearch.L3_L1 = (double)C;
+
 							threePhaseResultSearch.usedAlgorithm = Search;
 							bestMatch = threePhaseResultSearch;
 						}
@@ -89,8 +104,8 @@ double peakX(int aSign, double r, int shift) {
 }
 
 double phaseMax(double x, double ampA, int shiftA, double ampB, int shiftB) {
-	if(isnan(x) > 0)
-		return 0.0;
+	//if(isnan(x) > 0)
+	//	return 0.0;
 	volatile double a = (ampA * sin(x * M_PI / 0.01 + shiftA * M_PI / 180.0));
 	volatile double b = (ampB * sin(x * M_PI / 0.01 + shiftB * M_PI / 180.0));
 
