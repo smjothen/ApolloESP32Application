@@ -1,6 +1,16 @@
 #ifndef ZAPTEC_CLOUD_OBSERVATIONS_H
 #define ZAPTEC_CLOUD_OBSERVATIONS_H
 
+struct MqttDataDiagnostics
+{
+	uint32_t mqttBytes;
+	uint32_t mqttBytesIncMeta;
+	uint32_t nrOfmessages;
+};
+
+struct MqttDataDiagnostics MqttGetDiagnostics();
+void MqttDataReset();
+
 int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter, double rssi
 );

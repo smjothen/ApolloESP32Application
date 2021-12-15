@@ -30,6 +30,19 @@
 
 static bool startupMessage = true;
 
+
+struct MqttDataDiagnostics mqttDiagnostics = {0};
+
+struct MqttDataDiagnostics MqttGetDiagnostics()
+{
+	return mqttDiagnostics;
+}
+
+void MqttDataReset()
+{
+	memset(&mqttDiagnostics, 0, sizeof(mqttDiagnostics));
+}
+
 int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
     char *message = cJSON_PrintUnformatted(payload);
 
@@ -39,6 +52,8 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
         return -2;
     }
     ESP_LOGI(TAG, "<<<sending>>> %s", message);
+    int len = strlen(message);
+
 
     int publish_err;
     if(blocking){
@@ -49,6 +64,13 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
 
     cJSON_Delete(payload);
     free(message);
+
+    if(publish_err == 0)
+    {
+    	mqttDiagnostics.mqttBytes += len;
+    	mqttDiagnostics.mqttBytesIncMeta += (len+112);
+    	mqttDiagnostics.nrOfmessages++;
+    }
 
     if(publish_err<0){
         ESP_LOGW(TAG, "publish to iothub failed");

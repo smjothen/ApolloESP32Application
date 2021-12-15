@@ -1176,6 +1176,24 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_power();
 			}
 
+
+
+
+			if(onTime % 10 == 0)//15
+			{
+				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
+				char buf[100]={0};
+				sprintf(buf, "%d MQTT data: %d %d #%d", onTime, mqttDiag.mqttBytes, mqttDiag.mqttBytesIncMeta, mqttDiag.nrOfmessages);
+				ESP_LOGW(TAG, "**** %s ****", buf);
+
+				if(onTime % 3600 == 0)
+				{
+					int published = publish_debug_telemetry_observation_Diagnostics(buf);
+					MqttDataReset();
+					ESP_LOGW(TAG, "**** Hourly MQTT data reset ****");
+				}
+			}
+
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
 				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
