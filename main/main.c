@@ -37,7 +37,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 
-#include "IT3PCalculator.h"
+//#include "IT3PCalculator.h"
 
 const char *TAG_MAIN = "MAIN     ";
 
