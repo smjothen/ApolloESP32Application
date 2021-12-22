@@ -33,6 +33,15 @@ static bool startupMessage = true;
 
 struct MqttDataDiagnostics mqttDiagnostics = {0};
 
+
+void MqttSetRxDiagnostics(uint32_t bytes, uint32_t metabytes)
+{
+	mqttDiagnostics.mqttRxBytes += bytes;
+	mqttDiagnostics.mqttRxBytesIncMeta += (bytes + metabytes);
+	mqttDiagnostics.nrOfRxMessages++;
+}
+
+
 struct MqttDataDiagnostics MqttGetDiagnostics()
 {
 	return mqttDiagnostics;
@@ -51,9 +60,9 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
         cJSON_Delete(payload);
         return -2;
     }
-    ESP_LOGI(TAG, "<<<sending>>> %s", message);
-    int len = strlen(message);
 
+    int len = strlen(message);
+    ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
 
     int publish_err;
     if(blocking){
@@ -67,9 +76,9 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
 
     if(publish_err == 0)
     {
-    	mqttDiagnostics.mqttBytes += len;
-    	mqttDiagnostics.mqttBytesIncMeta += (len+112);
-    	mqttDiagnostics.nrOfmessages++;
+    	mqttDiagnostics.mqttTxBytes += len;
+    	mqttDiagnostics.mqttTxBytesIncMeta += (len+112);
+    	mqttDiagnostics.nrOfTxMessages++;
     }
 
     if(publish_err<0){
@@ -170,13 +179,13 @@ int publish_debug_telemetry_observation_power(){
 
     cJSON *observations = create_observation_collection();
 
-    /*add_observation_to_collection(observations, create_double_observation(501, voltage_l1));
-    add_observation_to_collection(observations, create_double_observation(502, voltage_l2));
-    add_observation_to_collection(observations, create_double_observation(503, voltage_l3));*/
-
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, MCU_GetCurrents(1)));
     add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));
+
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
+    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
 
     return publish_json(observations);
 }
@@ -358,7 +367,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
-    add_observation_to_collection(observations, create_observation(SourceVersion, esp_ota_get_app_description()->version));
+    add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
     //add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, (uint32_t)certificate_GetCurrentBundleVersion()));
 
@@ -433,15 +442,21 @@ int publish_debug_telemetry_observation_LteParameters()
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_observation(LteImsi, LTEGetImsi()));
+    add_observation_to_collection(observations, create_observation(LteImsi, (char*)LTEGetImsi()));
     //add_observation_to_collection(observations, create_observation(LteMsisdn, "0"));
-    add_observation_to_collection(observations, create_observation(LteIccid, LTEGetIccid()));
-    add_observation_to_collection(observations, create_observation(LteImei, LTEGetImei()));
+    add_observation_to_collection(observations, create_observation(LteIccid, (char*)LTEGetIccid()));
+    add_observation_to_collection(observations, create_observation(LteImei, (char*)LTEGetImei()));
 
     return publish_json(observations);
 }
 
 
+int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
+{
+    cJSON *observations = create_observation_collection();
+    add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
+    return publish_json(observations);
+}
 
 static uint32_t txCnt = 0;
 
@@ -457,23 +472,6 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, MCU_GetTemperaturePowerBoard(0)));
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, MCU_GetTemperaturePowerBoard(1)));
 
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
-
-    /*add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, MCU_GetCurrents(0)));
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, MCU_GetCurrents(1)));
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, MCU_GetCurrents(2)));*/
-
-    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
-    //add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
-
-
-    //add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
-
-    //add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
-    //add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
-
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
 	//add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
 
@@ -488,7 +486,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " SHT: %3.2f %3.1f%%  T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  SW: %d MCnt: %d", I2CGetSHT30Temperature(), I2CGetSHT30Humidity(), MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetSwitchState(), MCU_GetDebugCounter());
+	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt: %d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetchargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter());
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
@@ -551,6 +549,9 @@ static uint32_t previousCertificateVersion = 0;
 static uint8_t previousMaxCurrentConfigSource = 0xff;
 static uint32_t previousNumberOfTagsCount = 0;
 
+static uint8_t previousOverrideGridType = 0xff;
+static uint8_t previousIT3OptimizationEnabled = 0xff;
+
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -560,33 +561,18 @@ int publish_telemetry_observation_on_change(){
     cJSON *observations = create_observation_collection();
 
 
-    /*add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
-    add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
-
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, temperature_emeter1));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, temperature_emeter2));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, temperature_emeter3));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, temperature_TM));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, temperature_TM2));
-
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, voltage_l1));
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, voltage_l2));
-    add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, voltage_l3));
-
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, current_l1));
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, current_l2));
-    add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, current_l3));
-
-    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
-    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, MCU_GetEnergy()));
-    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
-    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
-
-	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));*/
-
     uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 	if (((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0)) || (clearSessionFlag == true))
 	{
+
+		//If a disconnect occur, send 0 voltage levels
+		if (chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+		{
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+		}
+
 		//If we have received command SetSessionId = null from cloud, fake car disconnect to clear session and user id in cloud
 		if(clearSessionFlag == true)
 		{
@@ -595,6 +581,7 @@ int publish_telemetry_observation_on_change(){
 		}
 
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
+
 		//ESP_LOGE(TAG, "\n ************* 4 Sending OperatingMode %d ***************\n", chargeOperatingMode);
 		previousChargeOperatingMode = chargeOperatingMode;
 		isChange = true;
@@ -784,6 +771,15 @@ int publish_telemetry_observation_on_change(){
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
 		}
+
+		//If power is starting, send voltages
+		if ((power > 0.0) && (previousPower == 0.0))
+		{
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
+			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+		}
+
 		previousPower = power;
 		isChange = true;
 	}
@@ -855,13 +851,13 @@ int publish_telemetry_observation_on_change(){
     	isChange = true;
     }
 
-	uint32_t pulseInterval = storage_Get_PulseInterval();
+	/*uint32_t pulseInterval = storage_Get_PulseInterval();
 	if(previousPulseInterval != pulseInterval)
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
 		previousPulseInterval = pulseInterval;
 		isChange = true;
-	}
+	}*/
 
 	uint32_t certificateVersion = (uint32_t)certificate_GetCurrentBundleVersion();
 	if(previousCertificateVersion != certificateVersion)
@@ -887,6 +883,25 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+	uint8_t overrideGridType = MCU_GetOverrideGridType();
+	if(overrideGridType != previousOverrideGridType)
+	{
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamGridTypeOverride, (uint32_t)overrideGridType));
+		previousOverrideGridType = overrideGridType;
+		isChange = true;
+	}
+
+	//Only send the IT3 Optimization state when on IT3 grid
+	if(MCU_GetGridType() == NETWORK_3P3W)
+	{
+		uint8_t IT3OptimizationEnabled = MCU_GetIT3OptimizationState();
+		if(IT3OptimizationEnabled != previousIT3OptimizationEnabled)
+		{
+			add_observation_to_collection(observations, create_uint32_t_observation(ParamIT3OptimizationEnabled, (uint32_t)IT3OptimizationEnabled));
+			previousIT3OptimizationEnabled = IT3OptimizationEnabled;
+			isChange = true;
+		}
+	}
 
 	//Check ret and retry?
     int ret = 0;

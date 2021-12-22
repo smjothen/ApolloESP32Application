@@ -44,12 +44,20 @@ struct RFIDTokens{
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 #define PREFIX_GUID 41
+#define DIAGNOSTICS_STRING_SIZE 100
 
 // Network IDs
 #define NETWORK_1P3W 1
 #define NETWORK_3P3W 2
 #define NETWORK_1P4W 3
 #define NETWORK_3P4W 4
+
+//PulseRates
+#define PULSE_DEFAULT 60
+#define PULSE_STANDALONE 900
+#define PULSE_SYSTEM_CONNECTED 500
+#define PULSE_SYSTEM_CHARGING 120
+
 
 //Numbers should match Pro
 enum CommunicationMode
@@ -118,6 +126,8 @@ struct Configuration
 	uint8_t phaseRotation;
 	uint8_t networkType;
 	uint8_t networkTypeOverride;
+
+	char diagnosticsLog[DIAGNOSTICS_STRING_SIZE];
 };
 
 

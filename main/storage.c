@@ -90,6 +90,8 @@ void storage_Init_Configuration()
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
 	configurationStruct.pulseInterval				= 60;
+
+	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
 }
 
 
@@ -228,6 +230,23 @@ void storage_Set_PulseInterval(uint32_t newValue)
 }
 
 
+//Max string length 37 characters
+void storage_Set_DiagnosticsLog(char * newValue)
+{
+	if(configurationStruct.diagnosticsLog[0] != '\0')
+	{
+		if(strlen(newValue) < 100)
+		{
+			strcpy(configurationStruct.diagnosticsLog, newValue);
+			storage_SaveConfiguration();
+			ESP_LOGW(TAG, "Saved diagnosticslog");
+			return;
+		}
+	}
+	ESP_LOGE(TAG, "Could not save to diagnosticslog");
+
+}
+
 //****************************************************
 
 uint8_t storage_Get_AuthenticationRequired()
@@ -298,7 +317,9 @@ uint32_t storage_Get_TransmitInterval()
 {
 	//Sanity check. On old chargers the default is 120. Don't use this frequent defaults when updated with nvs read parameter.
 	if (configurationStruct.transmitInterval == 120)
-		configurationStruct.transmitInterval = 3600;
+		configurationStruct.transmitInterval = 7200;
+	else if (configurationStruct.transmitInterval == 3600)
+			configurationStruct.transmitInterval = 7200;
 	//If 0, return (disable logging)
 	else if(configurationStruct.transmitInterval == 0)
 		return configurationStruct.transmitInterval;
@@ -415,6 +436,12 @@ uint32_t storage_Get_PulseInterval()
 	return configurationStruct.pulseInterval;
 }
 
+
+char * storage_Get_DiagnosticsLog()
+{
+	return configurationStruct.diagnosticsLog;
+}
+
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
 {
 	uint32_t floatToInt;
@@ -488,6 +515,8 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "NetworkTypeOv", configurationStruct.networkTypeOverride);
 	err += nvs_set_u32(configuration_handle, "PulseInterval", configurationStruct.pulseInterval);
 
+	err += nvs_set_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog);
+
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
 
@@ -539,6 +568,9 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
 	nvs_get_u32(configuration_handle, "PulseInterval", &configurationStruct.pulseInterval);
 
+	nvs_get_str(configuration_handle, "DiagnosticsLog", NULL, &readSize);
+	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.chargerName, &readSize);
+
 	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
 	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 
@@ -577,6 +609,7 @@ void storage_PrintConfiguration()
 
 	ESP_LOGI(TAG, "TransmitInterval: 			\t%i", configurationStruct.transmitInterval);
 	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	ESP_LOGI(TAG, "DiagnosticsLog: 				%s", configurationStruct.diagnosticsLog);
 
 
 	//ESP_LOGW(TAG, "*********************************");

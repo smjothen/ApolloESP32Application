@@ -41,7 +41,7 @@ void storage_Set_PhaseRotation(uint8_t newValue);
 void storage_Set_NetworkType(uint8_t newValue);
 void storage_Set_NetworkTypeOverride(uint8_t newValue);
 void storage_Set_PulseInterval(uint32_t newValue);
-
+void storage_Set_DiagnosticsLog(char * newValue);
 
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
@@ -71,6 +71,7 @@ uint8_t storage_Get_PhaseRotation();
 uint8_t storage_Get_NetworkType();
 uint8_t storage_Get_NetworkTypeOverride();
 uint32_t storage_Get_PulseInterval();
+char * storage_Get_DiagnosticsLog();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();

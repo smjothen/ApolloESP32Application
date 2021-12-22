@@ -358,18 +358,19 @@ void SessionHandler_SetOCMFHighInterval()
 }
 
 static bool logCurrents = false;
-static uint16_t logCurrentsCounter = 0;
 void SessionHandler_SetLogCurrents()
 {
-	if(logCurrents == false)
-	{
-		logCurrents = true;
-		logCurrentsCounter = 0;
-	}
-	else
-	{
-		logCurrents = false;
-	}
+	logCurrents = true;
+}
+
+static bool carInterfaceRestartTried = false;
+static bool hasSeenCarStateC = false;
+
+///Call this to make carInterface perform a new reset sequence if car is asleep
+void sessionHandler_ClearCarInterfaceResetConditions()
+{
+	carInterfaceRestartTried = false;
+	hasSeenCarStateC = false;
 }
 
 static void sessionHandler_task()
@@ -380,7 +381,9 @@ static void sessionHandler_task()
 	uint32_t onCounter = 0;
 
 	uint32_t onTime = 0;
-    uint32_t pulseCounter = 30;
+
+	///Set high to ensure first pulse sent instantly at start
+    uint32_t pulseCounter = 10000;
 
     uint32_t dataCounter = 0;
     uint32_t dataInterval = 120;
@@ -400,7 +403,7 @@ static void sessionHandler_task()
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
-    bool previousIsOnline = true;
+    volatile bool previousIsOnline = true;
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
@@ -414,8 +417,9 @@ static void sessionHandler_task()
     uint8_t nrOfResendRetries = 0;
 
     uint8_t activeWithoutChargingDuration = 0;
-    bool carInterfaceRestartTried = false;
-    bool hasSeenCarStateC = false;
+
+    uint32_t pulseInterval = PULSE_DEFAULT;
+    uint32_t previousPulseInterval = PULSE_DEFAULT;
 
     authentication_Init();
     OCMF_Init();
@@ -864,6 +868,7 @@ static void sessionHandler_task()
 		onTime++;
 		dataCounter++;
 
+		//if (onTime > 60)
 		if (onTime > 600)
 		{
 			if (networkInterface == eCONNECTION_WIFI)
@@ -940,15 +945,51 @@ static void sessionHandler_task()
 		}
 
 		pulseCounter++;
-		if((pulseCounter >= storage_Get_PulseInterval()) || (!previousIsOnline && isOnline))
+
+
+
+		if(isMqttConnected() == true)
 		{
-			if (isMqttConnected() == true)
+			if(storage_Get_Standalone() == true)
 			{
-				publish_cloud_pulse();
+				pulseInterval = PULSE_STANDALONE;
+			}
+			else if((storage_Get_Standalone() == false) && chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING)
+			{
+				pulseInterval = PULSE_SYSTEM_CONNECTED;
+			}
+			else if((storage_Get_Standalone() == false) && chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)
+			{
+				pulseInterval = PULSE_SYSTEM_CHARGING;
+			}
+			else
+			{
+				pulseInterval = PULSE_DEFAULT;
 			}
 
-			pulseCounter = 0;
+			if(pulseInterval != previousPulseInterval)
+				publish_debug_telemetry_observation_PulseInterval(pulseInterval);
+
+			previousPulseInterval = pulseInterval;
+
+			if(pulseCounter >= pulseInterval)
+			{
+				publish_cloud_pulse();
+
+				pulseCounter = 0;
+			}
 		}
+
+
+
+		/*if (isMqttConnected() == true)
+		{
+			if((pulseCounter >= storage_Get_PulseInterval()) || (!previousIsOnline && isOnline))
+			{
+					publish_cloud_pulse();
+					pulseCounter = 0;
+			}
+		}*/
 
 		statusCounter++;
 		if(statusCounter >= statusInterval)
@@ -956,7 +997,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  Pulse: %d *******", GetCellularQuality(), dataInterval, storage_Get_PulseInterval());
+				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  Pulse: %d *******", GetCellularQuality(), dataInterval, pulseInterval);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -965,7 +1006,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, storage_Get_PulseInterval());
+				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, pulseInterval);
 			}
 
 			//This is to make cloud settings visible during developement
@@ -1011,6 +1052,7 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
+				publish_debug_telemetry_observation_power();
 
 				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
 				//publish_debug_telemetry_observation_cloud_settings();
@@ -1167,13 +1209,8 @@ static void sessionHandler_task()
 
 			if(logCurrents == true)
 			{
-				if(logCurrentsCounter < 1000)
-					logCurrentsCounter++;
-				if(logCurrentsCounter == 1000)
-					logCurrents = false;
-
-				if(logCurrentsCounter % 2 == 0)
-					publish_debug_telemetry_observation_power();
+				publish_debug_telemetry_observation_power();
+				logCurrents = false;
 			}
 
 
@@ -1182,13 +1219,13 @@ static void sessionHandler_task()
 			if(onTime % 10 == 0)//15
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
-				char buf[100]={0};
-				sprintf(buf, "%d MQTT data: %d %d #%d", onTime, mqttDiag.mqttBytes, mqttDiag.mqttBytesIncMeta, mqttDiag.nrOfmessages);
+				char buf[150]={0};
+				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d ", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta));
 				ESP_LOGW(TAG, "**** %s ****", buf);
 
 				if(onTime % 3600 == 0)
 				{
-					int published = publish_debug_telemetry_observation_Diagnostics(buf);
+					publish_debug_telemetry_observation_Diagnostics(buf);
 					MqttDataReset();
 					ESP_LOGW(TAG, "**** Hourly MQTT data reset ****");
 				}

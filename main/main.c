@@ -46,7 +46,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.2";
+char softwareVersion[] = "0.0.0.93";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -406,10 +406,15 @@ void app_main(void)
     	}
 
 
-    	/*if(onTimeCounter % 100 == 0)
+    	if (isMqttConnected() == true)
     	{
-    		periodic_refresh_token();
-    	}*/
+			if(onTimeCounter % 3000 == 0) //Refreshing after 50 minutes. Token valid for 60 minutes
+			{
+				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
+				/// Doing token refresh and reconnect in advance gives a more stable connection.
+				periodic_refresh_token();
+			}
+    	}
 
     	//For 4G testing - activated with command
     	if(onlineWatchdog == true)

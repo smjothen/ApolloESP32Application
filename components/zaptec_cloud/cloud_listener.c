@@ -113,7 +113,7 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    //create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+    //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     //ESP_LOGE(TAG, "connection token is %s", token);
@@ -1317,6 +1317,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
+			sessionHandler_ClearCarInterfaceResetConditions();
 		}
 		else
 		{
@@ -1790,16 +1791,86 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					//Sanity check
 					if((4 >= newNetworkType) && (newNetworkType >= 0))
 					{
-							storage_Set_NetworkTypeOverride(newNetworkType);
-							ESP_LOGI(TAG, "Set Override Network type: %i", newNetworkType);
-							storage_SaveConfiguration();
-							responseStatus = 200;
+						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
+
+						MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, newNetworkType);
+						if(ret == MsgWriteAck)
+						{
+							uint8_t ret = MCU_UpdateOverrideGridType();
+
+							if(ret == 0)
+							{
+								ESP_LOGI(TAG, "Set OverrideNetworkType OK");
+								responseStatus = 200;
+							}
+							else
+							{
+								ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 1");
+								responseStatus = 400;
+							}
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 2");
+						}
+
+						responseStatus = 200;
 					}
 					else
 					{
 						responseStatus = 400;
 					}
 				}
+
+				else if(strstr(commandString,"IT3 enable") != NULL)
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 1);
+					if(ret == MsgWriteAck)
+					{
+						uint8_t ret = MCU_UpdateIT3OptimizationState();
+						if(ret == 0)
+						{
+							ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
+							responseStatus = 200;
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 1");
+							responseStatus = 400;
+						}
+					}
+					else
+					{
+						ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 2");
+						responseStatus = 400;
+					}
+				}
+				else if(strstr(commandString,"IT3 disable") != NULL)
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 0);
+					if(ret == MsgWriteAck)
+					{
+
+						uint8_t ret = MCU_UpdateIT3OptimizationState();
+						if(ret == 0)
+						{
+							ESP_LOGI(TAG, "Set IT3 optimization disabled OK");
+							responseStatus = 200;
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 1");
+							responseStatus = 400;
+						}
+					}
+					else
+					{
+						ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 2");
+						responseStatus = 400;
+					}
+				}
+
+
 				else if(strstr(commandString,"ITStart") != NULL)
 				{
 					ESP_LOGI(TAG, "IT diagnostics stop");
@@ -2047,6 +2118,10 @@ static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
+
+	ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
+	MqttSetRxDiagnostics(event->data_len, event->topic_len);
+
     mqtt_client = event->client;
 
     if((event->error_handle->esp_tls_stack_err != 0) || (event->error_handle->esp_tls_last_esp_err != 0))
@@ -2078,16 +2153,13 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
         //sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
-        // Cloud-to-device
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
-        //esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
+		// Cloud-to-device
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
+		//esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
 
-        // Device twin
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
-
-
-
+		// Device twin
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
 
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
@@ -2098,10 +2170,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
 
 			isFirstConnection = false;
+
+			// Only show this event on first boot, not on every SAS token expiry with reconnect
+			publish_debug_message_event("Connected", cloud_event_level_information);
+        }
+        else
+        {
+        	publish_debug_message_event("Reconnected", cloud_event_level_information);
         }
 
-        // Only show this event on first boot, not on every SAS token expiry with reconnect
-		publish_debug_message_event("mqtt connected", cloud_event_level_information);
 
         resetCounter = 0;
 
@@ -2277,7 +2354,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        memset(event->data, 0, event->data_len);
+        //memset(event->data, 0, event->data_len);
 
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
@@ -2331,6 +2408,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		if(resetCounter >= 720) //With 10-sec timeout without increase 720 * 10 = 2 hours
 			{
+    			//storage_Set_And_Save_DiagnosticsLog("#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times");
+
 				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
 			}
@@ -2339,6 +2418,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	{
     		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
     		{
+    			//storage_Set_And_Save_DiagnosticsLog("#2 MQTT_EVENT_ERROR: 720 times");
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
     		}
@@ -2349,6 +2429,11 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
         break;
     }
+
+    memset(event->data, 0, event->data_len);
+    event->data_len = 0;
+    event->total_data_len = 0;
+
     return ESP_OK;
 }
 
@@ -2514,8 +2599,13 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_config.disable_auto_reconnect = false;
     mqtt_config.reconnect_timeout_ms = 10000;
-    mqtt_config.keepalive = 300;//120;
-    //mqtt_config.refresh_connection_after_ms = 30000;
+
+    //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
+    //Ping is sent if no other communication has occured since timer.
+    mqtt_config.keepalive = 900; //300;//120 is default;
+
+    //Don't use, causes disconnect and reconnect
+    //mqtt_config.refresh_connection_after_ms = 20000;//3600000;//30000;
 
 	blocked_publish_event_group = xEventGroupCreate();
 	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED);
@@ -2601,9 +2691,23 @@ void update_mqtt_event_pattern(bool usePingReply)
 
 void periodic_refresh_token()
 {
-	ESP_LOGW(TAG, "Periodic new token");
-	refresh_token(&mqtt_config);
-    esp_mqtt_set_config(mqtt_client, &mqtt_config);
+	ESP_LOGW(TAG, "####### Periodic new token ######");
+	//refresh_token(&mqtt_config);
+
+	esp_err_t err = esp_mqtt_client_stop(mqtt_client);
+	//esp_mqtt_client_disconnect(mqtt_client);
+    //esp_err_t err = esp_mqtt_set_config(mqtt_client, &mqtt_config);
+    if(err != ESP_OK)
+    {
+    	ESP_LOGI(TAG, "MQTT refresh token failed restart: %d", err);
+    	esp_restart();
+    }
+    else
+    {
+    	//err = esp_mqtt_client_reconnect(mqtt_client);
+    	err = esp_mqtt_client_start(mqtt_client);
+    	ESP_LOGI(TAG, "MQTT reconnect result: %d", err);
+    }
 
     /*esp_mqtt_client_disconnect(mqtt_client);
     esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);

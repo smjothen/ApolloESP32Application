@@ -333,8 +333,11 @@ void uartSendTask(void *pvParameters){
     //Only applies to chargers with MCU bootloaders version 6 and greater.
     ActivateMCUWatchdog();
 
+    MCU_UpdateOverrideGridType();
+    MCU_UpdateIT3OptimizationState();
 
     uint32_t count = 0;
+    uint32_t printCount = 0;
     uint32_t offsetCount = 0;
     while (true)
     {
@@ -352,7 +355,7 @@ void uartSendTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-
+        printCount++;
 
         switch (count)
         {
@@ -575,9 +578,14 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(count >= 24)
+        if(printCount >= 24 * 10)
         {
         	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	printCount = 0;
+        }
+
+        if(count >= 24)
+        {
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -719,6 +727,54 @@ void MCU_StopLedOverride()
 		ESP_LOGI(TAG, "MCU clearing ledoverride FAILED");
 	}
 }
+
+
+static uint8_t overrideGridType = 0;
+uint8_t MCU_UpdateOverrideGridType()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(ParamGridTypeOverride);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == ParamGridTypeOverride))
+	{
+		overrideGridType = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read overrideGridType: %d ", overrideGridType);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read overrideGridType FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetOverrideGridType()
+{
+	return overrideGridType;
+}
+
+
+
+static uint8_t IT3OptimizationEnabled = 0;
+uint8_t MCU_UpdateIT3OptimizationState()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(ParamIT3OptimizationEnabled);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == ParamIT3OptimizationEnabled))
+	{
+		IT3OptimizationEnabled = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read IT3OptimizationEnabled: %d ", IT3OptimizationEnabled);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read IT3OptimizationEnabled FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetIT3OptimizationState()
+{
+	return IT3OptimizationEnabled;
+}
+
 
 char * MCU_GetSwVersionString()
 {

@@ -62,6 +62,12 @@ float MCU_StandAloneCurrent();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();
+
+uint8_t MCU_UpdateOverrideGridType();
+uint8_t MCU_GetOverrideGridType();
+uint8_t MCU_UpdateIT3OptimizationState();
+uint8_t MCU_GetIT3OptimizationState();
+
 void SetEspNotification(uint16_t notification);
 void ClearNotifications();
 uint32_t GetCombinedNotifications();

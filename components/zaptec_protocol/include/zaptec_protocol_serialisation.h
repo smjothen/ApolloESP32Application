@@ -56,6 +56,9 @@
 		ParamLedOverride = 290,
 		ParamLedOverrideClear = 291,
 
+		ParamGridTypeOverride = 402,
+		ParamIT3OptimizationEnabled = 403,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
