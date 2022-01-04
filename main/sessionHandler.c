@@ -662,7 +662,7 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_UNINITIALIZED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			chargeSession_Start();
 		}
