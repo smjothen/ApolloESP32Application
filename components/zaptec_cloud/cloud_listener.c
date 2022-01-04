@@ -2602,7 +2602,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    mqtt_config.keepalive = 900; //300;//120 is default;
+    mqtt_config.keepalive = 1100; //300;//120 is default;
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;//3600000;//30000;

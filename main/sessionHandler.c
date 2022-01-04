@@ -666,7 +666,7 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_UNINITIALIZED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			chargeSession_Start();
 		}
@@ -1262,7 +1262,7 @@ static void sessionHandler_task()
 }
 
 /*
- * If we have received an already set SesssionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
+ * If we have received an already set SessionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
  * This indicates that cloud does not have the correct chargeOperatingMode recorded.
 */
 void ChargeModeUpdateToCloudNeeded()

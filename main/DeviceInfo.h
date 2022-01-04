@@ -55,8 +55,8 @@ struct RFIDTokens{
 //PulseRates
 #define PULSE_DEFAULT 60
 #define PULSE_STANDALONE 900
-#define PULSE_SYSTEM_CONNECTED 500
-#define PULSE_SYSTEM_CHARGING 120
+#define PULSE_SYSTEM_CONNECTED 900
+#define PULSE_SYSTEM_CHARGING 180
 
 
 //Numbers should match Pro

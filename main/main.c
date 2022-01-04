@@ -264,7 +264,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    validate_booted_image();
+    //validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -317,7 +317,7 @@ void app_main(void)
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
 		//If it was OFF this will effectively power it ON so it is ready for later.
-		cellularPinsOff();
+		//cellularPinsOff();
 	}
 	
 	connectivity_init();
