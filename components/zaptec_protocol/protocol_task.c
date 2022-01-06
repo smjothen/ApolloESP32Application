@@ -737,12 +737,12 @@ uint8_t MCU_UpdateOverrideGridType()
 	{
 		overrideGridType = rxMsgm.data[0];
 		ESP_LOGW(TAG, "Read overrideGridType: %d ", overrideGridType);
-		return 0;
+		return overrideGridType;
 	}
 	else
 	{
 		ESP_LOGE(TAG, "Read overrideGridType FAILED");
-		return 1;
+		return 0xff;
 	}
 }
 

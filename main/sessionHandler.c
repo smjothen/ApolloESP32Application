@@ -504,6 +504,8 @@ static void sessionHandler_task()
 			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
 			publish_debug_message_event("mcuCOMError reset", cloud_event_level_warning);
 
+			storage_Set_And_Save_DiagnosticsLog("#3 MCU COM-error > 20");
+
 			vTaskDelay(5000 / portTICK_PERIOD_MS);
 
 			esp_restart();
@@ -524,6 +526,8 @@ static void sessionHandler_task()
 			{
 				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %i", mcuDebugCounter);
 				publish_debug_message_event("mcuDebugCounter reset", cloud_event_level_warning);
+
+				storage_Set_And_Save_DiagnosticsLog("#4 MCU debug counter stopped incrementing");
 
 				vTaskDelay(5000 / portTICK_PERIOD_MS);
 
@@ -666,7 +670,7 @@ static void sessionHandler_task()
 		}
 
 		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			chargeSession_Start();
 		}
@@ -1053,6 +1057,12 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
 				publish_debug_telemetry_observation_power();
+
+				if(storage_Get_DiagnosticsLogLength() > 0)
+				{
+					publish_debug_telemetry_observation_DiagnosticsLog();
+					storage_Clear_And_Save_DiagnosticsLog();
+				}
 
 				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
 				//publish_debug_telemetry_observation_cloud_settings();

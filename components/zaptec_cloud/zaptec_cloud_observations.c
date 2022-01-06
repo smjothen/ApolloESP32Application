@@ -28,7 +28,7 @@
 
 #define TAG "OBSERVATIONS POSTER"
 
-static bool startupMessage = true;
+//static bool startupMessage = true;
 
 
 struct MqttDataDiagnostics mqttDiagnostics = {0};
@@ -316,6 +316,17 @@ int publish_debug_telemetry_observation_Diagnostics(char * diagnostics)
 }
 
 
+int publish_debug_telemetry_observation_DiagnosticsLog()
+{
+    ESP_LOGD(TAG, "sending diagnosticsLog");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(InternalDiagnosticsLog, storage_Get_DiagnosticsLog()));
+
+    return publish_json(observations);
+}
+
 /*
  * Returns the last set of values set. If the MCU values for any reason has been cleared, these are a backup of last
  */
@@ -341,35 +352,15 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
-    //Sent at startup as Cloud settings
-    //add_observation_to_collection(observations, create_observation(InstallationId, storage_Get_InstallationId()));
-    //add_observation_to_collection(observations, create_observation(RoutingId, storage_Get_RoutingId()));
-
     add_observation_to_collection(observations, create_double_observation(ParamChargeCurrentUserMax, MCU_GetChargeCurrentUserMax()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSetPhases, (uint32_t)HOLD_GetSetPhases()));
-
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
-
-    //Sent at startup as Cloud settings
-    //add_observation_to_collection(observations, create_uint32_t_observation(AuthenticationRequired, (uint32_t)storage_Get_AuthenticationRequired()));
-	//add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)GetMaxPhases()));
-	//add_observation_to_collection(observations, create_uint32_t_observation(ParamIsEnabled, (uint32_t)storage_Get_IsEnabled()));
-
-    /*These are sent at startup with localsettings.
-    if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
-    	add_observation_to_collection(observations, create_observation(CommunicationMode, "Wifi"));
-    else if (storage_Get_CommunicationMode() == eCONNECTION_LTE)
-    	add_observation_to_collection(observations, create_observation(CommunicationMode, "LTE"));
-    */
-
-    //add_observation_to_collection(observations, create_observation(802, "Apollo5"));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
-    add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
+	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
     add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
-    //add_observation_to_collection(observations, create_uint32_t_observation(CertificateVersion, (uint32_t)certificate_GetCurrentBundleVersion()));
 
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
@@ -378,7 +369,6 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
-    //add_observation_to_collection(observations, create_observation(ChargePointName, storage_Get_ChargerName()));
 
     char buf[256];
     GetTimeOnString(buf);
@@ -466,22 +456,26 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
 
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, MCU_GetTemperaturePowerBoard(0)));
-    add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, MCU_GetTemperaturePowerBoard(1)));
+    //Only send temperatures periodically when charging is active
+    if(MCU_GetchargeMode() == eCAR_CHARGING)
+    {
+		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
+		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
+		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
+		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, MCU_GetTemperaturePowerBoard(0)));
+		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, MCU_GetTemperaturePowerBoard(1)));
+    }
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
 	//add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
 
-	if(startupMessage == true)
+	/*if(startupMessage == true)
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource, (uint32_t)MCU_GetResetSource()));
 		add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource, (uint32_t)esp_reset_reason()));
 
 		startupMessage = false;
-	}
+	}*/
 
 	txCnt++;
 	char buf[256];
@@ -497,11 +491,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 
 	add_observation_to_collection(observations, create_observation(808, buf));
 
-	int ret = publish_json(observations);
-
-	//cJSON_Delete(observations);
-
-    return ret;//publish_json(observations);
+    return publish_json(observations);
 }
 
 
@@ -544,7 +534,7 @@ static uint8_t maxRTCSend = 0;
 static uint8_t previousFinalStopActiveStatus = 0xff;
 
 static uint32_t previousTransmitInterval = 0;
-static uint32_t previousPulseInterval = 0;
+//static uint32_t previousPulseInterval = 0;
 static uint32_t previousCertificateVersion = 0;
 static uint8_t previousMaxCurrentConfigSource = 0xff;
 static uint32_t previousNumberOfTagsCount = 0;

@@ -40,6 +40,8 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics);
 
+int publish_debug_telemetry_observation_DiagnosticsLog();
+
 int publish_debug_telemetry_observation_InstallationConfigOnFile();
 
 int publish_debug_telemetry_observation_StartUpParameters();

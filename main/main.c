@@ -408,7 +408,7 @@ void app_main(void)
 
     	if (isMqttConnected() == true)
     	{
-			if(onTimeCounter % 3000 == 0) //Refreshing after 50 minutes. Token valid for 60 minutes
+			if(onTimeCounter % 3300 == 0) //Refreshing after 55 minutes. Token valid for 60 minutes
 			{
 				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
 				/// Doing token refresh and reconnect in advance gives a more stable connection.
@@ -425,7 +425,10 @@ void app_main(void)
     			ESP_LOGI(TAG_MAIN, "OnlineWatchdogCounter : %d", onlineWatchdogCounter);
     		}
     		if(onlineWatchdogCounter == 300)
+    		{
+    			storage_Set_And_Save_DiagnosticsLog("#7 main.c onlineWatchdogCounter == 300");
     			esp_restart();
+    		}
     	}
 
 
@@ -447,6 +450,9 @@ void app_main(void)
 				{
 					ESP_LOGW(TAG_MAIN, "Not able to get back online after firmware update, powering off 4G and restarting");
 					cellularPinsOff();
+
+					storage_Set_And_Save_DiagnosticsLog("#8 main.c LTE: Not online after firmware update");
+
 					esp_restart();
 				}
 			}

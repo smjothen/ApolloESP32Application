@@ -115,8 +115,6 @@ char token[256];  // token was seen to be at least 136 char long
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	//create_sas_token(1*3600, &token);
-    //ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
     return 0;
 }
@@ -1785,20 +1783,28 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"OverrideNetworkType ") != NULL)
 				{
-					char *endptr;
-					int newNetworkType = (int)strtol(commandString+22, &endptr, 10);
+					//char *endptr;
+					int newNetworkType = 0;//(int)strtol(commandString+22, &endptr, 10);
+					if(strstr(commandString,"IT1") != NULL)
+						newNetworkType = NETWORK_1P3W;
+					else if(strstr(commandString,"IT3") != NULL)
+						newNetworkType = NETWORK_3P3W;
+					else if(strstr(commandString,"TN1") != NULL)
+						newNetworkType = NETWORK_1P4W;
+					else if(strstr(commandString,"TN3") != NULL)
+						newNetworkType = NETWORK_3P4W;
 
 					//Sanity check
 					if((4 >= newNetworkType) && (newNetworkType >= 0))
 					{
 						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
 
-						MessageType ret = MCU_SendUint8Parameter(ParamNetworkType, newNetworkType);
+						MessageType ret = MCU_SendUint8Parameter(ParamGridTypeOverride, newNetworkType);
 						if(ret == MsgWriteAck)
 						{
-							uint8_t ret = MCU_UpdateOverrideGridType();
+							int ret = (int)MCU_UpdateOverrideGridType();
 
-							if(ret == 0)
+							if(ret == newNetworkType)
 							{
 								ESP_LOGI(TAG, "Set OverrideNetworkType OK");
 								responseStatus = 200;
@@ -2408,7 +2414,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		if(resetCounter >= 720) //With 10-sec timeout without increase 720 * 10 = 2 hours
 			{
-    			//storage_Set_And_Save_DiagnosticsLog("#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times");
+    			storage_Set_And_Save_DiagnosticsLog("#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times");
 
 				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
@@ -2418,7 +2424,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	{
     		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
     		{
-    			//storage_Set_And_Save_DiagnosticsLog("#2 MQTT_EVENT_ERROR: 720 times");
+    			storage_Set_And_Save_DiagnosticsLog("#2 MQTT_EVENT_ERROR: 39 times");
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
     		}
@@ -2700,6 +2706,7 @@ void periodic_refresh_token()
     if(err != ESP_OK)
     {
     	ESP_LOGI(TAG, "MQTT refresh token failed restart: %d", err);
+    	storage_Set_And_Save_DiagnosticsLog("#6 MQTT refresh token failed");
     	esp_restart();
     }
     else

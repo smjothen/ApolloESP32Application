@@ -231,21 +231,30 @@ void storage_Set_PulseInterval(uint32_t newValue)
 
 
 //Max string length 37 characters
-void storage_Set_DiagnosticsLog(char * newValue)
+void storage_Set_And_Save_DiagnosticsLog(char * newString)
 {
-	if(configurationStruct.diagnosticsLog[0] != '\0')
+	if(configurationStruct.diagnosticsLog[0] == '\0')
 	{
-		if(strlen(newValue) < 100)
+		if(strlen(newString) < DIAGNOSTICS_STRING_SIZE)
 		{
-			strcpy(configurationStruct.diagnosticsLog, newValue);
+			strcpy(configurationStruct.diagnosticsLog, newString);
 			storage_SaveConfiguration();
 			ESP_LOGW(TAG, "Saved diagnosticslog");
 			return;
 		}
 	}
 	ESP_LOGE(TAG, "Could not save to diagnosticslog");
-
 }
+
+
+void storage_Clear_And_Save_DiagnosticsLog()
+{
+	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
+	storage_SaveConfiguration();
+
+	ESP_LOGW(TAG, "Cleared diagnosticslog");
+}
+
 
 //****************************************************
 
@@ -440,6 +449,11 @@ uint32_t storage_Get_PulseInterval()
 char * storage_Get_DiagnosticsLog()
 {
 	return configurationStruct.diagnosticsLog;
+}
+
+int storage_Get_DiagnosticsLogLength()
+{
+	return strlen(configurationStruct.diagnosticsLog);
 }
 
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
@@ -685,6 +699,8 @@ esp_err_t storage_clearSessionResetInfo()
 
 	return err;
 }
+
+
 
 
 /*
