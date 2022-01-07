@@ -2167,6 +2167,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
 		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
 
+		char message[50] = {0};
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
         {
@@ -2178,13 +2179,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			isFirstConnection = false;
 
 			// Only show this event on first boot, not on every SAS token expiry with reconnect
-			publish_debug_message_event("Connected", cloud_event_level_information);
+			//publish_debug_message_event("Connected", cloud_event_level_information);
+			sprintf(message, "Connected: %d", resetCounter);
         }
         else
         {
-        	publish_debug_message_event("Reconnected", cloud_event_level_information);
+        	//publish_debug_message_event("Reconnected", cloud_event_level_information);
+        	sprintf(message, "Reconnected: %d", resetCounter);
         }
 
+        //publish_debug_message_event("Reconnected", cloud_event_level_information);
+        publish_debug_message_event(message, cloud_event_level_information);
 
         resetCounter = 0;
 
@@ -2382,7 +2387,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		esp_mqtt_set_config(mqtt_client, &mqtt_config);
     		ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
 
-    		if(resetCounter == 5)
+    		if(resetCounter == 7)
 			{
     			ESP_LOGI(TAG, "Refreshing Wifi Connected");
     			network_updateWifi();
@@ -2441,6 +2446,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     event->total_data_len = 0;
 
     return ESP_OK;
+}
+
+int cloud_listener_GetResetCounter()
+{
+	return resetCounter;
+}
+
+
+void cloud_listener_IncrementResetCounter()
+{
+	resetCounter++;
 }
 
 uint8_t* hex_decode(const char *in, size_t len,uint8_t *out)
@@ -2695,7 +2711,7 @@ void update_mqtt_event_pattern(bool usePingReply)
 }
 
 
-void periodic_refresh_token()
+void periodic_refresh_token(uint8_t source)
 {
 	ESP_LOGW(TAG, "####### Periodic new token ######");
 	//refresh_token(&mqtt_config);
@@ -2705,8 +2721,17 @@ void periodic_refresh_token()
     //esp_err_t err = esp_mqtt_set_config(mqtt_client, &mqtt_config);
     if(err != ESP_OK)
     {
-    	ESP_LOGI(TAG, "MQTT refresh token failed restart: %d", err);
-    	storage_Set_And_Save_DiagnosticsLog("#6 MQTT refresh token failed");
+    	if(source == 2)
+    	{
+    		ESP_LOGI(TAG, "MQTT errorCounter refresh token failed restart: %d", err);
+    		storage_Set_And_Save_DiagnosticsLog("#9 MQTT errorCounter refresh token failed");
+    	}
+    	else
+    	{
+    		ESP_LOGI(TAG, "MQTT periodic refresh token failed restart: %d", err);
+    		storage_Set_And_Save_DiagnosticsLog("#6 MQTT periodic refresh token failed");
+    	}
+
     	esp_restart();
     }
     else

@@ -40,7 +40,10 @@ int publish_to_iothub(const char* payload, const char* topic);
 
 void update_installationId();
 
-void periodic_refresh_token();
+void periodic_refresh_token(uint8_t source);
+
+int cloud_listener_GetResetCounter();
+void cloud_listener_IncrementResetCounter();
 
 
 #endif /* ZAPTEC_CLOUD_LISTENER_H */

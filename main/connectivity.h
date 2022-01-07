@@ -8,6 +8,7 @@ extern "C" {
 #include "DeviceInfo.h"
 
 bool connectivity_GetSNTPInitialized();
+bool connectivity_GetMQTTInitialized();
 enum CommunicationMode connectivity_GetActivateInterface();
 enum CommunicationMode connectivity_GetPreviousInterface();
 void connectivity_init();

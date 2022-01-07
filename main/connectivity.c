@@ -35,6 +35,11 @@ bool connectivity_GetSNTPInitialized()
 	return sntpInitialized;
 }
 
+bool connectivity_GetMQTTInitialized()
+{
+	return mqttInitialized;
+}
+
 void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
 {
 	previousInterface = activeInterface;

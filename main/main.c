@@ -46,7 +46,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.93";
+char softwareVersion[] = "0.0.0.94";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -412,9 +412,24 @@ void app_main(void)
 			{
 				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
 				/// Doing token refresh and reconnect in advance gives a more stable connection.
-				periodic_refresh_token();
+				periodic_refresh_token(1);
 			}
     	}
+
+    	/// Experimental
+    	/// If mqtt is running and EVENT_ERROR increment, try to call the refresh token which also results in a mqtt start/stop sequence
+    	/// Verify if this successfully generates a reconnect.
+    	if(connectivity_GetMQTTInitialized() && (cloud_listener_GetResetCounter() > 0))
+    	{
+			if(cloud_listener_GetResetCounter() % 7 == 0)
+			{
+				///Increment to avoid retrigging this case
+				cloud_listener_IncrementResetCounter();
+
+				periodic_refresh_token(2);	//Argument is for diagnostics
+			}
+    	}
+
 
     	//For 4G testing - activated with command
     	if(onlineWatchdog == true)
