@@ -16,6 +16,7 @@
 static const char *TAG = "STORAGE:";
 
 #define CONFIG_FILE "CONFIG_FILE"
+#define DEFAULT_TRANSMIT_INTERVAL 86400
 nvs_handle configuration_handle;
 
 // "wifi"
@@ -71,7 +72,7 @@ void storage_Init_Configuration()
 
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 
-	configurationStruct.transmitInterval 			= 3600;
+	configurationStruct.transmitInterval 			= DEFAULT_TRANSMIT_INTERVAL;
 	configurationStruct.transmitChangeLevel 		= 1.0;
 	configurationStruct.diagnosticsMode				= 0;
 
@@ -326,9 +327,9 @@ uint32_t storage_Get_TransmitInterval()
 {
 	//Sanity check. On old chargers the default is 120. Don't use this frequent defaults when updated with nvs read parameter.
 	if (configurationStruct.transmitInterval == 120)
-		configurationStruct.transmitInterval = 7200;
+		configurationStruct.transmitInterval = DEFAULT_TRANSMIT_INTERVAL;
 	else if (configurationStruct.transmitInterval == 3600)
-			configurationStruct.transmitInterval = 7200;
+		configurationStruct.transmitInterval = DEFAULT_TRANSMIT_INTERVAL;
 	//If 0, return (disable logging)
 	else if(configurationStruct.transmitInterval == 0)
 		return configurationStruct.transmitInterval;

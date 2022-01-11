@@ -408,7 +408,7 @@ void app_main(void)
 
     	if (isMqttConnected() == true)
     	{
-			if(onTimeCounter % 3300 == 0) //Refreshing after 55 minutes. Token valid for 60 minutes
+			if(onTimeCounter % (3300 * 3) == 0) //Refreshing after 55 * 3 minutes. Token valid for 60 * 3 minutes
 			{
 				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
 				/// Doing token refresh and reconnect in advance gives a more stable connection.

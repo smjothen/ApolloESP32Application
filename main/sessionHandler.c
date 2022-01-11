@@ -1241,6 +1241,7 @@ static void sessionHandler_task()
 				}
 			}
 
+
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
 				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
@@ -1264,6 +1265,21 @@ static void sessionHandler_task()
 			//publish_telemetry_observation_on_change();
 
 		}
+
+
+		/// Indicate offline with led LED
+		if((storage_Get_Standalone() == false) && ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE)))
+		{
+			if((offlineTime % 24 == 0) && (offlineMode == true))
+			{
+				MessageType ret = MCU_SendCommandId(CommandIndicateOffline);
+				if(ret == MsgCommandAck)
+					ESP_LOGW(TAG, "MCU Indicate offline command OK. ");
+				else
+					ESP_LOGE(TAG, "MCU Indicate offline command FAILED");
+			}
+		}
+
 
 		previousIsOnline = isOnline;
 

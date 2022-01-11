@@ -114,7 +114,7 @@ char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600 * 3, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
     mqtt_config->password = token;
     return 0;
 }
@@ -1781,7 +1781,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
-				else if(strstr(commandString,"OverrideNetworkType ") != NULL)
+				else if(strstr(commandString,"OverrideNetworkType") != NULL)
 				{
 					//char *endptr;
 					int newNetworkType = 0;//(int)strtol(commandString+22, &endptr, 10);
