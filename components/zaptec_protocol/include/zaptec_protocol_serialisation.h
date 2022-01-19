@@ -165,6 +165,11 @@
         PilotTestResults = 854,
 		//..
 
+		ServoCheckStartPosition = 870,
+		ServoCheckStartCurrent  = 871,
+		ServoCheckStopPosition 	= 872,
+		ServoCheckStopCurrent 	= 873,
+
         ProductionTestResults = 900,
         PostProductionTestResults = 901,
 
@@ -175,11 +180,14 @@
 		ParamSmartComputerAppVersion = 911,
 		ParamSmartComputerFwLoaderVersion = 912,
 		ParamSmartComputerImageVersion = 913,
-        
-        SourceVersion = 916,
 
 		//ParamSmartFpgaVersion = 914,
 		//ParamSmartFpgaVersionAndHash = 915,
+
+		SourceVersion = 916,
+
+		HwIdMCUSpeed = 917,
+		HwIdMCUPower = 918,
 
         MacMain = 950,
         MacWiFi = 952,
@@ -238,6 +246,7 @@
 		CommandITDiagnosticsStart = 806,
 		CommandITDiagnosticsStop = 807,
 		CommandActivateWatchdog = 810,
+		CommandStartServoCheck = 811,
 
 		CommandDisableCertificateOnce = 820,
 		CommandDisableCertificateAlways = 821
@@ -245,7 +254,7 @@
     } CommandNo;
 
 
-    //Custome - MCU Command numbers - Some are overlapping
+    //Custom - MCU Command numbers - Some are overlapping
     typedef enum
     {
     	MCUCommandRestartCarInterface = 507,

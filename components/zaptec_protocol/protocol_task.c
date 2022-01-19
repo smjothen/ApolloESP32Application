@@ -985,6 +985,60 @@ float MCU_StandAloneCurrent()
 	return mcuStandAloneCurrent;
 }
 
+
+
+
+
+uint16_t MCU_GetServoCheckParameter(int parameterDefinition)
+{
+	uint16_t servoCheckParameter = 0;
+	ZapMessage rxMsgm = MCU_ReadParameter(parameterDefinition);
+	if((rxMsgm.length == 2) && (rxMsgm.identifier == parameterDefinition))
+	{
+		servoCheckParameter = rxMsgm.data[0] << 8 | rxMsgm.data[1];
+		if(parameterDefinition == ServoCheckStartPosition)
+			ESP_LOGW(TAG, "Read ServoCheckStartPosition: %d ", servoCheckParameter);
+		else if(parameterDefinition == ServoCheckStartCurrent)
+			ESP_LOGW(TAG, "Read ServoCheckStartPosition: %d ", servoCheckParameter);
+		else if(parameterDefinition == ServoCheckStopPosition)
+			ESP_LOGW(TAG, "Read ServoCheckStartPosition: %d ", servoCheckParameter);
+		else if(parameterDefinition == ServoCheckStopCurrent)
+			ESP_LOGW(TAG, "Read ServoCheckStartPosition: %d ", servoCheckParameter);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read servoCheck param %i FAILED", parameterDefinition);
+		return 0xff;
+	}
+
+	return servoCheckParameter;
+}
+
+static bool servoCheckRunning = false;
+bool MCU_ServoCheckRunning()
+{
+	return servoCheckRunning;
+}
+
+void MCU_ServoCheckClear()
+{
+	servoCheckRunning = false;
+}
+
+void MCU_PerformServoCheck()
+{
+	if(MsgCommandAck == MCU_SendCommandId(CommandStartServoCheck))
+	{
+		ESP_LOGW(TAG, "Sent CommandStartServoCheck OK");
+		servoCheckRunning = true;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Sent CommandStartServoCheck FAILED");
+	}
+}
+
+
 void SetEspNotification(uint16_t notification)
 {
 	espNotifications |= notification;

@@ -1968,8 +1968,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ESP_LOGI(TAG, "MCU Restart car FAILED");
 					}
 				}
-
-
+				else if(strstr(commandString,"ServoCheck") != NULL)
+				{
+					MCU_PerformServoCheck();
+				}
 
 			}
 	}
