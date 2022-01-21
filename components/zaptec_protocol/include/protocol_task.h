@@ -64,6 +64,8 @@ uint16_t MCU_GetServoCheckParameter(int parameterDefinition);
 bool MCU_ServoCheckRunning();
 void MCU_ServoCheckClear();
 void MCU_PerformServoCheck();
+float MCU_GetHWCurrentActiveLimit();
+float MCU_GetHWCurrentMaxLimit();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();

@@ -1972,6 +1972,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					MCU_PerformServoCheck();
 				}
+				else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
+				{
+					char msg[60] = {0};
+					sprintf(msg, "eMeter HW Current limit: %f / %f A", MCU_GetHWCurrentActiveLimit(), MCU_GetHWCurrentMaxLimit());
+					publish_debug_telemetry_observation_Diagnostics(msg);
+					responseStatus = 200;
+				}
 
 			}
 	}

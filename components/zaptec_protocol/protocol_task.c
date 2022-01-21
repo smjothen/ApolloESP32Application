@@ -1039,6 +1039,31 @@ void MCU_PerformServoCheck()
 }
 
 
+float MCU_GetHWCurrentActiveLimit()
+{
+	float limit = -1.0;
+	ZapMessage rxMsg = MCU_ReadParameter(HWCurrentActiveLimit);
+	if((rxMsg.length == 4) && (rxMsg.identifier == HWCurrentActiveLimit))
+	{
+		limit = GetFloat(rxMsg.data);
+	}
+
+	return limit;
+}
+
+float MCU_GetHWCurrentMaxLimit()
+{
+	float limit = -1.0;
+	ZapMessage rxMsg = MCU_ReadParameter(HWCurrentMaxLimit);
+	if((rxMsg.length == 4) && (rxMsg.identifier == HWCurrentMaxLimit))
+	{
+		limit = GetFloat(rxMsg.data);
+	}
+
+	return limit;
+}
+
+
 void SetEspNotification(uint16_t notification)
 {
 	espNotifications |= notification;

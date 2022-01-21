@@ -170,6 +170,9 @@
 		ServoCheckStopPosition 	= 872,
 		ServoCheckStopCurrent 	= 873,
 
+		HWCurrentActiveLimit	= 880,
+		HWCurrentMaxLimit    	= 881,
+
         ProductionTestResults = 900,
         PostProductionTestResults = 901,
 

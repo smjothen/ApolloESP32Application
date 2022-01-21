@@ -45,7 +45,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.4";
+char softwareVersion[] = "0.0.0.96";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -263,7 +263,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    validate_booted_image();
+    //validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
