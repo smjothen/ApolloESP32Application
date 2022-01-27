@@ -204,6 +204,14 @@
 
     } ParamNo;
 
+
+    //Custom - MCU Param numbers - Some are overlapping with cloud parameter numbering
+	typedef enum
+	{
+		ParamEmeterAlarm = 809,
+	} MCUParamNo;
+
+
     //Cloud command numbers
     typedef enum
     {
@@ -257,7 +265,7 @@
     } CommandNo;
 
 
-    //Custom - MCU Command numbers - Some are overlapping
+    //Custom - MCU Command numbers - Some are overlapping with cloud command numbering
     typedef enum
     {
     	MCUCommandRestartCarInterface = 507,

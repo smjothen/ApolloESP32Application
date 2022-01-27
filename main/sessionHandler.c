@@ -417,6 +417,9 @@ static void sessionHandler_task()
     bool carInterfaceRestartTried = false;
     bool hasSeenCarStateC = false;
 
+    //Used to ensure eMeter alarm source is only read once per occurence
+    bool eMeterAlarmBlock = false;
+
     authentication_Init();
     OCMF_Init();
     uint32_t secondsSinceSync = OCMF_INTERVAL_TIME;
@@ -1191,6 +1194,29 @@ static void sessionHandler_task()
 
 				if(logCurrentsCounter % 2 == 0)
 					publish_debug_telemetry_observation_power();
+			}
+
+			if(MCU_GetWarnings() & 0x1000000) /// WARNING_EMETER_ALARM
+			{
+				if(eMeterAlarmBlock == false)
+				{
+					/// Delay to ensure alarm source is updated on MCU
+					vTaskDelay(pdMS_TO_TICKS(1000));
+
+					ZapMessage rxMsg = MCU_ReadParameter(ParamEmeterAlarm);
+					if((rxMsg.length == 2) && (rxMsg.identifier == ParamEmeterAlarm))
+					{
+						char buf[50] = {0};
+						sprintf(buf, "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
+						publish_debug_message_event(buf, cloud_event_level_warning);
+					}
+				}
+
+				eMeterAlarmBlock = true;
+			}
+			else
+			{
+				eMeterAlarmBlock = false;
 			}
 
 			/*if(CloudCommandCurrentUpdated() == true)
