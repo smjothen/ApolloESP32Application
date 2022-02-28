@@ -1004,6 +1004,7 @@ void cloud_listener_check_cmd()
 	{
 		vTaskDelay(pdMS_TO_TICKS(3000));
 		ota_rollback();
+		rollbackCmdReceived = false;
 	}
 }
 
