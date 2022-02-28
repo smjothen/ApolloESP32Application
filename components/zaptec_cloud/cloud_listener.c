@@ -990,6 +990,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 
 static bool restartCmdReceived = false;
+static bool rollbackCmdReceived = false;
 
 void cloud_listener_check_cmd()
 {
@@ -997,6 +998,12 @@ void cloud_listener_check_cmd()
 	{
 		vTaskDelay(pdMS_TO_TICKS(3000));
 		esp_restart();
+	}
+
+	if(rollbackCmdReceived == true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		ota_rollback();
 	}
 }
 
@@ -1078,11 +1085,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		commandString[commandEvent->data_len] = '\0';
 		strncpy(commandString, commandEvent->data, commandEvent->data_len);
 
-		//TODO perform in separate thread to be able to ack cloud?
 		if(strstr(commandString, "factory") != NULL)
-			ota_rollback_to_factory();
+			restartCmdReceived = ota_rollback_to_factory();
 		else
-			ota_rollback();
+			rollbackCmdReceived = true;
 
 		responseStatus = 200;
 	}
@@ -1424,7 +1430,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_Set_CommunicationMode(eCONNECTION_LTE);
 					storage_SaveConfiguration();
 					ESP_LOGI(TAG, "Restarting on LTE");
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 				else if(strstr(commandString,"Set Wifi") != NULL)
 				{
@@ -1434,7 +1442,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						storage_SaveConfiguration();
 
 						ESP_LOGI(TAG, "Restarting on Wifi");
-						esp_restart();
+						restartCmdReceived = true;
+						responseStatus = 200;
+						//esp_restart();
 					}
 					else
 					{
@@ -1751,7 +1761,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "SwapCommunicationMode");
 					responseStatus = 200;
 
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 
 				else if(strstr(commandString,"ActivateLogging") != NULL)
@@ -1883,7 +1895,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
 					//The 4G module will be powered on automatically if 4G is active communication mode
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 
 				//For testing AT on BG while on Wifi
