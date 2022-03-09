@@ -11,6 +11,7 @@
 #include "string.h"
 #include "storage.h"
 #include "protocol_task.h"
+#include <math.h>
 
 static const char *TAG = "OCMF     ";
 
@@ -44,6 +45,9 @@ double get_accumulated_energy(){
 	}
 
 	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
+
+	accumulated_energy = round(accumulated_energy * 1000) / 1000;/// Rounding to 3 decimal places
+
 	return accumulated_energy;
 }
 
@@ -261,6 +265,47 @@ int OCMF_FinalizeOCMFLog()
 	else
 	{
 		ESP_LOGW(TAG, "Nothing to finalize");
+	}
+
+	xSemaphoreGive(ocmf_lock);
+	return 0;
+}
+
+
+int OCMF_MakeAndSaveNewOfflineSessionEntry()
+{
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
+	}
+
+	if(logReaderArray != NULL)
+	{
+		OCMF_AddElementToOCMFLog_no_lock("T", "G");
+
+		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
+
+		char *buf = cJSON_PrintUnformatted(logRoot);
+
+		strcpy(logString, "OCMF|");
+		strcpy(logString+strlen(logString), buf);
+
+		ESP_LOGW(TAG, " After adding OCMF: %i: %s", strlen(buf), buf);
+
+		//cJSON_Delete(logRoot);
+
+		//logRoot = NULL;
+		//logReaderArray = NULL;
+
+		free(buf);
+		chargeSession_SetOCMF(logString);
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Nothing to add");
 	}
 
 	xSemaphoreGive(ocmf_lock);

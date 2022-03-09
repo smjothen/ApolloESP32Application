@@ -424,10 +424,13 @@ static void sessionHandler_task()
     OCMF_Init();
     uint32_t secondsSinceSync = OCMF_INTERVAL_TIME;
 
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(60*1000); //60 minutes
     TickType_t refresh_ticks = pdMS_TO_TICKS(60*60*1000); //60 minutes
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*5*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
+
+    SessionHandler_SetOCMFHighInterval();
 
 	while (1)
 	{
@@ -1300,6 +1303,6 @@ void sessionHandler_init(){
 
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 8000, NULL, 3, &taskSessionHandle);
 
 }

@@ -31,7 +31,7 @@ void chargeSession_Clear();
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
 void chargeSession_ClearAuthenticationCode();
-void chargeSession_SetEnergy(float energy);
+//void chargeSession_SetEnergy(float energy);
 void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
 void chargeSession_SetOCMF(char * OCMDString);
 

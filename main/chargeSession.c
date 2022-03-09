@@ -12,7 +12,8 @@
 #include "storage.h"
 #include "protocol_task.h"
 #include "OCMF.h"
-
+#include "offlineSession.h"
+#include <math.h>
 
 
 static const char *TAG = "CHARGESESSION:     ";
@@ -50,7 +51,6 @@ static void ChargeSession_Set_GUID()
 
 void chargeSession_PrintSession()
 {
-	//ESP_LOGW(TAG," %s - %s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH");
 	ESP_LOGW(TAG," %s - %s\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
 }
 
@@ -168,12 +168,16 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo() failed: %d. Cleaning session and returning", readErr);
 
 		memset(&chargeSession, 0, sizeof(chargeSession));
+
 	}
 
 	if((strlen(chargeSession.SessionId) == 36) && (readErr == ESP_OK))
 	{
 		ESP_LOGI(TAG, "chargeSession_Start() using resetSession");
 		strcpy(sidOrigin, "file ");
+
+		chargeSession.SignedSession = basicOCMF;
+		OCMF_CreateNewOCMFLog();
 	}
 	else
 	{
@@ -192,10 +196,18 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
-		esp_err_t saveErr = chargeSession_SaveSessionResetInfo();
+		chargeSession.SignedSession = basicOCMF;
+		OCMF_CreateNewOCMFLog();
+		//OCMF_NewOfflineSessionEntry();
+
+		char * sessionData = calloc(1000,1);
+		chargeSession_GetSessionAsString(sessionData);
+		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
+		free(sessionData);
+
 		if (saveErr != ESP_OK)
 		{
-			ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", saveErr);
+			ESP_LOGE(TAG, "offlineSession_SaveSession() failed: %d", saveErr);
 		}
 
 	}
@@ -203,10 +215,9 @@ void chargeSession_Start()
 	//Add for new and flash-read sessions
 	//strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
 	//chargeSession.SignedSession[7]='\0';
-	chargeSession.SignedSession = basicOCMF;
 
-	//chargeSession.SignedSession =
-	OCMF_CreateNewOCMFLog();
+	///chargeSession.SignedSession = basicOCMF;
+	///OCMF_CreateNewOCMFLog();
 }
 
 
@@ -217,10 +228,15 @@ void chargeSession_UpdateEnergy()
 	{
 		float energy = MCU_GetEnergy();
 
-		//Only allow significant, positive, increasing energy
-		if((energy > 0.001) && (energy > chargeSession.Energy))
+		if(energy > 0.001)
 		{
-			chargeSession.Energy = energy;
+			energy = roundf(energy * 1000) / 1000; /// round to 3rd desimal to remove unnecessary desimals
+
+			//Only allow significant, positive, increasing energy
+			if(energy > chargeSession.Energy)
+			{
+				chargeSession.Energy = energy;
+			}
 		}
 	}
 	else
@@ -277,10 +293,11 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID)
 		chargeSession.StoppedByRFID = stoppedByRFID;
 }
 
-void chargeSession_SetEnergy(float energy)
+/*void chargeSession_SetEnergy(float energy)
 {
+	energy = roundf(energy * 1000) / 1000;
 	chargeSession.Energy = energy;
-}
+}*/
 
 
 void chargeSession_SetOCMF(char * OCMDString)
@@ -301,7 +318,7 @@ int chargeSession_GetSessionAsString(char * message)
 	if(CompletedSessionObject == NULL){return -10;}
 
 	cJSON_AddStringToObject(CompletedSessionObject, "SessionId", chargeSession.SessionId);
-	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", (float)chargeSession.Energy);
+	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", chargeSession.Energy);
 	cJSON_AddStringToObject(CompletedSessionObject, "StartDateTime", chargeSession.StartTime);
 	cJSON_AddStringToObject(CompletedSessionObject, "EndDateTime", chargeSession.EndTime);
 	cJSON_AddBoolToObject(CompletedSessionObject, "ReliableClock", chargeSession.ReliableClock);

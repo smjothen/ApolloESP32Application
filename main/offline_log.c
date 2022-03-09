@@ -11,8 +11,8 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 
-const char *tmp_path = "/tmp";
-const char *log_path = "/tmp/log554.bin";
+static const char *tmp_path = "/tmp";
+static const char *log_path = "/tmp/log554.bin";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 static const int max_log_items = 1000;

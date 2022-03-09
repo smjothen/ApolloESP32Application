@@ -114,7 +114,7 @@ char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600 * 24, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	//create_sas_token(1*3600, &token);
     //ESP_LOGE(TAG, "connection token is %s", token);
     mqtt_config->password = token;
