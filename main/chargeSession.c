@@ -75,7 +75,10 @@ void chargeSession_ClearHasNewSession()
 }
 
 
-void GetUTCTimeString(char * timeString)
+/*
+ * This function returns the format required for CompletedSession
+ */
+void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 {
 	time_t now = 0;
 	struct tm timeinfo = { 0 };
@@ -91,14 +94,17 @@ void GetUTCTimeString(char * timeString)
 
 	sprintf(strftime_buf+strlen(strftime_buf), ".%06dZ", (uint32_t)t_now.tv_usec);
 	strcpy(timeString, strftime_buf);
+	*epochSec = now;
+	*epochUsec = (uint32_t)t_now.tv_usec;
 }
 
 
 static void ChargeSession_Set_StartTime()
 {
-	GetUTCTimeString(chargeSession.StartTime);
+	time_t time_out;
+	GetUTCTimeString(chargeSession.StartTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
 
-	ESP_LOGI(TAG, "Start time is: %s", chargeSession.StartTime);
+	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
 }
 
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
@@ -177,27 +183,29 @@ void chargeSession_Start()
 		strcpy(sidOrigin, "file ");
 
 		chargeSession.SignedSession = basicOCMF;
-		OCMF_CreateNewOCMFLog();
+		//Read from last file.
+		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
 	}
 	else
 	{
 		/// If no resetSession is found on Flash create new session
 		memset(&chargeSession, 0, sizeof(chargeSession));
 		ChargeSession_Set_GUID();
+		ChargeSession_Set_StartTime();
+
+
 		if(connectivity_GetSNTPInitialized() == true)
 		{
-			ChargeSession_Set_StartTime();
 			chargeSession.ReliableClock = true;
 		}
 		else
 		{
-			ChargeSession_Set_StartTime();
 			chargeSession.ReliableClock = false;
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
 		chargeSession.SignedSession = basicOCMF;
-		OCMF_CreateNewOCMFLog();
+		OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
 		//OCMF_NewOfflineSessionEntry();
 
 		char * sessionData = calloc(1000,1);
@@ -250,9 +258,12 @@ void chargeSession_Finalize()
 {
 	//chargeSession.Energy = MCU_GetEnergy();
 	chargeSession_UpdateEnergy();
-	GetUTCTimeString(chargeSession.EndTime);
+	GetUTCTimeString(chargeSession.EndTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
 
-	ESP_LOGI(TAG, "End time is: %s", chargeSession.EndTime);
+	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
+
+	//Create the 'E' message
+	OCMF_FinalizeOCMFLog(chargeSession.EpochEndTimeSec);
 }
 
 

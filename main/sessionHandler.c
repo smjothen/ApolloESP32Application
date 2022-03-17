@@ -43,7 +43,7 @@ void on_send_signed_meter_value()
 	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustment.
 	if(secSinceLastOCMFMessage <= 30)
 	{
-		ESP_LOGE(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
+		ESP_LOGW(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
 		return;
 	}
 
@@ -53,7 +53,8 @@ void on_send_signed_meter_value()
 	time_t time;
 	double energy;
 
-	bool state_charging = MCU_GetchargeMode() == eCAR_CHARGING;
+	enum CarChargeMode chargeMode = MCU_GetchargeMode();
+	bool state_charging = (chargeMode == eCAR_CHARGING);
 	bool state_log_empty = false;
 	int publish_result = -1;
 
@@ -64,7 +65,7 @@ void on_send_signed_meter_value()
 	}
 
 	if(state_charging || hasRemainingEnergy){
-		// sample energy now, dumping the log may be to slow to get the time aligned energy
+		// Sample energy now, dumping the log may be to slow to get the time aligned energy
 		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
 	}
 
@@ -74,7 +75,7 @@ void on_send_signed_meter_value()
 	ESP_LOGI(TAG, "***** Clearing energy log *****");
 
 	if(!isMqttConnected()){
-		// do not attempt sending data when we know that the system is offline
+		// Do not attempt sending data when we know that the system is offline
 	}else if(attempt_log_send()==0){
 		ESP_LOGI(TAG, "energy log empty");
 		state_log_empty = true;
@@ -94,9 +95,14 @@ void on_send_signed_meter_value()
 		append_offline_energy(time, energy);
 	}
 
+
 	if(state_charging || hasRemainingEnergy){
-		// add to log late to increase chance of consistent logs across observation types
-		OCMF_AddElementToOCMFLog("T", "G");
+		// CompletedSession-Log
+		// Add to log late to increase chance of consistent logs across observation types
+
+		//If hasRemainingEnergy, but disconnected -> don't add.
+		if (chargeMode != eCAR_DISCONNECTED)
+			OCMF_AddElementToOCMFLog("T", "G", time, energy);
 	}
 
 	//If this is the case, remaining energy has been sent -> clear the flag
@@ -595,6 +601,7 @@ static void sessionHandler_task()
 				ESP_LOGE(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
+					////if(chargeSession_GetSessionId() == '\0')
 					publish_debug_telemetry_observation_ChargingStateParameters();
 
 					// Reset timer
@@ -797,7 +804,7 @@ static void sessionHandler_task()
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
-				OCMF_FinalizeOCMFLog();
+				//Set end time, end energy and OCMF data
 				chargeSession_Finalize();
 				chargeSession_PrintSession();
 

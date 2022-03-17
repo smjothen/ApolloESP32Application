@@ -10,8 +10,10 @@ void offlineSession_UpdateSessionOnFile(char *sessionData);
 esp_err_t offlineSession_PrintFileContent();
 esp_err_t offlineSession_SaveSession(char * sessionData);
 
+unsigned int offlineSession_FindLatestFile();
+unsigned int offlineSession_FindOldestFile();
 
-void offlineSession_append_energy(int timestamp, double energy);
+void offlineSession_append_energy(char label, int timestamp, double energy);
 int offlineSession_attempt_send(void);
 
 

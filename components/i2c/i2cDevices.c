@@ -267,7 +267,7 @@ static void i2cDevice_task(void *pvParameters)
 
 	audioInit();
 
-	int i2cCount = 0;
+	unsigned int i2cCount = 0;
 	int nfcCardDetected = 0;
 
 	uint8_t blockReRead = 8;
@@ -445,20 +445,12 @@ static void i2cDevice_task(void *pvParameters)
 		nfcCardDetected = 0;
 
 		i2cCount++;
-		if(i2cCount >= 6)
+		if(i2cCount % 10 == 0)
 		{
-			i2cCount = 0;
-
 			temperature = SHT30ReadTemperature();
 			humidity = SHT30ReadHumidity();
 
-			//Debug
-			struct tm readTime = {0};
-			readTime = RTCReadTime();
-			char timebuf[30];
-			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
-
+			//Ensure RTC clock has correct default frequency
 			RTCVerifyControlRegisters();
 		}
 
@@ -476,6 +468,15 @@ static void i2cDevice_task(void *pvParameters)
 		}
 
 
+		//Diagnostics - print every 30 sec
+		if(i2cCount % 60 == 0)
+		{
+			struct tm readTime = {0};
+			readTime = RTCReadTime();
+			char timebuf[30];
+			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
+			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+		}
 
 		//Read from NFC at 2Hz for user to not notice delay
 		vTaskDelay(500 / portTICK_RATE_MS);

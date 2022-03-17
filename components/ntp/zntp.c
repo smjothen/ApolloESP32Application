@@ -71,6 +71,10 @@ struct tm zntp_GetLatestNTPTime()
 	return timeinfo;
 }
 
+
+/*
+ * This function returns the format required for SignedMeterValue OCMF messages.
+ */
 void zntp_format_time(char *buffer, time_t time_in){
 	struct tm time_elements = { 0 };
 	localtime_r(&time_in, &time_elements);

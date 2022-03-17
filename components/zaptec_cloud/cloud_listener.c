@@ -2086,12 +2086,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	ESP_LOGE(TAG, "TLS error - Updating certificate");
     	certificate_update(event->error_handle->esp_tls_stack_err);
 
-    	//Must reset
-    	if(simulateTlsError == true)
-    	{
-    		event->error_handle->esp_tls_stack_err = 0;
-    		simulateTlsError = false;
-    	}
+    	//Must reset tls error in all cases to avoid continuous certificate checks.
+   		event->error_handle->esp_tls_stack_err = 0;
+   		simulateTlsError = false;
     }
 
     switch (event->event_id) {

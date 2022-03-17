@@ -46,7 +46,7 @@ const char *TAG_MAIN = "MAIN     ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.3.8";
+char softwareVersion[] = "0.0.4.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -387,7 +387,7 @@ void app_main(void)
     {
 		onTimeCounter++;
 
-    	if(onTimeCounter % 15 == 0)
+    	if(onTimeCounter % 30 == 0)
     	{
 			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
@@ -396,7 +396,7 @@ void app_main(void)
 			ESP_LOGW(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 
-    	if(onTimeCounter % 15 == 0)
+    	if(onTimeCounter % 30 == 0)
     	{
     		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
 

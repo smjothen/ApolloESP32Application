@@ -16,7 +16,12 @@ struct ChargeSession
 	bool StoppedByRFID;
 	char AuthenticationCode[41];//Up to GUID string.
 	uint32_t unixStartTime;
-	char * SignedSession;//[1000];//8
+	time_t EpochStartTimeSec;
+	uint32_t EpochStartTimeUsec;
+	time_t EpochEndTimeSec;
+	uint32_t EpochEndTimeUsec;
+
+	char * SignedSession;
 };
 
 void chargeSession_PrintSession();

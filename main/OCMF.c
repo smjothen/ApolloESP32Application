@@ -11,6 +11,7 @@
 #include "string.h"
 #include "storage.h"
 #include "protocol_task.h"
+#include "offlineSession.h"
 #include <math.h>
 
 static const char *TAG = "OCMF     ";
@@ -21,7 +22,7 @@ static char * logString = NULL;
 
 static SemaphoreHandle_t ocmf_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st);
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st, time_t time_in, double energy_in);
 
 
 void OCMF_Init()
@@ -111,7 +112,7 @@ static cJSON * logReaderArray = NULL;
 //static cJSON *logArrayElement = NULL;
 
 
-char * OCMF_CreateNewOCMFLog()
+char * OCMF_CreateNewOCMFLog(time_t startTime)
 {
 	memset(logString, 0, LOG_STRING_SIZE);
 
@@ -148,8 +149,8 @@ char * OCMF_CreateNewOCMFLog()
 	cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
 	cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
 	cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState*/
-
-	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G");
+	double energyAtStart = get_accumulated_energy();
+	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G", startTime, energyAtStart);
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
 
@@ -177,7 +178,7 @@ char * OCMF_CreateNewOCMFLog()
 	return logString;
 }
 
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st)
+cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st, time_t time_in, double energy_in)
 {
 
 	if(logReaderArray != NULL)
@@ -189,11 +190,12 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 		{
 			cJSON * logArrayElement = cJSON_CreateObject();
 			char timeBuffer[50] = {0};
-			zntp_GetSystemTime(timeBuffer, NULL);
+			zntp_format_time(timeBuffer, time_in);
+			//zntp_GetSystemTime(timeBuffer, NULL);
 
 			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
 			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
-			cJSON_AddNumberToObject(logArrayElement, "RV", get_accumulated_energy());	//ReadingValue
+			cJSON_AddNumberToObject(logArrayElement, "RV", energy_in);//get_accumulated_energy());	//ReadingValue
 			cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 			cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
 			cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
@@ -212,7 +214,7 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 }
 
 
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st, time_t time_in, double energy_in)
 {
 	cJSON * result = NULL;
 
@@ -224,14 +226,18 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
 		ESP_LOGI(TAG, "got ocmf lock OCMF_AddElementToOCMFLog");
 	}
 
-	result = OCMF_AddElementToOCMFLog_no_lock(tx, st);
+	//Add to memory log
+	result = OCMF_AddElementToOCMFLog_no_lock(tx, st, time_in, energy_in);
+
+	//Add to file log
+	offlineSession_append_energy('T', time_in, energy_in);
 
 	xSemaphoreGive(ocmf_lock);
 	err:
 	return result;
 }
 
-int OCMF_FinalizeOCMFLog()
+int OCMF_FinalizeOCMFLog(time_t endTime)
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -243,7 +249,13 @@ int OCMF_FinalizeOCMFLog()
 
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog_no_lock("E", "G");
+		double endEnergy = get_accumulated_energy();
+
+		///Save the entry to the offline log in case CompletedSession is not transmitted successfully
+		offlineSession_append_energy('E', endTime, endEnergy);
+
+		///Build the OCMF structure for sending instantly
+		OCMF_AddElementToOCMFLog_no_lock("E", "G", endTime, endEnergy);
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -272,7 +284,7 @@ int OCMF_FinalizeOCMFLog()
 }
 
 
-int OCMF_MakeAndSaveNewOfflineSessionEntry()
+int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -284,7 +296,7 @@ int OCMF_MakeAndSaveNewOfflineSessionEntry()
 
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog_no_lock("T", "G");
+		OCMF_AddElementToOCMFLog_no_lock("T", "G", time, energy);
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
