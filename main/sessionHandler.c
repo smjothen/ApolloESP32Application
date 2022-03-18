@@ -23,6 +23,7 @@
 #include "../components/authentication/authentication.h"
 #include "../components/i2c/include/i2cDevices.h"
 #include "offline_log.h"
+#include "offlineSession.h"
 
 static const char *TAG = "SESSION    ";
 
@@ -437,6 +438,9 @@ static void sessionHandler_task()
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
 
     SessionHandler_SetOCMFHighInterval();
+
+    //TODO - evaluate placement
+    offlineSession_mount_folder();
 
 	while (1)
 	{

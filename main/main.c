@@ -30,7 +30,6 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "eeprom_wp.h"
-//#include "apollo_console.h"
 #include "certificate.h"
 #include "fat.h"
 #include "cJSON.h"
@@ -38,6 +37,12 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 
+
+//#define useConsole
+
+#ifdef useConsole
+	#include "apollo_console.h"
+#endif
 
 const char *TAG_MAIN = "MAIN     ";
 
@@ -144,12 +149,72 @@ void HandleCommands()
 		else if(strncmp("sdtr", commandBuffer, 4) == 0)
 			at_command_with_ok_ack("AT&D1", 1000);
 
+
+		else if(strncmp("latest", commandBuffer, 6) == 0)
+			offlineSession_FindLatestFile();
+
+		else if(strncmp("oldest", commandBuffer, 6) == 0)
+			offlineSession_FindOldestFile();
+
+		else if(strncmp("nrof", commandBuffer, 4) == 0)
+			offlineSession_FindNrOfFiles();
+
+		else if(strncmp("cont", commandBuffer, 4) == 0)
+		{
+			int x = 0;
+			if(sscanf(&commandBuffer[5], "%d", &x))
+			{
+				ESP_LOGW(TAG_MAIN, "Reading file no content: %d", x);
+				offlineSession_ReadFileContent(x);
+			}
+		}
+
+
+		else if(strncmp("ab", commandBuffer, 2) == 0)
+		{
+			time_t now = 0;
+			time(&now);
+			static float s_energy = 0.1;
+			offlineSession_append_energy('B', now, s_energy++);
+		}
+		else if(strncmp("ae", commandBuffer, 2) == 0)
+		{
+			time_t now = 0;
+			time(&now);
+			static float s_energy = 0.1;
+			offlineSession_append_energy('E', now, s_energy++);
+		}
+		else if(strncmp("end", commandBuffer, 3) == 0)
+		{
+			ESP_LOGW(TAG_MAIN, "Ending session");
+			//offlineSession_end();
+		}
+
+		else if(strncmp("del", commandBuffer, 3) == 0)
+		{
+			int x = 0;
+			if(sscanf(&commandBuffer[5], "%d", &x))
+			{
+				ESP_LOGW(TAG_MAIN, "Deleting file no : %d", x);
+				offlineSession_delete_session(x);
+			}
+		}
+
+		else if(strncmp("delall", commandBuffer, 6) == 0)
+		{
+			ESP_LOGW(TAG_MAIN, "Deleting all files");
+			int fileNo;
+			for (fileNo = 0; fileNo < 100; fileNo++)
+			{
+				offlineSession_delete_session(fileNo);
+			}
+		}
+
 		memset(commandBuffer, 0, 10);
 	}
 
 
 }
-//#define useConsole
 
 
 
@@ -218,7 +283,9 @@ void app_main(void)
 	cellularPinsInit();
 
 	//gpio_pullup_en(GPIO_NUM_3);
-	//apollo_console_init();
+#ifdef useConsole
+	apollo_console_init();
+#endif
 
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
@@ -256,9 +323,9 @@ void app_main(void)
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
-#ifdef useConsole
+//#ifdef useConsole
 	configure_console();
-#endif
+//#endif
 
 	configure_uart();
 	start_ota_task();
@@ -452,9 +519,9 @@ void app_main(void)
 		}
 
 
-	#ifdef useConsole
+	//#ifdef useConsole
     	HandleCommands();
-	#endif
+	//#endif
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

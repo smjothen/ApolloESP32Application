@@ -19,10 +19,10 @@ static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 //static const int max_offline_session_files = 10;
 
-#define FILE_VERSION_ADDR_0  		0
-#define FILE_SESSION_ADDR_2  		2
-#define FILE_NR_OF_OCMF_ADDR_1000  	1000
-#define FILE_OCMF_START_ADDR_1004 	1004
+#define FILE_VERSION_ADDR_0  		0L
+#define FILE_SESSION_ADDR_2  		2L
+#define FILE_NR_OF_OCMF_ADDR_1000  	1000L
+#define FILE_OCMF_START_ADDR_1004 	1004L
 
 struct LogHeader {
     int start;
@@ -110,7 +110,7 @@ bool offlineSession_mount_folder()
 /*
  * Find the file to use for a new session
  */
-unsigned int offlineSession_FindLatestFile()
+int offlineSession_FindLatestFile()
 {
 	int fileNo = 0;
 	FILE *file;
@@ -145,14 +145,13 @@ unsigned int offlineSession_FindLatestFile()
 /*
  * Find the oldest file to read, send, delete
  */
-unsigned int offlineSession_FindOldestFile()
+int offlineSession_FindOldestFile()
 {
 	int fileNo = 0;
 	FILE *file;
 	char buf[22] = {0};
-	int fileCount = 0;
 
-	for (fileNo = 0; fileNo < (100); fileNo++ )
+	for (fileNo = 0; fileNo < 100; fileNo++ )
 	{
 		sprintf(buf,"/offs/%d.bin", fileNo);
 
@@ -161,19 +160,48 @@ unsigned int offlineSession_FindOldestFile()
 		{
 			fclose(file);
 			ESP_LOGW(TAG, "OfflineSession file: %d", fileNo);
-			break; ///Use the current fileNo
+			return fileNo; ///Return the current file number
 		}
 
 	}
 
-	return fileNo;
+	return -1; //No files found
 }
+
+
+/*
+ * Find the oldest file to read, send, delete
+ */
+int offlineSession_FindNrOfFiles()
+{
+	int fileNo = 0;
+	FILE *file;
+	char buf[22] = {0};
+	int fileCount = 0;
+
+	for (fileNo = 0; fileNo < 100; fileNo++ )
+	{
+		sprintf(buf,"/offs/%d.bin", fileNo);
+
+		file = fopen(buf, "r");
+		if(file != NULL)
+		{
+			fclose(file);
+			fileCount++;
+			ESP_LOGW(TAG, "OfflineSession found file: %d", fileNo);
+		}
+
+	}
+	ESP_LOGW(TAG, "Nr of OfflineSession files: %d", fileCount);
+
+	return fileCount;
+}
+
+
 
 volatile static int activeFileNumber = -1;
 static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
-
-
 
 void offlineSession_UpdateSessionOnFile(char *sessionData)
 {
@@ -200,7 +228,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData)
 
 
 
-esp_err_t offlineSession_PrintFileContent(int fileNo)
+esp_err_t offlineSession_ReadFileContent(int fileNo)
 {
 	char buf[22] = {0};
 	sprintf(buf,"/offs/%d.bin", fileNo);
@@ -213,11 +241,11 @@ esp_err_t offlineSession_PrintFileContent(int fileNo)
 	}
 
 	/// Find end of file to get size
-	fseek(sessionFile, 0L, SEEK_END);
-	size_t readSize = ftell(sessionFile);
+	//fseek(sessionFile, FILE_VERSION_ADDR_0, SEEK_END);
+	//size_t readSize = ftell(sessionFile);
 
-	/// Go to beginnning before reading
-	fseek(sessionFile, 0L, SEEK_SET);
+	/// Go to beginning before reading
+	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 
 	char * base64SessionData = calloc(1000, 1);
 	volatile size_t size = fread(base64SessionData, 1000, 1, sessionFile);
@@ -261,26 +289,6 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 		return ret;
 	}
 
-	/*FILE *file = fopen("/offs/test.txt", "w");
-	//char cont[] = "xcontent";
-	int contentLen = strlen(sessionData)+1;
-	fwrite(sessionData, strlen(sessionData)+1, 1, file);
-	//fflush(file);
-	fclose(file);
-
-	memset(sessionData, 0, 1000);
-
-	file = fopen("/offs/test.txt", "r");
-
-	//fseek(file, 2, SEEK_SET);
-	//fseek(file, 0L, SEEK_END);
-	//long int res = ftell(file);
-	fread(sessionData, contentLen, 1, file);
-	//printf("%ld: %s\n", res, sessionData);
-	printf("%s\n", sessionData);
-
-	fclose(file);*/
-
 
 	/// Search for file number to use for this session
 	activeFileNumber = offlineSession_FindLatestFile();
@@ -289,12 +297,10 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 		return ESP_FAIL;
 	}
 
-	//char pathBuf[20] = {0};
 
 	sprintf(activePathString,"/offs/%d.bin", activeFileNumber);
 
 	sessionFile = fopen(activePathString, "wb+");
-	//file = fopen("/offs/test.txt", "wb+");
 
 	if(sessionFile == NULL)
 	{
@@ -302,26 +308,26 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 		return ESP_FAIL;
 	}
 
+
+	//Save the session structure to the file including the start 'B' message
 	offlineSession_UpdateSessionOnFile(sessionData);
 
 	fclose(sessionFile);
 
 
 
+	//offlineSession_ReadFileContent();
 
-	//offlineSession_PrintFileContent();
+	//offlineSession_append_energy('B', 123, 0.1);
 
-
-	offlineSession_append_energy('B', 123, 0.1);
-
-	offlineSession_append_energy('T', 1234, 0.2);
+	//offlineSession_append_energy('T', 1234, 0.2);
 
 	//offlineSession_append_energy('E', 12345, 0.3);
 
 
-	offlineSession_FindOldestFile();
+	//int oldest = offlineSession_FindOldestFile();
 
-	//offlineSession_Print
+	//offlineSession_ReadFileContent
 
 	return ret;
 }
@@ -482,7 +488,7 @@ int offlineSession_ReadOldestSession(char * SessionString)
 //}
 
 
-int offlineSession_delete_sessions()
+int offlineSession_delete_session(int fileNo)
 {
 	int ret = 0;
 
@@ -491,25 +497,31 @@ int offlineSession_delete_sessions()
 		return ret;
 	}
 
-	FILE *fp = fopen(log_path, "r");
+	char buf[22] = {0};
+	sprintf(buf,"/offs/%d.bin", fileNo);
+
+	FILE *fp = fopen(buf, "r");
 	if(fp==NULL)
-		ESP_LOGE(TAG, "Before remove: logfile can't be opened ");
+	{
+		ESP_LOGE(TAG, "%d: Before remove: logfile can't be opened ", fileNo);
+		return 0;
+	}
 	else
-		ESP_LOGE(TAG, "Before remove: logfile can be opened ");
+		ESP_LOGE(TAG, "%d: Before remove: logfile can be opened ", fileNo);
 
 	fclose(fp);
 
-	remove(log_path);
+	remove(buf);
 
-	fp = fopen(log_path, "r");
+	fp = fopen(buf, "r");
 	if(fp==NULL)
 	{
-		ESP_LOGE(TAG, "After remove: logfile can't be opened ");
+		ESP_LOGE(TAG, "%d: After remove: logfile deleted SUCCEEDED", fileNo);
 		ret = 1;
 	}
 	else
 	{
-		ESP_LOGE(TAG, "After remove: logfile can be opened ");
+		ESP_LOGE(TAG, "%d: After remove: logfile delete FAILED ", fileNo);
 		ret = 2;
 	}
 
