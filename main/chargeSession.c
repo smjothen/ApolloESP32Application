@@ -51,7 +51,7 @@ static void ChargeSession_Set_GUID()
 
 void chargeSession_PrintSession()
 {
-	ESP_LOGW(TAG," %s - %s\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
+	ESP_LOGW(TAG," %s - %s\n SessionId: \t\t%s (%s)\n Energy: \t\t%f\n StartDateTime: \t%s\n EndDateTime: \t\t%s\n ReliableClock: \t%i\n StoppedByRFIDUid: \t%i\n AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartDateTime, chargeSession.EndDateTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
 }
 
 void SetCarConnectedState(bool connectedState)
@@ -102,9 +102,9 @@ void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 static void ChargeSession_Set_StartTime()
 {
 	time_t time_out;
-	GetUTCTimeString(chargeSession.StartTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
+	GetUTCTimeString(chargeSession.StartDateTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
 
-	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
+	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
 }
 
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
@@ -144,7 +144,7 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 
 	ESP_LOGI(TAG, "SessionId: %s (%s), len: %d\n", chargeSession.SessionId, sidOrigin, strlen(chargeSession.SessionId));
 
-	if(chargeSession.StartTime[0] == '\0')
+	if(chargeSession.StartDateTime[0] == '\0')
 	{
 		ESP_LOGI(TAG, "Setting cloud start time");
 		ChargeSession_Set_StartTime();
@@ -205,7 +205,7 @@ void chargeSession_Start()
 		}
 
 		chargeSession.SignedSession = basicOCMF;
-		OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
+		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
 		//OCMF_NewOfflineSessionEntry();
 
 		char * sessionData = calloc(1000,1);
@@ -258,9 +258,9 @@ void chargeSession_Finalize()
 {
 	//chargeSession.Energy = MCU_GetEnergy();
 	chargeSession_UpdateEnergy();
-	GetUTCTimeString(chargeSession.EndTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
+	GetUTCTimeString(chargeSession.EndDateTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
 
-	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
+	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
 
 	//Create the 'E' message
 	OCMF_FinalizeOCMFLog(chargeSession.EpochEndTimeSec);
@@ -330,8 +330,8 @@ int chargeSession_GetSessionAsString(char * message)
 
 	cJSON_AddStringToObject(CompletedSessionObject, "SessionId", chargeSession.SessionId);
 	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", chargeSession.Energy);
-	cJSON_AddStringToObject(CompletedSessionObject, "StartDateTime", chargeSession.StartTime);
-	cJSON_AddStringToObject(CompletedSessionObject, "EndDateTime", chargeSession.EndTime);
+	cJSON_AddStringToObject(CompletedSessionObject, "StartDateTime", chargeSession.StartDateTime);
+	cJSON_AddStringToObject(CompletedSessionObject, "EndDateTime", chargeSession.EndDateTime);
 	cJSON_AddBoolToObject(CompletedSessionObject, "ReliableClock", chargeSession.ReliableClock);
 	cJSON_AddBoolToObject(CompletedSessionObject, "StoppedByRFID", chargeSession.StoppedByRFID);
 	cJSON_AddStringToObject(CompletedSessionObject, "AuthenticationCode", chargeSession.AuthenticationCode);
@@ -352,8 +352,8 @@ int chargeSession_GetSessionAsString(char * message)
 
 esp_err_t chargeSession_SaveSessionResetInfo()
 {
-	ESP_LOGI(TAG, "Saving resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
-	esp_err_t err = storage_SaveSessionResetInfo(chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+	ESP_LOGI(TAG, "Saving resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+	esp_err_t err = storage_SaveSessionResetInfo(chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
 	if (err != ESP_OK)
 		ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", err);
 
@@ -368,7 +368,7 @@ esp_err_t chargeSession_ReadSessionResetInfo()
 	{
 		ESP_LOGI(TAG, "No SessionId, checking flash for resetSession");
 
-		err = storage_ReadSessionResetInfo(chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+		err = storage_ReadSessionResetInfo(chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
 		if (err != ESP_OK)
 		{
 			return err;
@@ -376,7 +376,7 @@ esp_err_t chargeSession_ReadSessionResetInfo()
 
 		if(strlen(chargeSession.SessionId) == 36)
 		{
-			ESP_LOGI(TAG, "Loaded resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+			ESP_LOGI(TAG, "Loaded resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
 		}
 		else
 		{

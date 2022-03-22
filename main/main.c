@@ -165,7 +165,10 @@ void HandleCommands()
 			if(sscanf(&commandBuffer[5], "%d", &x))
 			{
 				ESP_LOGW(TAG_MAIN, "Reading file no content: %d", x);
-				offlineSession_ReadFileContent(x);
+				char * fileBuffer = calloc(20000,1);
+				offlineSession_ReadFileContent(x, fileBuffer);
+				ESP_LOGW(TAG_MAIN, "fileBuffer: \r\n %s", fileBuffer);
+				free(fileBuffer);
 			}
 		}
 

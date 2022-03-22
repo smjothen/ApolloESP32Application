@@ -10,8 +10,8 @@ struct ChargeSession
 {
 	char SessionId[37]; //[8-4-4-4-12 + 1]
 	float Energy;
-	char StartTime[32]; //27
-	char EndTime[32]; //27
+	char StartDateTime[32]; //27
+	char EndDateTime[32]; //27
 	bool ReliableClock;
 	bool StoppedByRFID;
 	char AuthenticationCode[41];//Up to GUID string.

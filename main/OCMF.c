@@ -116,19 +116,16 @@ char * OCMF_CreateNewOCMFLog(time_t startTime)
 {
 	memset(logString, 0, LOG_STRING_SIZE);
 
-	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	/*if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
 		ESP_LOGE(TAG, "failed to obtain ocmf lock during log create");
 		goto err;
 	}else{
 		ESP_LOGI(TAG, "got ocmf lock OCMF_CreateNewOCMFLog");
-	}
+	}*/
 
-
-	//if(logRoot != NULL){return -9;}
 
 	logRoot = cJSON_CreateObject();
-	//if(logRoot == NULL){return -10;}
 
 	cJSON_AddStringToObject(logRoot, "FV", formatVersion);							//FormatVersion
 	cJSON_AddStringToObject(logRoot, "GI", "ZAPTEC GO");								//GatewayIdentification
@@ -136,34 +133,15 @@ char * OCMF_CreateNewOCMFLog(time_t startTime)
 	cJSON_AddStringToObject(logRoot, "GV", GetSoftwareVersion());					//GatewayVersion
 	cJSON_AddStringToObject(logRoot, "PG", "T1");			//Pagination(class)
 
+	//xSemaphoreGive(ocmf_lock);
+
+	//return logString
+
+
 	logReaderArray = cJSON_CreateArray();
-	//logArrayElement = cJSON_CreateObject();
 
-	/*char timeBuffer[50] = {0};
-	zntp_GetSystemTime(timeBuffer);
-
-	cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
-	cJSON_AddNumberToObject(logArrayElement, "TX", "B");	//Message status (B, T, E)
-	cJSON_AddNumberToObject(logArrayElement, "RV", chargeSession_Get().Energy * 0.001);	//ReadingValue
-	cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
-	cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
-	cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
-	cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState*/
 	double energyAtStart = get_accumulated_energy();
 	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G", startTime, energyAtStart);
-	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
-	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
-
-	//cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
-
-	/*char *buf = cJSON_PrintUnformatted(logRoot);
-
-	strcpy(logString, "OCMF|");
-	strcpy(logString+strlen(logString), buf);
-
-	ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
-
-	free(buf);*/
 
 	//For testing maximum message size
 	/*
@@ -172,9 +150,9 @@ char * OCMF_CreateNewOCMFLog(time_t startTime)
 		OCMF_AddElementToOCMFLog("T", "G");
 	*/
 
-	xSemaphoreGive(ocmf_lock);
+	//xSemaphoreGive(ocmf_lock);
 
-	err:
+	//err:
 	return logString;
 }
 
