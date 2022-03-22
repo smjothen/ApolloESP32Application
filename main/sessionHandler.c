@@ -421,6 +421,9 @@ static void sessionHandler_task()
     uint32_t pulseInterval = PULSE_DEFAULT;
     uint32_t previousPulseInterval = PULSE_DEFAULT;
 
+	//Used to ensure eMeter alarm source is only read once per occurence
+    bool eMeterAlarmBlock = false;
+
     authentication_Init();
     OCMF_Init();
     uint32_t secondsSinceSync = OCMF_INTERVAL_TIME;
@@ -573,7 +576,7 @@ static void sessionHandler_task()
 
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
-		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh.
+		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
 		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && requestCurrentWhenOnline)
 		{
 			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
@@ -1206,6 +1209,23 @@ static void sessionHandler_task()
 				}
 			}
 
+			if(MCU_ServoCheckRunning() == true)
+			{
+				///Wait while the servo test is performed
+				vTaskDelay(pdMS_TO_TICKS(4000));
+				char payload[128];
+				uint16_t servoCheckStartPosition = MCU_GetServoCheckParameter(ServoCheckStartPosition);
+				uint16_t servoCheckStartCurrent = MCU_GetServoCheckParameter(ServoCheckStartCurrent);
+				uint16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
+				uint16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
+
+				sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
+				ESP_LOGI(TAG, "ServoCheckParams: %s", payload);
+				publish_debug_telemetry_observation_Diagnostics(payload);
+
+				MCU_ServoCheckClear();
+			}
+
 
 			if(HasNewData() == true)
 			{
@@ -1224,6 +1244,29 @@ static void sessionHandler_task()
 			}
 
 
+			if(MCU_GetWarnings() & 0x1000000) /// WARNING_EMETER_ALARM
+			{
+				if(eMeterAlarmBlock == false)
+				{
+					/// Delay to ensure alarm source is updated on MCU
+					vTaskDelay(pdMS_TO_TICKS(1000));
+
+					ZapMessage rxMsg = MCU_ReadParameter(ParamEmeterAlarm);
+					if((rxMsg.length == 2) && (rxMsg.identifier == ParamEmeterAlarm))
+					{
+						char buf[50] = {0};
+						sprintf(buf, "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
+						publish_debug_message_event(buf, cloud_event_level_warning);
+					}
+				}
+
+				eMeterAlarmBlock = true;
+			}
+			else
+			{
+				eMeterAlarmBlock = false;
+			}
+			
 
 
 			if(onTime % 10 == 0)//15

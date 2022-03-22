@@ -114,7 +114,7 @@ char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600 * 3, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(3600*12, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
     mqtt_config->password = token;
     return 0;
 }
@@ -988,6 +988,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 
 static bool restartCmdReceived = false;
+static bool rollbackCmdReceived = false;
 
 void cloud_listener_check_cmd()
 {
@@ -995,6 +996,13 @@ void cloud_listener_check_cmd()
 	{
 		vTaskDelay(pdMS_TO_TICKS(3000));
 		esp_restart();
+	}
+
+	if(rollbackCmdReceived == true)
+	{
+		vTaskDelay(pdMS_TO_TICKS(3000));
+		ota_rollback();
+		rollbackCmdReceived = false;
 	}
 }
 
@@ -1076,11 +1084,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		commandString[commandEvent->data_len] = '\0';
 		strncpy(commandString, commandEvent->data, commandEvent->data_len);
 
-		//TODO perform in separate thread to be able to ack cloud?
 		if(strstr(commandString, "factory") != NULL)
-			ota_rollback_to_factory();
+			restartCmdReceived = ota_rollback_to_factory();
 		else
-			ota_rollback();
+			rollbackCmdReceived = true;
 
 		responseStatus = 200;
 	}
@@ -1423,7 +1430,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_Set_CommunicationMode(eCONNECTION_LTE);
 					storage_SaveConfiguration();
 					ESP_LOGI(TAG, "Restarting on LTE");
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 				else if(strstr(commandString,"Set Wifi") != NULL)
 				{
@@ -1433,7 +1442,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						storage_SaveConfiguration();
 
 						ESP_LOGI(TAG, "Restarting on Wifi");
-						esp_restart();
+						restartCmdReceived = true;
+						responseStatus = 200;
+						//esp_restart();
 					}
 					else
 					{
@@ -1750,7 +1761,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "SwapCommunicationMode");
 					responseStatus = 200;
 
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 
 				else if(strstr(commandString,"ActivateLogging") != NULL)
@@ -1960,7 +1973,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
 					//The 4G module will be powered on automatically if 4G is active communication mode
-					esp_restart();
+					restartCmdReceived = true;
+					responseStatus = 200;
+					//esp_restart();
 				}
 
 				//For testing AT on BG while on Wifi
@@ -2045,8 +2060,17 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ESP_LOGI(TAG, "MCU Restart car FAILED");
 					}
 				}
-
-
+				else if(strstr(commandString,"ServoCheck") != NULL)
+				{
+					MCU_PerformServoCheck();
+				}
+				else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
+				{
+					char msg[60] = {0};
+					sprintf(msg, "eMeter HW Current limit: %f / %f A", MCU_GetHWCurrentActiveLimit(), MCU_GetHWCurrentMaxLimit());
+					publish_debug_telemetry_observation_Diagnostics(msg);
+					responseStatus = 200;
+				}
 
 			}
 	}
@@ -2143,12 +2167,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	ESP_LOGE(TAG, "TLS error - Updating certificate");
     	certificate_update(event->error_handle->esp_tls_stack_err);
 
-    	//Must reset
-    	if(simulateTlsError == true)
-    	{
-    		event->error_handle->esp_tls_stack_err = 0;
-    		simulateTlsError = false;
-    	}
+    	//Must reset to avoid repeated certificate checks
+    	event->error_handle->esp_tls_stack_err = 0;
+    	simulateTlsError = false;
     }
 
     switch (event->event_id) {

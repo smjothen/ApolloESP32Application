@@ -233,16 +233,16 @@ int prodtest_getNewId(bool validate_only)
 }
 
 enum test_state{
-		TEST_STATE_READY = -1,
-		TEST_STATE_RUNNING = 0,
-		TEST_STATE_SUCCESS = 1,
-		TEST_STATE_FAILURE = 2,
-		TEST_STATE_MESSAGE = 3,
-		TEST_STATE_QUESTION = 4,
-		TEST_STATE_ANSWER = 5,
-		TEST_STATE_TIMESTAMP = 6,
-		TEST_STATE_VERIFYSERIAL = 7,
-		TEST_STATE_SERIALIZEDDATA = 8,
+	TEST_STATE_READY = -1,
+	TEST_STATE_RUNNING = 0,
+	TEST_STATE_SUCCESS = 1,
+	TEST_STATE_FAILURE = 2,
+	TEST_STATE_MESSAGE = 3,
+	TEST_STATE_QUESTION = 4,
+	TEST_STATE_ANSWER = 5,
+	TEST_STATE_TIMESTAMP = 6,
+	TEST_STATE_VERIFYSERIAL = 7,
+	TEST_STATE_SERIALIZEDDATA = 8,
 };
 
 enum test_item{
@@ -251,6 +251,9 @@ enum test_item{
 	TEST_ITEM_COMPONENT_LED,
 	TEST_ITEM_COMPONENT_SWITCH,
 	TEST_ITEM_COMPONENT_BG,
+	TEST_ITEM_COMPONENT_SERVO,
+	TEST_ITEM_COMPONENT_SPEED_HWID,
+	TEST_ITEM_COMPONENT_POWER_HWID,
 	TEST_ITEM_DEV_TEMP,
 	TEST_ITEM_CHARGE_CYCLE,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS,
@@ -488,6 +491,10 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	prodtest_sock_send(payload);
 	await_prodtest_external_step_acceptance("ACCEPTED", false);
 
+	//For testing single function
+	/*test_servo();
+	success = true;
+	goto cleanup;*/
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
 	
@@ -823,6 +830,41 @@ int test_switch(){
 	return -1;
 }
 
+
+int test_servo(){
+	char payload[128];
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SERVO, "Servo");
+	if(MsgCommandAck == MCU_SendCommandId(CommandStartServoCheck))
+		ESP_LOGW(TAG, "Sent CommandStartServoCheck OK");
+	else
+		ESP_LOGE(TAG, "Sent CommandStartServoCheck FAILED");
+
+	///Wait while the servo test is performed
+	vTaskDelay(pdMS_TO_TICKS(4000));
+
+	uint16_t servoCheckStartPosition = MCU_GetServoCheckParameter(ServoCheckStartPosition);
+	uint16_t servoCheckStartCurrent = MCU_GetServoCheckParameter(ServoCheckStartCurrent);
+	uint16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
+	uint16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
+
+	sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i. OK?|yes|no", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
+	ESP_LOGI(TAG, "ServoCheckParams: %s", payload);
+
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_SERVO, payload);
+
+	int result = await_prodtest_external_step_acceptance("yes", true);
+	if(result==0){
+		ESP_LOGI(TAG, "servo test accepted");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SERVO, "Servo OK");
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SERVO, "Servo FAILED");
+	}
+
+	return -1;
+}
+
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
 	
@@ -845,8 +887,18 @@ int run_component_tests(){
 	if(test_switch()<0){
 		goto err;
 	}
-		
 	
+	if(test_servo()<0){
+		goto err;
+	}
+
+	/*if(test_speed_hwid()<0){
+		goto err;
+	}
+
+	if(test_speed_hwid()<0){
+		goto err;
+	}*/
 
 	return 0;
 

@@ -307,7 +307,7 @@ void ota_rollback()
 	esp_ota_mark_app_invalid_rollback_and_reboot();
 }
 
-void ota_rollback_to_factory()
+bool ota_rollback_to_factory()
 {
 	ESP_LOGI(TAG, "Rollback to factory");
 	//Ref: https://esp32.com/viewtopic.php?t=4210
@@ -339,10 +339,13 @@ void ota_rollback_to_factory()
 		if ( err != ESP_OK )                                        // Check error
 		{
 			ESP_LOGE ( TAG, "Failed to set boot partition" ) ;
+			return false;
 		}
 		else
 		{
-			esp_restart() ;                                         // Restart ESP
+			//esp_restart() ;                                         // Restart ESP
+			return true; //Restart after cloud response is sent.
 		}
 	}
+	return false;
 }

@@ -317,7 +317,7 @@ void app_main(void)
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
 		//If it was OFF this will effectively power it ON so it is ready for later.
-		//cellularPinsOff();
+		cellularPinsOff();
 	}
 	
 	connectivity_init();
@@ -408,7 +408,7 @@ void app_main(void)
 
     	if (isMqttConnected() == true)
     	{
-			if(onTimeCounter % (3300 * 3) == 0) //Refreshing after 55 * 3 minutes. Token valid for 60 * 3 minutes
+			if(onTimeCounter % (3300 * 12) == 0) //Refreshing after 55 * 3 minutes. Token valid for 60 * 3 minutes
 			{
 				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
 				/// Doing token refresh and reconnect in advance gives a more stable connection.
