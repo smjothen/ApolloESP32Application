@@ -372,6 +372,7 @@ void SessionHandler_SetLogCurrents()
 	}
 }
 
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -419,6 +420,8 @@ static void sessionHandler_task()
 
     //Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
+
+    uint8_t countdown = 5;
 
     authentication_Init();
     OCMF_Init();
@@ -1116,7 +1119,22 @@ static void sessionHandler_task()
 				{
 					char * gtr = (char *)calloc(rxMsg.length+1, 1);
 					memcpy(gtr, rxMsg.data, rxMsg.length);
-					int published = publish_debug_telemetry_observation_Diagnostics(gtr);
+
+					int published = -1;
+
+					if(currentCarChargeMode == eCAR_CHARGING)
+					{
+						countdown = 5;
+					}
+					else
+					{
+						if(countdown > 0)
+							countdown--;
+					}
+
+					if(countdown > 0)
+						published = publish_debug_telemetry_observation_Diagnostics(gtr);
+
 					free(gtr);
 
 					if (published == 0)
@@ -1135,6 +1153,11 @@ static void sessionHandler_task()
 					//ESP_LOGW(TAG,"Diagnostics length = 0");
 					//ClearMCUDiagnosicsResults();
 				}
+
+			}
+			else
+			{
+				countdown = 5;
 			}
 
 			if(GetESPDiagnosticsResults() == true)
@@ -1149,12 +1172,8 @@ static void sessionHandler_task()
 
 			if(GetInstallationConfigOnFile() == true)
 			{
-				int published = publish_debug_telemetry_observation_InstallationConfigOnFile();
-
-				if (published == 0)
-				{
-					ClearReportGridTestResults();
-				}
+				publish_debug_telemetry_observation_InstallationConfigOnFile();
+				ClearInstallationConfigOnFile();
 			}
 
 			if(MCU_ServoCheckRunning() == true)
