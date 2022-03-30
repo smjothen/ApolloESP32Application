@@ -16,7 +16,7 @@
 static const char *TAG = "STORAGE:";
 
 #define CONFIG_FILE "CONFIG_FILE"
-#define DEFAULT_TRANSMIT_INTERVAL 86400
+#define DEFAULT_TRANSMIT_INTERVAL 8640
 nvs_handle configuration_handle;
 
 // "wifi"

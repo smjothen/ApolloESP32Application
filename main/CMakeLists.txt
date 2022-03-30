@@ -12,6 +12,7 @@ idf_component_register(SRCS
 					"offline_log.c"
 					"crc32.c"
 					"IT3PCalculator.c"
+					"offlineHandler.c"
 					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
 					EMBED_TXTFILES ${project_dir}/main/cert/bundle8.crt 
 

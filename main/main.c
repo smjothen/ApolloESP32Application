@@ -37,16 +37,17 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 
+#include "zaptec_cloud_observations.h"
 //#include "IT3PCalculator.h"
 
-const char *TAG_MAIN = "MAIN     ";
+const char *TAG_MAIN = "MAIN           ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.94";
+char softwareVersion[] = "0.0.0.120";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -101,10 +102,12 @@ void HandleCommands()
 	if(length > 0)
 	{
 		memcpy(commandBuffer+strlen(commandBuffer), uart_data, length);
-		//ESP_LOGW(TAG_MAIN, "Read: %s", commandBuffer);
+		ESP_LOGW(TAG_MAIN, "Read: %s", commandBuffer);
 	}
 	if(strchr(commandBuffer, '\r') != NULL)
 	{
+		ESP_LOGW(TAG_MAIN, "Command:> %s", commandBuffer);
+
 		if(strncmp("mcu", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
@@ -135,7 +138,7 @@ void HandleCommands()
 		else if(strncmp("m0", commandBuffer, 2) == 0)
 			cellularPinsOff();
 
-		else if(strncmp("r", commandBuffer, 1) == 0)
+		else if(strncmp("rst", commandBuffer, 3) == 0)
 			esp_restart();
 		else if(strncmp("dtr0", commandBuffer, 4) == 0)
 			gpio_set_level(GPIO_OUTPUT_DTR, 0);
@@ -144,12 +147,19 @@ void HandleCommands()
 		else if(strncmp("sdtr", commandBuffer, 4) == 0)
 			at_command_with_ok_ack("AT&D1", 1000);
 
+		else if(strncmp("ping1", commandBuffer, 5) == 0)
+			update_mqtt_event_pattern(true);
+		else if(strncmp("ping0", commandBuffer, 5) == 0)
+			update_mqtt_event_pattern(false);
+		else if(strncmp("req", commandBuffer, 3) == 0)
+			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
+
 		memset(commandBuffer, 0, 10);
 	}
 
 
 }
-//#define useConsole
+#define useConsole
 
 
 
@@ -389,7 +399,7 @@ void app_main(void)
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
-			ESP_LOGW(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 
     	if(onTimeCounter % 15 == 0)//15
@@ -408,7 +418,7 @@ void app_main(void)
 
     	if (isMqttConnected() == true)
     	{
-			if(onTimeCounter % (3300 * 12) == 0) //Refreshing after 55 * 3 minutes. Token valid for 60 * 3 minutes
+			if(onTimeCounter % (554400) == 0) //Refreshing after 3300 * 24 * 7 seconds. Token valid for 3600 * 24 * 7 seconds
 			{
 				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
 				/// Doing token refresh and reconnect in advance gives a more stable connection.

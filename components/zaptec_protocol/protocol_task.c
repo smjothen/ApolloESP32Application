@@ -16,7 +16,7 @@
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
 
-const char *TAG = "MCU";
+const char *TAG = "MCU            ";
 
 #define RX_TIMEOUT  (2000 / (portTICK_PERIOD_MS))
 #define SEMAPHORE_TIMEOUT  (20000 / (portTICK_PERIOD_MS))

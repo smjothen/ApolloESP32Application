@@ -38,6 +38,14 @@ enum ChargerOperatingMode
     CHARGE_OPERATION_STATE_WARNING          = 7,
 };
 
+enum PingReplyState
+{
+	PING_REPLY_NO_ACTION = 0,
+	PING_REPLY_AWAITING_CMD = 1,
+	PING_REPLY_CMD_RECEIVED = 2,
+	PING_REPLY_OFFLINE		= 3,
+};
+
 void sessionHandler_init();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);

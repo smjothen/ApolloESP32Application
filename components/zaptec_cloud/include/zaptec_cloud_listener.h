@@ -39,6 +39,7 @@ int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait);
 int publish_to_iothub(const char* payload, const char* topic);
 
 void update_installationId();
+void update_mqtt_event_pattern(bool usePingReply);
 
 void periodic_refresh_token(uint8_t source);
 

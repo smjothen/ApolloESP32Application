@@ -114,7 +114,7 @@ char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600*12, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(604800, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
     mqtt_config->password = token;
     return 0;
 }
@@ -1006,13 +1006,20 @@ void cloud_listener_check_cmd()
 	}
 }
 
+static bool blockStartToTestPingReply = false;
 
 int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 {
 	int responseStatus = 0;
 
 	//Don't spend time in this function, must return from mqtt-event. May need separate process
-	if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
+	if(strstr(commandEvent->topic, "iothub/methods/POST/1/"))
+	{
+		ESP_LOGW(TAG, "######## INCHARGE_PING_REPLY ########");
+
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
 		//Execute delayed in another thread to allow command ack to be sent to cloud
@@ -1093,6 +1100,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
+		if(blockStartToTestPingReply == true)
+		{
+			responseStatus = 200;
+			return responseStatus;
+		}
+
+
 		//return 200; //For testing offline resendRequestTimer in system mode
 		//rDATA=["16","4"]
 		char commandString[commandEvent->data_len+1];
@@ -2071,6 +2085,17 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					publish_debug_telemetry_observation_Diagnostics(msg);
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"blockstart") != NULL)
+				{
+					blockStartToTestPingReply = true;
+				}
+				else if(strstr(commandString,"unblockstart") != NULL)
+				{
+					blockStartToTestPingReply = false;
+				}
+
+
+
 
 			}
 	}
@@ -2403,10 +2428,17 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
-    		incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
-    		mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
-    		esp_mqtt_set_config(mqtt_client, &mqtt_config);
-    		ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
+    		if(incrementalRefreshTimeout < 3600000) //1 hour in milliseconds
+    		{
+    			incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
+    			mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
+    			esp_mqtt_set_config(mqtt_client, &mqtt_config);
+    			ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
+    		}
+    		else
+    		{
+    			ESP_LOGW(TAG, "*** Reconnect at max: %i ***", incrementalRefreshTimeout);
+    		}
 
     		if(resetCounter == 7)
 			{
@@ -2701,7 +2733,9 @@ void update_installationId()
 
 void update_mqtt_event_pattern(bool usePingReply)
 {
-    char * instId = storage_Get_InstallationId();
+	ESP_LOGW(TAG," ### Setting PingReply to: %i ", usePingReply);
+
+	char * instId = storage_Get_InstallationId();
 
     int compare = strncmp(instId, INSTALLATION_ID, 36);
     if(compare != 0)

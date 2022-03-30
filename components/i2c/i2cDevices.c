@@ -457,7 +457,7 @@ static void i2cDevice_task(void *pvParameters)
 			readTime = RTCReadTime();
 			char timebuf[30];
 			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+			//ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
 
 			RTCVerifyControlRegisters();
 		}

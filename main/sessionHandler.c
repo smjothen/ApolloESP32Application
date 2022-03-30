@@ -24,7 +24,7 @@
 #include "../components/i2c/include/i2cDevices.h"
 #include "offline_log.h"
 
-static const char *TAG = "SESSION    ";
+static const char *TAG = "SESSION        ";
 
 #define RESEND_REQUEST_TIMER_LIMIT 90
 #define OCMF_INTERVAL_TIME 3600
@@ -172,6 +172,28 @@ void log_task_info(void){
 
 	publish_diagnostics_observation(formated_memory_use);
 	ESP_LOGD(TAG, "log_task_info done");
+}
+
+
+static enum PingReplyState pingReplyState = PING_REPLY_NO_ACTION;
+static uint32_t pingReplyTimer = 0;
+void PingReplyHandler()
+{
+	//Check if we are waiting for the Cloud-command
+	if(pingReplyState == PING_REPLY_AWAITING_CMD)
+	{
+		pingReplyTimer++;
+
+		///No cloud command received - start offline charging and do InChargePing periodically
+		if(pingReplyTimer == 10)
+			pingReplyState = PING_REPLY_OFFLINE;
+
+	}
+}
+
+void ClearPingReplyFromCloud()
+{
+	pingReplyState = PING_REPLY_NO_ACTION;
 }
 
 
@@ -336,7 +358,7 @@ static void sessionHandler_PrintParametersFromCloud()
 		actualCurrentSet = currentSetFromCloud;
 	}
 
-	ESP_LOGW(TAG,"******** FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A **************", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
+	ESP_LOGI(TAG,"FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
 }
 
 static bool offlineMode = false;
@@ -373,6 +395,7 @@ void sessionHandler_ClearCarInterfaceResetConditions()
 	hasSeenCarStateC = false;
 }
 
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -389,7 +412,7 @@ static void sessionHandler_task()
     uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
-    uint32_t statusInterval = 10;
+    uint32_t statusInterval = 15;
 
     uint32_t signalInterval = 120;
 
@@ -415,6 +438,7 @@ static void sessionHandler_task()
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
     uint8_t nrOfResendRetries = 0;
+    uint32_t pingReplyTrigger = 0;
 
     uint8_t activeWithoutChargingDuration = 0;
 
@@ -423,6 +447,8 @@ static void sessionHandler_task()
 
 	//Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
+
+    uint8_t countdown = 5;
 
     authentication_Init();
     OCMF_Init();
@@ -600,7 +626,19 @@ static void sessionHandler_task()
 				ESP_LOGE(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
+					/// On second request transmission, do the ping-reply to ensure inCharge is responding.
+					/// If Cloud does not reply with PingReply command, then go to offline mode.
+					pingReplyTrigger++;
+					if(pingReplyTrigger == 1)
+					{
+						update_mqtt_event_pattern(true);
+						pingReplyState = PING_REPLY_AWAITING_CMD;
+					}
+
 					publish_debug_telemetry_observation_ChargingStateParameters();
+
+					if(pingReplyTrigger == 1)
+						update_mqtt_event_pattern(false);
 
 					// Reset timer
 					resendRequestTimer = 0;
@@ -622,6 +660,7 @@ static void sessionHandler_task()
 				resendRequestTimer = 0;
 				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 				nrOfResendRetries = 0;
+				pingReplyTrigger = 0;
 			}
 
 
@@ -804,7 +843,7 @@ static void sessionHandler_task()
 			{
 				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
-				chargeSession_PrintSession();
+				chargeSession_PrintSession(isOnline, false);
 
 				//char completedSessionString[200] = {0};
 				memset(completedSessionString,0, LOG_STRING_SIZE);
@@ -881,17 +920,17 @@ static void sessionHandler_task()
 			if (networkInterface == eCONNECTION_WIFI)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
+					dataInterval = storage_Get_TransmitInterval() * 10;//3600;	//When car is disconnected or not charging
 				else
-					dataInterval = 900;	//When car is in charging state
+					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
 
 			}
 			else if (networkInterface == eCONNECTION_LTE)
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
+					dataInterval = storage_Get_TransmitInterval() * 10;//3600;	//When car is disconnected or not charging
 				else
-					dataInterval = 900;	//When car is in charging state
+					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
 				signalInterval = 7200;
@@ -963,7 +1002,7 @@ static void sessionHandler_task()
 			}
 			else if((storage_Get_Standalone() == false) && chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING)
 			{
-				pulseInterval = PULSE_SYSTEM_CONNECTED;
+				pulseInterval = PULSE_SYSTEM_NOT_CHARGING;
 			}
 			else if((storage_Get_Standalone() == false) && chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)
 			{
@@ -1004,7 +1043,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  Pulse: %d *******", GetCellularQuality(), dataInterval, pulseInterval);
+				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %d  Pulse: %d", GetCellularQuality(), dataInterval, pulseInterval);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -1013,7 +1052,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, pulseInterval);
+				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %d  Pulse: %d", rssi, dataInterval, pulseInterval);
 			}
 
 			//This is to make cloud settings visible during developement
@@ -1028,7 +1067,7 @@ static void sessionHandler_task()
 				}
 			}
 
-			chargeSession_PrintSession();
+			chargeSession_PrintSession(isOnline, false);
 
 			statusCounter = 0;
 		}
@@ -1061,6 +1100,8 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_local_settings();
 				publish_debug_telemetry_observation_power();
 
+
+				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)
 				{
 					publish_debug_telemetry_observation_DiagnosticsLog();
@@ -1168,7 +1209,22 @@ static void sessionHandler_task()
 				{
 					char * gtr = (char *)calloc(rxMsg.length+1, 1);
 					memcpy(gtr, rxMsg.data, rxMsg.length);
-					int published = publish_debug_telemetry_observation_Diagnostics(gtr);
+
+					int published = -1;
+
+					if(currentCarChargeMode == eCAR_CHARGING)
+					{
+						countdown = 5;
+					}
+					else
+					{
+						if(countdown > 0)
+							countdown--;
+					}
+
+					if(countdown > 0)
+						published = publish_debug_telemetry_observation_Diagnostics(gtr);
+
 					free(gtr);
 
 					if (published == 0)
@@ -1187,6 +1243,11 @@ static void sessionHandler_task()
 					//ESP_LOGW(TAG,"Diagnostics length = 0");
 					//ClearMCUDiagnosicsResults();
 				}
+
+			}
+			else
+			{
+				countdown = 5;
 			}
 
 			if(GetESPDiagnosticsResults() == true)
@@ -1201,12 +1262,8 @@ static void sessionHandler_task()
 
 			if(GetInstallationConfigOnFile() == true)
 			{
-				int published = publish_debug_telemetry_observation_InstallationConfigOnFile();
-
-				if (published == 0)
-				{
-					ClearReportGridTestResults();
-				}
+				publish_debug_telemetry_observation_InstallationConfigOnFile();
+				ClearInstallationConfigOnFile();
 			}
 
 			if(MCU_ServoCheckRunning() == true)
@@ -1273,8 +1330,8 @@ static void sessionHandler_task()
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
-				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d ", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta));
-				ESP_LOGW(TAG, "**** %s ****", buf);
+				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta) * 4.65));
+				ESP_LOGI(TAG, "**** %s ****", buf);
 
 				if(onTime % 3600 == 0)
 				{
