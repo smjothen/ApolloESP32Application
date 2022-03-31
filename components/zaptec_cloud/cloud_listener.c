@@ -1034,6 +1034,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
 		//Execute delayed in another thread to allow command ack to be sent to cloud
+
+		storage_Set_And_Save_DiagnosticsLog("#10 Cloud restart command");
+
 		restartCmdReceived = true;
 		responseStatus = 200;
 	}

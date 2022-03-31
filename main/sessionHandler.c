@@ -367,6 +367,7 @@ static void sessionHandler_task()
 
 		onCounter++;
 
+
 		/// This function is used to test the offline mode as a debug function from Cloud
 		offlineHandler_CheckForSimulateOffline();
 

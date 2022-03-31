@@ -584,7 +584,7 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_u32(configuration_handle, "PulseInterval", &configurationStruct.pulseInterval);
 
 	nvs_get_str(configuration_handle, "DiagnosticsLog", NULL, &readSize);
-	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.chargerName, &readSize);
+	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog, &readSize);
 
 	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
 	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
