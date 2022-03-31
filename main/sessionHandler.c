@@ -29,6 +29,7 @@ static const char *TAG = "SESSION        ";
 
 #define RESEND_REQUEST_TIMER_LIMIT 10//90
 #define OCMF_INTERVAL_TIME 3600
+#define PULSE_INIT_TIME 10000
 
 static char * completedSessionString = NULL;
 
@@ -280,7 +281,7 @@ static void sessionHandler_task()
 	uint32_t onTime = 0;
 
 	///Set high to ensure first pulse sent instantly at start
-    uint32_t pulseCounter = 10000;
+    uint32_t pulseCounter = PULSE_INIT_TIME;
 
     uint32_t dataCounter = 0;
     uint32_t dataInterval = 120;
@@ -288,7 +289,7 @@ static void sessionHandler_task()
     uint32_t statusCounter = 0;
     uint32_t statusInterval = 15;
 
-    uint32_t signalInterval = 120;
+    uint32_t LTEsignalInterval = 120;
 
     uint32_t signalCounter = 0;
 
@@ -300,7 +301,7 @@ static void sessionHandler_task()
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     bool isOnline = false;
-    volatile bool previousIsOnline = true;
+    bool previousIsOnline = true;
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
@@ -782,26 +783,17 @@ static void sessionHandler_task()
 		onTime++;
 		dataCounter++;
 
-		//if (onTime > 60)
 		if (onTime > 600)
 		{
-			if (networkInterface == eCONNECTION_WIFI)
+			if ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE))
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
 					dataInterval = storage_Get_TransmitInterval() * 10;//3600;	//When car is disconnected or not charging
 				else
 					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
 
-			}
-			else if (networkInterface == eCONNECTION_LTE)
-			{
-				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval() * 10;//3600;	//When car is disconnected or not charging
-				else
-					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
-
-				//LTE SignalQuality internal update interval
-				signalInterval = 7200;
+				/// LTE SignalQuality internal update interval
+				LTEsignalInterval = 3600 * 3;
 			}
 		}
 
@@ -846,7 +838,7 @@ static void sessionHandler_task()
 		if (networkInterface == eCONNECTION_LTE)
 		{
 			signalCounter++;
-			if((signalCounter >= signalInterval) && (otaIsRunning() == false))
+			if((signalCounter >= LTEsignalInterval) && (otaIsRunning() == false))
 			{
 				if (isMqttConnected() == true)
 				{
@@ -883,6 +875,11 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_PulseInterval(pulseInterval);
 
 			previousPulseInterval = pulseInterval;
+
+			/// If going from offline to online - ensure new pulse is sent instantly
+			/// Cloud sets charger as online within one minute after new pulse is received.
+			if((isOnline == true) && (previousIsOnline == false))
+				pulseCounter = PULSE_INIT_TIME;
 
 			if(pulseCounter >= pulseInterval)
 			{

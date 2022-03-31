@@ -55,7 +55,7 @@ void chargeSession_PrintSession(bool online, bool pingReplyActive)
 
 	//ESP_LOGI(TAG,"");
 	printf("\r\n");
-	ESP_LOGI(TAG,"%s - %s - %s - PR:%d\n \t\t\t\t  SessionId: \t\t%s (%s)\n \t\t\t\t  Energy: \t\t%f\n \t\t\t\t  StartDateTime: \t%s\n \t\t\t\t  EndDateTime: \t\t%s\n \t\t\t\t  ReliableClock: \t%i\n \t\t\t\t  StoppedByRFIDUid: \t%i\n \t\t\t\t  AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", online ? "ONLINE":"OFFLINE", pingReplyActive, chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
+	ESP_LOGI(TAG,"%s - %s - %s - PINGR:%d\n \t\t\t\t  SessionId: \t\t%s (%s)\n \t\t\t\t  Energy: \t\t%f\n \t\t\t\t  StartDateTime: \t%s\n \t\t\t\t  EndDateTime: \t\t%s\n \t\t\t\t  ReliableClock: \t%i\n \t\t\t\t  StoppedByRFIDUid: \t%i\n \t\t\t\t  AuthenticationCode: \t%s", storage_Get_Standalone() ? "STANDALONE": "SYSTEM", storage_Get_AuthenticationRequired() ? "AUTH" : "NO-AUTH", online ? "ONLINE":"OFFLINE", pingReplyActive, chargeSession.SessionId, sidOrigin, chargeSession.Energy, chargeSession.StartTime, chargeSession.EndTime, chargeSession.ReliableClock, chargeSession.StoppedByRFID, chargeSession.AuthenticationCode);
 	printf("\r\n");
 	//ESP_LOGI(TAG,"");
 }
