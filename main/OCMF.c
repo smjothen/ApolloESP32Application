@@ -12,7 +12,7 @@
 #include "storage.h"
 #include "protocol_task.h"
 
-static const char *TAG = "OCMF     ";
+static const char *TAG = "OCMF           ";
 
 static char * formatVersion = "1.0";
 

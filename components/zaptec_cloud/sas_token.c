@@ -17,7 +17,7 @@
 
 #include "sas_token.h"
 
-#define TAG "SAS TOKEN GENERATOR"
+#define TAG "SAS TOKEN GEN  "
 
 char rfc3986[256] = {0};
 char html5[256] = {0};

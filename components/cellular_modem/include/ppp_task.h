@@ -7,7 +7,7 @@
 #define GPIO_OUTPUT_RESET		33
 #define GPIO_OUTPUT_DEBUG_LED    0
 
-void configure_uart();
+void ppp_configure_uart();
 void ppp_set_uart_baud_high();
 int pppGetStackWatermark();
 void ppp_task_start(void);

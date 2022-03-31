@@ -28,12 +28,13 @@
 #include "../ble/ble_service_wifi_config.h"
 #include "../authentication/rfidPairing.h"
 #include "../../main/offline_log.h"
+#include "../../main/offlineHandler.h"
 
 #include "esp_tls.h"
 #include "base64.h"
 #include "main.h"
 
-#define TAG "Cloud Listener"
+#define TAG "CLOUD LISTENER "
 
 #ifdef DEVELOPEMENT_URL
 	#define MQTT_HOST "zap-d-iothub.azure-devices.net" //FOR DEVELOPEMENT
@@ -1007,6 +1008,7 @@ void cloud_listener_check_cmd()
 }
 
 static bool blockStartToTestPingReply = false;
+static bool blockPingReply = false;
 
 int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 {
@@ -1015,7 +1017,16 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	//Don't spend time in this function, must return from mqtt-event. May need separate process
 	if(strstr(commandEvent->topic, "iothub/methods/POST/1/"))
 	{
-		ESP_LOGW(TAG, "######## INCHARGE_PING_REPLY ########");
+
+		if(blockPingReply)
+		{
+			ESP_LOGW(TAG, "# INCHARGE_PING_REPLY BLOCKED #");
+		}
+		else
+		{
+			ESP_LOGW(TAG, "###### INCHARGE_PING_REPLY ######");
+			offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
+		}
 
 		responseStatus = 200;
 	}
@@ -1129,7 +1140,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			//Ensure that when a cloud start command is received, the offlineCurrentSent flag must be cleared
 			//to allow a offline current to be resent in case we go offline multiple times.
-			sessionHandler_ClearOfflineCurrentSent();
+			offlineHandler_ClearOfflineCurrentSent();
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentFromCloud);
 			if(ret == MsgWriteAck)
 			{
@@ -1795,7 +1806,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					char *endptr;
 					int offlineTime = (int)strtol(commandString+19, &endptr, 10);
 					if((offlineTime <= 86400) && (offlineTime > 0))
-						sessionHandler_simulateOffline(offlineTime);
+						offlineHandler_SimulateOffline(offlineTime);
 
 					ESP_LOGI(TAG, "Simulate offline %d", offlineTime);
 					responseStatus = 200;
@@ -2085,13 +2096,34 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					publish_debug_telemetry_observation_Diagnostics(msg);
 					responseStatus = 200;
 				}
-				else if(strstr(commandString,"blockstart") != NULL)
+				else if(strstr(commandString,"blockreq") != NULL)
 				{
 					blockStartToTestPingReply = true;
+					responseStatus = 200;
 				}
-				else if(strstr(commandString,"unblockstart") != NULL)
+				else if(strstr(commandString,"blockall") != NULL)
+				{
+					blockStartToTestPingReply = true;
+					blockPingReply = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"unblock") != NULL)
 				{
 					blockStartToTestPingReply = false;
+					blockPingReply = false;
+					responseStatus = 200;
+				}
+
+
+				else if(strstr(commandString,"pr on") != NULL)
+				{
+					offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"pr off") != NULL)
+				{
+					offlineHandler_UpdatePingReplyState(PING_REPLY_OFFLINE);
+					responseStatus = 200;
 				}
 
 
@@ -2174,7 +2206,7 @@ static int incrementalRefreshTimeout = 0;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
 
-	ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
+	//ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
 	MqttSetRxDiagnostics(event->data_len, event->topic_len);
 
     mqtt_client = event->client;
@@ -2543,7 +2575,7 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 		}
 	}
 
-	ESP_LOGW(TAG,"%s -> %s", instId, instIdFormatted);
+	//ESP_LOGW(TAG,"%s -> %s", instId, instIdFormatted);
 
 	uint8_t hex;
 	char substring[3] = {0};
@@ -2598,7 +2630,7 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 
 	strncpy(encodedString, encoded, 22);
 
-	ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
+	//ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
 }
 
 

@@ -23,10 +23,11 @@
 #include "../components/authentication/authentication.h"
 #include "../components/i2c/include/i2cDevices.h"
 #include "offline_log.h"
+#include "offlineHandler.h"
 
 static const char *TAG = "SESSION        ";
 
-#define RESEND_REQUEST_TIMER_LIMIT 90
+#define RESEND_REQUEST_TIMER_LIMIT 10//90
 #define OCMF_INTERVAL_TIME 3600
 
 static char * completedSessionString = NULL;
@@ -175,133 +176,6 @@ void log_task_info(void){
 }
 
 
-static enum PingReplyState pingReplyState = PING_REPLY_NO_ACTION;
-static uint32_t pingReplyTimer = 0;
-void PingReplyHandler()
-{
-	//Check if we are waiting for the Cloud-command
-	if(pingReplyState == PING_REPLY_AWAITING_CMD)
-	{
-		pingReplyTimer++;
-
-		///No cloud command received - start offline charging and do InChargePing periodically
-		if(pingReplyTimer == 10)
-			pingReplyState = PING_REPLY_OFFLINE;
-
-	}
-}
-
-void ClearPingReplyFromCloud()
-{
-	pingReplyState = PING_REPLY_NO_ACTION;
-}
-
-
-static uint32_t simulateOfflineTimeout = 180;
-static bool simulateOffline = false;
-void sessionHandler_simulateOffline(int offlineTime)
-{
-	simulateOffline = true;
-	simulateOfflineTimeout = offlineTime;
-}
-
-static bool requestCurrentWhenOnline = false;
-static bool offlineCurrentSent = false;
-void OfflineHandler()
-{
-
-	int activeSessionId = strlen(chargeSession_GetSessionId());
-	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
-
-	//Handle charge session started offline
-	if((activeSessionId > 0) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))//2 = Requesting, add definitions
-	{
-		//Wait until a valid tag is registered.
-		if((storage_Get_AuthenticationRequired() == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
-			return;
-
-		requestCurrentWhenOnline = true;
-
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "Offline MCU Granted command OK");
-
-			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
-
-			//Scaling is done in MCU
-			//if(MCU_GetGridType() == NETWORK_3P3W)
-			//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
-
-			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-			if(ret == MsgWriteAck)
-			{
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
-				{
-					ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
-
-				}
-				else
-				{
-					ESP_LOGI(TAG, "Offline MCU Start command FAILED");
-				}
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-			}
-
-		}
-		else
-		{
-			ESP_LOGI(TAG, "Offline MCU Granted command FAILED");
-		}
-	}
-
-	//Handel existing charge session that has gone offline
-	//Handle charge session started offline
-	else if((activeSessionId > 0) && ((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)) && !offlineCurrentSent)//2 = Requesting, add definitions
-	{
-		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
-
-		//Scaling is done in MCU
-		//if(MCU_GetGridType() == NETWORK_3P3W)
-		//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
-
-		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
-
-		requestCurrentWhenOnline = true;
-
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-		if(ret == MsgWriteAck)
-		{
-			MessageType ret = MCU_SendCommandId(CommandStartCharging);
-			if(ret == MsgCommandAck)
-			{
-				offlineCurrentSent = true;
-				ESP_LOGE(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-			}
-		}
-		else
-		{
-			ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-		}
-	}
-	else if(offlineCurrentSent == true)
-	{
-		ESP_LOGE(TAG, "Offline current mode. SimulateOfflineTimeout: %d", simulateOfflineTimeout);
-	}
-}
-
-void sessionHandler_ClearOfflineCurrentSent()
-{
-	offlineCurrentSent = false;
-}
 
 
 bool startupSent = false;
@@ -492,33 +366,26 @@ static void sessionHandler_task()
 
 		onCounter++;
 
-		//Allow simulating timelimited offline mode initated with cloud command
-		if(simulateOffline == true)
-		{
-			//Override state
-			//isOnline = false;
-			MqttSetSimulatedOffline(true);
-
-			simulateOfflineTimeout--;
-			if(simulateOfflineTimeout == 0)
-			{
-				simulateOffline= false;
-				MqttSetSimulatedOffline(false);
-			}
-		}
+		/// This function is used to test the offline mode as a debug function from Cloud
+		offlineHandler_CheckForSimulateOffline();
 
 		isOnline = isMqttConnected();
 
-		//Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
-		if(isOnline == true)
+		/// This only has effect in system mode - puts system in
+		offlineHandler_CheckPingReply();
+
+		enum PingReplyState pingReplyState = offlineHandler_GetPingReplyState();
+
+		// Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
+		if((isOnline == true) && (pingReplyState != PING_REPLY_OFFLINE))
 		{
-			offlineCurrentSent = false;
+			offlineHandler_ClearOfflineCurrentSent();
 			offlineTime = 0;
 		}
-		else
+		/*else
 		{
 			offlineTime++;
-		}
+		}*/
 
 
 		networkInterface = connectivity_GetActivateInterface();
@@ -567,21 +434,21 @@ static void sessionHandler_task()
 		if(networkInterface == eCONNECTION_NONE)
 		{
 			if((onCounter % 10) == 0)
-				ESP_LOGI(TAG, "No connection configured");
+				ESP_LOGI(TAG, "CommunicationMode == eCONNECTION_NONE");
 
 			//vTaskDelay(pdMS_TO_TICKS(1000));
 			//continue;
 		}
-		else if(!isOnline)
-		{
-			if((onCounter % 10) == 0)
-			{
-				if(storage_Get_Standalone() == 1)
-					ESP_LOGI(TAG, "Offline - Standalone");
-				else
-					ESP_LOGI(TAG, "Offline - System");
-			}
-		}
+//		else if(!isOnline)
+//		{
+//			if((onCounter % 10) == 0)
+//			{
+//				if(storage_Get_Standalone() == 1)
+//					ESP_LOGI(TAG, "Offline - Standalone");
+//				else
+//					ESP_LOGI(TAG, "Offline - System");
+//			}
+//		}
 
 		if(chargeSession_HasNewSessionId() == true)
 		{
@@ -603,14 +470,15 @@ static void sessionHandler_task()
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && requestCurrentWhenOnline)
+		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && offlineHandler_IsRequestingCurrentWhenOnline())
 		{
 			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
-			requestCurrentWhenOnline = false;
+			offlineHandler_SetRequestingCurrentWhenOnline(false);
 		}
 
 
-		if(isOnline)
+		/// MQTT connected and pingReply not in offline state
+		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
 		{
 			//Allow disabling send on change in standalone when TransmitInterval is 0
 			if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
@@ -632,7 +500,7 @@ static void sessionHandler_task()
 					if(pingReplyTrigger == 1)
 					{
 						update_mqtt_event_pattern(true);
-						pingReplyState = PING_REPLY_AWAITING_CMD;
+						offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
 					}
 
 					publish_debug_telemetry_observation_ChargingStateParameters();
@@ -667,7 +535,7 @@ static void sessionHandler_task()
 			offlineTime = 0;
 			offlineMode = false;
 		}
-		else
+		else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
 		{
 			if(storage_Get_Standalone() == false)
 			{
@@ -680,7 +548,7 @@ static void sessionHandler_task()
 					}
 					if(secondsSinceLastCheck >= 10)
 					{
-						OfflineHandler();
+						offlineHandler_CheckForOffline();
 						secondsSinceLastCheck = 0;
 						offlineMode = true;
 					}
@@ -843,7 +711,7 @@ static void sessionHandler_task()
 			{
 				OCMF_FinalizeOCMFLog();
 				chargeSession_Finalize();
-				chargeSession_PrintSession(isOnline, false);
+				chargeSession_PrintSession(isOnline, offlineHandler_IsPingReplyOffline());
 
 				//char completedSessionString[200] = {0};
 				memset(completedSessionString,0, LOG_STRING_SIZE);
@@ -992,8 +860,6 @@ static void sessionHandler_task()
 
 		pulseCounter++;
 
-
-
 		if(isMqttConnected() == true)
 		{
 			if(storage_Get_Standalone() == true)
@@ -1027,16 +893,6 @@ static void sessionHandler_task()
 		}
 
 
-
-		/*if (isMqttConnected() == true)
-		{
-			if((pulseCounter >= storage_Get_PulseInterval()) || (!previousIsOnline && isOnline))
-			{
-					publish_cloud_pulse();
-					pulseCounter = 0;
-			}
-		}*/
-
 		statusCounter++;
 		if(statusCounter >= statusInterval)
 		{
@@ -1067,7 +923,7 @@ static void sessionHandler_task()
 				}
 			}
 
-			chargeSession_PrintSession(isOnline, false);
+			chargeSession_PrintSession(isOnline, offlineHandler_IsPingReplyOffline());
 
 			statusCounter = 0;
 		}
@@ -1326,7 +1182,7 @@ static void sessionHandler_task()
 			
 
 
-			if(onTime % 10 == 0)//15
+			if(onTime % 15 == 0)//15
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
@@ -1370,13 +1226,13 @@ static void sessionHandler_task()
 		/// Indicate offline with led LED
 		if((storage_Get_Standalone() == false) && ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE)))
 		{
-			if((offlineTime % 24 == 0) && (offlineMode == true))
+			if((offlineTime % 30 == 0) && (offlineMode == true))
 			{
 				MessageType ret = MCU_SendCommandId(CommandIndicateOffline);
 				if(ret == MsgCommandAck)
-					ESP_LOGW(TAG, "MCU Indicate offline command OK. ");
+					ESP_LOGI(TAG, "MCU LED offline pulse OK. ");
 				else
-					ESP_LOGE(TAG, "MCU Indicate offline command FAILED");
+					ESP_LOGE(TAG, "MCU LED offline pulse FAILED");
 			}
 		}
 

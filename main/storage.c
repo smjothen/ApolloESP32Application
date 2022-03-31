@@ -13,7 +13,7 @@
 #include "DeviceInfo.h"
 #include "protocol_task.h"
 
-static const char *TAG = "STORAGE:";
+static const char *TAG = "STORAGE        ";
 
 #define CONFIG_FILE "CONFIG_FILE"
 #define DEFAULT_TRANSMIT_INTERVAL 8640

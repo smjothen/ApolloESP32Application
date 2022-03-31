@@ -25,8 +25,8 @@
 #include "../ntp/zntp.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
-static const char *TAG = "I2C_DEVICES";
-static const char *TAG_EEPROM = "EEPROM STATUS";
+static const char *TAG = "I2C_DEVICES    ";
+static const char *TAG_EEPROM = "EEPROM STATUS  ";
 
 static float temperature = 0.0;
 static float humidity = 0.0;

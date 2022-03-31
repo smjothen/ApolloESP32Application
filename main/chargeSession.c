@@ -114,10 +114,10 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 		ESP_LOGE(TAG, "#### Tried setting Cloud SessionId with car disconnected: %d ####", isCarConnected);
 		return -1;
 	}
-	else
-	{
-		ESP_LOGW(TAG, "**** Car connected: %d ***", isCarConnected);
-	}
+//	else
+//	{
+//		ESP_LOGW(TAG, "**** Car connected: %d ***", isCarConnected);
+//	}
 
 	if(strcmp(sessionIdFromCloud, chargeSession.SessionId) == 0)
 	{

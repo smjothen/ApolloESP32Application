@@ -23,10 +23,11 @@
 #include "sessionHandler.h"
 #include "../components/adc/adc_control.h"
 #include "../../main/connectivity.h"
+#include "offlineHandler.h"
 
 #include "../../main/IT3PCalculator.h"
 
-#define TAG "OBSERVATIONS POSTER"
+static const char *TAG = "OBSERV POSTER  ";
 
 //static bool startupMessage = true;
 
@@ -62,7 +63,7 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
     }
 
     int len = strlen(message);
-    ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
+    //ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
 
     int publish_err;
     if(blocking){
@@ -541,6 +542,7 @@ static uint32_t previousNumberOfTagsCount = 0;
 
 static uint8_t previousOverrideGridType = 0xff;
 static uint8_t previousIT3OptimizationEnabled = 0xff;
+static bool previousPingReplyState = 1;
 
 
 int publish_telemetry_observation_on_change(){
@@ -893,6 +895,16 @@ int publish_telemetry_observation_on_change(){
 		}
 	}
 
+	if(storage_Get_Standalone() == false)
+	{
+		bool pingReplyState = offlineHandler_IsPingReplyOffline();
+		if(pingReplyState != previousPingReplyState)
+		{
+			add_observation_to_collection(observations, create_uint32_t_observation(OfflineMode, (uint32_t)pingReplyState));
+			previousPingReplyState = pingReplyState;
+			isChange = true;
+		}
+	}
 	//Check ret and retry?
     int ret = 0;
 

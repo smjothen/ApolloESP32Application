@@ -30,17 +30,18 @@
 #include "../components/cellular_modem/include/ppp_task.h"
 #include "driver/uart.h"
 #include "eeprom_wp.h"
-//#include "apollo_console.h"
 #include "certificate.h"
 #include "fat.h"
 #include "cJSON.h"
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
-
 #include "zaptec_cloud_observations.h"
-//#include "IT3PCalculator.h"
 
-const char *TAG_MAIN = "MAIN           ";
+#ifdef useAdvancedConsole
+	//#include "apollo_console.h"
+#endif
+
+static const char *TAG_MAIN = "MAIN           ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
@@ -159,7 +160,7 @@ void HandleCommands()
 
 
 }
-#define useConsole
+#define useSimpleConsole
 
 
 
@@ -227,8 +228,10 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-	//gpio_pullup_en(GPIO_NUM_3);
-	//apollo_console_init();
+#ifdef useAdvancedConsole
+	gpio_pullup_en(GPIO_NUM_3);
+	apollo_console_init();
+#endif
 
 	eeprom_wp_enable_nfc_enable();
 	InitGPIOs();
@@ -266,11 +269,11 @@ void app_main(void)
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
-#ifdef useConsole
+#ifdef useSimpleConsole
 	configure_console();
 #endif
 
-	configure_uart();
+	ppp_configure_uart(); //Remove since in connectivity?
 	start_ota_task();
     zaptecProtocolStart();
 
@@ -484,7 +487,7 @@ void app_main(void)
 		}
 
 
-	#ifdef useConsole
+	#ifdef useSimpleConsole
     	HandleCommands();
 	#endif
 

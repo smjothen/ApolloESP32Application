@@ -38,13 +38,6 @@ enum ChargerOperatingMode
     CHARGE_OPERATION_STATE_WARNING          = 7,
 };
 
-enum PingReplyState
-{
-	PING_REPLY_NO_ACTION = 0,
-	PING_REPLY_AWAITING_CMD = 1,
-	PING_REPLY_CMD_RECEIVED = 2,
-	PING_REPLY_OFFLINE		= 3,
-};
 
 void sessionHandler_init();
 //void SetDataInterval(int newDataInterval);
@@ -54,8 +47,6 @@ void SessionHandler_SetOCMFHighInterval();
 void SessionHandler_SetLogCurrents();
 void sessionHandler_ClearCarInterfaceResetConditions();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
-void sessionHandler_ClearOfflineCurrentSent();
-void sessionHandler_simulateOffline(int offlineTime);
 int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
 void ChargeModeUpdateToCloudNeeded();

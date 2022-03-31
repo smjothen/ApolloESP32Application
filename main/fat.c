@@ -19,7 +19,7 @@
 #include "freertos/task.h"
 #include "DeviceInfo.h"
 
-static const char *TAG = "FAT  ";
+static const char *TAG = "FAT            ";
 
 // Handle of the wear levelling library instance
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
