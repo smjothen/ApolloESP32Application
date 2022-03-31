@@ -160,7 +160,7 @@ void HandleCommands()
 
 
 }
-#define useSimpleConsole
+//#define useSimpleConsole
 
 
 
@@ -277,7 +277,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    //validate_booted_image();
+    validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();

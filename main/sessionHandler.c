@@ -27,7 +27,7 @@
 
 static const char *TAG = "SESSION        ";
 
-#define RESEND_REQUEST_TIMER_LIMIT 10//90
+#define RESEND_REQUEST_TIMER_LIMIT 30 //90 TODO set back
 #define OCMF_INTERVAL_TIME 3600
 #define PULSE_INIT_TIME 10000
 
