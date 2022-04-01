@@ -265,6 +265,13 @@ bool GetNewInstallationIdFlag()
 	return newInstallationIdFlag;
 }
 
+static bool datalog = false;
+bool GetDatalog()
+{
+	return datalog;
+}
+
+
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
 	if ((message[0] != '{') || (message[message_len-1] != '}'))
@@ -2129,7 +2136,16 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
-
+				else if(strstr(commandString,"datalog on") != NULL)
+				{
+					datalog = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"datalog off") != NULL)
+				{
+					datalog = false;
+					responseStatus = 200;
+				}
 
 
 			}
@@ -2206,6 +2222,7 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 static int ridNr = 4199;
 static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
+static esp_err_t reconnectErr = ESP_OK;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
 
@@ -2475,16 +2492,11 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     			ESP_LOGW(TAG, "*** Reconnect at max: %i ***", incrementalRefreshTimeout);
     		}
 
-    		if(resetCounter == 7)
-			{
-    			ESP_LOGI(TAG, "Refreshing Wifi Connected");
-    			network_updateWifi();
-			}
 
 			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 35))
 			{
-				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+				reconnectErr = esp_mqtt_client_reconnect(mqtt_client);
+				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", reconnectErr);
 			}
     	}
     	else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
@@ -2507,7 +2519,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		if(resetCounter >= 720) //With 10-sec timeout without increase 720 * 10 = 2 hours
 			{
-    			storage_Set_And_Save_DiagnosticsLog("#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times");
+    			char buf[100]={0};
+    			sprintf(buf, "#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times. %d", reconnectErr);
+    			storage_Set_And_Save_DiagnosticsLog(buf);
 
 				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
@@ -2517,7 +2531,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	{
     		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
     		{
-    			storage_Set_And_Save_DiagnosticsLog("#2 MQTT_EVENT_ERROR: 39 times");
+    			char buf[100]={0};
+    			sprintf(buf, "#2 MQTT_EVENT_ERROR: 39 times. %d", reconnectErr);
+    			storage_Set_And_Save_DiagnosticsLog(buf);
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
     		}
@@ -2826,7 +2842,7 @@ void periodic_refresh_token(uint8_t source)
     }
     else
     {
-    	//err = esp_mqtt_client_reconnect(mqtt_client);
+    	//Refreshes token in event: MQTT_EVENT_BEFORE_CONNECT
     	err = esp_mqtt_client_start(mqtt_client);
     	ESP_LOGI(TAG, "MQTT reconnect result: %d", err);
     }

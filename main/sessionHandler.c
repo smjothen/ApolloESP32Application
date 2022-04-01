@@ -1184,12 +1184,15 @@ static void sessionHandler_task()
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
-				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta) * 4.65));
+				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((0.7973 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 2483.4));//=0.7973*C11+2483.4
 				ESP_LOGI(TAG, "**** %s ****", buf);
 
-				if(onTime % 3600 == 0)
+				if(onTime % 7200 == 0)
 				{
-					publish_debug_telemetry_observation_Diagnostics(buf);
+					//Only publish if activated by command
+					if(GetDatalog())
+						publish_debug_telemetry_observation_Diagnostics(buf);
+
 					MqttDataReset();
 					ESP_LOGW(TAG, "**** Hourly MQTT data reset ****");
 				}

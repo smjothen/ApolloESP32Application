@@ -168,30 +168,38 @@ void offlineHandler_CheckForOffline()
 
 		requestCurrentWhenOnline = true;
 
+		/// Sets LED Green, indicating waiting for start command from Cloud(or from this OfflineHandler)
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 		if(ret == MsgCommandAck)
 		{
 			ESP_LOGI(TAG, "Offline MCU Granted command OK");
 
 			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+			float maxCurrent = storage_Get_CurrentInMaximum();
 
-			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-			if(ret == MsgWriteAck)
+			/// Do not allow offline charging if offlineCurrent(Based on MaxCurrent) is below 6A.
+			if(offlineCurrent >= 6) && (maxCurrent >= 6)
 			{
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
+
+				MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
+				if(ret == MsgWriteAck)
 				{
-					ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
+					MessageType ret = MCU_SendCommandId(CommandStartCharging);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
+					}
+					else
+					{
+						ESP_LOGI(TAG, "Offline MCU Start command FAILED");
+					}
 				}
 				else
 				{
-					ESP_LOGI(TAG, "Offline MCU Start command FAILED");
+					ESP_LOGE(TAG, "Offline MCU Start command FAILED");
 				}
 			}
-			else
-			{
-				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-			}
+			ESP_LOGE(TAG, "To low offlineCurrent or maxCurrent to send start command");
 
 		}
 		else
@@ -205,29 +213,36 @@ void offlineHandler_CheckForOffline()
 	else if((activeSessionId > 0) && ((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)) && !offlineCurrentSent)//2 = Requesting, add definitions
 	{
 		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+		float maxCurrent = storage_Get_CurrentInMaximum();
 
-		ESP_LOGI(TAG, "Sending offline current to MCU %f", offlineCurrent);
+		ESP_LOGI(TAG, "Sending offline current to MCU %2.1f (MaxCurrent: %2.1)f", offlineCurrent, maxCurrent);
 
 		requestCurrentWhenOnline = true;
 
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-		if(ret == MsgWriteAck)
+		///When comming online, only check maxCurrent since offline current may not have been synced yet
+		if(maxCurrent >= 6)
 		{
-			MessageType ret = MCU_SendCommandId(CommandStartCharging);
-			if(ret == MsgCommandAck)
+
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
+			if(ret == MsgWriteAck)
 			{
-				offlineCurrentSent = true;
-				ESP_LOGW(TAG, "### Offline MCU Start command OK: %fA ###", offlineCurrent);
+				MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(ret == MsgCommandAck)
+				{
+					offlineCurrentSent = true;
+					ESP_LOGW(TAG, "### Offline MCU Start command OK: %fA ###", offlineCurrent);
+				}
+				else
+				{
+					ESP_LOGE(TAG, "Offline MCU Start command FAILED");
+				}
 			}
 			else
 			{
 				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
 			}
 		}
-		else
-		{
-			ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-		}
+		ESP_LOGE(TAG, "To low maxCurrent to send start command");
 	}
 	else if(offlineCurrentSent == true)
 	{

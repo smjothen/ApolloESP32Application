@@ -617,7 +617,9 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	\t\t%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
 	ESP_LOGI(TAG, "Standalone current: 	\t		%2.1f", configurationStruct.standaloneCurrent);
-
+	ESP_LOGI(TAG, "");
+	ESP_LOGI(TAG, "Maximum current: 	\t		%2.1f", configurationStruct.currentInMaximum);
+	ESP_LOGI(TAG, "Minimum current: 	\t		%2.1f", configurationStruct.currentInMinimum);
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
