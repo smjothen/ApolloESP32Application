@@ -178,7 +178,7 @@ void offlineHandler_CheckForOffline()
 			float maxCurrent = storage_Get_CurrentInMaximum();
 
 			/// Do not allow offline charging if offlineCurrent(Based on MaxCurrent) is below 6A.
-			if(offlineCurrent >= 6) && (maxCurrent >= 6)
+			if((offlineCurrent >= 6.0) && (maxCurrent >= 6.0))
 			{
 
 				MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
@@ -215,12 +215,12 @@ void offlineHandler_CheckForOffline()
 		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
 		float maxCurrent = storage_Get_CurrentInMaximum();
 
-		ESP_LOGI(TAG, "Sending offline current to MCU %2.1f (MaxCurrent: %2.1)f", offlineCurrent, maxCurrent);
+		ESP_LOGI(TAG, "Sending offline current to MCU %2.1f (MaxCurrent: %2.1f)", offlineCurrent, maxCurrent);
 
 		requestCurrentWhenOnline = true;
 
 		///When comming online, only check maxCurrent since offline current may not have been synced yet
-		if(maxCurrent >= 6)
+		if(maxCurrent >= 6.0)
 		{
 
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
