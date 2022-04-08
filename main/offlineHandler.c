@@ -14,9 +14,9 @@
 
 static const char *TAG = "OFFLINEHANDLER ";
 
-#define PING_REPLY_TIMER_LIMIT_TO_OFFLINE 30 							 //TODO evaluate 100
-#define PING_REPLY_CHECK_INCHARGE_PERIODE 60 							 //TODO evaluate 100
-#define PING_REPLY_TIMER_INCREASE (PING_REPLY_CHECK_INCHARGE_PERIODE/5) //TODO evaluate 100
+#define PING_REPLY_TIMER_LIMIT_TO_OFFLINE 120//30 //Test param
+#define PING_REPLY_CHECK_INCHARGE_PERIODE 180//60 //Test param
+#define PING_REPLY_TIMER_INCREASE (PING_REPLY_CHECK_INCHARGE_PERIODE/2)
 
 
 static enum PingReplyState pingReplyState = PING_REPLY_ONLINE;
@@ -199,7 +199,10 @@ void offlineHandler_CheckForOffline()
 					ESP_LOGE(TAG, "Offline MCU Start command FAILED");
 				}
 			}
-			ESP_LOGE(TAG, "To low offlineCurrent or maxCurrent to send start command");
+			else
+			{
+				ESP_LOGE(TAG, "To low offlineCurrent or maxCurrent to send start command");
+			}
 
 		}
 		else

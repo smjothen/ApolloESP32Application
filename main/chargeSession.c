@@ -65,6 +65,12 @@ void SetCarConnectedState(bool connectedState)
 	isCarConnected = connectedState;
 }
 
+bool chargeSession_IsCarConnected()
+{
+	return isCarConnected;
+}
+
+
 char * chargeSession_GetSessionId()
 {
 	return chargeSession.SessionId;

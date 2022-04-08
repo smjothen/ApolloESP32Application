@@ -43,6 +43,7 @@ esp_err_t chargeSession_ReadSessionResetInfo();
 
 bool chargeSession_IsAuthenticated();
 void SetCarConnectedState(bool connectedState);
+bool chargeSession_IsCarConnected();
 void chargeSession_SetReceivedStartChargingCommand();
 
 #ifdef __cplusplus

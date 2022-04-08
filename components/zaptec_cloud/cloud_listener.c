@@ -33,6 +33,7 @@
 #include "esp_tls.h"
 #include "base64.h"
 #include "main.h"
+#include <math.h>
 
 #define TAG "CLOUD LISTENER "
 
@@ -48,9 +49,10 @@
 #define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
 #define MQTT_EVENT_PATTERN_PING_REPLY "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s&pi=%s"
 
-int resetCounter = 0;
+static int resetCounter = 0;
+static int reconnectionAttempt = 0;
 
-char event_topic[128];
+static char event_topic[128];
 static struct DeviceInfo cloudDeviceInfo;
 
 static bool mqttConnected = false;
@@ -129,6 +131,8 @@ int publish_to_iothub(const char* payload, const char* topic){
             mqtt_client, topic,
             payload, 0, 1, 0
     );
+
+    //ESP_LOGE(TAG, "<<<sending>>> Id %i - Len: %d: %s", message_id, strlen(payload), payload);
 
     if(message_id>0){
         return 0;
@@ -2290,6 +2294,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         publish_debug_message_event(message, cloud_event_level_information);
 
         resetCounter = 0;
+        reconnectionAttempt = 0;
 
         mqttConnected = true;
         //When connected, reset connection timeout to default
@@ -2471,6 +2476,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         refresh_token(&mqtt_config);
 		ESP_LOGD(TAG, "setting config with the new token");
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
+        reconnectionAttempt++;
+
         break;
     case MQTT_EVENT_ERROR:
     	resetCounter++;
@@ -2480,12 +2487,43 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
-    		if(incrementalRefreshTimeout < 3600000) //1 hour in milliseconds
+    		bool slowBackoff = true;
+    		if(chargeSession_IsCarConnected())
+    			slowBackoff = false;
+
+    		//As in Pro - use different limits if car is connected or not
+    		double maxBackoff;
+			if(slowBackoff) {
+				maxBackoff = 180.0; // 3 min (+ 0-65 sec)
+			}
+			else {
+				maxBackoff = 45.0; // 45 sec (+ 0-28 sec)
+			}
+
+			double backOffSeconds = powf(reconnectionAttempt, 2.0);
+
+			if(backOffSeconds > maxBackoff)
+				backOffSeconds = maxBackoff;
+
+    		if(backOffSeconds <= maxBackoff)
     		{
-    			incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
-    			mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
+				uint32_t rand = esp_random();
+				float randomSeconds = rand/(0xffffffff * 1.0);
+
+				if(slowBackoff)
+					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 3.0;
+				else
+					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 2.0;
+
+
+				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %d)", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
+
+
+				incrementalRefreshTimeout = 10 + backOffSeconds + randomSeconds;
+    			//incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
+    			mqtt_config.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
     			esp_mqtt_set_config(mqtt_client, &mqtt_config);
-    			ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
+    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.reconnect_timeout_ms);
     		}
     		else
     		{
@@ -2731,7 +2769,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     mqtt_config.keepalive = 1100; //300;//120 is default;
 
     //Don't use, causes disconnect and reconnect
-    //mqtt_config.refresh_connection_after_ms = 20000;//3600000;//30000;
+    //mqtt_config.refresh_connection_after_ms = 20000;
 
 	blocked_publish_event_group = xEventGroupCreate();
 	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED);
@@ -2771,14 +2809,9 @@ void update_installationId()
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    //mqtt_config.cert_pem = cert;
-
     mqtt_config.lwt_topic = event_topic;
-    //esp_mqtt_client_disconnect(mqtt_client);
-    //esp_mqtt_client_stop(mqtt_client);
+
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
-	//esp_mqtt_client_start(mqtt_client);
-	//refresh_token(&mqtt_config);
 }
 
 
@@ -2806,25 +2839,18 @@ void update_mqtt_event_pattern(bool usePingReply)
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    //mqtt_config.cert_pem = cert;
-
     mqtt_config.lwt_topic = event_topic;
-    //esp_mqtt_client_disconnect(mqtt_client);
-    //esp_mqtt_client_stop(mqtt_client);
+
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
-	//esp_mqtt_client_start(mqtt_client);
-	//refresh_token(&mqtt_config);
 }
 
 
 void periodic_refresh_token(uint8_t source)
 {
 	ESP_LOGW(TAG, "####### Periodic new token ######");
-	//refresh_token(&mqtt_config);
 
 	esp_err_t err = esp_mqtt_client_stop(mqtt_client);
-	//esp_mqtt_client_disconnect(mqtt_client);
-    //esp_err_t err = esp_mqtt_set_config(mqtt_client, &mqtt_config);
+
     if(err != ESP_OK)
     {
     	if(source == 2)
@@ -2846,8 +2872,4 @@ void periodic_refresh_token(uint8_t source)
     	err = esp_mqtt_client_start(mqtt_client);
     	ESP_LOGI(TAG, "MQTT reconnect result: %d", err);
     }
-
-    /*esp_mqtt_client_disconnect(mqtt_client);
-    esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-    ESP_LOGI(TAG, "MQTT reconnect error? %d", rconErr);*/
 }

@@ -24,6 +24,7 @@
 #include "../components/adc/adc_control.h"
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
+#include "mqtt_client.h"
 
 #include "../../main/IT3PCalculator.h"
 
@@ -446,7 +447,8 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 {
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
-    return publish_json(observations);
+    //return publish_json(observations);
+    return publish_json_blocked(observations, 10000);
 }
 
 static uint32_t txCnt = 0;
@@ -481,7 +483,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt: %d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetchargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter());
+	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetchargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
@@ -528,7 +530,7 @@ static float previousEnergy = -1.0;
 static uint32_t previousDiagnosticsMode = 0;
 
 static uint8_t previousOfflinePhase = 0;
-static float previousOfflineCurrent = 0.0;
+static float previousOfflineCurrent = -1.0;
 
 static float warningValue = 0;
 static uint8_t maxRTCSend = 0;
@@ -611,6 +613,9 @@ int publish_telemetry_observation_on_change(){
     if ((previousNetworkType != networkType))// && (networkType != 0))
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
+
+    	//Always send this also to ensure consistency
+    	add_observation_to_collection(observations, create_uint32_t_observation(MaxPhases, (uint32_t)GetMaxPhases()));
     	previousNetworkType = networkType;
     	isChange = true;
     }
