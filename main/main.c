@@ -391,6 +391,7 @@ void app_main(void)
     char onTimeString[20]= {0};
 
     bool hasBeenOnline = false;
+    int otaDelayCounter = 0;
 
 	while (true)
     {
@@ -484,6 +485,33 @@ void app_main(void)
 					esp_restart();
 				}
 			}
+		}
+
+
+		/// Wait until car disconnects, delay 5 more minutes, then start OTA.
+		if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
+		{
+			if(IsOTADelayActive())
+			{
+				otaDelayCounter++;
+
+				if(otaDelayCounter % 10 == 0)
+					ESP_LOGW(TAG_MAIN, "OTA Counter: %d", otaDelayCounter);
+
+				/// When delay after disconnect has passed -> perform OTA
+				if(otaDelayCounter == 300)
+				{
+					otaDelayCounter = 0;
+					ClearOTADelay();
+
+					InitiateOTASequence();
+				}
+			}
+		}
+		else
+		{
+			/// Reset counter while car is connected
+			otaDelayCounter = 0;
 		}
 
 

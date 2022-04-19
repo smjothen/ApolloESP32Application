@@ -1018,6 +1018,42 @@ void cloud_listener_check_cmd()
 	}
 }
 
+
+
+int InitiateOTASequence()
+{
+	int status = 400;
+
+	ble_interface_deinit();
+
+	MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+	if(ret == MsgCommandAck)
+	{
+		status = 200;
+		ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+
+		//Only start ota if MCU has ack'ed the stop command
+		start_segmented_ota();
+		//start_ota();
+	}
+	else
+	{
+		status = 400;
+		ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+	}
+	return status;
+}
+
+static bool otaDelayActive = false;
+bool IsOTADelayActive()
+{
+	return otaDelayActive;
+}
+void ClearOTADelay()
+{
+	otaDelayActive = false;
+}
+
 static bool blockStartToTestPingReply = false;
 static bool blockPingReply = false;
 
@@ -1046,10 +1082,19 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
 		//Execute delayed in another thread to allow command ack to be sent to cloud
 
-		storage_Set_And_Save_DiagnosticsLog("#10 Cloud restart command");
-
-		restartCmdReceived = true;
-		responseStatus = 200;
+		MessageType ret = MCU_SendCommandId(CommandReset);
+		if(ret == MsgCommandAck)
+		{
+			restartCmdReceived = true;
+			responseStatus = 200;
+			storage_Set_And_Save_DiagnosticsLog("#10 Cloud restart command");
+			ESP_LOGI(TAG, "MCU Start command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Start command FAILED");
+		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
 	{
@@ -1070,8 +1115,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ble_interface_deinit();
 
+		if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
+		{
+
+			responseStatus = InitiateOTASequence();
+		}
+		else
+		{
+			otaDelayActive = true;
+			responseStatus = 200;
+			ESP_LOGW(TAG, "OTA Delayed start");
+		}
+
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
+	{
+		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
+
+		ble_interface_deinit();
 
 		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
 		if(ret == MsgCommandAck)
@@ -1089,12 +1151,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 		}
 
-	}
-	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
-	{
-		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
-		ESP_LOGI(TAG, "TODO: Implement forced");
-		ble_interface_deinit();
+
+		/*ble_interface_deinit();
 
 		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
 		if(ret == MsgCommandAck)
@@ -1105,7 +1163,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//Start ota even if MCU has NOT ack'ed the stop command
 		start_segmented_ota();
 		//start_ota();
-		responseStatus = 200;
+		responseStatus = 200;*/
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
 	{
@@ -1460,6 +1518,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
 					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"Restart ESP") != NULL)
+				{
+					restartCmdReceived = true;
+
+					storage_Set_And_Save_DiagnosticsLog("#11 Cloud Restart ESP command");
 					responseStatus = 200;
 				}
 

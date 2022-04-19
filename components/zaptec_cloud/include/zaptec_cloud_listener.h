@@ -35,6 +35,9 @@ void ClearNewInstallationIdFlag();
 bool GetNewInstallationIdFlag();
 
 bool GetDatalog();
+int InitiateOTASequence();
+bool IsOTADelayActive();
+void ClearOTADelay();
 
 int publish_iothub_event(const char *payload);
 int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait);
