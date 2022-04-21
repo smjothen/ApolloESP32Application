@@ -245,7 +245,10 @@ void offlineHandler_CheckForOffline()
 				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
 			}
 		}
-		ESP_LOGE(TAG, "To low maxCurrent to send start command");
+		else
+		{
+			ESP_LOGE(TAG, "To low maxCurrent to send start command");
+		}
 	}
 	else if(offlineCurrentSent == true)
 	{

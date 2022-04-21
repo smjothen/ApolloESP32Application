@@ -2574,7 +2574,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     		}
 
 
-			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 35))
+			if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 60) || (resetCounter == 90))
 			{
 				reconnectErr = esp_mqtt_client_reconnect(mqtt_client);
 				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", reconnectErr);
@@ -2610,10 +2610,10 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	}
     	else
     	{
-    		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
+    		if(resetCounter >= 99) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
     		{
     			char buf[100]={0};
-    			sprintf(buf, "#2 MQTT_EVENT_ERROR: 39 times. %d", reconnectErr);
+    			sprintf(buf, "#2 MQTT_EVENT_ERROR: 99 times. %d", reconnectErr);
     			storage_Set_And_Save_DiagnosticsLog(buf);
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
