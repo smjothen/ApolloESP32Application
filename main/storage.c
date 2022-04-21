@@ -16,7 +16,7 @@
 static const char *TAG = "STORAGE        ";
 
 #define CONFIG_FILE "CONFIG_FILE"
-#define DEFAULT_TRANSMIT_INTERVAL 8640
+#define DEFAULT_TRANSMIT_INTERVAL 3600
 nvs_handle configuration_handle;
 
 // "wifi"
@@ -36,6 +36,7 @@ void storage_Init()
 {
 	esp_err_t err = nvs_flash_init();
 
+	/// For debug
 	//err = nvs_flash_erase();
 	//err = nvs_flash_init();
 
@@ -220,10 +221,10 @@ void storage_Set_NetworkType(uint8_t newValue)
 	configurationStruct.networkType = newValue;
 }
 
-void storage_Set_NetworkTypeOverride(uint8_t newValue)
+/*void storage_Set_NetworkTypeOverride(uint8_t newValue)
 {
 	configurationStruct.networkTypeOverride = newValue;
-}
+}*/
 
 void storage_Set_PulseInterval(uint32_t newValue)
 {
@@ -414,7 +415,8 @@ uint8_t storage_Get_PhaseRotation()
 	return configurationStruct.phaseRotation;
 }
 
-uint8_t storage_Get_NetworkType()
+//This is read from MCU instead and is currently not used
+/*uint8_t storage_Get_NetworkType()
 {
 	//If the override value has been set to a valid value, the override measurement value
 	if(configurationStruct.networkTypeOverride != 0)
@@ -426,12 +428,12 @@ uint8_t storage_Get_NetworkType()
 	{
 		return configurationStruct.networkType;
 	}
-}
+}*/
 
-uint8_t storage_Get_NetworkTypeOverride()
+/*uint8_t storage_Get_NetworkTypeOverride()
 {
 	return configurationStruct.networkTypeOverride;
-}
+}*/
 
 uint32_t storage_Get_PulseInterval()
 {

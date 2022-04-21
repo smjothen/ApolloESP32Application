@@ -1133,37 +1133,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
 
-		ble_interface_deinit();
+		responseStatus = InitiateOTASequence();
 
-		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-		if(ret == MsgCommandAck)
-		{
-			responseStatus = 200;
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
-
-			//Only start ota if MCU has ack'ed the stop command
-			start_segmented_ota();
-			//start_ota();
-		}
-		else
-		{
-			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
-		}
-
-
-		/*ble_interface_deinit();
-
-		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-		if(ret == MsgCommandAck)
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
-		else
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
-
-		//Start ota even if MCU has NOT ack'ed the stop command
-		start_segmented_ota();
-		//start_ota();
-		responseStatus = 200;*/
+		ESP_LOGW(TAG, "OTA forced: %d", responseStatus);
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
 	{
@@ -2215,7 +2187,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					datalog = false;
 					responseStatus = 200;
 				}
-
+				/// This command may not be required, only for troubleshooting if MCU does not respond. Has never happened.
+				else if(strstr(commandString,"OTA no MCU") != NULL)
+				{
+					//Here no command is sent to stop MCU directly.
+					ble_interface_deinit();
+					start_segmented_ota();
+				}
 
 			}
 	}

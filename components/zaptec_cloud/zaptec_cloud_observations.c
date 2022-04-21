@@ -606,11 +606,7 @@ int publish_telemetry_observation_on_change(){
 
 
     uint8_t networkType = MCU_GetGridType();
-    uint8_t nwtOverride = storage_Get_NetworkTypeOverride();
-    if(nwtOverride != 0)
-    	networkType = nwtOverride;
-
-    if ((previousNetworkType != networkType))// && (networkType != 0))
+    if (previousNetworkType != networkType)
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamNetworkType, (uint32_t)networkType));
 
@@ -769,24 +765,35 @@ int publish_telemetry_observation_on_change(){
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
 		}
 
-		//If power is starting, send voltages
-		if ((power > 0.0) && (previousPower == 0.0))
+		previousPower = power;
+		isChange = true;
+	}
+
+	float energy = chargeSession_Get().Energy;
+
+	//Send energy for every 0.1kWh when below 1kWh to make the app responsive at start of charging
+	//Send for every 0.2kWh above 1kWh
+	float trigLimit = 0.1;
+	if(energy >= 1.0)
+		trigLimit = 0.2;
+
+	//Send energy based on level of change
+	if((energy > previousEnergy + trigLimit) || (energy < (previousEnergy - trigLimit)))
+	{
+		/// Sanity check
+		if(energy < 0.0)
+			energy = 0.0;
+
+		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, energy));
+
+		/// When 0.1kWh has been consumed, send voltages once
+		if ((energy >= 0.1) && (previousEnergy < 0.1))
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
 		}
 
-		previousPower = power;
-		isChange = true;
-	}
-
-	float energy = chargeSession_Get().Energy;
-	if((energy > previousEnergy + 0.1) || (energy < (previousEnergy - 0.1))) //0.1kWh
-	{
-		if(energy < 0.0)
-			energy = 0.0;
-		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, energy));
 		previousEnergy = energy;
 		isChange = true;
 	}

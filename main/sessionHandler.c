@@ -27,7 +27,7 @@
 
 static const char *TAG = "SESSION        ";
 
-#define RESEND_REQUEST_TIMER_LIMIT 30 //90 TODO set back
+#define RESEND_REQUEST_TIMER_LIMIT 90
 #define OCMF_INTERVAL_TIME 3600
 #define PULSE_INIT_TIME 10000
 
@@ -255,9 +255,18 @@ void SessionHandler_SetOCMFHighInterval()
 }
 
 static bool logCurrents = false;
+static uint16_t logCurrentsCounter = 0;
 void SessionHandler_SetLogCurrents()
 {
-	logCurrents = true;
+	if(logCurrents == false)
+	{
+		logCurrents = true;
+		logCurrentsCounter = 0;
+	}
+	else
+	{
+		logCurrents = false;
+	}
 }
 
 static bool carInterfaceRestartTried = false;
@@ -786,7 +795,7 @@ static void sessionHandler_task()
 			if ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE))
 			{
 				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval() * 10;//3600;	//When car is disconnected or not charging
+					dataInterval = storage_Get_TransmitInterval() * 12;	//When car is disconnected or not charging
 				else
 					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
 
@@ -1172,8 +1181,13 @@ static void sessionHandler_task()
 
 			if(logCurrents == true)
 			{
-				publish_debug_telemetry_observation_power();
-				logCurrents = false;
+				if(logCurrentsCounter < 300)
+					logCurrentsCounter++;
+				if(logCurrentsCounter == 300)
+					logCurrents = false;
+
+				if(logCurrentsCounter % 2 == 0)
+					publish_debug_telemetry_observation_power();
 			}
 
 
