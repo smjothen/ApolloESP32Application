@@ -9,7 +9,7 @@
 #include "../i2c/include/i2cDevices.h"
 
 
-static const char *TAG = "ZNTP     ";
+static const char *TAG = "ZNTP           ";
 
 static bool isSyncronized = false;
 static void time_sync_notification_cb(struct timeval *tv)

@@ -24,7 +24,7 @@ struct ChargeSession
 	char * SignedSession;
 };
 
-void chargeSession_PrintSession();
+void chargeSession_PrintSession(bool online, bool pingReplyActive);
 char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
@@ -48,6 +48,7 @@ esp_err_t chargeSession_ReadSessionResetInfo();
 
 bool chargeSession_IsAuthenticated();
 void SetCarConnectedState(bool connectedState);
+bool chargeSession_IsCarConnected();
 void chargeSession_SetReceivedStartChargingCommand();
 
 #ifdef __cplusplus

@@ -28,12 +28,14 @@
 #include "../ble/ble_service_wifi_config.h"
 #include "../authentication/rfidPairing.h"
 #include "../../main/offline_log.h"
+#include "../../main/offlineHandler.h"
 
 #include "esp_tls.h"
 #include "base64.h"
 #include "main.h"
+#include <math.h>
 
-#define TAG "Cloud Listener"
+#define TAG "CLOUD LISTENER "
 
 #ifdef DEVELOPEMENT_URL
 	#define MQTT_HOST "zap-d-iothub.azure-devices.net" //FOR DEVELOPEMENT
@@ -47,9 +49,10 @@
 #define MQTT_EVENT_PATTERN "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s"
 #define MQTT_EVENT_PATTERN_PING_REPLY "devices/%s/messages/events/$.ct=application%%2Fjson&$.ce=utf-8&ri=%s&ii=%s&pi=%s"
 
-int resetCounter = 0;
+static int resetCounter = 0;
+static int reconnectionAttempt = 0;
 
-char event_topic[128];
+static char event_topic[128];
 static struct DeviceInfo cloudDeviceInfo;
 
 static bool mqttConnected = false;
@@ -113,10 +116,8 @@ esp_mqtt_client_config_t mqtt_config = {0};
 char token[256];  // token was seen to be at least 136 char long
 
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
-    //create_sas_token(1*60*15, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	create_sas_token(3600 * 24, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-	//create_sas_token(1*3600, &token);
-    //ESP_LOGE(TAG, "connection token is %s", token);
+    //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
+	create_sas_token(604800, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
     mqtt_config->password = token;
     return 0;
 }
@@ -130,6 +131,8 @@ int publish_to_iothub(const char* payload, const char* topic){
             mqtt_client, topic,
             payload, 0, 1, 0
     );
+
+    //ESP_LOGE(TAG, "<<<sending>>> Id %i - Len: %d: %s", message_id, strlen(payload), payload);
 
     if(message_id>0){
         return 0;
@@ -265,6 +268,13 @@ bool GetNewInstallationIdFlag()
 {
 	return newInstallationIdFlag;
 }
+
+static bool datalog = false;
+bool GetDatalog()
+{
+	return datalog;
+}
+
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -1009,17 +1019,82 @@ void cloud_listener_check_cmd()
 }
 
 
+
+int InitiateOTASequence()
+{
+	int status = 400;
+
+	ble_interface_deinit();
+
+	MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+	if(ret == MsgCommandAck)
+	{
+		status = 200;
+		ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+
+		//Only start ota if MCU has ack'ed the stop command
+		start_segmented_ota();
+		//start_ota();
+	}
+	else
+	{
+		status = 400;
+		ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+	}
+	return status;
+}
+
+static bool otaDelayActive = false;
+bool IsOTADelayActive()
+{
+	return otaDelayActive;
+}
+void ClearOTADelay()
+{
+	otaDelayActive = false;
+}
+
+static bool blockStartToTestPingReply = false;
+static bool blockPingReply = false;
+
 int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 {
 	int responseStatus = 0;
 
 	//Don't spend time in this function, must return from mqtt-event. May need separate process
-	if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
+	if(strstr(commandEvent->topic, "iothub/methods/POST/1/"))
+	{
+
+		if(blockPingReply)
+		{
+			ESP_LOGW(TAG, "# INCHARGE_PING_REPLY BLOCKED #");
+		}
+		else
+		{
+			ESP_LOGW(TAG, "###### INCHARGE_PING_REPLY ######");
+			offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
+		}
+
+		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/102/"))
 	{
 		ESP_LOGI(TAG, "Received \"Restart ESP32\"-command");
 		//Execute delayed in another thread to allow command ack to be sent to cloud
-		restartCmdReceived = true;
-		responseStatus = 200;
+
+		MessageType ret = MCU_SendCommandId(CommandReset);
+		if(ret == MsgCommandAck)
+		{
+			restartCmdReceived = true;
+			responseStatus = 200;
+			storage_Set_And_Save_DiagnosticsLog("#10 Cloud restart command");
+			ESP_LOGI(TAG, "MCU Start command OK");
+		}
+		else
+		{
+			responseStatus = 400;
+			ESP_LOGI(TAG, "MCU Start command FAILED");
+		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
 	{
@@ -1040,42 +1115,27 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/200/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmware\"-command");
-		ble_interface_deinit();
 
-
-		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-		if(ret == MsgCommandAck)
+		if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
 		{
-			responseStatus = 200;
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
 
-			//Only start ota if MCU has ack'ed the stop command
-			start_segmented_ota();
-			//start_ota();
+			responseStatus = InitiateOTASequence();
 		}
 		else
 		{
-			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+			otaDelayActive = true;
+			responseStatus = 200;
+			ESP_LOGW(TAG, "OTA Delayed start");
 		}
 
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/201/"))
 	{
 		ESP_LOGI(TAG, "Received \"UpgradeFirmwareForced\"-command");
-		ESP_LOGI(TAG, "TODO: Implement forced");
-		ble_interface_deinit();
 
-		MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-		if(ret == MsgCommandAck)
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
-		else
-			ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+		responseStatus = InitiateOTASequence();
 
-		//Start ota even if MCU has NOT ack'ed the stop command
-		start_segmented_ota();
-		//start_ota();
-		responseStatus = 200;
+		ESP_LOGW(TAG, "OTA forced: %d", responseStatus);
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/202/"))
 	{
@@ -1095,6 +1155,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
 	{
+		if(blockStartToTestPingReply == true)
+		{
+			responseStatus = 200;
+			return responseStatus;
+		}
+
+
 		//return 200; //For testing offline resendRequestTimer in system mode
 		//rDATA=["16","4"]
 		char commandString[commandEvent->data_len+1];
@@ -1117,7 +1184,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		{
 			//Ensure that when a cloud start command is received, the offlineCurrentSent flag must be cleared
 			//to allow a offline current to be resent in case we go offline multiple times.
-			sessionHandler_ClearOfflineCurrentSent();
+			offlineHandler_ClearOfflineCurrentSent();
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentFromCloud);
 			if(ret == MsgWriteAck)
 			{
@@ -1324,6 +1391,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
+			sessionHandler_ClearCarInterfaceResetConditions();
 		}
 		else
 		{
@@ -1422,6 +1490,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
 					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"Restart ESP") != NULL)
+				{
+					restartCmdReceived = true;
+
+					storage_Set_And_Save_DiagnosticsLog("#11 Cloud Restart ESP command");
 					responseStatus = 200;
 				}
 
@@ -1782,7 +1857,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					char *endptr;
 					int offlineTime = (int)strtol(commandString+19, &endptr, 10);
 					if((offlineTime <= 86400) && (offlineTime > 0))
-						sessionHandler_simulateOffline(offlineTime);
+						offlineHandler_SimulateOffline(offlineTime);
 
 					ESP_LOGI(TAG, "Simulate offline %d", offlineTime);
 					responseStatus = 200;
@@ -1795,24 +1870,102 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
-				else if(strstr(commandString,"OverrideNetworkType ") != NULL)
+				else if(strstr(commandString,"OverrideNetworkType") != NULL)
 				{
-					char *endptr;
-					int newNetworkType = (int)strtol(commandString+22, &endptr, 10);
+					//char *endptr;
+					int newNetworkType = 0;//(int)strtol(commandString+22, &endptr, 10);
+					if(strstr(commandString,"IT1") != NULL)
+						newNetworkType = NETWORK_1P3W;
+					else if(strstr(commandString,"IT3") != NULL)
+						newNetworkType = NETWORK_3P3W;
+					else if(strstr(commandString,"TN1") != NULL)
+						newNetworkType = NETWORK_1P4W;
+					else if(strstr(commandString,"TN3") != NULL)
+						newNetworkType = NETWORK_3P4W;
 
 					//Sanity check
 					if((4 >= newNetworkType) && (newNetworkType >= 0))
 					{
-							storage_Set_NetworkTypeOverride(newNetworkType);
-							ESP_LOGI(TAG, "Set Override Network type: %i", newNetworkType);
-							storage_SaveConfiguration();
-							responseStatus = 200;
+						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
+
+						MessageType ret = MCU_SendUint8Parameter(ParamGridTypeOverride, newNetworkType);
+						if(ret == MsgWriteAck)
+						{
+							int ret = (int)MCU_UpdateOverrideGridType();
+
+							if(ret == newNetworkType)
+							{
+								ESP_LOGI(TAG, "Set OverrideNetworkType OK");
+								responseStatus = 200;
+							}
+							else
+							{
+								ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 1");
+								responseStatus = 400;
+							}
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 2");
+						}
+
+						responseStatus = 200;
 					}
 					else
 					{
 						responseStatus = 400;
 					}
 				}
+
+				else if(strstr(commandString,"IT3 enable") != NULL)
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 1);
+					if(ret == MsgWriteAck)
+					{
+						uint8_t ret = MCU_UpdateIT3OptimizationState();
+						if(ret == 0)
+						{
+							ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
+							responseStatus = 200;
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 1");
+							responseStatus = 400;
+						}
+					}
+					else
+					{
+						ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 2");
+						responseStatus = 400;
+					}
+				}
+				else if(strstr(commandString,"IT3 disable") != NULL)
+				{
+					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 0);
+					if(ret == MsgWriteAck)
+					{
+
+						uint8_t ret = MCU_UpdateIT3OptimizationState();
+						if(ret == 0)
+						{
+							ESP_LOGI(TAG, "Set IT3 optimization disabled OK");
+							responseStatus = 200;
+						}
+						else
+						{
+							ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 1");
+							responseStatus = 400;
+						}
+					}
+					else
+					{
+						ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 2");
+						responseStatus = 400;
+					}
+				}
+
+
 				else if(strstr(commandString,"ITStart") != NULL)
 				{
 					ESP_LOGI(TAG, "IT diagnostics stop");
@@ -1994,6 +2147,53 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					publish_debug_telemetry_observation_Diagnostics(msg);
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"blockreq") != NULL)
+				{
+					blockStartToTestPingReply = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"blockall") != NULL)
+				{
+					blockStartToTestPingReply = true;
+					blockPingReply = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"unblock") != NULL)
+				{
+					blockStartToTestPingReply = false;
+					blockPingReply = false;
+					responseStatus = 200;
+				}
+
+
+				else if(strstr(commandString,"pr on") != NULL)
+				{
+					offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"pr off") != NULL)
+				{
+					offlineHandler_UpdatePingReplyState(PING_REPLY_OFFLINE);
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"datalog on") != NULL)
+				{
+					datalog = true;
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"datalog off") != NULL)
+				{
+					datalog = false;
+					responseStatus = 200;
+				}
+				/// This command may not be required, only for troubleshooting if MCU does not respond. Has never happened.
+				else if(strstr(commandString,"OTA no MCU") != NULL)
+				{
+					//Here no command is sent to stop MCU directly.
+					ble_interface_deinit();
+					start_segmented_ota();
+				}
 
 			}
 	}
@@ -2069,8 +2269,13 @@ static void BuildLocalSettingsResponse(char * responseBuffer)
 static int ridNr = 4199;
 static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
+static esp_err_t reconnectErr = ESP_OK;
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
+
+	//ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
+	MqttSetRxDiagnostics(event->data_len, event->topic_len);
+
     mqtt_client = event->client;
 
     if((event->error_handle->esp_tls_stack_err != 0) || (event->error_handle->esp_tls_last_esp_err != 0))
@@ -2086,9 +2291,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	ESP_LOGE(TAG, "TLS error - Updating certificate");
     	certificate_update(event->error_handle->esp_tls_stack_err);
 
-    	//Must reset tls error in all cases to avoid continuous certificate checks.
-   		event->error_handle->esp_tls_stack_err = 0;
-   		simulateTlsError = false;
+    	//Must reset to avoid repeated certificate checks
+    	event->error_handle->esp_tls_stack_err = 0;
+    	simulateTlsError = false;
     }
 
     switch (event->event_id) {
@@ -2099,17 +2304,15 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         //sprintf(devicebound_topic, "devices/{%s}/messages/devicebound/#", cloudDeviceInfo.serialNumber);
         //sprintf(devicebound_topic, "devices/%s/messages/devicebound/#", cloudDeviceInfo.serialNumber);
 
-        // Cloud-to-device
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
-        //esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
+		// Cloud-to-device
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/methods/POST/#", 2);
+		//esp_mqtt_client_subscribe(mqtt_client, devicebound_topic, 2);
 
-        // Device twin
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
-        esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
+		// Device twin
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/res/#", 2);
+		esp_mqtt_client_subscribe(mqtt_client, "$iothub/twin/PATCH/properties/desired/#", 2);
 
-
-
-
+		char message[50] = {0};
         // Request twin data on every startup, but not on every following reconnect
         if(isFirstConnection == true)
         {
@@ -2119,12 +2322,22 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 			esp_mqtt_client_publish(mqtt_client, devicetwin_topic, NULL, 0, 1, 0);
 
 			isFirstConnection = false;
+
+			// Only show this event on first boot, not on every SAS token expiry with reconnect
+			//publish_debug_message_event("Connected", cloud_event_level_information);
+			sprintf(message, "Connected: %d", resetCounter);
+        }
+        else
+        {
+        	//publish_debug_message_event("Reconnected", cloud_event_level_information);
+        	sprintf(message, "Reconnected: %d", resetCounter);
         }
 
-        // Only show this event on first boot, not on every SAS token expiry with reconnect
-		publish_debug_message_event("mqtt connected", cloud_event_level_information);
+        //publish_debug_message_event("Reconnected", cloud_event_level_information);
+        publish_debug_message_event(message, cloud_event_level_information);
 
         resetCounter = 0;
+        reconnectionAttempt = 0;
 
         mqttConnected = true;
         //When connected, reset connection timeout to default
@@ -2298,7 +2511,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         }
 
-        memset(event->data, 0, event->data_len);
+        //memset(event->data, 0, event->data_len);
 
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
@@ -2306,6 +2519,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         refresh_token(&mqtt_config);
 		ESP_LOGD(TAG, "setting config with the new token");
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
+        reconnectionAttempt++;
+
         break;
     case MQTT_EVENT_ERROR:
     	resetCounter++;
@@ -2315,21 +2530,54 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
-    		incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
-    		mqtt_config.reconnect_timeout_ms = incrementalRefreshTimeout;
-    		esp_mqtt_set_config(mqtt_client, &mqtt_config);
-    		ESP_LOGW(TAG, "*** Refreshing timeout increased to %i ***", incrementalRefreshTimeout);
+    		bool slowBackoff = true;
+    		if(chargeSession_IsCarConnected())
+    			slowBackoff = false;
 
-    		if(resetCounter == 5)
-			{
-    			ESP_LOGI(TAG, "Refreshing Wifi Connected");
-    			network_updateWifi();
+    		//As in Pro - use different limits if car is connected or not
+    		double maxBackoff;
+			if(slowBackoff) {
+				maxBackoff = 180.0; // 3 min (+ 0-65 sec)
+			}
+			else {
+				maxBackoff = 45.0; // 45 sec (+ 0-28 sec)
 			}
 
-			if((resetCounter == 10) || (resetCounter == 20) || (resetCounter == 30) || (resetCounter == 35))
+			double backOffSeconds = powf(reconnectionAttempt, 2.0);
+
+			if(backOffSeconds > maxBackoff)
+				backOffSeconds = maxBackoff;
+
+    		if(backOffSeconds <= maxBackoff)
+    		{
+				uint32_t rand = esp_random();
+				float randomSeconds = rand/(0xffffffff * 1.0);
+
+				if(slowBackoff)
+					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 3.0;
+				else
+					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 2.0;
+
+
+				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %d)", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
+
+
+				incrementalRefreshTimeout = 10 + backOffSeconds + randomSeconds;
+    			//incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
+    			mqtt_config.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
+    			esp_mqtt_set_config(mqtt_client, &mqtt_config);
+    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.reconnect_timeout_ms);
+    		}
+    		else
+    		{
+    			ESP_LOGW(TAG, "*** Reconnect at max: %i ***", incrementalRefreshTimeout);
+    		}
+
+
+			if((resetCounter == 10) || (resetCounter == 30) || (resetCounter == 60) || (resetCounter == 90))
 			{
-				esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", rconErr);
+				reconnectErr = esp_mqtt_client_reconnect(mqtt_client);
+				ESP_LOGI(TAG, "MQTT event reconnect! Error: %d", reconnectErr);
 			}
     	}
     	else if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
@@ -2352,14 +2600,21 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
     		if(resetCounter >= 720) //With 10-sec timeout without increase 720 * 10 = 2 hours
 			{
+    			char buf[100]={0};
+    			sprintf(buf, "#1 MQTT_EVENT_ERROR: network_WifiIsConnected() == false) 720 times. %d", reconnectErr);
+    			storage_Set_And_Save_DiagnosticsLog(buf);
+
 				ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
 			}
     	}
     	else
     	{
-    		if(resetCounter >= 39) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
+    		if(resetCounter >= 99) //With 10-sec timeout increase this is reached within 7420 sec (2+ hours)
     		{
+    			char buf[100]={0};
+    			sprintf(buf, "#2 MQTT_EVENT_ERROR: 99 times. %d", reconnectErr);
+    			storage_Set_And_Save_DiagnosticsLog(buf);
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
     		}
@@ -2370,7 +2625,23 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
         break;
     }
+
+    memset(event->data, 0, event->data_len);
+    event->data_len = 0;
+    event->total_data_len = 0;
+
     return ESP_OK;
+}
+
+int cloud_listener_GetResetCounter()
+{
+	return resetCounter;
+}
+
+
+void cloud_listener_IncrementResetCounter()
+{
+	resetCounter++;
 }
 
 uint8_t* hex_decode(const char *in, size_t len,uint8_t *out)
@@ -2404,7 +2675,7 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 		}
 	}
 
-	ESP_LOGW(TAG,"%s -> %s", instId, instIdFormatted);
+	//ESP_LOGW(TAG,"%s -> %s", instId, instIdFormatted);
 
 	uint8_t hex;
 	char substring[3] = {0};
@@ -2459,7 +2730,7 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 
 	strncpy(encodedString, encoded, 22);
 
-	ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
+	//ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
 }
 
 
@@ -2535,8 +2806,13 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_config.disable_auto_reconnect = false;
     mqtt_config.reconnect_timeout_ms = 10000;
-    mqtt_config.keepalive = 300;//120;
-    //mqtt_config.refresh_connection_after_ms = 30000;
+
+    //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
+    //Ping is sent if no other communication has occured since timer.
+    mqtt_config.keepalive = 1100; //300;//120 is default;
+
+    //Don't use, causes disconnect and reconnect
+    //mqtt_config.refresh_connection_after_ms = 20000;
 
 	blocked_publish_event_group = xEventGroupCreate();
 	xEventGroupClearBits(blocked_publish_event_group, BLOCKED_MESSAGE_PUBLISHED);
@@ -2576,20 +2852,17 @@ void update_installationId()
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    //mqtt_config.cert_pem = cert;
-
     mqtt_config.lwt_topic = event_topic;
-    //esp_mqtt_client_disconnect(mqtt_client);
-    //esp_mqtt_client_stop(mqtt_client);
+
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
-	//esp_mqtt_client_start(mqtt_client);
-	//refresh_token(&mqtt_config);
 }
 
 
 void update_mqtt_event_pattern(bool usePingReply)
 {
-    char * instId = storage_Get_InstallationId();
+	ESP_LOGW(TAG," ### Setting PingReply to: %i ", usePingReply);
+
+	char * instId = storage_Get_InstallationId();
 
     int compare = strncmp(instId, INSTALLATION_ID, 36);
     if(compare != 0)
@@ -2609,24 +2882,37 @@ void update_mqtt_event_pattern(bool usePingReply)
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    //mqtt_config.cert_pem = cert;
-
     mqtt_config.lwt_topic = event_topic;
-    //esp_mqtt_client_disconnect(mqtt_client);
-    //esp_mqtt_client_stop(mqtt_client);
+
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
-	//esp_mqtt_client_start(mqtt_client);
-	//refresh_token(&mqtt_config);
 }
 
 
-void periodic_refresh_token()
+void periodic_refresh_token(uint8_t source)
 {
-	ESP_LOGW(TAG, "Periodic new token");
-	refresh_token(&mqtt_config);
-    esp_mqtt_set_config(mqtt_client, &mqtt_config);
+	ESP_LOGW(TAG, "####### Periodic new token ######");
 
-    /*esp_mqtt_client_disconnect(mqtt_client);
-    esp_err_t rconErr = esp_mqtt_client_reconnect(mqtt_client);
-    ESP_LOGI(TAG, "MQTT reconnect error? %d", rconErr);*/
+	esp_err_t err = esp_mqtt_client_stop(mqtt_client);
+
+    if(err != ESP_OK)
+    {
+    	if(source == 2)
+    	{
+    		ESP_LOGI(TAG, "MQTT errorCounter refresh token failed restart: %d", err);
+    		storage_Set_And_Save_DiagnosticsLog("#9 MQTT errorCounter refresh token failed");
+    	}
+    	else
+    	{
+    		ESP_LOGI(TAG, "MQTT periodic refresh token failed restart: %d", err);
+    		storage_Set_And_Save_DiagnosticsLog("#6 MQTT periodic refresh token failed");
+    	}
+
+    	esp_restart();
+    }
+    else
+    {
+    	//Refreshes token in event: MQTT_EVENT_BEFORE_CONNECT
+    	err = esp_mqtt_client_start(mqtt_client);
+    	ESP_LOGI(TAG, "MQTT reconnect result: %d", err);
+    }
 }

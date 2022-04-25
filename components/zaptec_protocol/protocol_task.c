@@ -16,7 +16,7 @@
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
 
-const char *TAG = "MCU";
+const char *TAG = "MCU            ";
 
 #define RX_TIMEOUT  (2000 / (portTICK_PERIOD_MS))
 #define SEMAPHORE_TIMEOUT  (20000 / (portTICK_PERIOD_MS))
@@ -333,10 +333,14 @@ void uartSendTask(void *pvParameters){
     //Only applies to chargers with MCU bootloaders version 6 and greater.
     ActivateMCUWatchdog();
 
+    MCU_UpdateOverrideGridType();
+    MCU_UpdateIT3OptimizationState();
+    MCU_ReadHwIdMCUSpeed();
+    MCU_ReadHwIdMCUPower();
 
     uint32_t count = 0;
+    uint32_t printCount = 0;
     uint32_t offsetCount = 0;
-    uint32_t printCounter = 0;
     while (true)
     {
     	if(mcuDebugCounter < previousMcuDebugCounter)
@@ -353,7 +357,7 @@ void uartSendTask(void *pvParameters){
         uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
         uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
         
-
+        printCount++;
 
         switch (count)
         {
@@ -576,12 +580,14 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
+        if(printCount >= 24 * 15)
+        {
+        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	printCount = 0;
+        }
+
         if(count >= 24)
         {
-        	printCounter++;
-        	if(printCounter % 10 == 0)
-        		ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
-
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
         	continue;
@@ -724,6 +730,54 @@ void MCU_StopLedOverride()
 	}
 }
 
+
+static uint8_t overrideGridType = 0;
+uint8_t MCU_UpdateOverrideGridType()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(ParamGridTypeOverride);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == ParamGridTypeOverride))
+	{
+		overrideGridType = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read overrideGridType: %d ", overrideGridType);
+		return overrideGridType;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read overrideGridType FAILED");
+		return 0xff;
+	}
+}
+
+uint8_t MCU_GetOverrideGridType()
+{
+	return overrideGridType;
+}
+
+
+
+static uint8_t IT3OptimizationEnabled = 0;
+uint8_t MCU_UpdateIT3OptimizationState()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(ParamIT3OptimizationEnabled);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == ParamIT3OptimizationEnabled))
+	{
+		IT3OptimizationEnabled = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read IT3OptimizationEnabled: %d ", IT3OptimizationEnabled);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read IT3OptimizationEnabled FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetIT3OptimizationState()
+{
+	return IT3OptimizationEnabled;
+}
+
+
 char * MCU_GetSwVersionString()
 {
 	return mcuSwVersionString;
@@ -732,6 +786,51 @@ char * MCU_GetSwVersionString()
 char * MCU_GetGridTestString()
 {
 	return mcuGridTestString;
+}
+
+
+static uint8_t HwIdSpeed = 0;
+uint8_t MCU_ReadHwIdMCUSpeed()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUSpeed);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUSpeed))
+	{
+		HwIdSpeed = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read HwIdSpeed: %d ", HwIdSpeed);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read HwIdMCUSpeed FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetHwIdMCUSpeed()
+{
+	return HwIdSpeed;
+}
+
+static uint8_t HwIdPower = 0;
+uint8_t MCU_ReadHwIdMCUPower()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUPower);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUPower))
+	{
+		HwIdPower = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read HwIdPower: %d ", HwIdPower);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read HwIdPower FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetHwIdMCUPower()
+{
+	return HwIdPower;
 }
 
 uint8_t MCU_GetSwitchState()
@@ -788,6 +887,9 @@ void MCU_ClearMaximumEnergy(){
 
 int8_t MCU_GetchargeMode()
 {
+	//if(chargeMode > 12)
+	//	chargeMode = 12;
+
 	return chargeMode;
 }
 

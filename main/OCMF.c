@@ -14,7 +14,7 @@
 #include "offlineSession.h"
 #include <math.h>
 
-static const char *TAG = "OCMF     ";
+static const char *TAG = "OCMF           ";
 
 static char * formatVersion = "1.0";
 

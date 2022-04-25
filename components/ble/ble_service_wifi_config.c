@@ -1464,6 +1464,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			if(ret == MsgCommandAck)
 			{
 				ESP_LOGI(TAG, "MCU Start command OK. Restarting ESP...");
+
+				storage_Set_And_Save_DiagnosticsLog("#5 BLE restart - OK");
+
 				esp_restart();
 			}
 			else

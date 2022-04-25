@@ -36,22 +36,19 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "offlineSession.h"
-
-
-//#define useConsole
-
-#ifdef useConsole
-	#include "apollo_console.h"
+#include "zaptec_cloud_observations.h"
+#ifdef useAdvancedConsole
+	//#include "apollo_console.h"
 #endif
 
-const char *TAG_MAIN = "MAIN     ";
+static const char *TAG_MAIN = "MAIN           ";
 
 //OUTPUT PIN
 #define GPIO_OUTPUT_DEBUG_LED    0
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.4.0";
+char softwareVersion[] = "0.0.0.125";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -106,10 +103,12 @@ void HandleCommands()
 	if(length > 0)
 	{
 		memcpy(commandBuffer+strlen(commandBuffer), uart_data, length);
-		//ESP_LOGW(TAG_MAIN, "Read: %s", commandBuffer);
+		ESP_LOGW(TAG_MAIN, "Read: %s", commandBuffer);
 	}
 	if(strchr(commandBuffer, '\r') != NULL)
 	{
+		ESP_LOGW(TAG_MAIN, "Command:> %s", commandBuffer);
+
 		if(strncmp("mcu", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
@@ -140,7 +139,7 @@ void HandleCommands()
 		else if(strncmp("m0", commandBuffer, 2) == 0)
 			cellularPinsOff();
 
-		else if(strncmp("r", commandBuffer, 1) == 0)
+		else if(strncmp("rst", commandBuffer, 3) == 0)
 			esp_restart();
 		else if(strncmp("dtr0", commandBuffer, 4) == 0)
 			gpio_set_level(GPIO_OUTPUT_DTR, 0);
@@ -218,7 +217,7 @@ void HandleCommands()
 
 
 }
-
+//#define useSimpleConsole
 
 
 void GetTimeOnString(char * onTimeString)
@@ -285,8 +284,8 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-	//gpio_pullup_en(GPIO_NUM_3);
-#ifdef useConsole
+#ifdef useAdvancedConsole
+	gpio_pullup_en(GPIO_NUM_3);
 	apollo_console_init();
 #endif
 
@@ -326,11 +325,11 @@ void app_main(void)
 	//Init to read device ID from EEPROM
 	I2CDevicesInit();
 
-//#ifdef useConsole
+#ifdef useSimpleConsole
 	configure_console();
-//#endif
+#endif
 
-	configure_uart();
+	ppp_configure_uart(); //Remove since in connectivity?
 	start_ota_task();
     zaptecProtocolStart();
 
@@ -452,6 +451,7 @@ void app_main(void)
     char onTimeString[20]= {0};
 
     bool hasBeenOnline = false;
+    int otaDelayCounter = 0;
 
 	while (true)
     {
@@ -463,7 +463,7 @@ void app_main(void)
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
-			ESP_LOGW(TAG_MAIN, "[DMA memory] free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 
     	if(onTimeCounter % 30 == 0)
@@ -480,10 +480,30 @@ void app_main(void)
     	}
 
 
-    	/*if(onTimeCounter % 100 == 0)
+    	if (isMqttConnected() == true)
     	{
-    		periodic_refresh_token();
-    	}*/
+			if(onTimeCounter % (554400) == 0) //Refreshing after 3300 * 24 * 7 seconds. Token valid for 3600 * 24 * 7 seconds
+			{
+				/// If this is not called, the token will expire, the charger will be disconnected and do an reconnect after 10 seconds
+				/// Doing token refresh and reconnect in advance gives a more stable connection.
+				periodic_refresh_token(1);
+			}
+    	}
+
+    	/// Experimental
+    	/// If mqtt is running and EVENT_ERROR increment, try to call the refresh token which also results in a mqtt start/stop sequence
+    	/// Verify if this successfully generates a reconnect.
+    	if(connectivity_GetMQTTInitialized() && (cloud_listener_GetResetCounter() > 0))
+    	{
+			if(cloud_listener_GetResetCounter() % 7 == 0)
+			{
+				///Increment to avoid retrigging this case
+				cloud_listener_IncrementResetCounter();
+
+				periodic_refresh_token(2);	//Argument is for diagnostics
+			}
+    	}
+
 
     	//For 4G testing - activated with command
     	if(onlineWatchdog == true)
@@ -494,7 +514,10 @@ void app_main(void)
     			ESP_LOGI(TAG_MAIN, "OnlineWatchdogCounter : %d", onlineWatchdogCounter);
     		}
     		if(onlineWatchdogCounter == 300)
+    		{
+    			storage_Set_And_Save_DiagnosticsLog("#7 main.c onlineWatchdogCounter == 300");
     			esp_restart();
+    		}
     	}
 
 
@@ -516,15 +539,45 @@ void app_main(void)
 				{
 					ESP_LOGW(TAG_MAIN, "Not able to get back online after firmware update, powering off 4G and restarting");
 					cellularPinsOff();
+
+					storage_Set_And_Save_DiagnosticsLog("#8 main.c LTE: Not online after firmware update");
+
 					esp_restart();
 				}
 			}
 		}
 
 
-	//#ifdef useConsole
+		/// Wait until car disconnects, delay 5 more minutes, then start OTA.
+		if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
+		{
+			if(IsOTADelayActive())
+			{
+				otaDelayCounter++;
+
+				if(otaDelayCounter % 10 == 0)
+					ESP_LOGW(TAG_MAIN, "OTA Counter: %d", otaDelayCounter);
+
+				/// When delay after disconnect has passed -> perform OTA
+				if(otaDelayCounter == 300)
+				{
+					otaDelayCounter = 0;
+					ClearOTADelay();
+
+					InitiateOTASequence();
+				}
+			}
+		}
+		else
+		{
+			/// Reset counter while car is connected
+			otaDelayCounter = 0;
+		}
+
+
+	#ifdef useSimpleConsole
     	HandleCommands();
-	//#endif
+	#endif
 
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

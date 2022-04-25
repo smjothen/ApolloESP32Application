@@ -38,15 +38,15 @@ enum ChargerOperatingMode
     CHARGE_OPERATION_STATE_WARNING          = 7,
 };
 
+
 void sessionHandler_init();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
 bool SessionHandler_IsOfflineMode();
 void SessionHandler_SetOCMFHighInterval();
 void SessionHandler_SetLogCurrents();
+void sessionHandler_ClearCarInterfaceResetConditions();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
-void sessionHandler_ClearOfflineCurrentSent();
-void sessionHandler_simulateOffline(int offlineTime);
 int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
 void ChargeModeUpdateToCloudNeeded();

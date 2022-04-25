@@ -25,8 +25,8 @@
 #include "../ntp/zntp.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
-static const char *TAG = "I2C_DEVICES";
-static const char *TAG_EEPROM = "EEPROM STATUS";
+static const char *TAG = "I2C_DEVICES    ";
+static const char *TAG_EEPROM = "EEPROM STATUS  ";
 
 static float temperature = 0.0;
 static float humidity = 0.0;
@@ -267,7 +267,7 @@ static void i2cDevice_task(void *pvParameters)
 
 	audioInit();
 
-	unsigned int i2cCount = 0;
+	int i2cCount = 0;
 	int nfcCardDetected = 0;
 
 	uint8_t blockReRead = 8;
@@ -445,12 +445,20 @@ static void i2cDevice_task(void *pvParameters)
 		nfcCardDetected = 0;
 
 		i2cCount++;
-		if(i2cCount % 10 == 0)
+		if(i2cCount >= 6)
 		{
+			i2cCount = 0;
+
 			temperature = SHT30ReadTemperature();
 			humidity = SHT30ReadHumidity();
 
-			//Ensure RTC clock has correct default frequency
+			//Debug
+			/*struct tm readTime = {0};
+			readTime = RTCReadTime();
+			char timebuf[30];
+			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
+			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);*/
+
 			RTCVerifyControlRegisters();
 		}
 
@@ -468,15 +476,6 @@ static void i2cDevice_task(void *pvParameters)
 		}
 
 
-		//Diagnostics - print every 30 sec
-		if(i2cCount % 60 == 0)
-		{
-			struct tm readTime = {0};
-			readTime = RTCReadTime();
-			char timebuf[30];
-			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
-		}
 
 		//Read from NFC at 2Hz for user to not notice delay
 		vTaskDelay(500 / portTICK_RATE_MS);

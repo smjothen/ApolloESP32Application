@@ -1,6 +1,25 @@
 #ifndef ZAPTEC_CLOUD_OBSERVATIONS_H
 #define ZAPTEC_CLOUD_OBSERVATIONS_H
 
+
+
+
+struct MqttDataDiagnostics
+{
+	uint32_t mqttRxBytes;
+	uint32_t mqttRxBytesIncMeta;
+	uint32_t nrOfRxMessages;
+
+	uint32_t mqttTxBytes;
+	uint32_t mqttTxBytesIncMeta;
+	uint32_t nrOfTxMessages;
+};
+
+void MqttSetRxDiagnostics(uint32_t bytes, uint32_t metabytes);
+
+struct MqttDataDiagnostics MqttGetDiagnostics();
+void MqttDataReset();
+
 int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter, double rssi
 );
@@ -21,6 +40,8 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics);
 
+int publish_debug_telemetry_observation_DiagnosticsLog();
+
 int publish_debug_telemetry_observation_InstallationConfigOnFile();
 
 int publish_debug_telemetry_observation_StartUpParameters();
@@ -34,6 +55,8 @@ int publish_debug_telemetry_observation_WifiParameters();
 int publish_debug_telemetry_observation_LteParameters();
 
 int publish_debug_telemetry_observation_all(double rssi);
+
+int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
 
 void SetClearSessionFlag();
 

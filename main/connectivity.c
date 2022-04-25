@@ -17,7 +17,7 @@
 #include "certificate.h"
 #include "protocol_task.h"
 
-static const char *TAG = "CONNECTIVITY: ";
+static const char *TAG = "CONNECTIVITY   ";
 
 
 enum CommunicationMode activeInterface = eCONNECTION_NONE;
@@ -33,6 +33,11 @@ static uint32_t swapInterfaceTestCounter = 180;
 bool connectivity_GetSNTPInitialized()
 {
 	return sntpInitialized;
+}
+
+bool connectivity_GetMQTTInitialized()
+{
+	return mqttInitialized;
 }
 
 void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
@@ -162,7 +167,7 @@ static void connectivity_task()
 			else if(localNewInterface == eCONNECTION_LTE)
 			{
 				ESP_LOGI(TAG, "LTE interface activating");
-				configure_uart();
+				ppp_configure_uart();
 				ppp_task_start();
 				interfaceChange = false;
 			}

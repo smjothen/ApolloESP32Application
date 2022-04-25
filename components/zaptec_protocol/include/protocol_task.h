@@ -27,6 +27,15 @@ int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
 char * MCU_GetSwVersionString();
+uint8_t MCU_ReadHwIdMCUSpeed();
+uint8_t MCU_GetHwIdMCUSpeed();
+
+uint8_t MCU_GetHwIdMCUSpeed();
+uint8_t MCU_GetHwIdMCUPower();
+
+uint8_t MCU_ReadHwIdMCUPower();
+uint8_t MCU_GetHwIdMCUPower();
+
 char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
 float MCU_GetEmeterTemperature(uint8_t phase);
@@ -69,6 +78,12 @@ float MCU_GetHWCurrentMaxLimit();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();
+
+uint8_t MCU_UpdateOverrideGridType();
+uint8_t MCU_GetOverrideGridType();
+uint8_t MCU_UpdateIT3OptimizationState();
+uint8_t MCU_GetIT3OptimizationState();
+
 void SetEspNotification(uint16_t notification);
 void ClearNotifications();
 uint32_t GetCombinedNotifications();

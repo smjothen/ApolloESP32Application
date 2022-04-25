@@ -8,7 +8,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-static const char *TAG_RTC = "RTC    ";
+static const char *TAG_RTC = "RTC            ";
 
 /// Driver for the RTC: PCF85063A
 /// https://www.nxp.com/products/peripherals-and-logic/signal-chain/real-time-clocks/rtcs-with-ic-bus/tiny-real-time-clock-calendar-with-alarm-function-and-ic-bus:PCF85063A
@@ -135,7 +135,7 @@ void RTCWriteControl(uint8_t value)
 	uint8_t writeBytes[2] = {0};
 	writeBytes[0] = 1;
 	writeBytes[1] = value;
-	esp_err_t err = i2c_master_write_slave(slaveAddressRTC, (uint8_t*)&writeBytes, 2);
+	i2c_master_write_slave(slaveAddressRTC, (uint8_t*)&writeBytes, 2);
 }
 
 

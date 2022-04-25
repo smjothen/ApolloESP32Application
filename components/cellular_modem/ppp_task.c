@@ -14,7 +14,7 @@
 #include "ppp_task.h"
 #include "at_commands.h"
 
-static const char *TAG = "PPP_TASK";
+static const char *TAG = "PPP_TASK       ";
 
 
 //#define CELLULAR_RX_SIZE 256 * 4 * 3
@@ -194,7 +194,7 @@ int send_line(char * line){
     return 0;
 }
 
-void configure_uart(void){
+void ppp_configure_uart(void){
 
     ESP_LOGI(TAG, "creating queue with elems size %d", sizeof( line_buffer ));
     line_queue = xQueueCreate( LINE_QUEUE_LENGTH, sizeof( line_buffer ) );

@@ -33,7 +33,7 @@
     	//extern const esp_gatts_attr_db_t devinfo_serv_gatt_db[DEVINFO_SERV_NUM_ATTR];
     //extern const esp_gatts_attr_db_t devinfo_serv_gatt_db[DEVINFO_SERV_NUM_ATTR];
 
-#define TAG "GATT Server"
+#define TAG "GATT SERVER    "
 
 #define PROFILE_NUM                 2
 #define PROFILE_APP_IDX             0
