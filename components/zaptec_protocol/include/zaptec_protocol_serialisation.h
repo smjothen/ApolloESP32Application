@@ -56,9 +56,6 @@
 		ParamLedOverride = 290,
 		ParamLedOverrideClear = 291,
 
-		ParamGridTypeOverride = 402,
-		ParamIT3OptimizationEnabled = 403,
-
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -129,6 +126,8 @@
 
 		DebugCounter = 731,
 		ParamWarningValue = 732,
+		ParamGridTypeOverride = 733,
+		ParamIT3OptimizationEnabled = 734,
 
 		NrOfChargeCards = 749,
 	    NewChargeCard = 750,
