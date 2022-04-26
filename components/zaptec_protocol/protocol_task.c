@@ -335,6 +335,8 @@ void uartSendTask(void *pvParameters){
 
     MCU_UpdateOverrideGridType();
     MCU_UpdateIT3OptimizationState();
+    MCU_ReadHwIdMCUSpeed();
+    MCU_ReadHwIdMCUPower();
 
     uint32_t count = 0;
     uint32_t printCount = 0;
@@ -780,6 +782,57 @@ char * MCU_GetSwVersionString()
 {
 	return mcuSwVersionString;
 }
+
+
+static uint8_t HwIdSpeed = 0;
+uint8_t MCU_ReadHwIdMCUSpeed()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUSpeed);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUSpeed))
+	{
+		HwIdSpeed = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read HwIdSpeed: %d ", HwIdSpeed);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read HwIdMCUSpeed FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetHwIdMCUSpeed()
+{
+	return HwIdSpeed;
+}
+
+static uint8_t HwIdPower = 0;
+uint8_t MCU_ReadHwIdMCUPower()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUPower);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUPower))
+	{
+		HwIdPower = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read HwIdPower: %d ", HwIdPower);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read HwIdPower FAILED");
+		return 1;
+	}
+}
+
+uint8_t MCU_GetHwIdMCUPower()
+{
+	return HwIdPower;
+}
+
+
+
+
+
+
 
 char * MCU_GetGridTestString()
 {

@@ -372,6 +372,9 @@ int publish_debug_telemetry_observation_StartUpParameters()
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
 
+	add_observation_to_collection(observations, create_uint32_t_observation(HwIdMCUSpeed, (uint32_t)MCU_GetHwIdMCUSpeed()));
+    add_observation_to_collection(observations, create_uint32_t_observation(HwIdMCUPower, (uint32_t)MCU_GetHwIdMCUPower()));
+
     char buf[256];
     GetTimeOnString(buf);
     sprintf(buf + strlen(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());

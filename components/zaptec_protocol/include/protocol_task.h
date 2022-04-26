@@ -27,6 +27,12 @@ int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
 char * MCU_GetSwVersionString();
+uint8_t MCU_ReadHwIdMCUSpeed();
+uint8_t MCU_GetHwIdMCUSpeed();
+
+uint8_t MCU_ReadHwIdMCUPower();
+uint8_t MCU_GetHwIdMCUPower();
+
 char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
 float MCU_GetEmeterTemperature(uint8_t phase);

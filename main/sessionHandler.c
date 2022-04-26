@@ -864,6 +864,10 @@ static void sessionHandler_task()
 			if(storage_Get_Standalone() == true)
 			{
 				pulseInterval = PULSE_STANDALONE;
+
+				/// If other than default on storage, use this to override pulseInterval
+				if(storage_Get_PulseInterval() != 60)
+					pulseInterval = storage_Get_PulseInterval();
 			}
 			else if(storage_Get_Standalone() == false)
 			{
@@ -874,6 +878,10 @@ static void sessionHandler_task()
 				else
 				{
 					pulseInterval = PULSE_SYSTEM_NOT_CHARGING;
+
+					/// If other than default on storage, use this to override pulseInterval
+					if(storage_Get_PulseInterval() != 60)
+						pulseInterval = storage_Get_PulseInterval();
 				}
 			}
 
@@ -1263,7 +1271,7 @@ static void sessionHandler_task()
 		/// Indicate offline with led LED
 		if((storage_Get_Standalone() == false) && ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE)))
 		{
-			if((offlineTime % 30 == 0) && (offlineMode == true))
+			if((offlineTime % 30 == 0) && (isOnline == false))
 			{
 				MessageType ret = MCU_SendCommandId(CommandIndicateOffline);
 				if(ret == MsgCommandAck)
