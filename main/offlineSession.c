@@ -13,15 +13,17 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 #include "chargeSession.h"
+#include "../components/ntp/zntp.h"
 
 static const char *tmp_path = "/offs";
-static const char *log_path = "/offs/1.json";
+//static const char *log_path = "/offs/1.json";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 //static const int max_offline_session_files = 10;
 
 #define FILE_VERSION_ADDR_0  		0L
 #define FILE_SESSION_ADDR_2  		2L
+#define FILE_SESSION_CRC_ADDR_996	996L
 #define FILE_NR_OF_OCMF_ADDR_1000  	1000L
 #define FILE_OCMF_START_ADDR_1004 	1004L
 
@@ -39,6 +41,8 @@ struct LogOCMFData {
     double energy;
     uint32_t crc;
 };
+
+static bool offlineSessionOpen = false;
 
 bool offlineSession_mount_folder()
 {
@@ -206,29 +210,57 @@ static FILE *sessionFile = NULL;
 
 void offlineSession_UpdateSessionOnFile(char *sessionData)
 {
+
+	sessionFile = fopen(activePathString, "rb+");
+
 	uint8_t fileVersion = 1;
 	fseek(sessionFile, FILE_VERSION_ADDR_0, SEEK_SET);
 	fwrite(&fileVersion, 1, 1, sessionFile);
 
-	int sessionDataLen = strlen(sessionData)+1;
+	int sessionDataLen = strlen(sessionData);
 	char * base64SessionData;// = calloc(500,1);
 	size_t outLen = 0;
-	base64SessionData = base64_encode(sessionData, sessionDataLen-1, &outLen);
-	volatile int base64SessionDataLen = strlen(base64SessionData)+1;
+	base64SessionData = base64_encode(sessionData, sessionDataLen, &outLen);
+	volatile int base64SessionDataLen = strlen(base64SessionData);
 
-	printf("%d: %s\n", strlen(sessionData), sessionData);
-	printf("%d: %s\n", strlen(base64SessionData), base64SessionData);
+	ESP_LOGW(TAG,"%d: %s\n", strlen(sessionData), sessionData);
+	ESP_LOGW(TAG,"%d: %s\n", strlen(base64SessionData), base64SessionData);
 
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 	fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
 
+	ESP_LOGW(TAG,"Write session: %i, %i:, %s", base64SessionDataLen, strlen(base64SessionData), base64SessionData);
+
+	//Write CRC at the end of the block
+	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
+	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
+	fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
+
+	ESP_LOGW(TAG, "Session CRC:: 0x%X", crcCalc);
+
+
+
+	/*fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
+
+//char * base64SessionData = calloc(1000-4, 1);
+	memset(base64SessionData, 0, 996);
+	fread(base64SessionData, 1000-4, 1, sessionFile);
+
+
+	base64SessionDataLen = strlen(base64SessionData);
+
+	volatile uint32_t crcReCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
+
+	ESP_LOGW(TAG,"Read session: %i, 0x%X:, %s", base64SessionDataLen, crcReCalc, base64SessionData);
+
+	//ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+*/
 	fclose(sessionFile);
 	free(base64SessionData);
 }
 
 
-
-esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
+esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 {
 	char buf[22] = {0};
 	sprintf(buf,"/offs/%d.bin", fileNo);
@@ -240,14 +272,300 @@ esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
 		return ESP_FAIL;
 	}
 
-	/// Find end of file to get size
-	//fseek(sessionFile, FILE_VERSION_ADDR_0, SEEK_END);
-	//size_t readSize = ftell(sessionFile);
+	uint8_t fileVersion = 0;
+	fread(&fileVersion, 1, 1, sessionFile);
+	ESP_LOGW(TAG, "File version: %d", fileVersion);
+
+	/// Read session CRC
+	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
+	uint32_t crcRead = 0;
+	fread(&crcRead, sizeof(uint32_t), 1, sessionFile);
+
+	/// Go to beginning before reading
+	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
+
+
+	char * base64SessionData = calloc(1000-4, 1);
+	fread(base64SessionData, 1000-4, 1, sessionFile);
+
+	int readLen = strlen(base64SessionData);
+	uint32_t crcCalc = 0;
+	if(readLen <= 996)
+		crcCalc = crc32_normal(0, base64SessionData, readLen);
+
+	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+
+	if(crcRead != crcCalc)
+	{
+		return ESP_ERR_INVALID_CRC;
+	}
+
+	/// Find first \0 element in the array, index = length of base64 encoded CompletedSession-structure
+	int endIndex = 0;
+	for (endIndex = 0; endIndex <= 999; endIndex++)
+	{
+		if(base64SessionData[endIndex] == '\0')
+		{
+			break;
+		}
+	}
+
+
+	int base64SessionDataLen = endIndex+1;
+	size_t outLen = 0;
+
+	char *sessionDataCreated = (char*)base64_decode(base64SessionData, base64SessionDataLen, &outLen);
+
+	printf("%d: %s\n", strlen(base64SessionData), base64SessionData);
+	printf("%d: %.*s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
+
+	struct ChargeSession chargeSessionFromFile = {0};
+
+	cJSON* jsonSession = cJSON_Parse(sessionDataCreated);
+
+	if(cJSON_HasObjectItem(jsonSession, "SessionId") &&
+			cJSON_HasObjectItem(jsonSession, "Energy") &&
+			cJSON_HasObjectItem(jsonSession, "StartDateTime") &&
+			cJSON_HasObjectItem(jsonSession, "EndDateTime") &&
+			cJSON_HasObjectItem(jsonSession, "ReliableClock") &&
+			cJSON_HasObjectItem(jsonSession, "StoppedByRFID")&&
+			cJSON_HasObjectItem(jsonSession, "AuthenticationCode"))
+	{
+		strncpy(chargeSessionFromFile.SessionId, 	cJSON_GetObjectItem(jsonSession,"SessionId")->valuestring, 37);
+		chargeSessionFromFile.Energy = 				cJSON_GetObjectItem(jsonSession,"Energy")->valuedouble;
+		strncpy(chargeSessionFromFile.StartDateTime,	cJSON_GetObjectItem(jsonSession,"StartDateTime")->valuestring, 32);
+		strncpy(chargeSessionFromFile.EndDateTime,	cJSON_GetObjectItem(jsonSession,"EndDateTime")->valuestring, 32);
+
+		if(cJSON_GetObjectItem(jsonSession,"ReliableClock")->valueint > 0)
+			chargeSessionFromFile.ReliableClock = true;
+		else
+			chargeSessionFromFile.ReliableClock = false;
+
+		if(cJSON_GetObjectItem(jsonSession,"StoppedByRFID")->valueint > 0)
+			chargeSessionFromFile.StoppedByRFID = true;
+		else
+			chargeSessionFromFile.StoppedByRFID = false;
+
+		strncpy(chargeSessionFromFile.AuthenticationCode ,cJSON_GetObjectItem(jsonSession,"AuthenticationCode")->valuestring, 41);
+
+
+		ESP_LOGI(TAG, "SessionId=%s",chargeSessionFromFile.SessionId);
+		ESP_LOGI(TAG, "Energy=%f",chargeSessionFromFile.Energy);
+		ESP_LOGI(TAG, "StartDateTime=%s",chargeSessionFromFile.StartDateTime);
+		ESP_LOGI(TAG, "EndDateTime=%s",chargeSessionFromFile.EndDateTime);
+		ESP_LOGI(TAG, "ReliableClock=%d",chargeSessionFromFile.ReliableClock);
+		ESP_LOGI(TAG, "StoppedByRFID=%d",chargeSessionFromFile.StoppedByRFID);
+		ESP_LOGI(TAG, "AuthenticationCode=%s",chargeSessionFromFile.AuthenticationCode);
+
+	}
+
+	if(jsonSession != NULL)
+		cJSON_Delete(jsonSession);
+
+
+	/// Go to length index
+	fseek(sessionFile, FILE_NR_OF_OCMF_ADDR_1000, SEEK_SET);
+
+	uint32_t nrOfOCMFElements = 0;
+	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
+	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	/// Build OCMF strings for each element
+	if(nrOfOCMFElements > 0)
+	{
+		int i;
+		for (i = 0; i < nrOfOCMFElements; i++)
+		{
+			/// Go to element position
+			int newElementPosition = (FILE_OCMF_START_ADDR_1004) + ((i) * sizeof(struct LogOCMFData));
+			fseek(sessionFile, newElementPosition, SEEK_SET);
+
+			struct LogOCMFData OCMFElement;
+			fread(&OCMFElement, sizeof(struct LogOCMFData), 1, sessionFile);
+
+			/// Hold'n clear crc to get correct calculation for packet
+			uint32_t packetCrc = OCMFElement.crc;
+			OCMFElement.crc = 0;
+
+			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
+
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+		}
+
+	}
+
+	fclose(sessionFile);
+
+	free(base64SessionData);
+	free(sessionDataCreated);
+
+	return ESP_OK;
+}
+
+esp_err_t offlineSession_ReadChargeSessionFromFile(int fileNo, cJSON * jsonSession)
+{
+	char buf[22] = {0};
+	sprintf(buf,"/offs/%d.bin", fileNo);
+	sessionFile = fopen(buf, "r");
+
+	if(sessionFile == NULL)
+	{
+		ESP_LOGE(TAG, "Print: sessionFile == NULL");
+		return ESP_FAIL;
+	}
 
 	uint8_t fileVersion = 0;
 	fread(&fileVersion, 1, 1, sessionFile);
 	ESP_LOGW(TAG, "File version: %d", fileVersion);
 
+	/// Read session CRC
+	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
+	uint32_t crcRead = 0;
+	fread(&crcRead, sizeof(uint32_t), 1, sessionFile);
+
+	/// Go to beginning before reading
+	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
+
+
+	char * base64SessionData = calloc(1000-4, 1);
+	volatile size_t size = fread(base64SessionData, 1000-4, 1, sessionFile);
+
+	/// Find first \0 element in the array, index = length of base64 encoded CompletedSession-structure
+	/*int endIndex = 0;
+	for (endIndex = 0; endIndex < 996; endIndex++)
+	{
+		if(base64SessionData[endIndex] == '\0')
+		{
+			break;
+		}
+	}*/
+
+	//int base64SessionDataLen = endIndex + 1;
+	int base64SessionDataLen = strlen(base64SessionData);
+
+	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
+
+	ESP_LOGW(TAG,"Read session: %i, %i:, %s", base64SessionDataLen, strlen(base64SessionData), base64SessionData);
+
+	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+
+	if(crcRead != crcCalc)
+	{
+		return ESP_ERR_INVALID_CRC;
+	}
+
+
+
+	size_t outLen = 0;
+
+	char *sessionDataCreated = (char*)base64_decode(base64SessionData, base64SessionDataLen, &outLen);
+
+	printf("%d: %s\n", strlen(base64SessionData), base64SessionData);
+	printf("%d: %.*s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
+
+	struct ChargeSession chargeSessionFromFile = {0};
+
+	jsonSession = cJSON_Parse(sessionDataCreated);
+
+	if(cJSON_HasObjectItem(jsonSession, "SessionId") &&
+			cJSON_HasObjectItem(jsonSession, "Energy") &&
+			cJSON_HasObjectItem(jsonSession, "StartDateTime") &&
+			cJSON_HasObjectItem(jsonSession, "EndDateTime") &&
+			cJSON_HasObjectItem(jsonSession, "ReliableClock") &&
+			cJSON_HasObjectItem(jsonSession, "StoppedByRFID")&&
+			cJSON_HasObjectItem(jsonSession, "AuthenticationCode"))
+	{
+		strncpy(chargeSessionFromFile.SessionId, 	cJSON_GetObjectItem(jsonSession,"SessionId")->valuestring, 37);
+		chargeSessionFromFile.Energy = 				cJSON_GetObjectItem(jsonSession,"Energy")->valuedouble;
+		strncpy(chargeSessionFromFile.StartDateTime,	cJSON_GetObjectItem(jsonSession,"StartDateTime")->valuestring, 32);
+		strncpy(chargeSessionFromFile.EndDateTime,	cJSON_GetObjectItem(jsonSession,"EndDateTime")->valuestring, 32);
+
+		if(cJSON_GetObjectItem(jsonSession,"ReliableClock")->valueint > 0)
+			chargeSessionFromFile.ReliableClock = true;
+		else
+			chargeSessionFromFile.ReliableClock = false;
+
+		if(cJSON_GetObjectItem(jsonSession,"StoppedByRFID")->valueint > 0)
+			chargeSessionFromFile.StoppedByRFID = true;
+		else
+			chargeSessionFromFile.StoppedByRFID = false;
+
+		strncpy(chargeSessionFromFile.AuthenticationCode ,cJSON_GetObjectItem(jsonSession,"AuthenticationCode")->valuestring, 41);
+
+
+		ESP_LOGI(TAG, "SessionId=%s",chargeSessionFromFile.SessionId);
+		ESP_LOGI(TAG, "Energy=%f",chargeSessionFromFile.Energy);
+		ESP_LOGI(TAG, "StartDateTime=%s",chargeSessionFromFile.StartDateTime);
+		ESP_LOGI(TAG, "EndDateTime=%s",chargeSessionFromFile.EndDateTime);
+		ESP_LOGI(TAG, "ReliableClock=%d",chargeSessionFromFile.ReliableClock);
+		ESP_LOGI(TAG, "StoppedByRFID=%d",chargeSessionFromFile.StoppedByRFID);
+		ESP_LOGI(TAG, "AuthenticationCode=%s",chargeSessionFromFile.AuthenticationCode);
+
+	}
+
+	if(jsonSession != NULL)
+		cJSON_Delete(jsonSession);
+
+
+	/// Go to length index
+	fseek(sessionFile, FILE_NR_OF_OCMF_ADDR_1000, SEEK_SET);
+
+	uint32_t nrOfOCMFElements = 0;
+	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
+	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	/// Build OCMF strings for each element
+	if(nrOfOCMFElements > 0)
+	{
+		int i;
+		for (i = 0; i < nrOfOCMFElements; i++)
+		{
+			/// Go to element position
+			int newElementPosition = (FILE_OCMF_START_ADDR_1004) + ((i) * sizeof(struct LogOCMFData));
+			fseek(sessionFile, newElementPosition, SEEK_SET);
+
+			struct LogOCMFData OCMFElement;
+			fread(&OCMFElement, sizeof(struct LogOCMFData), 1, sessionFile);
+
+			/// Hold'n clear crc to get correct calculation for packet
+			uint32_t packetCrc = OCMFElement.crc;
+			OCMFElement.crc = 0;
+
+			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
+
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+		}
+
+	}
+
+	fclose(sessionFile);
+
+	free(base64SessionData);
+	free(sessionDataCreated);
+
+	return ESP_OK;
+}
+
+
+
+
+
+esp_err_t offlineSession_GetSignedSessionFromActiveFile(cJSON* entryArray)
+{
+	char buf[22] = {0};
+	sprintf(buf,"/offs/%d.bin", 0);
+	sessionFile = fopen(buf, "r");
+	//sessionFile = fopen(activePathString, "r");
+
+	if(sessionFile == NULL)
+	{
+		ESP_LOGE(TAG, "Print: sessionFile == NULL");
+		return ESP_FAIL;
+	}
+
+	uint8_t fileVersion = 0;
+	fread(&fileVersion, 1, 1, sessionFile);
+	ESP_LOGW(TAG, "File version: %d", fileVersion);
+
+	/*
 	/// Go to beginning before reading
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 
@@ -255,8 +573,6 @@ esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
 
 	char * base64SessionData = calloc(1000, 1);
 	volatile size_t size = fread(base64SessionData, 1000, 1, sessionFile);
-
-	fclose(sessionFile);
 
 	/// Find first \0 element in the array, index = length of base64 encoded CompletedSession-structure
 	int endIndex = 0;
@@ -275,8 +591,6 @@ esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
 	char *sessionDataCreated = (char*)base64_decode(base64SessionData, base64SessionDataLen, &outLen);
 
 	printf("%d: %s\n", strlen(base64SessionData), base64SessionData);
-	//printf("%d: %s\n", strlen(sessionDataCreated), sessionDataCreated);
-	//sessionDataCreated[outLen] = '\0';
 	printf("%d: %.*s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
 
 	struct ChargeSession chargeSessionFromFile = {0};
@@ -306,7 +620,7 @@ esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
 		else
 			chargeSessionFromFile.StoppedByRFID = false;
 
-		strncpy(chargeSessionFromFile.AuthenticationCode ,cJSON_GetObjectItem(jsonSession,"Energy")->valuestring, 41);
+		strncpy(chargeSessionFromFile.AuthenticationCode ,cJSON_GetObjectItem(jsonSession,"AuthenticationCode")->valuestring, 41);
 
 
 		ESP_LOGI(TAG, "SessionId=%s",chargeSessionFromFile.SessionId);
@@ -321,25 +635,65 @@ esp_err_t offlineSession_ReadFileContent(int fileNo, char * fileBuffer)
 
 	if(jsonSession != NULL)
 			cJSON_Delete(jsonSession);
-
+*/
 
 	/// Go to length index
-	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
+	fseek(sessionFile, FILE_NR_OF_OCMF_ADDR_1000, SEEK_SET);
 
 	uint32_t nrOfOCMFElements = 0;
-	fwrite(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-
+	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
+	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	/// Build OCMF strings for each element
 	if(nrOfOCMFElements > 0)
 	{
+		int i;
+		for (i = 0; i < nrOfOCMFElements; i++)
+		{
+			/// Go to element position
+			int newElementPosition = (FILE_OCMF_START_ADDR_1004) + ((i) * sizeof(struct LogOCMFData));
+			fseek(sessionFile, newElementPosition, SEEK_SET);
 
+
+				struct LogOCMFData OCMFElement;
+				fread(&OCMFElement, sizeof(struct LogOCMFData), 1, sessionFile);
+
+				/// Hold'n clear crc got get correct calculation for packet
+				uint32_t packetCrc = OCMFElement.crc;
+				OCMFElement.crc = 0;
+
+				uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
+
+				ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+
+				if((crcCalc == packetCrc))
+				{
+					cJSON * logArrayElement = cJSON_CreateObject();
+					char timeBuffer[50] = {0};
+					zntp_format_time(timeBuffer, OCMFElement.timestamp);
+					//zntp_GetSystemTime(timeBuffer, NULL);
+					char* tx = &OCMFElement.label;
+
+					cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
+					cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
+					cJSON_AddNumberToObject(logArrayElement, "RV", OCMFElement.energy);//get_accumulated_energy());	//ReadingValue
+					cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
+					cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
+					cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
+					cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState
+
+					cJSON_AddItemToArray(entryArray, logArrayElement);
+				}
+		}
 	}
 
+	fclose(sessionFile);
 
-	free(base64SessionData);
-	free(sessionDataCreated);
+	//free(base64SessionData);
+	//free(sessionDataCreated);
 
 	return ESP_OK;
 }
+
 
 
 //static cJSON * fileRoot = NULL;
@@ -456,9 +810,22 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 		{
 			/// Set first element
 			nrOfOCMFElements = 0;
+			offlineSessionOpen = true;
 		}
 		else
 		{
+			/// Make sure no attempts to write energy occurs until the Begin label is set
+			if(offlineSessionOpen == false)
+			{
+				ESP_LOGE(TAG, "Tried appending energy with unopened offlinesession: %c", label);
+				return;
+			}
+
+			/// Make sure no attempts to write energy occurs after the End label is set
+			if(label == 'E')
+				offlineSessionOpen = false;
+
+
 			/// Get nr of elements...
 			fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
 
@@ -477,15 +844,17 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 		struct LogOCMFData line = {.label = label, .energy = energy, .timestamp = timestamp, .crc = 0};
 		uint32_t crc = crc32_normal(0, &line, sizeof(struct LogOCMFData));
 		line.crc = crc;
+
 		//ESP_LOGW(TAG, "FileNo %d: writing to OFFS-file with crc=%u", activeFileNumber, line.crc);
 
 		/// Find new element position
 		int elementOffset = 0;
-		if(nrOfOCMFElements > 0)
-			elementOffset = nrOfOCMFElements - 1;
+		//if(nrOfOCMFElements > 0)
+			//elementOffset = nrOfOCMFElements - 1;
 
-		int newElementPosition = (FILE_OCMF_START_ADDR_1004) + (elementOffset * sizeof(struct LogOCMFData));
+		int newElementPosition = (FILE_OCMF_START_ADDR_1004) + (nrOfOCMFElements * sizeof(struct LogOCMFData));
 		ESP_LOGW(TAG, "FileNo %d: New element position: #%d: %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
+		ESP_LOGW(TAG, "OCMF Write %i addr: %i : %c %i %f 0x%X", nrOfOCMFElements, newElementPosition, line.label, line.timestamp, line.energy, line.crc);
 
 		/// Write new element
 		fseek(sessionFile, newElementPosition, SEEK_SET);

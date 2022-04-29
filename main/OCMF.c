@@ -18,16 +18,16 @@ static const char *TAG = "OCMF           ";
 
 static char * formatVersion = "1.0";
 
-static char * logString = NULL;
+static char * OCMFLogEntryString = NULL;
 
 static SemaphoreHandle_t ocmf_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st, time_t time_in, double energy_in);
+cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx,  time_t time_in, double energy_in);
 
 
 void OCMF_Init()
 {
-	logString = calloc(LOG_STRING_SIZE, 1);
+	OCMFLogEntryString = calloc(LOG_STRING_SIZE, 1);
 	ocmf_lock = xSemaphoreCreateMutex();
 	xSemaphoreGive(ocmf_lock);
 }
@@ -52,7 +52,7 @@ double get_accumulated_energy(){
 	return accumulated_energy;
 }
 
-int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
+int _OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
 {
 	cJSON *OCMFObject = cJSON_CreateObject();
 	if(OCMFObject == NULL){return -10;}
@@ -90,40 +90,68 @@ int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double ene
 	return 0;
 }
 
-int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out){
+int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out){
 	char timeBuffer[50] = {0};
 	zntp_GetSystemTime(timeBuffer, time_out);
 	*energy_out = get_accumulated_energy();
 
-	return _OCMF_CreateNewOCMFMessage(newMessage, timeBuffer, *energy_out);
+	return _OCMF_SignedMeterValue_CreateNewOCMFMessage(newMessage, timeBuffer, *energy_out);
 
 }
 
-int  OCMF_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in){
+int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in){
 	char time_buffer[50] = {0};
 	zntp_format_time(time_buffer, time_in);
 
-	return _OCMF_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
+	return _OCMF_SignedMeterValue_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
 }
 
+
+/************************************************************************************/
 
 static cJSON *logRoot = NULL;
 static cJSON * logReaderArray = NULL;
 //static cJSON *logArrayElement = NULL;
 
 
-char * OCMF_CreateNewOCMFLog(time_t startTime)
+esp_err_t OCMF_CompletedSession_CreateNewMessageFile(char * messageString)
 {
-	memset(logString, 0, LOG_STRING_SIZE);
-
-	/*if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
-		ESP_LOGE(TAG, "failed to obtain ocmf lock during log create");
-		goto err;
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
 	}else{
-		ESP_LOGI(TAG, "got ocmf lock OCMF_CreateNewOCMFLog");
-	}*/
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
+	}
 
+
+
+	cJSON *CompletedSessionObject = cJSON_CreateObject();
+	if(CompletedSessionObject == NULL)
+	{
+		xSemaphoreGive(ocmf_lock);
+		return -10;
+	}
+
+	int latestFile = offlineSession_FindLatestFile();
+	if(latestFile < 0)
+	{
+		xSemaphoreGive(ocmf_lock);
+		return ESP_ERR_NOT_FOUND;
+	}
+
+	/// First get cJSON ChargeSession from file
+	esp_err_t err = offlineSession_ReadChargeSessionFromFile(latestFile, CompletedSessionObject);
+	if(err != ESP_OK)
+	{
+		xSemaphoreGive(ocmf_lock);
+		return err;
+	}
+
+	ESP_LOGW(TAG, "CompletedSession: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+
+	/// ..then get OCMF log entires
+	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
 
 	logRoot = cJSON_CreateObject();
 
@@ -133,30 +161,71 @@ char * OCMF_CreateNewOCMFLog(time_t startTime)
 	cJSON_AddStringToObject(logRoot, "GV", GetSoftwareVersion());					//GatewayVersion
 	cJSON_AddStringToObject(logRoot, "PG", "T1");			//Pagination(class)
 
-	//xSemaphoreGive(ocmf_lock);
-
-	//return logString
-
-
+	//Array to hold all hourly SignedSession energy elements
 	logReaderArray = cJSON_CreateArray();
 
-	double energyAtStart = get_accumulated_energy();
-	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G", startTime, energyAtStart);
+	if(logReaderArray != NULL)
+	{
+		offlineSession_GetSignedSessionFromActiveFile(logReaderArray);
+
+		ESP_LOGW(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
+
+		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
+
+		char *buf = cJSON_PrintUnformatted(logRoot);
+
+		strcpy(OCMFLogEntryString, "OCMF|");
+		strcpy(OCMFLogEntryString+strlen(OCMFLogEntryString), buf);
+
+		ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+
+		cJSON_Delete(logRoot);
+
+		logRoot = NULL;
+		logReaderArray = NULL;
+
+		free(buf);
+		cJSON * signedSessionObject = cJSON_CreateObject();
+		cJSON_AddStringToObject(signedSessionObject, "SignedSession", OCMFLogEntryString);
+		cJSON_ReplaceItemInObject(CompletedSessionObject, "SignedSession", signedSessionObject);			//Pagination(class)
+
+		cJSON_Delete(signedSessionObject);//chargeSession_SetOCMF(logString);
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Nothing to finalize");
+	}
+
+
+	char *buf = cJSON_PrintUnformatted(CompletedSessionObject);
+
+	strcpy(messageString, buf);
+
+	ESP_LOGI(TAG, "Made CompletedSessionObject");
+
+	cJSON_Delete(CompletedSessionObject);
+	free(buf);
 
 	//For testing maximum message size
-	/*
-	int i;
-	for (i = 0; i < 99; i++)
-		OCMF_AddElementToOCMFLog("T", "G");
-	*/
+	//
+	//int i;
+	//for (i = 0; i < 99; i++)
+	//	OCMF_AddElementToOCMFLog("T", "G");
 
-	//xSemaphoreGive(ocmf_lock);
+	xSemaphoreGive(ocmf_lock);
 
-	//err:
-	return logString;
+	return ESP_OK;
 }
 
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st, time_t time_in, double energy_in)
+
+void OCMF_CompletedSession_StartStopOCMFLog(char label, time_t startTimeSec)
+{
+	double energyAtStart = get_accumulated_energy();
+	OCMF_CompletedSession_AddElementToOCMFLog(label, startTimeSec, energyAtStart);
+}
+
+
+cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx, time_t time_in, double energy_in)
 {
 
 	if(logReaderArray != NULL)
@@ -177,7 +246,7 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 			cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 			cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
 			cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
-			cJSON_AddStringToObject(logArrayElement, "ST", st);			//MeterState
+			cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState
 
 			cJSON_AddItemToArray(logReaderArray, logArrayElement);
 
@@ -192,7 +261,7 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 }
 
 
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st, time_t time_in, double energy_in)
+cJSON * OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in)
 {
 	cJSON * result = NULL;
 
@@ -205,17 +274,17 @@ cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st, t
 	}
 
 	//Add to memory log
-	result = OCMF_AddElementToOCMFLog_no_lock(tx, st, time_in, energy_in);
+	//Log only to flash, call this when building msg// result = OCMF_AddElementToOCMFLog_no_lock(tx, st, time_in, energy_in);
 
 	//Add to file log
-	offlineSession_append_energy('T', time_in, energy_in);
+	offlineSession_append_energy(tx, time_in, energy_in);
 
 	xSemaphoreGive(ocmf_lock);
 	err:
 	return result;
 }
 
-int OCMF_FinalizeOCMFLog(time_t endTime)
+/*int OCMF_CompletedSession_FinalizeOCMFLog()
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -225,15 +294,20 @@ int OCMF_FinalizeOCMFLog(time_t endTime)
 		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
 	}
 
+
+	///Save the entry to the offline log in case CompletedSession is not transmitted successfully
+	//offlineSession_append_energy('E', endTime, endEnergy);
+
 	if(logReaderArray != NULL)
 	{
-		double endEnergy = get_accumulated_energy();
+		//double endEnergy = get_accumulated_energy();
 
 		///Save the entry to the offline log in case CompletedSession is not transmitted successfully
-		offlineSession_append_energy('E', endTime, endEnergy);
+		//offlineSession_append_energy('E', endTime, endEnergy);
 
 		///Build the OCMF structure for sending instantly
-		OCMF_AddElementToOCMFLog_no_lock("E", "G", endTime, endEnergy);
+		//char label = 'E';
+		//OCMF_AddElementToOCMFLog_no_lock(&label, endTime, endEnergy);
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -259,10 +333,10 @@ int OCMF_FinalizeOCMFLog(time_t endTime)
 
 	xSemaphoreGive(ocmf_lock);
 	return 0;
-}
+}*/
 
 
-int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
+/*int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -274,7 +348,7 @@ int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
 
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog_no_lock("T", "G", time, energy);
+		OCMF_AddElementToOCMFLog_no_lock("T", time, energy);
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -300,4 +374,4 @@ int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
 
 	xSemaphoreGive(ocmf_lock);
 	return 0;
-}
+}*/

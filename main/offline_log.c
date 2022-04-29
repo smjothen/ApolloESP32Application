@@ -227,7 +227,7 @@ int attempt_log_send(void){
         );
 
         if(crc_on_file==calculated_crc){
-            OCMF_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
+            OCMF_SignedMeterValue_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
             int publish_result = publish_string_observation_blocked(
 			    SignedMeterValue, ocmf_text, 2000
 		    );

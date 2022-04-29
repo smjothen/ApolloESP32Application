@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.125";
+char softwareVersion[] = "0.0.0.130";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -164,10 +164,10 @@ void HandleCommands()
 			if(sscanf(&commandBuffer[5], "%d", &x))
 			{
 				ESP_LOGW(TAG_MAIN, "Reading file no content: %d", x);
-				char * fileBuffer = calloc(20000,1);
-				offlineSession_ReadFileContent(x, fileBuffer);
-				ESP_LOGW(TAG_MAIN, "fileBuffer: \r\n %s", fileBuffer);
-				free(fileBuffer);
+				//char * fileBuffer = calloc(20000,1);
+				offlineSession_Diagnostics_ReadFileContent(x);//, fileBuffer);
+				//ESP_LOGW(TAG_MAIN, "fileBuffer: \r\n %s", fileBuffer);
+				//free(fileBuffer);
 			}
 		}
 
@@ -217,7 +217,7 @@ void HandleCommands()
 
 
 }
-//#define useSimpleConsole
+#define useSimpleConsole
 
 
 void GetTimeOnString(char * onTimeString)
@@ -574,11 +574,15 @@ void app_main(void)
 			otaDelayCounter = 0;
 		}
 
-
 	#ifdef useSimpleConsole
-    	HandleCommands();
+		int i;
+		for (i = 0; i < 10; i++)
+		{
+			HandleCommands();
+			vTaskDelay(100 / portTICK_PERIOD_MS);
+		}
+	#else
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	#endif
-
-    	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }

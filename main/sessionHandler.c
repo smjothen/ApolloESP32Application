@@ -69,7 +69,7 @@ void on_send_signed_meter_value()
 
 	if(state_charging || hasRemainingEnergy){
 		// Sample energy now, dumping the log may be to slow to get the time aligned energy
-		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
+		OCMF_SignedMeterValue_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
 	}
 
 	if(hasRemainingEnergy)
@@ -105,7 +105,7 @@ void on_send_signed_meter_value()
 
 		//If hasRemainingEnergy, but disconnected -> don't add.
 		if (chargeMode != eCAR_DISCONNECTED)
-			OCMF_AddElementToOCMFLog("T", "G", time, energy);
+			OCMF_CompletedSession_AddElementToOCMFLog('T', time, energy);
 	}
 
 	//If this is the case, remaining energy has been sent -> clear the flag
@@ -356,6 +356,9 @@ static void sessionHandler_task()
 
     //TODO - evaluate placement
     offlineSession_mount_folder();
+
+    //if()
+    //OCMF_CompletedSession_CreateNewOCMFLogFromFile();
 
 	while (1)
 	{
@@ -734,9 +737,15 @@ static void sessionHandler_task()
 				chargeSession_Finalize();
 				chargeSession_PrintSession(isOnline, offlineHandler_IsPingReplyOffline());
 
+
+
 				//char completedSessionString[200] = {0};
 				memset(completedSessionString,0, LOG_STRING_SIZE);
-				chargeSession_GetSessionAsString(completedSessionString);
+
+				OCMF_CompletedSession_CreateNewMessageFile(completedSessionString);
+
+				//Obsoleted memory structure
+				//chargeSession_GetSessionAsString(completedSessionString);
 
 				// Delay to space data recorded i cloud.
 				//vTaskDelay(pdMS_TO_TICKS(2000));
@@ -877,6 +886,10 @@ static void sessionHandler_task()
 			if(storage_Get_Standalone() == true)
 			{
 				pulseInterval = PULSE_STANDALONE;
+
+				/// If other than default on storage, use this to override pulseInterval
+				if(storage_Get_PulseInterval() != 60)
+					pulseInterval = storage_Get_PulseInterval();
 			}
 			else if(storage_Get_Standalone() == false)
 			{
@@ -887,6 +900,10 @@ static void sessionHandler_task()
 				else
 				{
 					pulseInterval = PULSE_SYSTEM_NOT_CHARGING;
+
+					/// If other than default on storage, use this to override pulseInterval
+					if(storage_Get_PulseInterval() != 60)
+						pulseInterval = storage_Get_PulseInterval();
 				}
 			}
 
@@ -1276,7 +1293,7 @@ static void sessionHandler_task()
 		/// Indicate offline with led LED
 		if((storage_Get_Standalone() == false) && ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE)))
 		{
-			if((offlineTime % 30 == 0) && (offlineMode == true))
+			if((offlineTime % 30 == 0) && (isOnline == false))
 			{
 				MessageType ret = MCU_SendCommandId(CommandIndicateOffline);
 				if(ret == MsgCommandAck)

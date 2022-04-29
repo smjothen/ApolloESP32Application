@@ -783,11 +783,6 @@ char * MCU_GetSwVersionString()
 	return mcuSwVersionString;
 }
 
-char * MCU_GetGridTestString()
-{
-	return mcuGridTestString;
-}
-
 
 static uint8_t HwIdSpeed = 0;
 uint8_t MCU_ReadHwIdMCUSpeed()
@@ -832,6 +827,19 @@ uint8_t MCU_GetHwIdMCUPower()
 {
 	return HwIdPower;
 }
+
+
+
+
+
+
+
+char * MCU_GetGridTestString()
+{
+	return mcuGridTestString;
+}
+
+
 
 uint8_t MCU_GetSwitchState()
 {

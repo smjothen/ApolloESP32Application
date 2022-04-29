@@ -10,11 +10,21 @@ extern "C" {
 #define LOG_STRING_SIZE 20000
 
 void OCMF_Init();
-int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out);
-int  OCMF_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in);
-char * OCMF_CreateNewOCMFLog();
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st, time_t time_in, double energy_in);
-int OCMF_FinalizeOCMFLog(time_t endTime);
+
+/******_SignedMeterValue_*****/
+
+int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out);
+int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in);
+//char * OCMF_CreateNewOCMFLog();
+
+
+/******* CompletedSession *****/
+
+void OCMF_CompletedSession_StartStopOCMFLog(char label, time_t startTimeSec);
+cJSON * OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in);
+//char * OCMF_CompletedSession_CreateNewOCMFLogFromFile();
+esp_err_t OCMF_CompletedSession_CreateNewMessageFile(char * messageString);
+int OCMF_CompletedSession_FinalizeOCMFLog();
 
 #ifdef __cplusplus
 }

@@ -232,6 +232,8 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "offlineSession_SaveSession() failed: %d", saveErr);
 		}
 
+		OCMF_CompletedSession_StartStopOCMFLog('B', chargeSession.EpochStartTimeSec);
+
 	}
 
 	//Add for new and flash-read sessions
@@ -276,8 +278,17 @@ void chargeSession_Finalize()
 
 	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
 
-	//Create the 'E' message
-	OCMF_FinalizeOCMFLog(chargeSession.EpochEndTimeSec);
+
+	/// Create the 'E' message
+	OCMF_CompletedSession_StartStopOCMFLog('E', chargeSession.EpochEndTimeSec);
+
+	/// After the 'E' entry is set no more 'T' entries can be added through hourly interrupt
+
+	/// Finalize offlineSession flash structure
+	char * sessionData = calloc(1000,1);
+	chargeSession_GetSessionAsString(sessionData);
+	offlineSession_UpdateSessionOnFile(sessionData);
+	free(sessionData);
 }
 
 
