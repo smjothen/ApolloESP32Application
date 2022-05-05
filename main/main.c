@@ -99,7 +99,7 @@ void HandleCommands()
 	uint8_t uart_data_size = 10;
 	uint8_t uart_data[uart_data_size];
 
-	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 100);
+	int length = uart_read_bytes(UART_NUM_0, uart_data, 1, 1);
 	if(length > 0)
 	{
 		memcpy(commandBuffer+strlen(commandBuffer), uart_data, length);
@@ -150,7 +150,7 @@ void HandleCommands()
 
 
 		else if(strncmp("latest", commandBuffer, 6) == 0)
-			offlineSession_FindLatestFile();
+			offlineSession_FindNewFileNumber();
 
 		else if(strncmp("oldest", commandBuffer, 6) == 0)
 			offlineSession_FindOldestFile();
@@ -217,7 +217,7 @@ void HandleCommands()
 
 
 }
-#define useSimpleConsole
+//#define useSimpleConsole
 
 
 void GetTimeOnString(char * onTimeString)
@@ -263,6 +263,7 @@ void SetOnlineWatchdog()
 {
 	onlineWatchdog = true;
 }
+
 
 
 
@@ -333,7 +334,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    //validate_booted_image();
+    validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -375,10 +376,6 @@ void app_main(void)
 	#endif
 
 	fat_static_mount();
-
-
-	//offlineSession_SaveSession();
-
 
 	i2cReadDeviceInfoFromEEPROM();
 	I2CDevicesStartTask();
@@ -457,7 +454,7 @@ void app_main(void)
     {
 		onTimeCounter++;
 
-    	if(onTimeCounter % 30 == 0)
+    	if(onTimeCounter % 10 == 0)
     	{
 			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
@@ -466,9 +463,9 @@ void app_main(void)
 			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 
-    	if(onTimeCounter % 30 == 0)
+    	if(onTimeCounter % 10 == 0)
     	{
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark());
+    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -574,6 +571,7 @@ void app_main(void)
 			otaDelayCounter = 0;
 		}
 
+
 	#ifdef useSimpleConsole
 		int i;
 		for (i = 0; i < 10; i++)
@@ -584,5 +582,6 @@ void app_main(void)
 	#else
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	#endif
+
     }
 }

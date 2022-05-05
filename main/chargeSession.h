@@ -28,7 +28,7 @@ void chargeSession_PrintSession(bool online, bool pingReplyActive);
 char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
-
+void chargeSession_CheckIfLastSessionIncomplete();
 void chargeSession_Start();
 void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();
@@ -43,8 +43,8 @@ void chargeSession_SetOCMF(char * OCMDString);
 struct ChargeSession chargeSession_Get();
 int chargeSession_GetSessionAsString(char * message);
 
-esp_err_t chargeSession_SaveSessionResetInfo();
-esp_err_t chargeSession_ReadSessionResetInfo();
+esp_err_t chargeSession_SaveUpdatedSession();
+//esp_err_t chargeSession_ReadSessionResetInfo();
 
 bool chargeSession_IsAuthenticated();
 void SetCarConnectedState(bool connectedState);

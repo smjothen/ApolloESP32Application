@@ -115,7 +115,6 @@ void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 
 static void ChargeSession_Set_StartTime()
 {
-	time_t time_out;
 	GetUTCTimeString(chargeSession.StartDateTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
 
 	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
@@ -165,20 +164,21 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 	}
 
 	//Save
-	chargeSession_SaveSessionResetInfo();
+	chargeSession_SaveUpdatedSession();
 
 	return 0;
 }
 
-
+void chargeSession_CheckIfLastSessionIncomplete()
+{
+	if((strlen(chargeSession.SessionId) == 0))
+		offlineSession_CheckIfLastLessionIncomplete(&chargeSession);
+}
 
 void chargeSession_Start()
 {
 	/// First check for resetSession on Flash
-	esp_err_t readErr = chargeSession_ReadSessionResetInfo();
-
-	//indicate that the energy value is invalid
-	//chargeSession.Energy = -1.0;
+	/*esp_err_t readErr = chargeSession_ReadSessionResetInfo();
 
 	if (readErr != ESP_OK)
 	{
@@ -189,11 +189,11 @@ void chargeSession_Start()
 
 		memset(&chargeSession, 0, sizeof(chargeSession));
 
-	}
+	}*/
 
-	if((strlen(chargeSession.SessionId) == 36) && (readErr == ESP_OK))
+	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{
-		ESP_LOGI(TAG, "chargeSession_Start() using resetSession");
+		ESP_LOGI(TAG, "chargeSession_Start() using uncompleted Session from flash");
 		strcpy(sidOrigin, "file ");
 
 		chargeSession.SignedSession = basicOCMF;
@@ -224,6 +224,7 @@ void chargeSession_Start()
 
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
+		ESP_LOGE(TAG, "sessionDataLen: %d", strlen(sessionData));
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
 		free(sessionData);
 
@@ -254,7 +255,7 @@ void chargeSession_UpdateEnergy()
 
 		if(energy > 0.001)
 		{
-			energy = roundf(energy * 1000) / 1000; /// round to 3rd desimal to remove unnecessary desimals
+			energy = roundf(energy * 1000) / 1000.0; /// round to 3rd decimal to remove unnecessary desimals
 
 			//Only allow significant, positive, increasing energy
 			if(energy > chargeSession.Energy)
@@ -272,7 +273,6 @@ void chargeSession_UpdateEnergy()
 
 void chargeSession_Finalize()
 {
-	//chargeSession.Energy = MCU_GetEnergy();
 	chargeSession_UpdateEnergy();
 	GetUTCTimeString(chargeSession.EndDateTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
 
@@ -287,7 +287,8 @@ void chargeSession_Finalize()
 	/// Finalize offlineSession flash structure
 	char * sessionData = calloc(1000,1);
 	chargeSession_GetSessionAsString(sessionData);
-	offlineSession_UpdateSessionOnFile(sessionData);
+	offlineSession_UpdateSessionOnFile(sessionData, false);
+	offlineSession_SetSessionFileInactive();
 	free(sessionData);
 }
 
@@ -354,7 +355,11 @@ int chargeSession_GetSessionAsString(char * message)
 	if(CompletedSessionObject == NULL){return -10;}
 
 	cJSON_AddStringToObject(CompletedSessionObject, "SessionId", chargeSession.SessionId);
-	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", chargeSession.Energy);
+
+	double energyAsDouble  = round(chargeSession.Energy * 1000) / 1000.0;
+
+	//cJSON_AddNumberToObject(CompletedSessionObject, "Energy", chargeSession.Energy);
+	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", energyAsDouble);
 	cJSON_AddStringToObject(CompletedSessionObject, "StartDateTime", chargeSession.StartDateTime);
 	cJSON_AddStringToObject(CompletedSessionObject, "EndDateTime", chargeSession.EndDateTime);
 	cJSON_AddBoolToObject(CompletedSessionObject, "ReliableClock", chargeSession.ReliableClock);
@@ -366,7 +371,7 @@ int chargeSession_GetSessionAsString(char * message)
 
 	strcpy(message, buf);
 
-	ESP_LOGI(TAG, "Made CompletedSessionObject");
+	ESP_LOGI(TAG, "Made CompletedSessionObject %d", strlen(message));
 
 	cJSON_Delete(CompletedSessionObject);
 	free(buf);
@@ -375,17 +380,24 @@ int chargeSession_GetSessionAsString(char * message)
 }
 
 
-esp_err_t chargeSession_SaveSessionResetInfo()
+/// When an RFID-tag is validated, call this to update the session on file
+esp_err_t chargeSession_SaveUpdatedSession()
 {
-	ESP_LOGI(TAG, "Saving resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
+
+	char * sessionData = calloc(1000,1);
+	chargeSession_GetSessionAsString(sessionData);
+	offlineSession_UpdateSessionOnFile(sessionData, false);
+	free(sessionData);
+
+	/*ESP_LOGI(TAG, "Saving resetSession: %s, Start: %s - %d,  %f W, %s", chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
 	esp_err_t err = storage_SaveSessionResetInfo(chargeSession.SessionId, chargeSession.StartDateTime, chargeSession.unixStartTime, chargeSession.Energy, chargeSession.AuthenticationCode);
 	if (err != ESP_OK)
-		ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", err);
+		ESP_LOGE(TAG, "chargeSession_SaveSessionResetInfo() failed: %d", err);*/
 
-	return err;
+	return ESP_OK;
 }
 
-esp_err_t chargeSession_ReadSessionResetInfo()
+/*esp_err_t chargeSession_ReadSessionResetInfo()
 {
 	esp_err_t err = ESP_OK;
 
@@ -409,7 +421,7 @@ esp_err_t chargeSession_ReadSessionResetInfo()
 		}
 	}
 	return err;
-}
+}*/
 
 
 bool chargeSession_IsAuthenticated()

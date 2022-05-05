@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "string.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
@@ -58,6 +59,54 @@ enum CommunicationMode connectivity_GetPreviousInterface()
 
 bool wifiInitialized = false;
 
+/// This timer-function is called every second to control pulses to Cloud
+static uint32_t mqttUnconnectedCounter = 0;
+static uint32_t carDisconnectedCounter = 0;
+static const uint32_t restartTimeLimit = 3600*6;
+static void OneSecondTimer()
+{
+	//ESP_LOGW(TAG_MAIN,"OneSec?");
+	sessionHandler_Pulse();
+
+	if(mqttInitialized == true)
+	{
+		if(isMqttConnected() == false)
+		{
+			mqttUnconnectedCounter++;
+
+			if(mqttUnconnectedCounter % 10 == 0)
+			{
+				ESP_LOGE(TAG, "MQTT_unconnected restart %d/%d (Car:%d)", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter);
+			}
+
+			/// Check how long a car has been disconnected
+			if(sessionHandler_GetCurrentChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
+			{
+				carDisconnectedCounter++;
+			}
+			else
+			{
+				carDisconnectedCounter = 0;
+			}
+
+			/// Ensure that the offline situation has been consistent for x seconds
+			/// and a car disconnected for x seconds before saving to log and restarting
+			if((mqttUnconnectedCounter >= restartTimeLimit) && (carDisconnectedCounter >= 600)) //TODO
+			{
+				char buf[100]={0};
+				sprintf(buf, "#2 mqttUnconnectedCounter %d times.", mqttUnconnectedCounter);
+				storage_Set_And_Save_DiagnosticsLog(buf);
+				ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
+				esp_restart();
+			}
+		}
+		else
+		{
+			mqttUnconnectedCounter = 0;
+		}
+	}
+}
+
 /*
  * This task shall handle the initiation and switching between wireless
  * interfaces and protocols:
@@ -94,6 +143,11 @@ static void connectivity_task()
 	}
 	ESP_LOGI(TAG, "MCU is ready");
 
+
+    //Create timer for sending pulses once mqtt is initialized
+    TickType_t secTimer = pdMS_TO_TICKS(1000); //1 second
+    TimerHandle_t oneSecondTimerHandle = xTimerCreate( "SecondTimer", secTimer, pdTRUE, NULL, OneSecondTimer );
+    xTimerReset( oneSecondTimerHandle, portMAX_DELAY);
 
 	while (1) {
 
@@ -289,6 +343,6 @@ int connectivity_GetStackWatermark()
 
 void connectivity_init()
 {
-	xTaskCreate(connectivity_task, "connectivity_task", 7000, NULL, 2, &taskConnHandle);
+	xTaskCreate(connectivity_task, "connectivity_task", 5000, NULL, 2, &taskConnHandle);
 	vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

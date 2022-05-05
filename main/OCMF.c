@@ -108,13 +108,11 @@ int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_i
 
 
 /************************************************************************************/
-
 static cJSON *logRoot = NULL;
 static cJSON * logReaderArray = NULL;
-//static cJSON *logArrayElement = NULL;
 
 
-esp_err_t OCMF_CompletedSession_CreateNewMessageFile(char * messageString)
+esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * messageString)
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -125,50 +123,46 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(char * messageString)
 	}
 
 
-
-	cJSON *CompletedSessionObject = cJSON_CreateObject();
-	if(CompletedSessionObject == NULL)
-	{
-		xSemaphoreGive(ocmf_lock);
-		return -10;
-	}
-
-	int latestFile = offlineSession_FindLatestFile();
-	if(latestFile < 0)
+	if(oldestFile < 0)
 	{
 		xSemaphoreGive(ocmf_lock);
 		return ESP_ERR_NOT_FOUND;
 	}
 
-	/// First get cJSON ChargeSession from file
-	esp_err_t err = offlineSession_ReadChargeSessionFromFile(latestFile, CompletedSessionObject);
-	if(err != ESP_OK)
+	/// 1. First get cJSON ChargeSession from file
+	cJSON *CompletedSessionObject = offlineSession_ReadChargeSessionFromFile(oldestFile);
+	if(CompletedSessionObject == NULL)
 	{
 		xSemaphoreGive(ocmf_lock);
-		return err;
+		return ESP_ERR_NOT_FOUND;
 	}
 
-	ESP_LOGW(TAG, "CompletedSession: %s", cJSON_PrintUnformatted(CompletedSessionObject));
 
-	/// ..then get OCMF log entires
+	/// 2. ..then get OCMF log entires
 	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
 
 	logRoot = cJSON_CreateObject();
 
 	cJSON_AddStringToObject(logRoot, "FV", formatVersion);							//FormatVersion
-	cJSON_AddStringToObject(logRoot, "GI", "ZAPTEC GO");								//GatewayIdentification
+	cJSON_AddStringToObject(logRoot, "GI", "ZAPTEC GO");							//GatewayIdentification
 	cJSON_AddStringToObject(logRoot, "GS", i2cGetLoadedDeviceInfo().serialNumber);	//GatewaySerial
 	cJSON_AddStringToObject(logRoot, "GV", GetSoftwareVersion());					//GatewayVersion
-	cJSON_AddStringToObject(logRoot, "PG", "T1");			//Pagination(class)
+	cJSON_AddStringToObject(logRoot, "PG", "T1");									//Pagination(class)
+
 
 	//Array to hold all hourly SignedSession energy elements
-	logReaderArray = cJSON_CreateArray();
+	cJSON *logReaderArray = offlineSession_GetSignedSessionFromActiveFile(oldestFile);
 
 	if(logReaderArray != NULL)
 	{
-		offlineSession_GetSignedSessionFromActiveFile(logReaderArray);
-
 		ESP_LOGW(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
+
+		float sessEnergy = (float)cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble;
+		double energyDiff = GetEnergyDiff();
+		if(energyDiff > 0.001)
+			ESP_LOGE(TAG, "#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, energyDiff, (sessEnergy - energyDiff));
+		else
+			ESP_LOGW(TAG, "**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, energyDiff, (sessEnergy - energyDiff));
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -185,21 +179,24 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(char * messageString)
 		logReaderArray = NULL;
 
 		free(buf);
-		cJSON * signedSessionObject = cJSON_CreateObject();
-		cJSON_AddStringToObject(signedSessionObject, "SignedSession", OCMFLogEntryString);
-		cJSON_ReplaceItemInObject(CompletedSessionObject, "SignedSession", signedSessionObject);			//Pagination(class)
 
-		cJSON_Delete(signedSessionObject);//chargeSession_SetOCMF(logString);
+		cJSON_DeleteItemFromObject(CompletedSessionObject, "SignedSession");
+		//ESP_LOGW(TAG, "CompletedSession2: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+		cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", OCMFLogEntryString);
+
+		ESP_LOGW(TAG, "CompletedSession3: %s", cJSON_PrintUnformatted(CompletedSessionObject));
 	}
 	else
 	{
-		ESP_LOGW(TAG, "Nothing to finalize");
+		ESP_LOGW(TAG, "Could not finalize SignedValues from flash");
 	}
 
-
+	///3. Create the full message string
 	char *buf = cJSON_PrintUnformatted(CompletedSessionObject);
 
 	strcpy(messageString, buf);
+
+	ESP_LOGW(TAG, "OCMF: %i:: %s", strlen(messageString), messageString);
 
 	ESP_LOGI(TAG, "Made CompletedSessionObject");
 
@@ -261,27 +258,10 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx, time_t time_in, double energy
 }
 
 
-cJSON * OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in)
+void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in)
 {
-	cJSON * result = NULL;
-
-	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
-	{
-		ESP_LOGE(TAG, "failed to obtain ocmf lock during element add");
-		goto err;
-	}else{
-		ESP_LOGI(TAG, "got ocmf lock OCMF_AddElementToOCMFLog");
-	}
-
-	//Add to memory log
-	//Log only to flash, call this when building msg// result = OCMF_AddElementToOCMFLog_no_lock(tx, st, time_in, energy_in);
-
 	//Add to file log
 	offlineSession_append_energy(tx, time_in, energy_in);
-
-	xSemaphoreGive(ocmf_lock);
-	err:
-	return result;
 }
 
 /*int OCMF_CompletedSession_FinalizeOCMFLog()

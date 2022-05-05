@@ -2193,6 +2193,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					//Here no command is sent to stop MCU directly.
 					ble_interface_deinit();
 					start_segmented_ota();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"GetOfflineSessions") != NULL)
+				{
+					sessionHandler_SetOfflineSessionFlag();
+					responseStatus = 200;
 				}
 
 			}
@@ -2594,7 +2600,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	}
 
     	//Case if the Wifi router is not accessible. incrementalRefreshTimeout is not being changed
-    	if((storage_Get_CommunicationMode() == eCONNECTION_WIFI) && (network_WifiIsConnected() == false))
+    	/*if((storage_Get_CommunicationMode() == eCONNECTION_WIFI) && (network_WifiIsConnected() == false))
     	{
     		ESP_LOGI(TAG, "Wifi not connected");
 
@@ -2618,7 +2624,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     			ESP_LOGI(TAG, "MQTT_EVENT_ERROR restart");
 				esp_restart();
     		}
-		}
+		}*/
 
         break;
     default:
@@ -2809,7 +2815,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    mqtt_config.keepalive = 1100; //300;//120 is default;
+    mqtt_config.keepalive = 180;//1100; //300;//120 is default;
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;

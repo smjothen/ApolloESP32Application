@@ -40,6 +40,7 @@ enum ChargerOperatingMode
 
 
 void sessionHandler_init();
+enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
 bool SessionHandler_IsOfflineMode();
@@ -49,11 +50,14 @@ void sessionHandler_ClearCarInterfaceResetConditions();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
 int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
+void sessionHandler_CheckAndSendOfflineSessions();
+void sessionHandler_SetOfflineSessionFlag();
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);
 void SetAuthorized(bool authFromCloud);
+void sessionHandler_Pulse();
 
 #ifdef __cplusplus
 }
