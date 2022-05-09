@@ -15,7 +15,7 @@
 #include "types/ocpp_reset_status.h"
 #include "types/ocpp_reset_type.h"
 
-#define TASK_OCPP_STACK_SIZE 2300
+#define TASK_OCPP_STACK_SIZE 2500
 #define OCPP_PROBLEM_RESET_INTERVAL 30
 #define OCPP_PROBLEMS_COUNT_BEFORE_RETRY 50
 #define OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT 18000 // 5 hours
@@ -135,7 +135,7 @@ static void ocpp_task(){
 		retry_attempts = 0;
 		retry_delay = 5;
 		do{
-			err = complete_boot_notification_process();
+			err = complete_boot_notification_process(i2cGetLoadedDeviceInfo().serialNumber);
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to get accepted boot, retrying in %d sec", retry_delay);

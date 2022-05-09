@@ -4,9 +4,21 @@
 cJSON * ocpp_create_boot_notification_request(const char * charge_box_serial_number, const char * charge_point_model,
 							const char * charge_point_serial_number, const char * charge_point_vendor, const char * firmware_version,
 						const char * iccid, const char * imsi, const char * meter_serial_number, const char * meter_type){
-	if(!is_ci_string_type(charge_box_serial_number, 25) || !is_ci_string_type(charge_point_model, 20) || !is_ci_string_type(charge_point_serial_number, 25) ||
-		!is_ci_string_type(charge_point_vendor, 20) || !is_ci_string_type(firmware_version, 50) || !is_ci_string_type(iccid, 20) ||
-		!is_ci_string_type(imsi, 20) || !is_ci_string_type(meter_serial_number, 25) || !is_ci_string_type(meter_type, 25))
+
+	if(charge_point_model == NULL || charge_point_vendor == NULL)
+		return NULL;
+
+	if(!is_ci_string_type(charge_point_model, 20) || !is_ci_string_type(charge_point_vendor, 20))
+		return NULL;
+
+	if((charge_box_serial_number != NULL && !is_ci_string_type(charge_box_serial_number, 25))
+		|| (charge_point_serial_number != NULL &&  !is_ci_string_type(charge_point_serial_number, 25))
+		|| (firmware_version != NULL && !is_ci_string_type(firmware_version, 50))
+		|| (iccid != NULL && !is_ci_string_type(iccid, 20))
+		|| (imsi != NULL && !is_ci_string_type(imsi, 20))
+		|| (meter_serial_number != NULL && !is_ci_string_type(meter_serial_number, 25))
+		|| (meter_type != NULL && !is_ci_string_type(meter_type, 25))
+		)
 		return NULL;
 
 	cJSON * payload = cJSON_CreateObject();
@@ -20,9 +32,6 @@ cJSON * ocpp_create_boot_notification_request(const char * charge_box_serial_num
 
 		cJSON_AddItemToObject(payload, "chargeBoxSerialNumber", charge_box_json);
 	}
-
-	if(charge_point_model == NULL)
-		return NULL;
 
 	cJSON * charge_point_model_json = cJSON_CreateString(charge_point_model);
 	if(charge_point_model_json == NULL)
@@ -38,9 +47,6 @@ cJSON * ocpp_create_boot_notification_request(const char * charge_box_serial_num
 
 		cJSON_AddItemToObject(payload, "chargePointSerialNumber", charge_point_serial_number_json);
 	}
-
-	if(charge_point_vendor == NULL)
-		return NULL;
 
 	cJSON * charge_point_vendor_json = cJSON_CreateString(charge_point_vendor);
 	if(charge_point_vendor_json == NULL)
@@ -87,7 +93,14 @@ cJSON * ocpp_create_boot_notification_request(const char * charge_box_serial_num
 
 		cJSON_AddItemToObject(payload, "meterType", meter_type_json);
 	}
-	return ocpp_create_call(OCPPJ_ACTION_BOOT_NOTIFICATION, payload);
+
+	cJSON * result = ocpp_create_call(OCPPJ_ACTION_BOOT_NOTIFICATION, payload);
+	if(result == NULL){
+		goto error;
+	}
+	else{
+		return result;
+	}
 
 error:
 	cJSON_Delete(payload);

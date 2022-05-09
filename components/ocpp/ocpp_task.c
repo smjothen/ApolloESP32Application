@@ -482,7 +482,7 @@ int start_ocpp(const char * charger_id){
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp2.0",
-		.task_stack = 2600,
+		.task_stack = 2800,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 	};
 
@@ -611,9 +611,9 @@ void boot_error_cb(const char * unique_id, const char * error_code, const char *
 	registration_status = eOCPP_REGISTRATION_REJECTED;
 }
 
-int complete_boot_notification_process(){
+int complete_boot_notification_process(char * serial_nr){
 	//TODO: update notification request parameters to real values
-	cJSON * boot_notification = ocpp_create_boot_notification_request("1", "2", "3", "4", "5", "6", "7", "8", "9");
+	cJSON * boot_notification = ocpp_create_boot_notification_request(NULL, "Go", serial_nr, "Zaptec", NULL, NULL, NULL, NULL, NULL);
 
 	if(boot_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create boot notification");

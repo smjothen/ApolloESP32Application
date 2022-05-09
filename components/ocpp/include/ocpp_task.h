@@ -46,7 +46,7 @@ const char * get_active_call_id(void);
 
 void handle_ocpp_call(void);
 
-int complete_boot_notification_process(void);
+int complete_boot_notification_process(char * serial_nr);
 
 int start_ocpp_heartbeat(void);
 void stop_ocpp_heartbeat(void);
