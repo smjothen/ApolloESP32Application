@@ -1,0 +1,21 @@
+#ifndef OCPP_CHARGE_POINT_ERROR_CODE_H
+#define OCPP_CHARGE_POINT_ERROR_CODE_H
+
+#define OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE "ConnectorLockFailure"
+#define OCPP_CP_ERROR_EV_COMMUNICATION_ERROR "EVCommunicationError"
+#define OCPP_CP_ERROR_GROUND_FAILURE "GroundFailure"
+#define OCPP_CP_ERROR_HIGH_TEMPERATURE "HighTemperature"
+#define OCPP_CP_ERROR_INTERNAL_ERROR "InternalError"
+#define OCPP_CP_ERROR_LOCAL_LIST_CONFLICT "LocalListConflict"
+#define OCPP_CP_ERROR_NO_ERROR "NoError"
+#define OCPP_CP_ERROR_OTHER_ERROR "OtherError"
+#define OCPP_CP_ERROR_OVER_CURRENT_FAILURE "OverCurrentFailure"
+#define OCPP_CP_ERROR_OVER_VOLTAGE "OverVoltage"
+#define OCPP_CP_ERROR_POWER_METER_FAILURE "PowerMeterFailure"
+#define OCPP_CP_ERROR_POWER_SWITCH_FAILURE "PowerSwitchFailure"
+#define OCPP_CP_ERROR_READER_FAILURE "ReaderFailure"
+#define OCPP_CP_ERROR_RESET_FAILURE "ResetFailure"
+#define OCPP_CP_ERROR_UNDER_VOLTAGE "UnderVoltage"
+#define OCPP_CP_ERROR_WEAK_SIGNAL "WeakSignal"
+
+#endif /*OCPP_CHARGE_POINT_ERROR_CODE_H*/

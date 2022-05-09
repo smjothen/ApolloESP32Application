@@ -1,0 +1,7 @@
+#ifndef OCPP_RESET_TYPE_H
+#define OCPP_RESET_TYPE_H
+
+#define OCPP_RESET_TYPE_SOFT "Soft"
+#define OCPP_RESET_TYPE_HARD "Hard"
+
+#endif /*OCPP_RESET_TYPE_H*/

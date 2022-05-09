@@ -1,0 +1,7 @@
+#ifndef OCPP_RESET_STATUS_H
+#define OCPP_RESET_STATUS_H
+
+#define OCPP_RESET_STATUS_ACCEPTED "Accepted"
+#define OCPP_RESET_STATUS_REJECTED "Rejected"
+
+#endif /*OCPP_RESET_STATUS_H*/

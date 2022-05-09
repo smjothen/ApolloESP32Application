@@ -1,7 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
+#include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,332 +13,698 @@
 #include "freertos/event_groups.h"
 
 #include "cJSON.h"
-#include "iot_button.h"
-
-#include "esp_log.h"
-#include "esp_websocket_client.h"
-#include "esp_event.h"
-#include "esp_system.h"
-#include "time.h"
 
 #include "ocpp_task.h"
-#include "ocpp_call.h"
+#include "ocpp_listener.h"
+#include "messages/call_messages/ocpp_call_request.h"
+#include "types/ocpp_enum.h"
 
-#define NO_DATA_TIMEOUT_SEC 10
+static const char *TAG = "OCPP_TASK";
 
-static const char *TAG = "WEBSOCKET";
-#define OCPP_MESSAGE_MAX_LENGTH 4096 // TODO: Check with standard
+// TODO: Tune, currently above CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL
+// to prevent use of DMA. esp_websocket_client allocates this twice (for rx_buffer and tx_buffer)
+#define WEBSOCKET_BUFFER_SIZE 2048
 
 esp_websocket_client_handle_t client;
 
-SemaphoreHandle_t ocpp_request_pending;
-cJSON *request_reply;
-char pending_request_unique_id[25];
+SemaphoreHandle_t ocpp_active_call_lock_1 = NULL;
 
-QueueHandle_t ocpp_response_recv_queue;
-QueueHandle_t ocpp_send_queue;
+/**
+ * The specification allows only one active call from the charge point:
+ * "A Charge Point or Central System SHOULD NOT send a CALL message to the other party unless all the
+ * CALL messages it sent before have been responded to or have timed out."
+ */
+char * active_call_id; // "Maximum of 36 characters, to allow for GUIDs" (37 with '\0')
+struct ocpp_call_with_cb * active_call = NULL;
+bool is_trigger_message = false; // Will always be false until TriggerMessage is implemented
 
-void updateRequestUniqueId(void){
-    int result = sprintf(
-        pending_request_unique_id,
-        "apollo-%08x-%08x",
-        esp_random(), esp_random()
-    );
-    configASSERT(result==24);
-    ESP_LOGI(TAG, "pending_request_unique_id: %s", pending_request_unique_id);
+time_t last_call_timestamp = {0};
+
+QueueHandle_t ocpp_call_queue; // For normal messages
+QueueHandle_t ocpp_blocking_call_queue; // For messages that prevent significant ocpp behaviour (BootNotification)
+QueueHandle_t ocpp_transaction_call_queue; // transactions SHOULD be delivered as soon as possible, in chronological order, MUST queue when offline
+
+bool websocket_connected = false;
+enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
+
+int heartbeat_interval = -1; // TODO: implement with ChangeConfiguration (RW) and possibly persist through reboot.
+TimerHandle_t heartbeat_handle = NULL;
+
+#define OCPP_TIME_SYNC_MARGIN 5
+#define OCPP_MAX_EXPECTED_OFFSET 60*60 // 1 hour
+#define MAX_HEARTBEAT_INTERVAL 60*60*24*2 // 1 heartbeat every 48 hours
+#define MINIMUM_HEARTBEAT_INTERVAL 2 // To prevent flooding the central service with heartbeat
+#define WEBSOCKET_WRITE_TIMEOUT 3000
+
+// TODO: implement with ChangeConfiguration (RW) and possibly persist through reboot.
+#define TRANSACTION_MESSAGE_ATTEMPTS 3
+#define TRANSACTION_MESSAGE_RETRY_INTERVAL 60
+
+struct ocpp_call_with_cb * failed_transaction = NULL;
+unsigned int failed_transaction_count = 0;
+
+time_t last_transaction_timestamp = {0};
+
+long int central_system_time_offset = 0;
+
+enum ocpp_registration_status get_registration_status(){
+	return registration_status;
 }
 
-struct tm parseTime(const char * string){
-    // the date time in a json schema is compliant with RFC 5.6 https://json-schema.org/understanding-json-schema/reference/string.html
-    // e.g. "1985-04-12T23:20:50.52Z", "1990-12-31T15:59:60-08:00"
-    // parseing based on https://stackoverflow.com/questions/26895428/how-do-i-parse-an-iso-8601-date-with-optional-milliseconds-to-a-struct-tm-in-c
-
-    int y,M,d,h,m;
-    float s;
-    int tzh = 0, tzm = 0;
-
-    int paresed_arguments = sscanf(string, "%d-%d-%dT%d:%d:%f%d:%dZ", &y, &M, &d, &h, &m, &s, &tzh, &tzm);
-
-    if (6 < paresed_arguments) {
-        if (tzh < 0) {
-        tzm = -tzm;    // Fix the sign on minutes.
-        }
-    }
-
-    struct tm time;
-    time.tm_year = y - 1900; // Year since 1900
-    time.tm_mon = M - 1;     // 0-11
-    time.tm_mday = d;        // 1-31
-    time.tm_hour = h;        // 0-23
-    time.tm_min = m;         // 0-59
-    time.tm_sec = (int)s;    // 0-61 (0-60 in C++11)
-
-    //TODO: return tz and maybe handle sub-sec resolution
-
-    return time;
+bool is_connected(void){
+	return websocket_connected;
 }
 
-cJSON *runCall(const char* action, cJSON *payload){
-
-    if( xSemaphoreTake( ocpp_request_pending, portMAX_DELAY ) == pdTRUE )
-    {
-        xQueueReset(ocpp_response_recv_queue);
-        updateRequestUniqueId();
-
-        cJSON *call = cJSON_CreateArray();
-        cJSON_AddItemToArray(call, cJSON_CreateNumber(2)); //[<MessageTypeId>, is call
-        cJSON_AddItemToArray(call, cJSON_CreateString(pending_request_unique_id));
-        cJSON_AddItemToArray(call, cJSON_CreateString(action));
-        cJSON_AddItemToArray(call, payload);
-        char *request_string = cJSON_Print(call);
-        if (request_string == NULL)
-        {
-            ESP_LOGE(TAG, "cJSON_Print failed for ocpp hb");
-            configASSERT(false);
-        }
-
-        configASSERT(strlen(request_string)<OCPP_MESSAGE_MAX_LENGTH);
-        cJSON_Delete(call); // Free BOTH the newly created and the payload passed to the routine
-
-        esp_websocket_client_send(client, request_string, strlen(request_string), portMAX_DELAY);
-        free(request_string);
-
-        xQueueReceive( 
-            ocpp_response_recv_queue,
-            &request_reply,
-            portMAX_DELAY
-        );
-
-        // dont release ocpp_request_pending, let caller use freeOcppReply()
-        ESP_LOGI(TAG, "--->got reply type %d", cJSON_GetArrayItem(request_reply, 0)->valueint);
-        return request_reply;
-    }
-    configASSERT(false);
-    cJSON *dummmy_reply = {0};
-    return dummmy_reply;
+void set_connected(bool connected){
+	websocket_connected = connected;
 }
 
-void freeOcppReply(){
-    cJSON_Delete(request_reply);
-    xSemaphoreGive(ocpp_request_pending) ;
+struct tm parse_time(const char * string){
+  // the date time in a json schema is compliant with RFC 5.6 https://json-schema.org/understanding-json-schema/reference/string.html
+  // e.g. "1985-04-12T23:20:50.52Z", "1990-12-31T15:59:60-08:00"
+  // parseing based on https://stackoverflow.com/questions/26895428/how-do-i-parse-an-iso-8601-date-with-optional-milliseconds-to-a-struct-tm-in-c
+
+  int y,M,d,h,m;
+  float s;
+  int tzh = 0, tzm = 0;
+
+  int paresed_arguments = sscanf(string, "%d-%d-%dT%d:%d:%f%d:%dZ", &y, &M, &d, &h, &m, &s, &tzh, &tzm);
+
+  if (6 < paresed_arguments) {
+	  if (tzh < 0) {
+		  tzm = -tzm;    // Fix the sign on minutes.
+	  }
+  }
+
+  struct tm time;
+  time.tm_year = y - 1900; // Year since 1900
+  time.tm_mon = M - 1;     // 0-11
+  time.tm_mday = d;        // 1-31
+  time.tm_hour = h;        // 0-23
+  time.tm_min = m;         // 0-59
+  time.tm_sec = (int)s;    // 0-61 (0-60 in C++11)
+
+  //TODO: return tz and maybe handle sub-sec resolution
+
+  return time;
 }
 
-void replyToCall(cJSON *message){
-    char *unique_id = cJSON_GetArrayItem(message, 1)->valuestring;
-    char *action = cJSON_GetArrayItem(message, 2)->valuestring;
-    cJSON *payload = cJSON_GetArrayItem(message, 3);
+void update_central_system_time_offset(time_t charge_point_time, time_t central_system_time){
+	time_t offset = central_system_time - (charge_point_time + central_system_time_offset);
 
-    cJSON *reply_payload = cJSON_CreateObject();
+	if(abs(offset) > OCPP_TIME_SYNC_MARGIN){
+		if(abs(offset) > OCPP_MAX_EXPECTED_OFFSET){
+			ESP_LOGW(TAG, "Time difference between charge point and central system is unexpectedly large %ld", offset);
+		}
+		central_system_time_offset += offset;
+		ESP_LOGI(TAG, "Updating central system time syncronization to %ld relative to charge point time", central_system_time_offset);
+	}else{
+		ESP_LOGI(TAG, "Time difference between syncronized charge point and central system is within margins");
+	}
 
-    ESP_LOGI(TAG, "Handleing call %s", action);
-
-    if(strcmp(action, "ChangeAvailability") == 0){
-        ESP_LOGI(
-            TAG, "Changing avaiability to %s for connector %d",
-            cJSON_GetObjectItem(payload, "type")->valuestring,
-            cJSON_GetObjectItem(payload, "connectorId")->valueint
-        );
-
-        cJSON_AddStringToObject(reply_payload, "status", "Accepted");
-    }
-
-    cJSON *callReply = cJSON_CreateArray();
-    cJSON_AddItemToArray(callReply, cJSON_CreateNumber(3)); //[<MessageTypeId>, is callresult
-    cJSON_AddItemToArray(callReply, cJSON_CreateString(unique_id));
-    cJSON_AddItemToArray(callReply, reply_payload);
-   
-    char *reply_string = cJSON_Print(callReply);
-    configASSERT(strlen(reply_string)<OCPP_MESSAGE_MAX_LENGTH);
-    cJSON_Delete(callReply);
-    esp_websocket_client_send(client, reply_string, strlen(reply_string), portMAX_DELAY);
-    free(reply_string);
-    ESP_LOGI(TAG, "sent callreply");
+	//TODO: Check if settimeofday() or adjtime() should be used
 }
 
-void ocpp_web_ws_event_handler(esp_websocket_event_data_t *data){
-    // cJSON requires a nullterminated string
-        char message_string[OCPP_MESSAGE_MAX_LENGTH] = {0};
+int add_call(struct ocpp_call_with_cb * message, enum call_type type){
+	if(ocpp_call_queue == NULL)
+		return -1;
 
-        configASSERT(data->data_len<OCPP_MESSAGE_MAX_LENGTH-1);
-        memcpy(message_string, data->data_ptr, data->data_len);
-        cJSON *message = cJSON_Parse(message_string);
-        // the message is freed here if it is a call from the server
-        // for results and call errors a pointer is passed to a queue
-        // and the consumer will/ MUST free it
-
-        int message_type_id = cJSON_GetArrayItem(message, 0)->valueint;
-        
-        switch (message_type_id)
-        {
-        case 2:
-            // central system sent call
-            ESP_LOGI(TAG, "central system sent call:%s", message_string);
-            replyToCall(message);
-            cJSON_Delete(message);
-            break;
-        case 3:
-            // central system sent CallResult
-            ESP_LOGI(TAG, "central system sent result");
-            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY))
-            break;
-
-        case 4:
-            // central system sent callerror
-            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY))
-            ESP_LOGE(TAG, "central system sent callerror");
-
-            break;
-        default:
-            ESP_LOGE(TAG, "unknown message type id from occp cs: %d", message_type_id);
-        }
+	switch(type){
+	case eOCPP_CALL_GENERIC:
+		if(xQueueSendToBack(ocpp_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+			return -1;
+		}
+		break;
+	case eOCPP_CALL_TRANSACTION_RELATED:
+		if(xQueueSendToBack(ocpp_transaction_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+			return -1;
+		}
+		break;
+	case eOCPP_CALL_BLOCKING:
+		if(xQueueSendToBack(ocpp_blocking_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+			return -1;
+		}
+		break;
+	}
+	return 0;
 }
 
-static void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
-    switch (event_id) {
-    case WEBSOCKET_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
-        break;
-    case WEBSOCKET_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-        break;
-    case WEBSOCKET_EVENT_DATA:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
-        ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
-        ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
-        ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n", data->payload_len, data->data_len, data->payload_offset);
+int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
+	if(call == NULL){
+		ESP_LOGE(TAG, "Invalid call: NULL");
+		return -1;
+	}
 
-        switch (data->op_code){
-        case 1:
-            //ws text frame
-            ocpp_web_ws_event_handler(data); 
-            break;
-        case 9:
-        case 10:
-            // ws layer ping pong
-            break;
-        default:
-            ESP_LOGE(TAG, "unhandled websocket op code");
-            configASSERT(false);
-            break;
-        }
+	struct ocpp_call_with_cb * message_with_cb = malloc(sizeof(struct ocpp_call_with_cb));
+	if(message_with_cb == NULL){
+		ESP_LOGE(TAG, "Unable to allocate buffer for message callback struct");
+		return -1;
+	}
 
-        break;
-        
-        
-    case WEBSOCKET_EVENT_ERROR:
-        ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
-        break;
-    }
+	message_with_cb->call_message = call;
+	message_with_cb->result_cb = result_cb;
+	message_with_cb->error_cb = error_cb;
+	message_with_cb->cb_data = cb_data;
+
+	int err = add_call(message_with_cb, type);
+
+	if(err != 0){
+		ESP_LOGE(TAG, "Unable to enqueue call");
+		free(message_with_cb);
+	}
+
+	return err;
 }
 
-void on_btn(void* arg){
-    cJSON *auth_call_payload = cJSON_CreateObject();
-    cJSON_AddStringToObject(auth_call_payload, "idTag", "12345678901234567888");
-    cJSON *authorize_response = runCall("Authorize", auth_call_payload);
-    freeOcppReply(authorize_response);
+int send_call_reply(cJSON * call){
+	if(call == NULL){
+		ESP_LOGE(TAG, "Invalid call reply: NULL");
+		return -1;
+	}
+
+	char * message = cJSON_Print(call);
+	if(message == NULL){
+		ESP_LOGE(TAG, "Unable to create message string");
+		return -1;
+	}
+
+	int err = esp_websocket_client_send(client, message, strlen(message), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
+
+	if(err == -1){
+		ESP_LOGE(TAG, "Error sending with websocket");
+		return -1;
+	}else{
+		return 0;
+	}
 }
 
-void send_heartbeat(TimerHandle_t xTimer){
-    ESP_LOGI(TAG, "sending ocpp heartbeat ");
-    cJSON *auth_call_payload = cJSON_CreateObject();
-    cJSON *authorize_response = runCall("Heartbeat", auth_call_payload);
+int check_send_legality(const char * action){
 
-    char *central_system_time = cJSON_GetObjectItem(
-        cJSON_GetArrayItem(authorize_response, 2),
-        "currentTime"
-    )->valuestring;
-    ESP_LOGI(TAG, "got ocpp hb reply<------------[servertime:%s]",
-    central_system_time);
+	switch(registration_status){
+	case eOCPP_REGISTRATION_ACCEPTED:
+		return 0;
+	case eOCPP_REGISTRATION_PENDING:
+		// "The Charge Point SHALL send a BootNotification.req PDU each time it boots or reboots. Between the physical
+		// power-on/reboot and the successful completion of a BootNotification, where Central System returns Accepted or
+		// Pending, the Charge Point SHALL NOT send any other request to the Central System."[...]
+		// "[if BootNotification returns pending/rejected] the value of the interval field indicates the minimum wait time
+		// before sending a next BootNotification request [...] unless requested to do so with a TriggerMessage.req[...]
+		// The Charge Point SHALL NOT send request messages to the Central System unless it has been instructed
+		// by the Central System to do so with a TriggerMessage.req request.
+		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0) && is_trigger_message == false)
+			return -1;
 
-    struct tm calendar_time = parseTime(central_system_time);
-    time_t posix_time = mktime(&calendar_time);
-    ESP_LOGI(TAG, "parsed time: %s", ctime(&posix_time));
+		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) == 0) &&
+			time(NULL) < last_call_timestamp + heartbeat_interval && is_trigger_message == false)
+			return -1;
+		break;
+	case eOCPP_REGISTRATION_REJECTED:
+		if(strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0)
+			return -1;
 
-    freeOcppReply(authorize_response);
+		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) == 0) && time(NULL) < last_call_timestamp + heartbeat_interval)
+			return -1;
+		break;
+	}
+
+	return 0;
 }
 
-static void ocpp_task(void *pvParameters)
-{
-    ocpp_request_pending = xSemaphoreCreateMutex();
-
-    ocpp_response_recv_queue = xQueueCreate( 1, sizeof(cJSON *) );
-    ocpp_send_queue = xQueueCreate( 1, sizeof(char)*OCPP_MESSAGE_MAX_LENGTH );
-    
-    ESP_LOGI(TAG, "staring ocpp ws client");
-    esp_websocket_client_config_t websocket_cfg = {};
-
-    websocket_cfg.uri = "ws://192.168.10.174:9000/testcp001";
-    websocket_cfg.subprotocol = "ocpp1.6";
-
-    int default_ws_stack_size = 4*1024;
-    websocket_cfg.task_stack = default_ws_stack_size + (4 * OCPP_MESSAGE_MAX_LENGTH);
-
-    ESP_LOGI(TAG, "Connecting to %s...", websocket_cfg.uri);
-
-    client = esp_websocket_client_init(&websocket_cfg);
-    esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
-
-    esp_websocket_client_start(client);
-    int i = 0;
-    while (i < 10) {
-        if (esp_websocket_client_is_connected(client)) {
-            break;
-        }
-        i++;
-        ESP_LOGI(TAG, "waiting for connection");
-        vTaskDelay(500 / portTICK_RATE_MS);
-    }
-
-    cJSON *on_boot_payload = cJSON_CreateObject();
-    cJSON_AddStringToObject(on_boot_payload, "chargePointVendor", "VendorX");
-    cJSON_AddStringToObject(on_boot_payload, "chargePointModel", "SingleSocketCharger");
-    cJSON *on_boot_response = runCall("BootNotification", on_boot_payload);
-    int heartbeat_interval = cJSON_GetObjectItem(
-        cJSON_GetArrayItem( on_boot_response, 2),
-         "interval"
-    )->valueint;
-    freeOcppReply(on_boot_response);
-
-    if(heartbeat_interval<=0){
-        heartbeat_interval = 10;
-    }
-
-    ESP_LOGI(TAG, "staring heartbeat timer at %d sec period", heartbeat_interval);
-    TimerHandle_t timer = xTimerCreate( 
-            "Ocpp-HB-timer",
-            ( 1000 * heartbeat_interval ) / portTICK_RATE_MS,
-            pdTRUE,
-            NULL,
-            send_heartbeat
-    );
-    xTimerStart(timer, 0);
-
-    ESP_LOGI(TAG, "_/^\\_/^\\_/^\\_/^\\_/^\\");
-    
-    vTaskDelay(1000 / portTICK_RATE_MS);
-
-    while (true)
-    {
-        vTaskDelay(1000 / portTICK_RATE_MS);
-    }
-    
+struct ocpp_call_with_cb * get_active_call(){
+	return active_call;
 }
 
-void ocpp_task_start(void)
-{
-    ESP_LOGI(TAG, "staring ocpp ws client soon");
+bool is_transaction_related_message(const char * action){
+	return ocpp_validate_enum(action, 3,
+				OCPPJ_ACTION_START_TRANSACTION,
+				OCPPJ_ACTION_STOP_TRANSACTION,
+				OCPPJ_ACTION_METER_VALUES) == 0 ? true : false;
 
-    #define BUTTON_IO_NUM           0
-    #define BUTTON_ACTIVE_LEVEL     0
-    button_handle_t btn_handle = iot_button_create(BUTTON_IO_NUM, BUTTON_ACTIVE_LEVEL);
-    if (btn_handle) {
-        iot_button_set_evt_cb(btn_handle, BUTTON_CB_RELEASE, on_btn, "RELEASE");
-    }
+}
 
-    static uint8_t ucParameterToPass = {0};
-    TaskHandle_t taskHandle = NULL;
-    int stack_size = 4096 + (2*OCPP_MESSAGE_MAX_LENGTH);
-    xTaskCreate( ocpp_task, "ocppTask", stack_size, &ucParameterToPass, 5, &taskHandle );
+const char * get_active_call_id(){
+	return active_call_id;
+}
+
+void clear_active_call(void){
+
+	if(active_call != NULL){
+		// If active call is a transaction retry, then also clear retry data
+		if(failed_transaction_count > 0){
+			if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
+				const char * action = cJSON_GetArrayItem(active_call->call_message, 2)->valuestring;
+
+				if(is_transaction_related_message(action)){
+					failed_transaction_count = 0;
+				}
+			}
+		}
+
+		cJSON_Delete(active_call->call_message); //Includes reference of active_call_id
+		active_call_id = NULL;
+		free(active_call);
+		active_call = NULL;
+	}
+
+	if(ocpp_active_call_lock_1 != NULL)
+		xSemaphoreGive(ocpp_active_call_lock_1);
+}
+
+// Used if the active call was sendt or attempted to be sendt to allow retrying transaction related messages
+void fail_active_call(const char * fail_description){
+	if(active_call != NULL){
+		if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
+			const char * action = cJSON_GetArrayItem(active_call->call_message, 2)->valuestring;
+
+			if(is_transaction_related_message(action)){
+				if(failed_transaction_count < TRANSACTION_MESSAGE_ATTEMPTS){
+					ESP_LOGW(TAG, "Preparing failed transaction for retry");
+					failed_transaction = active_call;
+					failed_transaction_count++;
+					active_call = NULL;
+					xSemaphoreGive(ocpp_active_call_lock_1);
+				}
+				else{
+					ESP_LOGE(TAG, "Giving up on transaction: retry attemps exceeded");
+					failed_transaction_count = 0;
+					clear_active_call();
+				}
+			}
+			else{
+				active_call->error_cb(0, "CP failure", fail_description, NULL, active_call->cb_data);
+				clear_active_call();
+			}
+		}else{
+			ESP_LOGE(TAG, "Message is malformed, unable to determin type");
+			active_call->error_cb(0, "CP failure", fail_description, NULL, active_call->cb_data);
+			clear_active_call();
+		}
+	}
+}
+
+int send_next_call(){
+	struct ocpp_call_with_cb * call;
+
+	if(ocpp_active_call_lock_1 == NULL){
+		ESP_LOGE(TAG, "The lock is not initialized");
+		return -1;
+	}
+
+	if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(OCPP_CALL_TIMEOUT)) !=pdTRUE){
+		ESP_LOGE(TAG, "Call timed out, clearing for next call");
+		fail_active_call("timeout");
+
+		if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(500)) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to aquire lock after clear");
+			return -1;
+		}
+	}
+	// Attempt to get call from prioritized queue
+	if(xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+
+		// We check for failed transactions as they SHOULD be delivered chronologically
+		if(failed_transaction != NULL){
+
+			if(time(NULL) > last_transaction_timestamp + TRANSACTION_MESSAGE_RETRY_INTERVAL * failed_transaction_count){
+				call = failed_transaction;
+				failed_transaction = NULL;
+				last_transaction_timestamp = time(NULL);
+			}else{
+				// if the failed transaction was attempted recently, then we send other calls while waiting.
+				if(xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+					xSemaphoreGive(ocpp_active_call_lock_1);
+					return -1;
+				}
+			}
+		}
+		else{
+			if(xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+				if(xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+					xSemaphoreGive(ocpp_active_call_lock_1);
+					return -1;
+				}
+			}
+			else{
+				last_transaction_timestamp = time(NULL);
+			}
+		}
+	}
+
+	active_call_id = cJSON_GetArrayItem(call->call_message, 1)->valuestring;
+	active_call = call;
+
+	char * action = cJSON_GetArrayItem(call->call_message, 2)->valuestring;
+
+	int err = check_send_legality(action);
+
+	if(err != 0){
+		ESP_LOGE(TAG, "Could not send '%s' now, specification prohibits it", action);
+		goto error;
+	}
+	ESP_LOGI(TAG, "Sending next call (%s)", action);
+
+	char * message_string = cJSON_Print(call->call_message);
+	err = esp_websocket_client_send(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
+	free(message_string);
+
+	if(err == -1){
+		ESP_LOGE(TAG, "Got websocket error when sending ocpp message");
+		goto error;
+	}
+	last_call_timestamp = time(NULL);
+	return 0;
+
+error:
+	fail_active_call("Not sendt");
+	return -1;
+}
+
+
+void heartbeat_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * data){
+	if(error_code == NULL || error_description == NULL){
+		ESP_LOGE(TAG, "Error response on heartbeat");
+		return;
+	}
+
+	char * details = NULL;
+	if(error_details != NULL){
+		details = cJSON_Print(error_details);
+	}
+
+	if(details == NULL){
+		ESP_LOGE(TAG, "Error response on heartbeat: [%s] %s", error_code, error_description);
+		return;
+	}
+
+	ESP_LOGE(TAG, "Error response on heartbeat: [%s] %s, %s", error_code, error_description, details);
+	free(details);
+}
+
+void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
+	ESP_LOGI(TAG, "Response on heartbeat");
+
+	time_t charge_point_time = time(NULL);
+
+	if(cJSON_HasObjectItem(payload, "currentTime")){
+		struct tm central_system_time_tm = parse_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
+		time_t central_system_time = mktime(&central_system_time_tm);
+		update_central_system_time_offset(charge_point_time, central_system_time);
+	}else{
+		ESP_LOGW(TAG, "Response to heartbeat did not contain currentTime");
+	}
+}
+
+void ocpp_heartbeat(){
+	cJSON * heartbeat_request = ocpp_create_heartbeat_request();
+
+	if(heartbeat_request == NULL){
+		ESP_LOGE(TAG, "Unable to create heartbeat");
+		return;
+	}
+
+	if(enqueue_call(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
+		ESP_LOGE(TAG, "Unable to send heartbeat");
+		cJSON_Delete(heartbeat_request);
+	}
+}
+
+int start_ocpp_heartbeat(void){
+	int actual_interval = heartbeat_interval;
+
+	if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL || heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
+		ESP_LOGE(TAG, "Unable to start heartbeat with interval %d", heartbeat_interval);
+
+		if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL){
+			actual_interval = MINIMUM_HEARTBEAT_INTERVAL;
+
+		}else if(heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
+			actual_interval = MAX_HEARTBEAT_INTERVAL;
+		}
+		ESP_LOGE(TAG, "Using an interval of %d instead", actual_interval);
+	}
+
+	ESP_LOGI(TAG, "starting heartbeat with interval %d sec", actual_interval);
+
+	heartbeat_handle = xTimerCreate("Ocpp Heartbeat", pdMS_TO_TICKS(actual_interval * 1000),
+					pdTRUE, NULL, ocpp_heartbeat);
+
+	if(heartbeat_handle == NULL){
+		ESP_LOGE(TAG, "Unable to allocate memory for heartbeat timer");
+		return -1;
+	}
+
+	if(xTimerStart(heartbeat_handle, pdMS_TO_TICKS(500)) != pdTRUE){
+		ESP_LOGE(TAG, "Unable to schedule heartbeat timer");
+		return -1;
+	}
+
+	return 0;
+}
+
+void stop_ocpp_heartbeat(void){
+	if(xTimerDelete(heartbeat_handle, pdMS_TO_TICKS(500)) != pdTRUE){
+		ESP_LOGE(TAG, "Unable to stop heartbeat timer");
+	}
+	heartbeat_handle = NULL;
+	heartbeat_interval = -1;
+}
+
+int start_ocpp(const char * charger_id){
+	ESP_LOGI(TAG, "Starting ocpp");
+	char uri[64];
+	int written_length = snprintf(uri, sizeof(uri), "ws://%s/%s", "10.4.210.114:9000", charger_id);
+
+	if(written_length < 0 || written_length >= sizeof(uri)){
+		ESP_LOGE(TAG, "Unable to write uri to buffer");
+		return -1;
+	}
+
+	esp_websocket_client_config_t websocket_cfg = {
+		.uri = uri,
+		.subprotocol = "ocpp2.0",
+		.task_stack = 2600,
+		.buffer_size = WEBSOCKET_BUFFER_SIZE,
+	};
+
+	client = esp_websocket_client_init(&websocket_cfg);
+	if(client == NULL){
+		ESP_LOGE(TAG, "Unable to create websocket client");
+		return -1;
+	}
+
+	esp_err_t err = esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
+	if(err != ESP_OK){
+		ESP_LOGE(TAG, "Unable to register events");
+		goto error;
+	}
+
+	ESP_LOGI(TAG, "Starting websocket client");
+	err = esp_websocket_client_start(client);
+	if(err != ESP_OK){
+		ESP_LOGE(TAG, "Unable to start websocket client");
+		goto error;
+	}
+
+	for(int i = 0; i < 5; i++){
+		if(websocket_connected){
+			ocpp_call_queue = xQueueCreate(5, sizeof(struct ocpp_call_with_cb *));
+			ocpp_blocking_call_queue = xQueueCreate(1, sizeof(struct ocpp_call_with_cb *));
+			ocpp_transaction_call_queue = xQueueCreate(20, sizeof(struct ocpp_call_with_cb *));
+
+			if(ocpp_call_queue == NULL || ocpp_transaction_call_queue == NULL || ocpp_blocking_call_queue == NULL){
+				ESP_LOGE(TAG, "Unable to create call queues");
+				goto error;
+			}
+
+			ocpp_active_call_lock_1 = xSemaphoreCreateBinary();
+			if(ocpp_active_call_lock_1 == NULL){
+				ESP_LOGE(TAG, "Unable to create semaphore");
+				goto error;
+			}
+
+			if(xSemaphoreGive(ocpp_active_call_lock_1) != pdTRUE){
+				ESP_LOGE(TAG, "Unable to open semaphore");
+				goto error;
+			}
+			return 0;
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+
+		if(i+1 == 5){
+			ESP_LOGE(TAG, "Websocket did not connect");
+			goto error;
+		}
+	}
+
+error:
+	stop_ocpp();
+	return -1;
+}
+
+void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
+	time_t charge_point_time = time(NULL);
+
+	if(cJSON_HasObjectItem(payload, "currentTime")){
+		struct tm central_system_time_tm = parse_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
+		time_t central_system_time = mktime(&central_system_time_tm);
+		update_central_system_time_offset(charge_point_time, central_system_time);
+	}else{
+		ESP_LOGE(TAG, "Boot result is lacking currentTime");
+	}
+
+	if(cJSON_HasObjectItem(payload, "interval")){
+		heartbeat_interval = cJSON_GetObjectItem(payload, "interval")->valueint;
+		ESP_LOGI(TAG, "Heartbeat interval is: %d", heartbeat_interval);
+	}else{
+		ESP_LOGE(TAG, "Boot result is lacking interval");
+	}
+
+	if(cJSON_HasObjectItem(payload, "status")){
+		char * status_string = cJSON_GetObjectItem(payload, "status")->valuestring;
+
+		if(strcmp(status_string, OCPP_REGISTRATION_ACCEPTED) == 0){
+			ESP_LOGI(TAG, "Boot accepted");
+			registration_status = eOCPP_REGISTRATION_ACCEPTED;
+		}
+		else if(strcmp(status_string, OCPP_REGISTRATION_PENDING) == 0){
+			ESP_LOGW(TAG, "Boot still pending");
+			registration_status = eOCPP_REGISTRATION_PENDING;
+		}
+		else if(strcmp(status_string, OCPP_REGISTRATION_REJECTED) == 0){
+			ESP_LOGE(TAG, "Boot rejected");
+			registration_status = eOCPP_REGISTRATION_REJECTED;
+		}
+		else{
+			ESP_LOGE(TAG, "Got unrecognised registration status '%s'", status_string);
+			ESP_LOGE(TAG, "Assuming rejected");
+			registration_status = eOCPP_REGISTRATION_REJECTED;
+		}
+
+	}else{
+		ESP_LOGE(TAG, "Boot result without error is lacking status, assuming REJECTED");
+	}
+
+	// The specification indicates that interval can be 0 and that its meaning depends on the given status:
+	// "If that interval value is zero, the Charge Point chooses a waiting interval on its
+	// own, in a way that avoids flooding the Central System with requests"
+	//
+	// "If the Central System returns something other than Accepted, the value of the interval field
+	// indicates the minimum wait time before sending a next BootNotification request"
+    	if(registration_status == eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
+		// With websocket, heartbeat is not mandatory but it is recommended to send
+		// one at least every 24 hours for syncronization
+		heartbeat_interval = 60 * 60 * 24;
+
+	}else if(registration_status != eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
+		// No recommendations are given for delay to next BootNotification request
+		heartbeat_interval = 10; // We use relatively short delay as the websocket is active anyway
+	}
+}
+
+void boot_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * data){
+	if(error_code == NULL || error_description == NULL){
+		ESP_LOGE(TAG, "Error response on boot notification");
+	}
+	else{
+		ESP_LOGE(TAG, "Error response from boot notification: [%s] %s", error_code, error_description);
+	}
+	registration_status = eOCPP_REGISTRATION_REJECTED;
+}
+
+int complete_boot_notification_process(){
+	//TODO: update notification request parameters to real values
+	cJSON * boot_notification = ocpp_create_boot_notification_request("1", "2", "3", "4", "5", "6", "7", "8", "9");
+
+	if(boot_notification == NULL){
+		ESP_LOGE(TAG, "Unable to create boot notification");
+		return -1;
+	}
+
+	if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
+		ESP_LOGE(TAG, "Unable to equeue BootNotification");
+		cJSON_Delete(boot_notification);
+		return -1;
+	}
+
+	ESP_LOGI(TAG, "Sending boot notification message");
+	if(send_next_call() != 0){
+		ESP_LOGE(TAG, "Unable to send message");
+		return -1;
+	}
+
+	ESP_LOGI(TAG, "Waiting for response to complete...");
+	bool is_retry = false;
+	for(int i = 0; i < 5; i++){
+		if(registration_status != eOCPP_REGISTRATION_PENDING || heartbeat_interval != -1){
+
+			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
+				return 0;
+			}else if(!is_retry){
+				// If boot is not accepted, a new boot notification should be sendt after given interval.
+				vTaskDelay(pdMS_TO_TICKS(heartbeat_interval * 1000));
+				is_retry = true;
+
+				boot_notification = ocpp_create_boot_notification_request("1", "2", "3", "4", "5", "6", "7", "8", "9");
+				if(boot_notification == NULL){
+					ESP_LOGE(TAG, "Unable to recreate boot notification for retry");
+					return -1;
+				}
+
+				if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
+					ESP_LOGE(TAG, "Unable to equeue new BootNotification");
+					cJSON_Delete(boot_notification);
+					return -1;
+				}
+
+				registration_status = eOCPP_REGISTRATION_PENDING;
+				heartbeat_interval = -1;
+
+				ESP_LOGI(TAG, "Sending new boot notification message");
+				if(send_next_call() != 0){
+					ESP_LOGE(TAG, "Unable to send new boot notification message");
+					return -1;
+				}
+				i = 0;
+			}
+			return (registration_status == eOCPP_REGISTRATION_ACCEPTED) ? 0 : -1;
+		}
+		ESP_LOGW(TAG, "WAITING...");
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+	ESP_LOGE(TAG, "Boot status not updated");
+	return -1;
+}
+
+void stop_ocpp(void){
+	ESP_LOGW(TAG, "Closing web socket");
+	esp_websocket_client_stop(client);
+	esp_websocket_client_destroy(client);
+	client = NULL;
+
+	if(ocpp_call_queue != NULL){
+		vQueueDelete(ocpp_call_queue);
+		ocpp_call_queue = NULL;
+	}
+
+	if(ocpp_blocking_call_queue != NULL){
+		vQueueDelete(ocpp_blocking_call_queue);
+		ocpp_blocking_call_queue = NULL;
+	}
+
+	if(ocpp_transaction_call_queue){
+		vQueueDelete(ocpp_call_queue);
+		ocpp_blocking_call_queue = NULL;
+	}
+
+	if(ocpp_active_call_lock_1){
+		vSemaphoreDelete(ocpp_active_call_lock_1);
+		ocpp_active_call_lock_1 = NULL;
+	}
+
+	clear_active_call();
+	return;
+}
+
+void handle_ocpp_call(void){
+	send_next_call();
 }
