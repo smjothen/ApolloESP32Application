@@ -644,7 +644,7 @@ int complete_boot_notification_process(char * serial_nr){
 				vTaskDelay(pdMS_TO_TICKS(heartbeat_interval * 1000));
 				is_retry = true;
 
-				boot_notification = ocpp_create_boot_notification_request("1", "2", "3", "4", "5", "6", "7", "8", "9");
+				boot_notification = ocpp_create_boot_notification_request(NULL, "Go", serial_nr, "Zaptec", NULL, NULL, NULL, NULL, NULL);
 				if(boot_notification == NULL){
 					ESP_LOGE(TAG, "Unable to recreate boot notification for retry");
 					return -1;
