@@ -24,6 +24,18 @@
 #include "../components/i2c/include/i2cDevices.h"
 #include "offline_log.h"
 
+//#define USE_OCPP // TODO: See if ocpp should be used together with mqtt or if it should be switched during runtime, after reboot or compiletime.
+
+
+#ifdef USE_OCPP
+#include <math.h>
+#include "ocpp_task.h"
+#include "messages/call_messages/ocpp_call_request.h"
+#include "types/ocpp_authorization_status.h"
+#include "types/ocpp_charge_point_status.h"
+#include "types/ocpp_charge_point_error_code.h"
+#endif
+
 static const char *TAG = "SESSION    ";
 
 #define RESEND_REQUEST_TIMER_LIMIT 90
@@ -372,6 +384,328 @@ void SessionHandler_SetLogCurrents()
 	}
 }
 
+#ifdef USE_OCPP
+int transaction_id = -1;
+
+static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
+
+		if(cJSON_HasObjectItem(id_tag_info, "status")){
+			const char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
+			ESP_LOGI(TAG, "Central system returned status %s", status);
+
+			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
+				ESP_LOGW(TAG, "Transaction not Autorized");
+				//TODO: Update LocalList
+				/* authentication_AddTag is not implemented and TagItem struct is insufficient for ocpp.
+				 * TagInfo is closer but still not sufficient
+				 *
+				 * authentication_AddTag(ocpp_tag_info_to_TagItem(id_tag_info));
+				 */
+				//TODO: check (required) StopTransactionOnInvalidId before stopping charging
+				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+					SetFinalStopActiveStatus(1);
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED");
+					//TODO: Handle error. If this occurs there might be charging without valid token or payment
+				}
+
+				ret = MCU_SendCommandId(CommandAuthorizationDenied);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU command CommandAuthorizationDenied OK");
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU command CommandAuthorizationDenied FAILED");
+				}
+			}
+		}
+	}else{
+		ESP_LOGE(TAG, "Recieved start transaction response lacking 'idTagInfo'");
+	}
+
+
+	if(cJSON_HasObjectItem(payload, "transactionId")){
+		/*
+		 * Cloud sets session id whilest in requesting state, ocpp sets transaction id during charge state
+		 * if cloud sets the id first, we should not update it as it would confuse the cloud.
+		 */
+		transaction_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
+
+		if(strstr(chargeSession_GetSessionId(), "-") == NULL){ // Only set the transaction id if cloud did not yet
+			//If session id is persisted from a previous session, then this might still be valid as ocpp will use the transaction id instead, but this should be changed.
+			char transaction_id_str[37]; // when not using ocpp directly, session id is UUID
+
+			snprintf(transaction_id_str, sizeof(transaction_id_str), "%d", transaction_id);
+
+			chargeSession_SetSessionIdFromCloud(transaction_id_str);
+		}
+	}else{
+		ESP_LOGE(TAG, "Recieved start transaction response lacking 'transactionId'");
+	}
+}
+
+static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+	const char * action = (const char *) cb_data;
+	ESP_LOGE(TAG, "Got ocpp error from central system when attemting start transaction");
+
+	if(unique_id != NULL && error_code != NULL && error_description != NULL){
+		if(error_details == NULL){
+			ESP_LOGE(TAG, "[%s|%s]: (%s) '%s'", action, unique_id, error_code, error_description);
+		}else{
+			char * details = cJSON_Print(error_details);
+			if(details != NULL){
+				ESP_LOGE(TAG, "[%s|%s]: (%s) '%s' \nDetails:\n %s", action, unique_id, error_code, error_description, details);
+				free(details);
+			}
+		}
+	}
+}
+
+void stop_transaction(){
+	if(transaction_id == -1){
+		ESP_LOGE(TAG, "Transaction id not set, unable to stop transaction");
+		return;
+	}
+
+	cJSON * stop_transaction  = ocpp_create_stop_transaction_request(chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), time(NULL), transaction_id, NULL, 0, NULL);
+
+	if(stop_transaction == NULL){
+		ESP_LOGE(TAG, "Unable to create stop transaction request");
+	}else{
+		int err = enqueue_call(stop_transaction, NULL, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
+		}
+	}
+
+	transaction_id = -1; // Clear the transaction id
+}
+
+void start_transaction(){
+	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), -1, time(NULL));
+
+	if(start_transaction == NULL){
+		ESP_LOGE(TAG, "Unable to create start transaction request");
+	}else{
+		int err = enqueue_call(start_transaction, start_transaction_response_cb, error_cb, "start", eOCPP_CALL_TRANSACTION_RELATED);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
+		}
+	}
+}
+
+static void authorize_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+	ESP_LOGW(TAG, "Got auth response");
+	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+		ESP_LOGW(TAG, "Got auth tag");
+		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
+
+		if(cJSON_HasObjectItem(id_tag_info, "status")){
+			ESP_LOGW(TAG, "Got status");
+			char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
+
+			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
+				ESP_LOGI(TAG, "Authorized to start transaction");
+				MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+				if(ret != MsgCommandAck)
+				{
+					ESP_LOGE(TAG, "Unable to grant authorization to MCU");
+				}
+				else{
+					ESP_LOGW(TAG, "granted ok");
+					SetAuthorized(true);
+				}
+			}else{
+				ESP_LOGW(TAG, "Transaction is not authorized");
+				MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+				if(ret != MsgCommandAck)
+				{
+					ESP_LOGE(TAG, "Unable to deny authorization");
+				}
+				else{
+					ESP_LOGI(TAG, "Authorization denial ok");
+					SetAuthorized(false);
+				}
+
+			}
+		}else{
+			ESP_LOGE(TAG, "Authorization tag info lacks required 'status'");
+		}
+	}else{
+		ESP_LOGE(TAG, "Authorize response lacks required 'idTagInfo'");
+	}
+}
+
+void authorize(){
+	//TODO: use (required) LocalPreAuthorize and potentially the local authentication list
+	//TODO: use (required) LocalAuthorizeOffline
+	//TODO: handle error to deny authorization or retry if timed out.
+	cJSON * authorization = ocpp_create_authorize_request(pendingAuthID);
+	if(authorization == NULL){
+		ESP_LOGE(TAG, "Unable to create authorization request");
+	}else{
+		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "start", eOCPP_CALL_TRANSACTION_RELATED);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue authorization request");
+		}
+	}
+}
+
+// Currently the used states are Disconnected (1), Requesting (2) and charging (3)
+// its value -1 is used as index ([from][to]).
+// TODO: update approach to support all relevant transitions and use settings from ChangeConfigurations
+bool want_status_notification[3][3] = {
+	{false, false, true},
+	{false, false, true},
+	{true, true, false}
+};
+
+void status_notification(enum ChargerOperatingMode new_state){
+	ESP_LOGD(TAG, "Sending status notification");
+
+	char state[15];
+
+	switch(new_state){
+	case CHARGE_OPERATION_STATE_DISCONNECTED:
+		strcpy(state, OCPP_CP_STATUS_AVAILABLE);
+		break;
+	case CHARGE_OPERATION_STATE_REQUESTING:
+		strcpy(state, OCPP_CP_STATUS_PREPARING);
+		break;
+	case CHARGE_OPERATION_STATE_CHARGING:
+		strcpy(state, OCPP_CP_STATUS_CHARGING);
+		break;
+	case CHARGE_OPERATION_STATE_PAUSED:
+		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV); // Change if EVSE is capable of suspending without EV
+		break;
+	default:
+		ESP_LOGE(TAG, "Unhandled transition for status notification");
+		return;
+	}
+
+	cJSON * status_notification  = ocpp_create_status_notification_request(1, OCPP_CP_ERROR_NO_ERROR, NULL, state, time(NULL), NULL, NULL);
+	if(status_notification == NULL){
+		ESP_LOGE(TAG, "Unable to create status notification request");
+	}else{
+		int err = enqueue_call(status_notification, NULL, error_cb, "status notification", eOCPP_CALL_GENERIC);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue status notification");
+		}
+	}
+}
+
+void handle_state_transition(uint32_t old_state, uint32_t new_state){
+	switch(new_state){
+	case CHARGE_OPERATION_STATE_DISCONNECTED: // Part of ocpp Available
+		switch(old_state){
+		case CHARGE_OPERATION_STATE_REQUESTING: // B1
+			break;
+		case CHARGE_OPERATION_STATE_CHARGING: // C1
+		case CHARGE_OPERATION_STATE_PAUSED: // D1/E1
+			//TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
+			stop_transaction();
+			break;
+		default:
+			ESP_LOGE(TAG, "Unknown new state transition from %d to DISCONNECTED", old_state);
+			return;
+		}
+		break;
+	case CHARGE_OPERATION_STATE_REQUESTING: // Part of ocpp Preparing
+		switch(old_state){
+		case CHARGE_OPERATION_STATE_DISCONNECTED: //A2
+			authorize();
+			break;
+		case CHARGE_OPERATION_STATE_CHARGING:
+		case CHARGE_OPERATION_STATE_PAUSED:
+			ESP_LOGE(TAG, "Transition not defined in ocpp: from %d to REQUESTING", old_state);
+			return;
+			break;
+		default:
+			ESP_LOGE(TAG, "Unknown new state transition from %d to REQUESTING", old_state);
+			return;
+		}
+		break;
+	case CHARGE_OPERATION_STATE_CHARGING: // Equivalent to ocpp Charging
+		switch(old_state){
+		case CHARGE_OPERATION_STATE_DISCONNECTED: // A3
+		case CHARGE_OPERATION_STATE_REQUESTING: // B3
+			start_transaction();
+			break;
+		case CHARGE_OPERATION_STATE_PAUSED: // D3/E3
+			break;
+		default:
+			ESP_LOGE(TAG, "Unknown new state transition from %d to CHARGING", old_state);
+			return;
+		}
+		break;
+	case CHARGE_OPERATION_STATE_PAUSED: // Equivalent to ocpp Suspended EV/EVSE
+		switch(old_state){
+		case CHARGE_OPERATION_STATE_DISCONNECTED: // A4/A5
+			break;
+		case CHARGE_OPERATION_STATE_REQUESTING: // B4/B5
+			break;
+		case CHARGE_OPERATION_STATE_CHARGING: // C4/C5
+			break;
+		default:
+			ESP_LOGE(TAG, "Unknown new state transition from %d to PAUSED", old_state);
+			return;
+		}
+		break;
+	default:
+		ESP_LOGE(TAG, "Unknown new state (%d)", new_state);
+		return;
+	}
+
+	if(want_status_notification[old_state-1][new_state-1]){
+		status_notification(new_state);
+	}
+}
+
+void handle_requesting(){
+	// if all prerequisit for charging are met, enter charge mode.
+	if(/*cable_connected() && */ isAuthorized){
+		MessageType ret = MCU_SendCommandId(CommandStartCharging);
+		if(ret != MsgCommandAck)
+		{
+			ESP_LOGE(TAG, "Unable to send charging command");
+		}
+		else{
+			ESP_LOGI(TAG, "Charging ok");
+
+			HOLD_SetPhases(1);
+			sessionHandler_HoldParametersFromCloud(32.0f, 1);
+
+			//This must be set to stop replying the same SessionIds to cloud
+			chargeSession_SetReceivedStartChargingCommand();
+		}
+	}
+}
+
+void handle_state(uint32_t state){
+	switch(state){
+	case CHARGE_OPERATION_STATE_DISCONNECTED:
+		break;
+	case CHARGE_OPERATION_STATE_REQUESTING:
+		handle_requesting();
+		break;
+	case CHARGE_OPERATION_STATE_CHARGING:
+		break;
+	case CHARGE_OPERATION_STATE_PAUSED:
+		break;
+	default:
+		ESP_LOGE(TAG, "Currently in unknown charge operation state");
+		return;
+	}
+}
+#endif /*USE_OCPP*/
 
 static void sessionHandler_task()
 {
@@ -434,7 +768,6 @@ static void sessionHandler_task()
 
 	while (1)
 	{
-
 		if((!setTimerSyncronization))
 		{
 			//if(zntp_GetTimeAlignementPointDEBUG())
@@ -562,6 +895,13 @@ static void sessionHandler_task()
 		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
 		currentCarChargeMode = MCU_GetchargeMode();
 
+#ifdef USE_OCPP
+		if(chargeOperatingMode != previousChargeOperatingMode){
+			handle_state_transition(previousChargeOperatingMode, chargeOperatingMode);
+		}else{
+			handle_state(chargeOperatingMode);
+		}
+#endif /*USE_OCPP*/
 		//We need to inform the ChargeSession if a car is connected.
 		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
 		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
