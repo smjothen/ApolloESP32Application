@@ -25,6 +25,7 @@
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
 #include "mqtt_client.h"
+#include <math.h>
 
 #include "../../main/IT3PCalculator.h"
 
@@ -98,25 +99,141 @@ int publish_json_blocked(cJSON *payload, int timeout_ms){
     return _publish_json(payload, true, pdMS_TO_TICKS(timeout_ms));
 }
 
+
+/*static char hold_strftime_buf[32];
+static time_t holdEpochSec = 0;
+static uint32_t holdEpochUsec = 0;*/
+
+static bool initiateHoldRequestTimeStamp = false;
+//static bool useHoldRequestTimeStamp = false;
+void InitiateHoldRequestTimeStamp()
+{
+	initiateHoldRequestTimeStamp = true;
+}
+
+/*bool cloud_observation_UseAndClearHoldRequestTimestamp()
+{
+	bool tmp = useHoldRequestTimeStamp;
+	useHoldRequestTimeStamp = false;
+	return tmp;
+}*/
+
+/*
+ * This function returns the format required for CompletedSession
+ */
+void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
+{
+	time_t now = 0;
+	struct tm timeinfo = { 0 };
+	char strftime_buf[64] = {0};
+
+	time(&now);
+
+	setenv("TZ", "UTC-0", 1);
+	tzset();
+
+	localtime_r(&now, &timeinfo);
+
+	struct timeval t_now;
+	gettimeofday(&t_now, NULL);
+
+	strftime(strftime_buf, sizeof(strftime_buf), "%Y-%02m-%02dT%02H:%02M:%02S", &timeinfo);
+
+	sprintf(strftime_buf+strlen(strftime_buf), ".%06dZ", (uint32_t)t_now.tv_usec);
+	strcpy(timeString, strftime_buf);
+	if((epochSec == NULL) || (epochSec == NULL))
+		return;
+
+	*epochSec = now;
+	*epochUsec = (uint32_t)t_now.tv_usec;
+}
+
+/*struct HoldSessionStartTime {
+	char timeString[32];
+	time_t holdEpochSec;
+	uint32_t holdEpochUsec;
+	bool usedInSession;
+};*/
+
+static struct HoldSessionStartTime timeStruct = {0};
+
+struct HoldSessionStartTime *cloud_observation_GetTimeStruct()
+{
+	return &timeStruct;
+}
+
+void cloud_observation_SetTimeStruct(char * _timeString, time_t _holdEpochSec, uint32_t _holdEpochUsec, bool _usedInSession)
+{
+	strcpy(timeStruct.timeString, _timeString);
+	timeStruct.holdEpochSec = _holdEpochSec;
+	timeStruct.holdEpochUsec = _holdEpochUsec;
+	timeStruct.usedInSession = _usedInSession;
+}
+
+void cloud_observation_ClearTimeStruct()
+{
+	memset(&timeStruct, 0 , sizeof(timeStruct));
+}
+
+
+
 cJSON *create_observation(int observation_id, char *value){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
 
-    struct timeval tv_now;
+    char strftime_buf[32];
+
+    /*struct timeval tv_now;
     gettimeofday(&tv_now, NULL);
 
     time_t now = tv_now.tv_sec;
     struct tm timeinfo = { 0 };
-    char strftime_buf_head[64];
-    char strftime_buf[128];
+    //char strftime_buf_head[64];
+    char strftime_buf[32];
     time(&now);
     setenv("TZ", "UTC-0", 1);
     tzset();
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf_head, sizeof(strftime_buf_head), "%Y-%m-%dT%H:%M:%S.", &timeinfo);
     snprintf(strftime_buf, sizeof(strftime_buf), "%s%03dZ", strftime_buf_head, (int)(tv_now.tv_usec/1000));
-    
-    cJSON_AddStringToObject(result, "ObservedAt", strftime_buf);
+    */
+    //if(observation_id == 710)
+    	//ESP_LOGW(TAG, "State: %s", value);
+
+    /// When a new request command is sent the first time, hold the timestamp to use as StartDateTime in the CompletedSessionStructure.
+    if((observation_id == 710) && (initiateHoldRequestTimeStamp == true) && (timeStruct.usedInSession == false) && (timeStruct.usedInRequest == false))
+    {
+    	//Get the time-string for Observation AND CompletedSession use
+    	GetUTCTimeString(timeStruct.timeString, &timeStruct.holdEpochSec, &timeStruct.holdEpochUsec);
+
+    	timeStruct.usedInSession = false;
+    	timeStruct.usedInRequest = true;
+
+    	initiateHoldRequestTimeStamp = false;
+    	//strcpy(hold_strftime_buf, strftime_buf);
+    	//useHoldRequestTimeStamp = true;
+
+    	cJSON_AddStringToObject(result, "ObservedAt", timeStruct.timeString);
+
+    	ESP_LOGW(TAG, "Made REQUESTING TimeStamp: %i: %s for use in Session", strlen(timeStruct.timeString), timeStruct.timeString);
+    }
+    //Start time was defined in ChargeSession_Set_StartTime(), use for first requesting message
+    else if((observation_id == 710) && (initiateHoldRequestTimeStamp == true) && (timeStruct.usedInSession == true) && (timeStruct.usedInRequest == false))
+    {
+    	cJSON_AddStringToObject(result, "ObservedAt", timeStruct.timeString);
+    	initiateHoldRequestTimeStamp = false;
+    	timeStruct.usedInRequest = true;
+
+    	ESP_LOGW(TAG, "Using SESSION TimeStamp: %i: %s in REQUEST", strlen(timeStruct.timeString), timeStruct.timeString);
+    }
+    else
+
+    {
+    	/// Get the time-string for Observation only use
+    	GetUTCTimeString(strftime_buf, NULL, NULL);
+    	cJSON_AddStringToObject(result, "ObservedAt", strftime_buf);
+    }
+
     cJSON_AddStringToObject(result, "Value", value);
     cJSON_AddNumberToObject(result, "ObservationId", (float) observation_id);
     cJSON_AddNumberToObject(result, "Type", (float) 1.0);
@@ -367,7 +484,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
-    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetChargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
@@ -407,7 +524,7 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)MCU_GetCableType()));
-    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetchargeMode()));
+    add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetChargeMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
     //ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
@@ -463,7 +580,7 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
 
     //Only send temperatures periodically when charging is active
-    if(MCU_GetchargeMode() == eCAR_CHARGING)
+    if(MCU_GetChargeMode() == eCAR_CHARGING)
     {
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
@@ -486,7 +603,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetchargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
@@ -559,7 +676,7 @@ int publish_telemetry_observation_on_change(){
 
 
     uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
-	if (((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0)) || (clearSessionFlag == true))
+	if (((previousChargeOperatingMode != chargeOperatingMode) && (chargeOperatingMode != 0)))// || (clearSessionFlag == true))
 	{
 
 		//If a disconnect occur, send 0 voltage levels
@@ -571,11 +688,11 @@ int publish_telemetry_observation_on_change(){
 		}
 
 		//If we have received command SetSessionId = null from cloud, fake car disconnect to clear session and user id in cloud
-		if(clearSessionFlag == true)
+		/*if(clearSessionFlag == true)
 		{
 			chargeOperatingMode = CHARGE_OPERATION_STATE_DISCONNECTED;
 			clearSessionFlag = false;
-		}
+		}*/
 
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
 
@@ -584,7 +701,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
-    int8_t chargeMode = MCU_GetchargeMode();
+    int8_t chargeMode = MCU_GetChargeMode();
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != -1))
 	{
 		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
@@ -774,11 +891,18 @@ int publish_telemetry_observation_on_change(){
 
 	float energy = chargeSession_Get().Energy;
 
+	/// Round down on the 3rd decmial to ensure. In OCMF this digit may be rounded down to meet the SignedValue diff
+	/// to compensate for rounding inaccuracy. By always rounding down here it ensures that this value can never be
+	/// 1Wh higher than the CompletedSession energy.
+	energy = floor(energy * 1000) / 1000.0;
+
 	//Send energy for every 0.1kWh when below 1kWh to make the app responsive at start of charging
 	//Send for every 0.2kWh above 1kWh
 	float trigLimit = 0.1;
 	if(energy >= 1.0)
 		trigLimit = 0.2;
+	if(energy >= 5.0)
+		trigLimit = 0.5;
 
 	//Send energy based on level of change
 	if((energy > previousEnergy + trigLimit) || (energy < (previousEnergy - trigLimit)))

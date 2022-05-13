@@ -39,7 +39,7 @@ double get_accumulated_energy(){
 
 	if((max>0.0) && (dspic_session_energy < max)){
 		MCU_ClearMaximumEnergy();
-		ESP_LOGI(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
+		ESP_LOGW(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
 			dspic_session_energy, max
 		);
 		dspic_session_energy = max;
@@ -81,7 +81,7 @@ int _OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, char * time_b
 	strcpy(newMessage, "OCMF|");
 	strcpy(newMessage+strlen(newMessage), buf);
 
-	ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+	//ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
 
 	cJSON_Delete(OCMFObject);
 
@@ -157,12 +157,29 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 	{
 		ESP_LOGW(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
 
-		float sessEnergy = (float)cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble;
-		double energyDiff = GetEnergyDiff();
-		if(energyDiff > 0.001)
-			ESP_LOGE(TAG, "#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, energyDiff, (sessEnergy - energyDiff));
+		double sessEnergy = cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble;
+		double signedEnergy = GetEnergySigned();
+		double energyDiff = fabs(sessEnergy - signedEnergy);
+		if(energyDiff >= 0.0001)
+			ESP_LOGW(TAG, "1#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, signedEnergy, energyDiff);
 		else
-			ESP_LOGW(TAG, "**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, energyDiff, (sessEnergy - energyDiff));
+			ESP_LOGI(TAG, "1**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, signedEnergy, energyDiff);
+
+		/// Compensate for rounding error by rounding sessionEnergy up or down to match signed value difference
+		/// If case (0.0014 vs 0.002) normal rounding would give different result
+		if(sessEnergy > signedEnergy)
+			sessEnergy = floor(sessEnergy * 1000) / 1000.0;
+		else if(sessEnergy < signedEnergy)
+			sessEnergy = ceil(sessEnergy * 1000) / 1000.0;
+
+		energyDiff = fabs(sessEnergy - signedEnergy);
+		if(energyDiff >= 0.0001)
+			ESP_LOGE(TAG, "2#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, signedEnergy, energyDiff);
+		else
+			ESP_LOGI(TAG, "2**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, signedEnergy, energyDiff);
+
+		/// Update the rounded session energy
+		cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble = sessEnergy;
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -171,7 +188,7 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		strcpy(OCMFLogEntryString, "OCMF|");
 		strcpy(OCMFLogEntryString+strlen(OCMFLogEntryString), buf);
 
-		ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+		//ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
 
 		cJSON_Delete(logRoot);
 
@@ -183,8 +200,9 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		cJSON_DeleteItemFromObject(CompletedSessionObject, "SignedSession");
 		//ESP_LOGW(TAG, "CompletedSession2: %s", cJSON_PrintUnformatted(CompletedSessionObject));
 		cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", OCMFLogEntryString);
+		//cJSON_GetObjectItem(CompletedSessionObject,"SignedSession")->valuestring = OCMFLogEntryString;
 
-		ESP_LOGW(TAG, "CompletedSession3: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+		//ESP_LOGW(TAG, "CompletedSession3: %s", cJSON_PrintUnformatted(CompletedSessionObject));
 	}
 	else
 	{
@@ -196,7 +214,7 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 
 	strcpy(messageString, buf);
 
-	ESP_LOGW(TAG, "OCMF: %i:: %s", strlen(messageString), messageString);
+	ESP_LOGW(TAG, "\r\nOCMF: %i:: %s\r\n", strlen(messageString), messageString);
 
 	ESP_LOGI(TAG, "Made CompletedSessionObject");
 

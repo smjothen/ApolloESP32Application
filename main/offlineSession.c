@@ -1,6 +1,6 @@
 #include "offlineSession.h"
 
-#define TAG "OFFLINE_LOG"
+#define TAG "OFFLINE_SESSION"
 
 #include "esp_log.h"
 #include "errno.h"
@@ -138,9 +138,11 @@ int offlineSession_FindNewFileNumber()
 	int fileNo = 0;
 	FILE *file;
 	char buf[22] = {0};
-	int fileCount = 0;
 
-	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
+	ESP_LOGW(TAG, "Searching for first unused OfflineSession file...");
+
+	//for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
+	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo--)
 	{
 		sprintf(buf,"/offs/%d.bin", fileNo);
 
@@ -148,17 +150,25 @@ int offlineSession_FindNewFileNumber()
 		if(file != NULL)
 		{
 			fclose(file);
-			ESP_LOGW(TAG, "OfflineSession file: %d", fileNo);
-			fileCount++;
+
+			//Max file (99) is used, no available
+			if(fileNo == (max_offline_session_files - 1))
+				return -1;
+			else
+			{
+				fileNo = fileNo + 1;
+				break; //Found unused file, abort search
+			}
 		}
 		else
 		{
-			///Found first unused file
-			break;
+			///Found 0 as first unused file
+			if(fileNo == 0)
+				break;
 		}
 	}
 
-	ESP_LOGW(TAG, "Nr of OfflineSession files: %d. Using: %d", fileCount, fileNo);
+	ESP_LOGW(TAG, "Found from top as first unused OfflineSession file: %d", fileNo);
 
 	return fileNo;
 }
@@ -330,10 +340,22 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 
 /// Call this function to ensure that the sessionFile is no longer accessed
+static int lastUsedFileNumber = -1;
 void offlineSession_SetSessionFileInactive()
 {
+	lastUsedFileNumber = activeFileNumber;
 	activeFileNumber = -1;
 	strcpy(activePathString, "");
+}
+
+void offlineSession_DeleteLastUsedFile()
+{
+	if((activeFileNumber == -1) && (lastUsedFileNumber >= 0))
+	{
+		ESP_LOGE(TAG, "### Deleting last session because LOCAL only with energy = 0.0 ###");
+		offlineSession_delete_session(lastUsedFileNumber);
+		lastUsedFileNumber = -1;
+	}
 }
 
 void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
@@ -350,9 +372,6 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return;
 	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
-	}
 
 	if(createNewFile)
 		sessionFile = fopen(activePathString, "wb+");
@@ -366,7 +385,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 		return;
 	}
 
-	ESP_LOGW(TAG, "strlen: %d, path: %s", strlen(sessionData), activePathString);
+	//ESP_LOGW(TAG, "strlen: %d, path: %s", strlen(sessionData), activePathString);
 
 	uint8_t fileVersion = 1;
 	fseek(sessionFile, FILE_VERSION_ADDR_0, SEEK_SET);
@@ -378,7 +397,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	volatile int base64SessionDataLen = strlen(base64SessionData);
 
 	ESP_LOGW(TAG,"%d: %s\n", strlen(sessionData), sessionData);
-	ESP_LOGW(TAG,"%d: %s\n", strlen(base64SessionData), base64SessionData);
+	//ESP_LOGW(TAG,"%d: %s\n", strlen(base64SessionData), base64SessionData);
 
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 	fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
@@ -388,7 +407,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
 	fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
 
-	ESP_LOGW(TAG, "Session CRC:: 0x%X", crcCalc);
+	//ESP_LOGW(TAG, "Session CRC:: 0x%X", crcCalc);
 
 	free(base64SessionData);
 	fclose(sessionFile);
@@ -406,9 +425,6 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return -1;
-	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
 	}
 
 	char buf[22] = {0};
@@ -559,9 +575,6 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return NULL;
 	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
-	}
 
 	char buf[22] = {0};
 	sprintf(buf,"/offs/%d.bin", fileNo);
@@ -623,14 +636,14 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 static double startEnergy = 0.0;
 static double stopEnergy = 0.0;
 
-double GetEnergyDiff()
+double GetEnergySigned()
 {
-	double diff = stopEnergy - startEnergy;
+	double signedDiff = stopEnergy - startEnergy;
 
 	//Clear variables
 	startEnergy = 0;
 	stopEnergy = 0;
-	return diff;
+	return signedDiff;
 }
 
 
@@ -643,9 +656,6 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return NULL;
-	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
 	}
 
 	char buf[22] = {0};
@@ -808,9 +818,6 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return;
-	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
 	}
 
 	sessionFile = fopen(activePathString, "rb+");
@@ -996,9 +1003,6 @@ int offlineSession_delete_session(int fileNo)
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
 		return -1;
 	}
-	else{
-		ESP_LOGI(TAG, "got offs lock");
-	}
 
 	char buf[22] = {0};
 	sprintf(buf,"/offs/%d.bin", fileNo);
@@ -1006,12 +1010,12 @@ int offlineSession_delete_session(int fileNo)
 	FILE *fp = fopen(buf, "r");
 	if(fp==NULL)
 	{
-		ESP_LOGE(TAG, "%d: Before remove: logfile can't be opened ", fileNo);
+		ESP_LOGE(TAG, "File %d: Before remove: logfile can't be opened ", fileNo);
 		xSemaphoreGive(offs_lock);
 		return 0;
 	}
 	else
-		ESP_LOGE(TAG, "%d: Before remove: logfile can be opened ", fileNo);
+		ESP_LOGI(TAG, "File %d: Before remove: logfile can be opened ", fileNo);
 
 	fclose(fp);
 
@@ -1020,12 +1024,12 @@ int offlineSession_delete_session(int fileNo)
 	fp = fopen(buf, "r");
 	if(fp==NULL)
 	{
-		ESP_LOGE(TAG, "%d: After remove: logfile deleted SUCCEEDED", fileNo);
+		ESP_LOGI(TAG, "File %d: After remove: logfile deleted SUCCEEDED", fileNo);
 		ret = 1;
 	}
 	else
 	{
-		ESP_LOGE(TAG, "%d: After remove: logfile delete FAILED ", fileNo);
+		ESP_LOGE(TAG, "File %d: After remove: logfile delete FAILED ", fileNo);
 		ret = 2;
 	}
 

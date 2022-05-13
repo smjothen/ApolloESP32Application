@@ -17,6 +17,7 @@ int offlineSession_FindNrOfFiles();
 int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incompleteSession);
 
 void offlineSession_SetSessionFileInactive();
+void offlineSession_DeleteLastUsedFile();
 void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile);
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo);
 
@@ -30,6 +31,6 @@ int offlineSession_attempt_send(void);
 
 uint32_t crc32_normal(uint32_t crc, const void *buf, size_t size);
 int offlineSession_delete_session(int fileNo);
-double GetEnergyDiff();
+double GetEnergySigned();
 
 #endif /* OFFLINE_SESSION */

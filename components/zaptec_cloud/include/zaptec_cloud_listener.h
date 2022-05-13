@@ -51,5 +51,7 @@ void periodic_refresh_token(uint8_t source);
 int cloud_listener_GetResetCounter();
 void cloud_listener_IncrementResetCounter();
 
+void cloud_listener_SetMQTTKeepAliveTime(uint8_t isStandalone);
+
 
 #endif /* ZAPTEC_CLOUD_LISTENER_H */

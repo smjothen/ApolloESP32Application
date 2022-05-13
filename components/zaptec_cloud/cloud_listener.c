@@ -612,6 +612,9 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					{
 						storage_Set_Standalone((uint8_t)standalone);
 						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
+
+						cloud_listener_SetMQTTKeepAliveTime(standalone);
+
 						doSave = true;
 					}
 					else
@@ -811,6 +814,9 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 						storage_Set_Standalone(standalone);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
+
+						cloud_listener_SetMQTTKeepAliveTime(standalone);
+
 						localSettingsAreUpdated = true;
 					}
 					else
@@ -1088,12 +1094,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			restartCmdReceived = true;
 			responseStatus = 200;
 			storage_Set_And_Save_DiagnosticsLog("#10 Cloud restart command");
-			ESP_LOGI(TAG, "MCU Start command OK");
+			ESP_LOGI(TAG, "MCU reset command OK");
 		}
 		else
 		{
 			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU Start command FAILED");
+			ESP_LOGI(TAG, "MCU reset command FAILED");
 		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/103/"))
@@ -1103,12 +1109,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;
-			ESP_LOGI(TAG, "MCU Start command OK");
+			ESP_LOGI(TAG, "MCU reset command OK");
 		}
 		else
 		{
 			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU Start command FAILED");
+			ESP_LOGI(TAG, "MCU reset command FAILED");
 		}
 	}
 
@@ -1189,7 +1195,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			if(ret == MsgWriteAck)
 			{
 				responseStatus = 200;
-				ESP_LOGE(TAG, "MCU Start: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
+				ESP_LOGW(TAG, "Charge Start from Cloud: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
 				MessageType ret = MCU_SendCommandId(CommandStartCharging);
 				if(ret == MsgCommandAck)
 				{
@@ -1257,19 +1263,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if(((commandEvent->data_len == 2) && (strncmp(commandEvent->data, "\"\"", 2) == 0)) ||
 			((commandEvent->data_len == 4) && (strncmp(commandEvent->data, "[\"\"]", 4) == 0)))
 		{
-			MessageType ret = MCU_SendCommandId(CommandResetSession);
-			if(ret == MsgCommandAck)
+			if((storage_Get_Standalone() == 0))
 			{
-				ESP_LOGI(TAG, "MCU ResetSession command OK");
-				sessionHandler_SetStoppedByCloud(true);
-
-				return 200;
+				sessionHandler_InitiateResetChargeSession();
+				chargeSession_HoldUserUUID();
 			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU ResetSession command FAILED");
-				return 400;
-			}
+			return 200;
 		}
 
 
@@ -1314,16 +1313,33 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
+		sessionHandler_InitiateResetChargeSession();
+
 		//Clear user UUID
-		if((storage_Get_AuthenticationRequired() == 1) && (storage_Get_Standalone() == 0))//Only in system mode
+		//if((storage_Get_AuthenticationRequired() == 1) && (storage_Get_Standalone() == 0))//Only in system mode
+		if((storage_Get_Standalone() == 0))//Only in system mode
 		{
-			char * ptr = strnstr(commandEvent->data, "null", commandEvent->data_len);
+			///Check for cleared userUUID command [""]
+			ESP_LOGW(TAG, "505: Len: %d, %s", commandEvent->data_len, commandEvent->data);
+			if(((commandEvent->data_len == 2) && (strncmp(commandEvent->data, "\"\"", 2) == 0)) ||
+				((commandEvent->data_len == 4) && (strncmp(commandEvent->data, "[\"\"]", 4) == 0)))
+			{
+				if((storage_Get_Standalone() == 0))
+				{
+					//Clear session
+					sessionHandler_InitiateResetChargeSession();
+				}
+				return 200;
+			}
+
+
+			/*char * ptr = strnstr(commandEvent->data, "null", commandEvent->data_len);
 			if((ptr != NULL) && (ptr != commandEvent->data) && (commandEvent->data_len < 37))
 			{
 				MessageType ret = MCU_SendCommandId(CommandResetSession);
 				if(ret == MsgCommandAck)
 				{
-					chargeSession_ClearAuthenticationCode();
+					//chargeSession_ClearAuthenticationCode();
 					ESP_LOGI(TAG, "MCU ResetSession command OK");
 					return 200;
 				}
@@ -1332,10 +1348,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGE(TAG, "MCU ResetSession command FAILED");
 					return 400;
 				}
-			}
+			}*/
+
 			else if((commandEvent->data_len > 4) && (commandEvent->data_len < 37)) //Auth code length limit
 			{
-				if(chargeSession_Get().SessionId[0] != '\0')
+				if((chargeSession_Get().SessionId[0] != '\0') && (storage_Get_AuthenticationRequired() == 1))
 				{
 					char newAuthCode[37] = {0};
 					strncpy(newAuthCode, &commandEvent->data[2], commandEvent->data_len-4);
@@ -1355,6 +1372,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ESP_LOGE(TAG, "MCU AuthorizationGranted command FAILED");
 						return 400;
 					}
+				}
+				else
+				{
+					return 400;
 				}
 			}
 		}
@@ -2739,7 +2760,8 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 	//ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
 }
 
-
+#define MQTT_KEEPALIVE_STANDALONE 1100
+#define MQTT_KEEPALIVE_SYSTEM 300
 void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 	cloudDeviceInfo = deviceInfo;
@@ -2815,7 +2837,10 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    mqtt_config.keepalive = 180;//1100; //300;//120 is default;
+    if(storage_Get_Standalone() == 0)
+    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+    else
+    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;
@@ -2921,4 +2946,22 @@ void periodic_refresh_token(uint8_t source)
     	err = esp_mqtt_client_start(mqtt_client);
     	ESP_LOGI(TAG, "MQTT reconnect result: %d", err);
     }
+}
+
+
+/**
+ * Change keepalive time to save data cost in standalone.
+ * Takes it longer to detect broken connection and issue reconnect
+ */
+void cloud_listener_SetMQTTKeepAliveTime(uint8_t isStandalone)
+{
+	int previous = mqtt_config.keepalive;
+    if(isStandalone == 0)
+    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+    else
+    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
+
+    ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.keepalive);
+
+    esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }

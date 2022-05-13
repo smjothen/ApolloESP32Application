@@ -14,6 +14,7 @@
 #include "OCMF.h"
 #include "offlineSession.h"
 #include <math.h>
+#include "../components/zaptec_cloud/include/zaptec_cloud_observations.h"
 
 
 
@@ -89,10 +90,38 @@ void chargeSession_ClearHasNewSession()
 }
 
 
+static char holdAuthenticationCode[41] = {0};
+void chargeSession_HoldUserUUID()
+{
+	if(chargeSession.AuthenticationCode[0] != '\0')
+	{
+		ESP_LOGE(TAG,"Holding userUUID in mem");
+		strcpy(holdAuthenticationCode, chargeSession.AuthenticationCode);
+	}
+}
+
+char * sessionSession_GetHeldUserUUID()
+{
+	return holdAuthenticationCode;
+}
+
+bool sessionSession_IsHoldingUserUUID()
+{
+	if(holdAuthenticationCode[0] != '\0')
+		return true;
+	else
+		return false;
+}
+
+void chargeSession_ClearHeldUserUUID()
+{
+	strcpy(holdAuthenticationCode, "");
+}
+
 /*
  * This function returns the format required for CompletedSession
  */
-void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
+/*void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 {
 	time_t now = 0;
 	struct tm timeinfo = { 0 };
@@ -110,13 +139,39 @@ void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 	strcpy(timeString, strftime_buf);
 	*epochSec = now;
 	*epochUsec = (uint32_t)t_now.tv_usec;
-}
+}*/
 
 
 static void ChargeSession_Set_StartTime()
 {
-	GetUTCTimeString(chargeSession.StartDateTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
+	//bool useHoldTimeStamp = cloud_observation_UseAndClearHoldRequestTimestamp();
 
+	struct HoldSessionStartTime *timeStruct = cloud_observation_GetTimeStruct();
+
+	///If request has been sent with a timestamp, use this timestamp for session start
+	if(timeStruct->usedInRequest == true)
+	{
+		///Use the exact time info that was used for first REQUEST to cloud as CompletedSession StartDateTime
+
+		strcpy(chargeSession.StartDateTime, timeStruct->timeString);
+		chargeSession.EpochStartTimeSec = timeStruct->holdEpochSec;
+		chargeSession.EpochStartTimeUsec = timeStruct->holdEpochUsec;
+		timeStruct->usedInSession = true;
+
+		ESP_LOGW(TAG, "Using startTime from REQUESTING in SESSION: %s", chargeSession.StartDateTime);
+	}
+	else
+	{
+		/// No request timestamp to available, make new timestamp(offline or standalone)
+
+		GetUTCTimeString(chargeSession.StartDateTime, &chargeSession.EpochStartTimeSec, &chargeSession.EpochStartTimeUsec);
+
+		/// Set the startTime to be used by first requesting message in order for Cloud to be happy.
+		cloud_observation_SetTimeStruct(chargeSession.StartDateTime, chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec, true);
+
+		ESP_LOGW(TAG, "Made startTime in SESSION for use in REQUESTING: %s", chargeSession.StartDateTime);
+
+	}
 	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
 }
 
@@ -147,7 +202,7 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 
 	if(strlen(chargeSession.SessionId) > 0)
 	{
-		ESP_LOGE(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
+		ESP_LOGW(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
 	}
 
 	strcpy(chargeSession.SessionId, sessionIdFromCloud);
@@ -171,10 +226,27 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 
 void chargeSession_CheckIfLastSessionIncomplete()
 {
-	if((strlen(chargeSession.SessionId) == 0))
+	/// Check if sessionId is not set
+	if((chargeSession.SessionId[0] == '\0'))
+	{
 		offlineSession_CheckIfLastLessionIncomplete(&chargeSession);
+
+		///...Check if read from file
+		if(chargeSession.SessionId[0] != '\0')
+		{
+			///If contains startDateTime
+			if(chargeSession.StartDateTime[0] != '\0')
+			{
+				/// Set the startTime to be used by first requesting message in order for Cloud to be happy.
+				cloud_observation_SetTimeStruct(chargeSession.StartDateTime, chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec, true);
+
+				ESP_LOGW(TAG, "Read startTime from SESSION-FILE for use in REQUESTING: %s", chargeSession.StartDateTime);
+			}
+		}
+	}
 }
 
+static double startAcc = 0.0;
 void chargeSession_Start()
 {
 	/// First check for resetSession on Flash
@@ -190,6 +262,8 @@ void chargeSession_Start()
 		memset(&chargeSession, 0, sizeof(chargeSession));
 
 	}*/
+
+	ESP_LOGI(TAG, "* STARTING SESSION *");
 
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{
@@ -218,13 +292,32 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
+		/// If the session is reset from Cloud, reuse the previous authentication, send to MCU?
+		/*if(holdAuthenticationCode[0] != '\0')
+		{
+			ESP_LOGE(TAG,"Reusing userUUID from mem");
+			strcpy(chargeSession.AuthenticationCode, holdAuthenticationCode);
+			/// Clear the holding Id
+			strcpy(holdAuthenticationCode, "");
+
+			MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU Granted command OK");
+			}
+			else
+			{
+				ESP_LOGI(TAG, "MCU Granted command FAILED");
+			}
+		}*/
+
 		chargeSession.SignedSession = basicOCMF;
 		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
 		//OCMF_NewOfflineSessionEntry();
 
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
-		ESP_LOGE(TAG, "sessionDataLen: %d", strlen(sessionData));
+		//ESP_LOGE(TAG, "sessionDataLen: %d", strlen(sessionData));
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
 		free(sessionData);
 
@@ -243,6 +336,8 @@ void chargeSession_Start()
 
 	///chargeSession.SignedSession = basicOCMF;
 	///OCMF_CreateNewOCMFLog();
+	startAcc = storage_update_accumulated_energy(0.0);
+
 }
 
 
@@ -255,7 +350,7 @@ void chargeSession_UpdateEnergy()
 
 		if(energy > 0.001)
 		{
-			energy = roundf(energy * 1000) / 1000.0; /// round to 3rd decimal to remove unnecessary desimals
+			energy = roundf(energy * 10000) / 10000.0; /// round to 3rd decimal to remove unnecessary desimals
 
 			//Only allow significant, positive, increasing energy
 			if(energy > chargeSession.Energy)
@@ -284,12 +379,24 @@ void chargeSession_Finalize()
 
 	/// After the 'E' entry is set no more 'T' entries can be added through hourly interrupt
 
+
+	double endAcc = storage_update_accumulated_energy(0.0);
+	double accDiff = endAcc - startAcc;
+	if(fabs(accDiff - chargeSession.Energy) < 0.001)
+		ESP_LOGW(TAG, "**** ACC-DIFF: %f - %f = %f vs %f **** OK", endAcc, startAcc, accDiff, chargeSession.Energy);
+	else
+		ESP_LOGE(TAG, "#### ACC-DIFF: %f - %f = %f vs %f #### FAIL", endAcc, startAcc, accDiff, chargeSession.Energy);
+
 	/// Finalize offlineSession flash structure
 	char * sessionData = calloc(1000,1);
 	chargeSession_GetSessionAsString(sessionData);
 	offlineSession_UpdateSessionOnFile(sessionData, false);
+
+
 	offlineSession_SetSessionFileInactive();
 	free(sessionData);
+
+	cloud_observation_ClearTimeStruct();
 }
 
 
@@ -309,14 +416,28 @@ void chargeSession_Clear()
 	strcpy(sidOrigin, "     ");
 	hasNewSessionIdFromCloud = false;
 	hasReceivedStartChargingCommand = false;
+
+	ESP_LOGI(TAG, "* FINALIZED AND CLEARED SESSION *");
 }
 
+//Query if the SessionId source is local
+bool chargeSession_IsLocalSession()
+{
+	if(sidOrigin[0] == 'l')
+		return true;
+	else
+		return false;
+}
 
 void chargeSession_SetAuthenticationCode(char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
 }
 
+char* chargeSession_GetAuthenticationCode()
+{
+	return chargeSession.AuthenticationCode;
+}
 
 void chargeSession_ClearAuthenticationCode()
 {
@@ -356,7 +477,7 @@ int chargeSession_GetSessionAsString(char * message)
 
 	cJSON_AddStringToObject(CompletedSessionObject, "SessionId", chargeSession.SessionId);
 
-	double energyAsDouble  = round(chargeSession.Energy * 1000) / 1000.0;
+	double energyAsDouble  = round(chargeSession.Energy * 10000) / 10000.0;
 
 	//cJSON_AddNumberToObject(CompletedSessionObject, "Energy", chargeSession.Energy);
 	cJSON_AddNumberToObject(CompletedSessionObject, "Energy", energyAsDouble);
@@ -436,3 +557,13 @@ void chargeSession_SetReceivedStartChargingCommand()
 {
 	hasReceivedStartChargingCommand = true;
 }
+
+bool chargeSession_HasSessionId()
+{
+	if(chargeSession.SessionId[0] != '\0')
+		return true;
+	else
+		return false;
+}
+
+

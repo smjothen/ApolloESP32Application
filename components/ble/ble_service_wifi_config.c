@@ -960,11 +960,11 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
     case CHARGER_WIFI_MAC_UUID:
  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
- 		volatile uint8_t wifiMAC[18] = {0};
+ 		uint8_t wifiMAC[18] = {0};
  		esp_read_mac(wifiMAC, 0); //0=Wifi station
- 		sprintf(wifiMAC, "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
+ 		sprintf((char*)wifiMAC, "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
 
- 		ESP_LOGI(TAG, "Read Wifi MAC: %s, len %d", (char*)wifiMAC, strlen((char*)wifiMAC));
+ 		ESP_LOGW(TAG, "Read Wifi MAC: %s, len %d", (char*)wifiMAC, strlen((char*)wifiMAC));
 
  		memcpy(rsp->attr_value.value, wifiMAC, 17);
  		rsp->attr_value.len = 17;

@@ -125,7 +125,7 @@ int authentication_ParseOfflineList(char * message, int message_len)
 		//ESP_LOGI(TAG, "resolutions2->type=%s", JSON_Types(tokens->type));
 		int token_array_size = cJSON_GetArraySize(tokens);
 
-		volatile struct RFIDTokens rfidTokens[token_array_size];
+		struct RFIDTokens rfidTokens[token_array_size];
 		memset(rfidTokens,0,sizeof(rfidTokens));
 
 		ESP_LOGI(TAG, "token_array_size=%d", token_array_size);

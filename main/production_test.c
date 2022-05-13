@@ -986,7 +986,7 @@ int charge_cycle_test(){
 		return -1;
 	}
 
-	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+	if(MCU_GetChargeMode()!=eCAR_DISCONNECTED){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected to early");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 		return -1;
@@ -998,7 +998,7 @@ int charge_cycle_test(){
 		return -1;
 	}
 	vTaskDelay(pdMS_TO_TICKS(10000));
-	if(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+	if(MCU_GetChargeMode()!=eCAR_DISCONNECTED){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected while calibrating servo");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 		return -1;
@@ -1037,7 +1037,7 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
-	while(MCU_GetchargeMode()!=eCAR_CHARGING){
+	while(MCU_GetChargeMode()!=eCAR_CHARGING){
 		ESP_LOGI(TAG, "waiting for charging start");
 
 		vTaskDelay(pdMS_TO_TICKS(1500));
@@ -1078,7 +1078,7 @@ int charge_cycle_test(){
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "sampling charge cycle data" );
 	
 	for(int i = 0; i<10; i++){
-		if(MCU_GetchargeMode()!=eCAR_CHARGING){
+		if(MCU_GetChargeMode()!=eCAR_CHARGING){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "stop in charge cycle");
 			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 			return -1;
@@ -1109,7 +1109,7 @@ int charge_cycle_test(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");
 
-	while(MCU_GetchargeMode()!=eCAR_DISCONNECTED){	
+	while(MCU_GetChargeMode()!=eCAR_DISCONNECTED){
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 

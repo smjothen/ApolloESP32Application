@@ -24,6 +24,14 @@ struct ChargeSession
 	char * SignedSession;
 };
 
+struct HoldSessionStartTime {
+	char timeString[32];
+	time_t holdEpochSec;
+	uint32_t holdEpochUsec;
+	bool usedInSession;
+	bool usedInRequest;
+};
+
 void chargeSession_PrintSession(bool online, bool pingReplyActive);
 char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
@@ -33,12 +41,18 @@ void chargeSession_Start();
 void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();
 void chargeSession_Clear();
+bool chargeSession_IsLocalSession();
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
+char* chargeSession_GetAuthenticationCode();
 void chargeSession_ClearAuthenticationCode();
 //void chargeSession_SetEnergy(float energy);
 void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
 void chargeSession_SetOCMF(char * OCMDString);
+void chargeSession_HoldUserUUID();
+char * sessionSession_GetHeldUserUUID();
+bool sessionSession_IsHoldingUserUUID();
+void chargeSession_ClearHeldUserUUID();
 
 struct ChargeSession chargeSession_Get();
 int chargeSession_GetSessionAsString(char * message);
@@ -47,6 +61,8 @@ esp_err_t chargeSession_SaveUpdatedSession();
 //esp_err_t chargeSession_ReadSessionResetInfo();
 
 bool chargeSession_IsAuthenticated();
+bool chargeSession_HasSessionId();
+
 void SetCarConnectedState(bool connectedState);
 bool chargeSession_IsCarConnected();
 void chargeSession_SetReceivedStartChargingCommand();

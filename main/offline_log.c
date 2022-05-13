@@ -1,6 +1,6 @@
 #include "offline_log.h"
 
-#define TAG "OFFLINE_LOG"
+#define TAG "OFFLINE_LOG    "
 
 #include "esp_log.h"
 #include "errno.h"

@@ -46,8 +46,10 @@ float MCU_GetEnergy();
 float MCU_GetMaximumEnergy();
 void MCU_ClearMaximumEnergy();
 
-int8_t MCU_GetchargeMode();
+int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
+void SetTransitionOperatingModeState(bool newTransitionState);
+bool GetTransitionOperatingModeState();
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();

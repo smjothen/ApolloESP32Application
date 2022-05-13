@@ -39,6 +39,15 @@ enum ChargerOperatingMode
 };
 
 
+enum SessionResetMode
+{
+	eSESSION_RESET_NONE = 0,
+	eSESSION_RESET_INITIATED = 1,
+	eSESSION_RESET_STOP_SENT = 2,
+	eSESSION_RESET_FINALIZE  = 3,
+	eSESSION_RESET_DO_RESET	 = 4
+};
+
 void sessionHandler_init();
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode();
 //void SetDataInterval(int newDataInterval);
@@ -58,6 +67,8 @@ void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);
 void SetAuthorized(bool authFromCloud);
 void sessionHandler_Pulse();
+void sessionHandler_InitiateResetChargeSession();
+void sessionHandler_StopAndResetChargeSession();
 
 #ifdef __cplusplus
 }

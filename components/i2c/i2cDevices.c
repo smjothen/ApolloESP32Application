@@ -343,7 +343,7 @@ static void i2cDevice_task(void *pvParameters)
 			{
 				prodtest_on_nfc_read();
 			}
-			else if((nfcCardDetected > 0) && (MCU_GetchargeMode() == 12) && (isNfcTagPairing == false))
+			else if((nfcCardDetected > 0) && (MCU_GetChargeMode() == 12) && (isNfcTagPairing == false))
 			{
 				audio_play_single_biip();
 				ESP_LOGW(TAG, "Card working, clearing...");
@@ -373,6 +373,34 @@ static void i2cDevice_task(void *pvParameters)
 							{
 								audio_play_nfc_card_accepted();
 								ESP_LOGW(TAG, "Online: Authenticate by Cloud");
+							}
+
+							/// Authenticated session ongoing
+							else
+							{
+								/// See if we should stop due to correct RFID tag
+
+								ESP_LOGW(TAG, "StopTag: %s", NFCGetTagInfo().idAsString);
+								ESP_LOGW(TAG, "SessTag: %s", chargeSession_GetAuthenticationCode());
+
+								if(strcmp(NFCGetTagInfo().idAsString, chargeSession_GetAuthenticationCode()) == 0)
+								{
+									audio_play_nfc_card_accepted();
+									chargeSession_SetStoppedByRFID(true);
+									sessionHandler_InitiateResetChargeSession();
+									/*MessageType ret = MCU_SendCommandId(CommandResetSession);
+									if(ret == MsgCommandAck)
+									{
+										SetTransitionOperatingModeState(true);
+										ESP_LOGI(TAG, "MCU ResetSession command OK");
+									}
+									else
+									{
+										ESP_LOGE(TAG, "MCU ResetSession command FAILED");
+									}*/
+									isAuthenticated = false;
+								}
+
 							}
 						}
 						//Charger offline authentication
@@ -433,7 +461,6 @@ static void i2cDevice_task(void *pvParameters)
 							}
 						}
 					}
-
 				}
 
 			}

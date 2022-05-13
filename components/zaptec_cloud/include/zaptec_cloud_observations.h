@@ -24,6 +24,13 @@ int publish_debug_telemetry_observation(
     double temperature_5, double temperature_emeter, double rssi
 );
 
+void InitiateHoldRequestTimeStamp();
+bool cloud_observation_UseAndClearHoldRequestTimestamp();
+void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec);
+struct HoldSessionStartTime *cloud_observation_GetTimeStruct();
+void cloud_observation_SetTimeStruct(char * _timeString, time_t _holdEpochSec, uint32_t _holdEpochUsec, bool _usedInRequest);
+void cloud_observation_ClearTimeStruct();
+
 int publish_debug_telemetry_observation_power();
 
 int publish_debug_telemetry_observation_cloud_settings();

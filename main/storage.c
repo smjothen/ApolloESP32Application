@@ -1206,7 +1206,7 @@ double storage_update_accumulated_energy(float session_energy){
 		goto err;
 	}
 
-	ESP_LOGI(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
+	ESP_LOGW(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
 		session_energy, previous_session_energy, previous_accumulated_energy
 	);
 
@@ -1234,14 +1234,14 @@ double storage_update_accumulated_energy(float session_energy){
 		}else{
 			ESP_LOGW(TAG, "no change in energy");
 			result = previous_accumulated_energy;
-			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
+			ESP_LOGW(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
 				previous_accumulated_energy, result, previous_session_energy, session_energy
 			);
 			goto err;
 		}
 	}
 
-	ESP_LOGI(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
+	ESP_LOGW(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
 		previous_accumulated_energy, result, previous_session_energy, session_energy
 	);
 
