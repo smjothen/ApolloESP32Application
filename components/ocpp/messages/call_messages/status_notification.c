@@ -84,7 +84,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
 	if(timestamp != 0){
 		char timestamp_buffer[30];
 		size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
-		if(written_length != 0)
+		if(written_length == 0)
 			goto error;
 
 		cJSON * timestamp_json = cJSON_CreateString(timestamp_buffer);

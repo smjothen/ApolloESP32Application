@@ -55,7 +55,8 @@ static int ocpp_parse_message(cJSON * ocpp_call, int * message_type_id_out, char
 			*error_details = cJSON_GetArrayItem(ocpp_call, 4);
 			break;
 		default:
-			ESP_LOGE(TAG, "Message is invalid");
+			ESP_LOGE(TAG, "MessageTypeId is invalid");
+			return -1;
 		}
 	}else{
 		ESP_LOGE(TAG, "Unexpected call structure");
@@ -187,17 +188,21 @@ void text_frame_handler(esp_websocket_client_handle_t client, esp_websocket_even
 
 	switch(message_type_id){
 	case eOCPPJ_MESSAGE_ID_CALL:
-		ESP_LOGI(TAG, "Recieved ocpp call message");
+		ESP_LOGD(TAG, "Recieved ocpp call message");
 		call_handler(client, unique_id, action, payload);
 		break;
 	case eOCPPJ_MESSAGE_ID_RESULT:
-		ESP_LOGI(TAG, "Recieved ocpp result message: %s", get_active_call_id());
+		ESP_LOGD(TAG, "Recieved ocpp result message: %s", get_active_call_id());
 		if(strcmp(get_active_call_id(), unique_id) == 0){
 			struct ocpp_call_with_cb * call = get_active_call();
 			if(call == NULL){
 				ESP_LOGE(TAG, "Active call id matched response, but original call was NULL");
 			}
-			call->result_cb(unique_id, payload, call->cb_data);
+			if(call->result_cb != NULL){
+				call->result_cb(unique_id, payload, call->cb_data);
+			}else{
+				ESP_LOGD(TAG, "Finished call %s", unique_id);
+			}
 			clear_active_call();
 		}else{
 			ESP_LOGE(TAG, "Got result to unexpected message id, ignoring");
@@ -211,7 +216,11 @@ void text_frame_handler(esp_websocket_client_handle_t client, esp_websocket_even
 			if(call == NULL){
 				ESP_LOGE(TAG, "Active call id matched error, but original call was NULL");
 			}
-			call->error_cb(unique_id, error_code, error_description, error_details, call->cb_data);
+			if(call->error_cb != NULL){
+				call->error_cb(unique_id, error_code, error_description, error_details, call->cb_data);
+			}else{
+				ESP_LOGW(TAG, "No error callback for ocpp call %s", unique_id);
+			}
 			clear_active_call();
 		}else{
 			ESP_LOGE(TAG, "Got error to unexpected message id, ignoring");
@@ -235,19 +244,18 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTED, eSetValueWithOverwrite);
 		break;
 	case WEBSOCKET_EVENT_DISCONNECTED:
-		ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+		ESP_LOGW(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
 		set_connected(false);
 		if(task_to_notify != NULL)
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_DISCONNECT, eSetValueWithOverwrite);
 		break;
 	case WEBSOCKET_EVENT_DATA:
-		ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
 		switch(data->op_code){
 		case 0:
 			ESP_LOGE(TAG, "Got unexpected continuation frame");
 			break;
 		case 1:
-			ESP_LOGI(TAG, "Handle text frame");
+			ESP_LOGD(TAG, "Handle text frame");
 			text_frame_handler(client, data);
 			break;
 		case 2:
@@ -276,7 +284,7 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 
 		break;
 	case WEBSOCKET_EVENT_ERROR:
-		ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+		ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
 		if(task_to_notify != NULL)
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_FAILURE, eSetValueWithOverwrite);
 		break;

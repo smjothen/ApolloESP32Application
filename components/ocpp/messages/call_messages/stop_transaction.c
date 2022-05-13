@@ -50,7 +50,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 
 	char timestamp_buffer[30];
 	size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
-	if(written_length != 0)
+	if(written_length == 0)
 		goto error;
 
 	cJSON * timestamp_json = cJSON_CreateString(timestamp_buffer);
@@ -75,21 +75,21 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 		cJSON_AddItemToObject(payload, "reason", reason_json);
 	}
 
-	cJSON * meter_values_json = cJSON_CreateArray();
-	if(meter_values_json == NULL)
+	cJSON * transaction_data_json = cJSON_CreateArray();
+	if(transaction_data_json == NULL)
 		goto error;
 
 	for(size_t i = 0; i < meter_values_count; i++){
-		cJSON * value_json = create_meter_value_json(transaction_data[i]);
-		if(value_json == NULL){
-			cJSON_Delete(meter_values_json);
+		cJSON * meter_value_json = create_meter_value_json(transaction_data[i]);
+		if(meter_value_json == NULL){
+			cJSON_Delete(transaction_data_json);
 			goto error;
 		}
 		else{
-			cJSON_AddItemToArray(meter_values_json, value_json);
+			cJSON_AddItemToArray(transaction_data_json, meter_value_json);
 		}
 	}
-	cJSON_AddItemToObject(payload, "meterValue", meter_values_json);
+	cJSON_AddItemToObject(payload, "transactionData", transaction_data_json);
 
 	cJSON * result =  ocpp_create_call(OCPPJ_ACTION_STOP_TRANSACTION, payload);
 	if(result == NULL)

@@ -482,7 +482,7 @@ int start_ocpp(const char * charger_id){
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp2.0",
-		.task_stack = 2800,
+		.task_stack = 3000,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 	};
 

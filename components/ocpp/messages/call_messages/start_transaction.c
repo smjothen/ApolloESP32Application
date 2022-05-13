@@ -1,6 +1,7 @@
 #include "messages/call_messages/ocpp_call_request.h"
 #include "types/ocpp_ci_string_type.h"
 
+
 cJSON * ocpp_create_start_transaction_request(unsigned int connector_id, const char * id_tag, int meter_start, int reservation_id, time_t timestamp){
 	if(connector_id < 1)
 		return NULL;
@@ -40,7 +41,7 @@ cJSON * ocpp_create_start_transaction_request(unsigned int connector_id, const c
 
 	char timestamp_buffer[30];
 	size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
-	if(written_length != 0)
+	if(written_length == 0)
 		goto error;
 
 	cJSON * timestamp_json = cJSON_CreateString(timestamp_buffer);
