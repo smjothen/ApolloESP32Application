@@ -386,7 +386,6 @@ static void sessionHandler_task()
 
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
-    bool useTransitionState = false;
 
     authentication_Init();
     OCMF_Init();
