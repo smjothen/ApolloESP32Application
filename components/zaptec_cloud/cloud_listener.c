@@ -29,6 +29,7 @@
 #include "../authentication/rfidPairing.h"
 #include "../../main/offline_log.h"
 #include "../../main/offlineHandler.h"
+#include "../../main/offlineSession.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -1332,24 +1333,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				return 200;
 			}
 
-
-			/*char * ptr = strnstr(commandEvent->data, "null", commandEvent->data_len);
-			if((ptr != NULL) && (ptr != commandEvent->data) && (commandEvent->data_len < 37))
-			{
-				MessageType ret = MCU_SendCommandId(CommandResetSession);
-				if(ret == MsgCommandAck)
-				{
-					//chargeSession_ClearAuthenticationCode();
-					ESP_LOGI(TAG, "MCU ResetSession command OK");
-					return 200;
-				}
-				else
-				{
-					ESP_LOGE(TAG, "MCU ResetSession command FAILED");
-					return 400;
-				}
-			}*/
-
 			else if((commandEvent->data_len > 4) && (commandEvent->data_len < 37)) //Auth code length limit
 			{
 				if((chargeSession_Get().SessionId[0] != '\0') && (storage_Get_AuthenticationRequired() == 1))
@@ -2216,12 +2199,39 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					start_segmented_ota();
 					responseStatus = 200;
 				}
+
+				///OfflineSessions
+
 				else if(strstr(commandString,"GetOfflineSessions") != NULL)
 				{
 					sessionHandler_SetOfflineSessionFlag();
 					responseStatus = 200;
 				}
-
+				else if(strstr(commandString,"DeleteOfflineSessions") != NULL)
+				{
+					offlineSession_DeleteAllFiles();
+					responseStatus = 200;
+				}
+				//Test Offline Sessions
+				else if(strstr(commandString,"tos ") != NULL)
+				{
+					char *endptr;
+					uint32_t nrOfSessions = (uint32_t)strtol(commandString+6, &endptr, 10);
+					if(nrOfSessions <= 110)
+					{
+						char *sec = strchr(commandString, '|');
+						if(sec != NULL)
+						{
+							uint32_t nrOfSignedValues = (uint32_t)strtol(sec+1, &endptr, 10);
+							if(nrOfSignedValues <= 110)
+							{
+								ESP_LOGW(TAG, "NrSess: %i NrSV: %i", nrOfSessions, nrOfSignedValues);
+								sessionHandler_TestOfflineSessions(nrOfSessions, nrOfSignedValues);
+							}
+						}
+					}
+					responseStatus = 200;
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))

@@ -69,6 +69,7 @@ void SetAuthorized(bool authFromCloud);
 void sessionHandler_Pulse();
 void sessionHandler_InitiateResetChargeSession();
 void sessionHandler_StopAndResetChargeSession();
+void sessionHandler_TestOfflineSessions();
 
 #ifdef __cplusplus
 }

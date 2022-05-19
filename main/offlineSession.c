@@ -20,6 +20,7 @@ static const char *tmp_path = "/offs";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 static const int max_offline_session_files = 100;
+static const int max_offline_signed_values = 100;
 
 #define FILE_VERSION_ADDR_0  		0L
 #define FILE_SESSION_ADDR_2  		2L
@@ -51,6 +52,7 @@ static bool mounted = false;
 static int activeFileNumber = -1;
 static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
+static int maxOfflineSessionsCount = 0;
 
 void offlineSession_Init()
 {
@@ -231,9 +233,18 @@ int offlineSession_FindNrOfFiles()
 	}
 	ESP_LOGW(TAG, "Nr of OfflineSession files: %d", fileCount);
 
+	if(fileCount > maxOfflineSessionsCount)
+		maxOfflineSessionsCount = fileCount;
+
 	return fileCount;
 }
 
+int offlineSession_GetMaxSessionCount()
+{
+	int tmp = maxOfflineSessionsCount;
+	maxOfflineSessionsCount = 0;
+	return tmp;
+}
 
 int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incompleteSession)
 {
@@ -610,6 +621,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	if(crcRead != crcCalc)
 	{
+		fclose(sessionFile);
 		xSemaphoreGive(offs_lock);
 		return NULL;
 	}
@@ -684,8 +696,8 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
 	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
 
-	/// Build OCMF strings for each element
-	if(nrOfOCMFElements > 0)
+	/// Build OCMF strings for each element, Should never be more than maxElements
+	if((nrOfOCMFElements > 0) && (nrOfOCMFElements <= max_offline_signed_values))
 	{
 		int i;
 		for (i = 0; i < nrOfOCMFElements; i++)
@@ -844,6 +856,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			if(offlineSessionOpen == false)
 			{
 				ESP_LOGE(TAG, "Tried appending energy with unopened offlinesession: %c", label);
+				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
 			}
@@ -856,9 +869,29 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			/// Get nr of elements...
 			fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
 
-			if((nrOfOCMFElements == 0) || (nrOfOCMFElements >= 99))
+			/// Should at least be one element 'B'
+			if(nrOfOCMFElements == 0)
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d", activeFileNumber, nrOfOCMFElements);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				fclose(sessionFile);
+				xSemaphoreGive(offs_lock);
+				return;
+			}
+
+			///100 elements, leave room for last element with 'E'
+			if((label == 'T') && (nrOfOCMFElements >= (max_offline_signed_values-1)))
+			{
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				fclose(sessionFile);
+				xSemaphoreGive(offs_lock);
+				return;
+			}
+
+			///Max 100 elements check if room for 'e'
+			if((label == 'E') && (nrOfOCMFElements >= max_offline_signed_values))
+			{
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
 			}
@@ -988,6 +1021,16 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 //    return result;
 //}
 
+
+void offlineSession_DeleteAllFiles()
+{
+	ESP_LOGW(TAG, "Deleting all files");
+	int fileNo;
+	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
+	{
+		offlineSession_delete_session(fileNo);
+	}
+}
 
 int offlineSession_delete_session(int fileNo)
 {

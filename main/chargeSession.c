@@ -402,13 +402,13 @@ void chargeSession_Finalize()
 
 void chargeSession_Clear()
 {
-	ESP_LOGI(TAG, "Clearing csResetSession file");
+	/*ESP_LOGI(TAG, "Clearing csResetSession file");
 	esp_err_t clearErr = storage_clearSessionResetInfo();
 
 	if (clearErr != ESP_OK)
 	{
 		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
-	}
+	}*/
 
 	ESP_LOGI(TAG, "Clearing chargeSession");
 	memset(&chargeSession, 0, sizeof(chargeSession));
@@ -457,6 +457,10 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID)
 	chargeSession.Energy = energy;
 }*/
 
+void chargeSession_SetEnergyForTesting(float e)
+{
+	chargeSession.Energy = e;
+}
 
 void chargeSession_SetOCMF(char * OCMDString)
 {

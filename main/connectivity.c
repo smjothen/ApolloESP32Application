@@ -62,7 +62,7 @@ bool wifiInitialized = false;
 /// This timer-function is called every second to control pulses to Cloud
 static uint32_t mqttUnconnectedCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
-static const uint32_t restartTimeLimit = 3600*6;
+static const uint32_t restartTimeLimit = 3600*3;
 static void OneSecondTimer()
 {
 	//ESP_LOGW(TAG_MAIN,"OneSec?");
@@ -91,7 +91,7 @@ static void OneSecondTimer()
 
 			/// Ensure that the offline situation has been consistent for x seconds
 			/// and a car disconnected for x seconds before saving to log and restarting
-			if((mqttUnconnectedCounter >= restartTimeLimit) && (carDisconnectedCounter >= 600)) //TODO
+			if((mqttUnconnectedCounter >= restartTimeLimit) && (carDisconnectedCounter >= 600))
 			{
 				char buf[100]={0};
 				sprintf(buf, "#2 mqttUnconnectedCounter %d times.", mqttUnconnectedCounter);

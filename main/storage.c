@@ -634,6 +634,8 @@ void storage_PrintConfiguration()
 	//ESP_LOGW(TAG, "*********************************");
 }
 
+/* Obsoleted - Replaced with OfflineSessions
+
 esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
 {
 	volatile esp_err_t err;
@@ -703,7 +705,7 @@ esp_err_t storage_clearSessionResetInfo()
 	nvs_close(session_reset_handle);
 
 	return err;
-}
+}*/
 
 
 

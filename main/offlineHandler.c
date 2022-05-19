@@ -138,7 +138,7 @@ void offlineHandler_CheckForSimulateOffline()
 }
 
 
-static bool requestCurrentWhenOnline = false;
+static bool requestCurrentWhenOnline = false;//Debug change to true of online/offline testing
 
 bool offlineHandler_IsRequestingCurrentWhenOnline()
 {

@@ -31,9 +31,6 @@
 
 static const char *TAG = "OBSERV POSTER  ";
 
-//static bool startupMessage = true;
-
-
 struct MqttDataDiagnostics mqttDiagnostics = {0};
 
 
@@ -100,23 +97,12 @@ int publish_json_blocked(cJSON *payload, int timeout_ms){
 }
 
 
-/*static char hold_strftime_buf[32];
-static time_t holdEpochSec = 0;
-static uint32_t holdEpochUsec = 0;*/
-
 static bool initiateHoldRequestTimeStamp = false;
-//static bool useHoldRequestTimeStamp = false;
 void InitiateHoldRequestTimeStamp()
 {
 	initiateHoldRequestTimeStamp = true;
 }
 
-/*bool cloud_observation_UseAndClearHoldRequestTimestamp()
-{
-	bool tmp = useHoldRequestTimeStamp;
-	useHoldRequestTimeStamp = false;
-	return tmp;
-}*/
 
 /*
  * This function returns the format required for CompletedSession
@@ -148,12 +134,6 @@ void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 	*epochUsec = (uint32_t)t_now.tv_usec;
 }
 
-/*struct HoldSessionStartTime {
-	char timeString[32];
-	time_t holdEpochSec;
-	uint32_t holdEpochUsec;
-	bool usedInSession;
-};*/
 
 static struct HoldSessionStartTime timeStruct = {0};
 
@@ -183,23 +163,6 @@ cJSON *create_observation(int observation_id, char *value){
 
     char strftime_buf[32];
 
-    /*struct timeval tv_now;
-    gettimeofday(&tv_now, NULL);
-
-    time_t now = tv_now.tv_sec;
-    struct tm timeinfo = { 0 };
-    //char strftime_buf_head[64];
-    char strftime_buf[32];
-    time(&now);
-    setenv("TZ", "UTC-0", 1);
-    tzset();
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf_head, sizeof(strftime_buf_head), "%Y-%m-%dT%H:%M:%S.", &timeinfo);
-    snprintf(strftime_buf, sizeof(strftime_buf), "%s%03dZ", strftime_buf_head, (int)(tv_now.tv_usec/1000));
-    */
-    //if(observation_id == 710)
-    	//ESP_LOGW(TAG, "State: %s", value);
-
     /// When a new request command is sent the first time, hold the timestamp to use as StartDateTime in the CompletedSessionStructure.
     if((observation_id == 710) && (initiateHoldRequestTimeStamp == true) && (timeStruct.usedInSession == false) && (timeStruct.usedInRequest == false))
     {
@@ -210,8 +173,6 @@ cJSON *create_observation(int observation_id, char *value){
     	timeStruct.usedInRequest = true;
 
     	initiateHoldRequestTimeStamp = false;
-    	//strcpy(hold_strftime_buf, strftime_buf);
-    	//useHoldRequestTimeStamp = true;
 
     	cJSON_AddStringToObject(result, "ObservedAt", timeStruct.timeString);
 
@@ -456,7 +417,7 @@ int publish_debug_telemetry_observation_InstallationConfigOnFile()
     cJSON *observations = create_observation_collection();
 
     char buf[100];
-    sprintf(buf, "On file: MaxInstallationCurrentConfig: %f, StandaloneCurrent: %f, PhaseRotation %d", storage_Get_MaxInstallationCurrentConfig(), storage_Get_StandaloneCurrent(), storage_Get_PhaseRotation());
+    snprintf(buf, sizeof(buf), "On file: MaxInstallationCurrentConfig: %f, StandaloneCurrent: %f, PhaseRotation %d", storage_Get_MaxInstallationCurrentConfig(), storage_Get_StandaloneCurrent(), storage_Get_PhaseRotation());
 
     ESP_LOGI(TAG, "Sending InstallationConfigOnFile telemetry: %d/100", strlen(buf));
     add_observation_to_collection(observations, create_observation(808, buf));
@@ -494,7 +455,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     char buf[256];
     GetTimeOnString(buf);
-    sprintf(buf + strlen(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());
+    snprintf(buf + strlen(buf), sizeof(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());
 
     ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
     add_observation_to_collection(observations, create_observation(808, buf));
@@ -541,7 +502,7 @@ int publish_debug_telemetry_observation_WifiParameters()
 
     char wifiMAC[18] = {0};
     esp_read_mac((uint8_t*)wifiMAC, 0); //0=Wifi station
-    sprintf(wifiMAC, "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
+    snprintf(wifiMAC, sizeof(wifiMAC), "%02x:%02x:%02x:%02x:%02x:%02x", wifiMAC[0],wifiMAC[1],wifiMAC[2],wifiMAC[3],wifiMAC[4],wifiMAC[5]);
 
     add_observation_to_collection(observations, create_observation(MacWiFi, wifiMAC));
 
@@ -603,11 +564,11 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	sprintf(buf + strlen(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+	snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
-		sprintf(buf + strlen(buf), " NFC Pass: %d Fail: %d ", GetPassedDetectedCounter(), GetFailedDetectedCounter());
+		snprintf(buf + strlen(buf), sizeof(buf), " NFC Pass: %d Fail: %d ", GetPassedDetectedCounter(), GetFailedDetectedCounter());
 	}
 
 	ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
@@ -937,7 +898,7 @@ int publish_telemetry_observation_on_change(){
 	if((RTCIsRegisterChanged() || sendRTC) && (maxRTCSend < 10)) //If there is an I2C bus error, don't send unlimited nr of messages.
 	{
 		char buf[80];
-		sprintf(buf, " RTC: %i 0x%X->0x%X %i 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
+		snprintf(buf, sizeof(buf)," RTC: %i 0x%X->0x%X %i 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
 
 		ESP_LOGI(TAG, "Sending RTC telemetry: %d/80", strlen(buf));
 
@@ -1059,7 +1020,7 @@ int publish_telemetry_observation_on_change(){
 void SendStacks()
 {
 	char buf[150] = {0};
-	sprintf(buf, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+	snprintf(buf, sizeof(buf),"Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
 	publish_debug_telemetry_observation_Diagnostics(buf);
 }
 

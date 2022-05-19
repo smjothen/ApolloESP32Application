@@ -53,7 +53,7 @@ void on_send_signed_meter_value()
 	secSinceLastOCMFMessage = 0;
 
 	char OCMPMessage[220] = {0};
-	time_t time;
+	time_t timeSec;
 	double energy;
 
 	enum CarChargeMode chargeMode = MCU_GetChargeMode();
@@ -69,7 +69,7 @@ void on_send_signed_meter_value()
 
 	if(state_charging || hasRemainingEnergy){
 		// Sample energy now, dumping the log may be to slow to get the time aligned energy
-		OCMF_SignedMeterValue_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
+		OCMF_SignedMeterValue_CreateNewOCMFMessage(OCMPMessage, &timeSec, &energy);
 	}
 
 	if(hasRemainingEnergy)
@@ -90,12 +90,12 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
-			append_offline_energy(time, energy);
+			append_offline_energy(timeSec, energy);
 		}
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
-		append_offline_energy(time, energy);
+		append_offline_energy(timeSec, energy);
 	}
 
 
@@ -105,7 +105,7 @@ void on_send_signed_meter_value()
 
 		//If hasRemainingEnergy, but disconnected -> don't add.
 		if (chargeMode != eCAR_DISCONNECTED)
-			OCMF_CompletedSession_AddElementToOCMFLog('T', time, energy);
+			OCMF_CompletedSession_AddElementToOCMFLog('T', timeSec, energy);
 	}
 
 	//If this is the case, remaining energy has been sent -> clear the flag
@@ -313,6 +313,9 @@ void sessionHandler_CheckAndSendOfflineSessions()
 			ESP_LOGE(TAG,"Sending CompletedSession failed! Aborting.");
 			break;
 		}
+
+		/// Give other tasks time to run if there are many offline sessions to send
+		vTaskDelay(50 / portTICK_PERIOD_MS);
 	}
 }
 
@@ -467,6 +470,16 @@ static void sessionHandler_task()
 		{
 			sessionHandler_CheckAndSendOfflineSessions();
 			doCheckOfflineSessions = false;
+
+			/// Send diagnostics if there has been any offline sessions
+			char sessionString[32] = {0};
+			int maxCount = offlineSession_GetMaxSessionCount();
+			if(maxCount >= 0)
+			{
+				snprintf(sessionString, sizeof(sessionString),"MaxOfflineSessions: %i", maxCount);
+				ESP_LOGI(TAG, "%s", sessionString);
+				publish_debug_telemetry_observation_Diagnostics(sessionString);
+			}
 		}
 
 
@@ -553,10 +566,30 @@ static void sessionHandler_task()
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && offlineHandler_IsRequestingCurrentWhenOnline())
+		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
 		{
-			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
-			offlineHandler_SetRequestingCurrentWhenOnline(false);
+			if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED))
+			{
+				ESP_LOGW(TAG, "Got online - Send requesting");
+
+				MessageType ret = MCU_SendCommandId(CommandStopCharging);
+				if(ret == MsgCommandAck)
+				{
+
+					ESP_LOGI(TAG, "MCU Stop command OK");
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU Stop command FAILED");
+				}
+
+				publish_debug_telemetry_observation_RequestNewStartChargingCommand();
+				offlineHandler_SetRequestingCurrentWhenOnline(false);
+			}
+			else
+			{
+				ESP_LOGW(TAG, "Got online - Unexpected state requesting");
+			}
 		}
 
 		/// MQTT connected and pingReply not in offline state
@@ -1252,7 +1285,7 @@ static void sessionHandler_task()
 				uint16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
 				uint16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
 
-				sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
+				snprintf(payload, sizeof(payload), "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
 				ESP_LOGI(TAG, "ServoCheckParams: %s", payload);
 				publish_debug_telemetry_observation_Diagnostics(payload);
 
@@ -1293,7 +1326,7 @@ static void sessionHandler_task()
 					if((rxMsg.length == 2) && (rxMsg.identifier == ParamEmeterAlarm))
 					{
 						char buf[50] = {0};
-						sprintf(buf, "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
+						snprintf(buf, sizeof(buf), "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
 						publish_debug_message_event(buf, cloud_event_level_warning);
 					}
 				}
@@ -1311,7 +1344,7 @@ static void sessionHandler_task()
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
-				sprintf(buf, "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
+				snprintf(buf, sizeof(buf), "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
 				ESP_LOGI(TAG, "**** %s ****", buf);
 
 				if(onTime % 7200 == 0)
@@ -1571,7 +1604,30 @@ void sessionHandler_Pulse()
 }
 
 
+void sessionHandler_TestOfflineSessions(int nrOfSessions, int nrOfSignedValues)
+{
+	MqttSetSimulatedOffline(true);
 
+	int i, j;
+	for(i = 0; i < nrOfSessions; i++)
+	{
+		ESP_LOGI(TAG, "Generating OfflineSession nr: %i", i);
+		chargeSession_Start();
+
+		for(j = 0; j < nrOfSignedValues; j++)
+		{
+			OCMF_CompletedSession_AddElementToOCMFLog('T', i, j*1.0);
+		}
+
+		chargeSession_SetEnergyForTesting(j*1.0);
+
+		chargeSession_Finalize();
+
+		chargeSession_Clear();
+	}
+
+	MqttSetSimulatedOffline(false);
+}
 
 void sessionHandler_init(){
 
