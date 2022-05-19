@@ -25,6 +25,7 @@
 #include "offline_log.h"
 #include "offlineSession.h"
 #include "offlineHandler.h"
+#include "chargeController.h"
 
 static const char *TAG = "SESSION        ";
 
@@ -399,6 +400,8 @@ static void sessionHandler_task()
     /// For developement testing only
     //SessionHandler_SetOCMFHighInterval();
 
+    chargeController_Init();
+
     offlineSession_Init();
 
 	while (1)
@@ -433,7 +436,6 @@ static void sessionHandler_task()
 		}
 
 		onCounter++;
-
 
 		/// This function is used to test the offline mode as a debug function from Cloud
 		offlineHandler_CheckForSimulateOffline();

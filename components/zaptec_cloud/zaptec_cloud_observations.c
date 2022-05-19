@@ -769,7 +769,7 @@ int publish_telemetry_observation_on_change(){
 		else
 		{
 			valueToSend = maxInstallationCurrentConfig;
-			ESP_LOGW(TAG, "Sending MCU value: %f", maxInstallationCurrentConfig);
+			ESP_LOGW(TAG, "Sending MCUs MaxInstCurrent: %f", maxInstallationCurrentConfig);
 		}
 
 		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, valueToSend));

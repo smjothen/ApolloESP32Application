@@ -30,6 +30,7 @@
 #include "../../main/offline_log.h"
 #include "../../main/offlineHandler.h"
 #include "../../main/offlineSession.h"
+#include "../../main/chargeController.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -1197,22 +1198,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				responseStatus = 200;
 				ESP_LOGW(TAG, "Charge Start from Cloud: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
+
+				bool isSent = chargeController_SetStartCharging(eCHARGE_SOURCE_CLOUD);
+				//MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(isSent)
 				{
-					responseStatus = 200;
-					ESP_LOGI(TAG, "MCU Start command OK");
+					//ESP_LOGI(TAG, "MCU Start command OK");
 
 					HOLD_SetPhases(phaseFromCloud);
 					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
 
 					//This must be set to stop replying the same SessionIds to cloud
 					chargeSession_SetReceivedStartChargingCommand();
+
+					responseStatus = 200;
 				}
 				else
 				{
 					responseStatus = 400;
-					ESP_LOGI(TAG, "MCU Start command FAILED");
+					//ESP_LOGI(TAG, "MCU Start command FAILED");
 				}
 			}
 			else
@@ -2232,6 +2236,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 					responseStatus = 200;
 				}
+
+				else if(strstr(commandString,"StartTimer") != NULL)
+				{
+					//chargeController_SetStartTimer();
+					chargeController_SetStartCharging(eCHARGE_SOURCE_RAND_DELAY);
+					responseStatus = 200;
+				}
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
