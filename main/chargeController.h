@@ -19,6 +19,7 @@ static void RunStartChargeTimer();
 static bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
+void chargeController_CancelDelay();
 bool chargeController_SetStartCharging(enum ChargeSource source);
 void chargeController_SetStartTimer();
 

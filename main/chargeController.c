@@ -9,12 +9,12 @@
 static const char *TAG = "CHARGECONTROL  ";
 
 
-const uint32_t maxStartDelay = 900;
+const uint32_t maxStartDelay = 600;
 
 static uint32_t startDelayCounter = 0;
 static uint32_t randomStartDelay = 0;
 static bool runStartimer = false;
-
+static bool overrideTimer = false;
 
 void chargeController_Init()
 {
@@ -24,18 +24,29 @@ void chargeController_Init()
 	xTimerReset( startTimerHandle, portMAX_DELAY);
 }
 
+void chargeController_CancelDelay()
+{
+	if(runStartimer == true)
+	{
+		overrideTimer = true;
+	}
+}
+
 static void RunStartChargeTimer()
 {
 	if((startDelayCounter > 0) && (runStartimer == true))
 	{
 		startDelayCounter--;
 
-		ESP_LOGW(TAG, "startDelayCounter %i/%i", startDelayCounter/randomStartDelay);
+		ESP_LOGW(TAG, "startDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
 
-		if(startDelayCounter == 0)
+		if((startDelayCounter == 0) || (overrideTimer == true))
 		{
 			chargeController_SendStartCommandToMCU();
+
 			runStartimer = false;
+			overrideTimer = false;
+			startDelayCounter = 0;
 		}
 	}
 }
