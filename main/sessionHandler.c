@@ -363,16 +363,12 @@ static void sessionHandler_task()
     uint32_t signalCounter = 0;
 
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
-    //enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
-
     enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
-
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
-    bool sessionIDClearedByCloud = false;
 
     // Offline parameters
     uint32_t offlineTime = 0;
@@ -474,7 +470,7 @@ static void sessionHandler_task()
 			/// Send diagnostics if there has been any offline sessions
 			char sessionString[32] = {0};
 			int maxCount = offlineSession_GetMaxSessionCount();
-			if(maxCount >= 0)
+			if(maxCount > 0)
 			{
 				snprintf(sessionString, sizeof(sessionString),"MaxOfflineSessions: %i", maxCount);
 				ESP_LOGI(TAG, "%s", sessionString);
@@ -681,35 +677,11 @@ static void sessionHandler_task()
 		}
 
 
-		/*if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
-		{
-			if(storage_CheckSessionResetFile() > 0)
-			{
-				esp_err_t clearErr = storage_clearSessionResetInfo();
-				ESP_LOGI(TAG, "Clearing csResetSession file due to eCAR_DISCONNECTED at start: %d", clearErr);
-			}
-			else
-			{
-				ESP_LOGI(TAG, "No session in csResetSession file");
-			}
-		}*/
-
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			chargeSession_Start();
 		}
-		else if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionIDClearedByCloud == true))
-		{
-			sessionIDClearedByCloud = false;
-			chargeSession_Start();
-		}
-		/*else if((currentCarChargeMode == eCAR_CONNECTED) && (authorizationRequired == true) && (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().SessionId[0] == '\0'))
-		{
-			ESP_LOGW(TAG, "New session due to tag");
-			chargeSession_Start();
-			//NFCTagInfoClearValid();
-		}*/
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
@@ -831,7 +803,6 @@ static void sessionHandler_task()
 			chargeSession_UpdateEnergy();
 
 		// Check if car connecting -> start a new session
-		//if(((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			//Do not send a CompletedSession with no SessionId.
@@ -858,16 +829,6 @@ static void sessionHandler_task()
 				}
 			}
 
-			//Reset if set
-			/*if(stoppedByCloud == true)
-			{
-				stoppedByCloud = false;
-				sessionIDClearedByCloud = true;
-				ESP_LOGE(TAG," Session ended by Cloud");
-
-				//char empty[] = "\0";
-				publish_string_observation(SessionIdentifier, NULL);
-			}*/
 			chargeSession_Clear();
 
 			NFCClearTag();
@@ -883,13 +844,6 @@ static void sessionHandler_task()
 			SetFinalStopActiveStatus(0);
 		}
 
-		//If session is cleared while car is disconnecting, ensure a new session is not generated incorrectly
-		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
-		{
-			sessionIDClearedByCloud = false;
-		}
-
-
 		//Set flag for the periodic OCMF message to show that charging has occured within an
 		// interval so that energy message must be sent
 		if((chargeOperatingMode != CHARGE_OPERATION_STATE_CHARGING) && (previousChargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING))
@@ -899,7 +853,6 @@ static void sessionHandler_task()
 		}
 
 
-		//previousCarChargeMode = currentCarChargeMode;
 		previousChargeOperatingMode = chargeOperatingMode;
 
 		onTime++;

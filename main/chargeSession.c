@@ -3,7 +3,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "chargeSession.h"
-//#include <time.h>
 #include <sys/time.h>
 #include "sntp.h"
 #include <string.h>
@@ -249,20 +248,6 @@ void chargeSession_CheckIfLastSessionIncomplete()
 static double startAcc = 0.0;
 void chargeSession_Start()
 {
-	/// First check for resetSession on Flash
-	/*esp_err_t readErr = chargeSession_ReadSessionResetInfo();
-
-	if (readErr != ESP_OK)
-	{
-		if(readErr == 4354)
-			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo(): No file found: %d. Cleaning session and returning", readErr);
-		else
-			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo() failed: %d. Cleaning session and returning", readErr);
-
-		memset(&chargeSession, 0, sizeof(chargeSession));
-
-	}*/
-
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
@@ -292,32 +277,12 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
-		/// If the session is reset from Cloud, reuse the previous authentication, send to MCU?
-		/*if(holdAuthenticationCode[0] != '\0')
-		{
-			ESP_LOGE(TAG,"Reusing userUUID from mem");
-			strcpy(chargeSession.AuthenticationCode, holdAuthenticationCode);
-			/// Clear the holding Id
-			strcpy(holdAuthenticationCode, "");
-
-			MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU Granted command OK");
-			}
-			else
-			{
-				ESP_LOGI(TAG, "MCU Granted command FAILED");
-			}
-		}*/
 
 		chargeSession.SignedSession = basicOCMF;
-		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
-		//OCMF_NewOfflineSessionEntry();
 
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
-		//ESP_LOGE(TAG, "sessionDataLen: %d", strlen(sessionData));
+
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
 		free(sessionData);
 
@@ -330,14 +295,7 @@ void chargeSession_Start()
 
 	}
 
-	//Add for new and flash-read sessions
-	//strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
-	//chargeSession.SignedSession[7]='\0';
-
-	///chargeSession.SignedSession = basicOCMF;
-	///OCMF_CreateNewOCMFLog();
 	startAcc = storage_update_accumulated_energy(0.0);
-
 }
 
 
@@ -402,14 +360,6 @@ void chargeSession_Finalize()
 
 void chargeSession_Clear()
 {
-	/*ESP_LOGI(TAG, "Clearing csResetSession file");
-	esp_err_t clearErr = storage_clearSessionResetInfo();
-
-	if (clearErr != ESP_OK)
-	{
-		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
-	}*/
-
 	ESP_LOGI(TAG, "Clearing chargeSession");
 	memset(&chargeSession, 0, sizeof(chargeSession));
 
