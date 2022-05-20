@@ -12,7 +12,7 @@ cJSON * ocpp_create_clear_cache_confirmation(const char * unique_id, const char 
 //cJSON * ocpp_create_clear_charging_profile_conf(const char * unique_id, const char * status);
 cJSON * ocpp_create_data_transfer_confirmation(const char * unique_id, const char * status, const char * data);
 //cJSON * ocpp_create_get_composite_schedule_conf(const char * unique_id, const char * status, int connector_id, time_t schedule_start, char * charging_schedule);
-cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, const char ** unknown_key);
+cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, char ** unknown_key);
 //cJSON * ocpp_create_get_diagnostics_conf(const char * unique_id, const char * file_name);
 //cJSON * ocpp_create_get_local_list_version_conf(const char * unique_id, const char * list_version);
 cJSON * remote_start_transaction_confirmation(const char * unique_id, const char * status);

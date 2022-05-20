@@ -2,7 +2,7 @@
 #include "types/ocpp_key_value.h"
 #include "types/ocpp_ci_string_type.h"
 
-cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, const char ** unknown_key){
+cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, char ** unknown_key){
 
 
 	if(configuration_key_count > 0 && configuration_key == NULL)

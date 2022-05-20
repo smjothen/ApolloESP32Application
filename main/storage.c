@@ -75,6 +75,34 @@ void storage_Init_Configuration()
 	configurationStruct.transmitChangeLevel 		= 1.0;
 	configurationStruct.diagnosticsMode				= 0;
 
+	// ocpp core profile settings
+	configurationStruct.ocpp_authorize_remote_tx_requests = true;
+	configurationStruct.ocpp_clock_aligned_data_interval = 0;
+	configurationStruct.ocpp_connection_timeout = 0;
+	configurationStruct.ocpp_connector_phase_rotation_max_length = 1;
+	configurationStruct.ocpp_get_configuration_max_keys = 34;
+	configurationStruct.ocpp_heartbeat_interval = 86400;
+	configurationStruct.ocpp_local_authorize_offline = true;
+	configurationStruct.ocpp_local_pre_authorize = false;
+	strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
+	configurationStruct.ocpp_meter_values_aligned_data_max_length = DEFAULT_CSL_LENGTH;
+	strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
+	configurationStruct.ocpp_meter_values_sampled_data_max_length = DEFAULT_CSL_LENGTH;
+	configurationStruct.ocpp_meter_value_sample_interval = 0;
+	configurationStruct.ocpp_number_of_connectors = 1;
+	configurationStruct.ocpp_reset_retries = 0;
+	configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect = true;
+	configurationStruct.ocpp_stop_transaction_on_invalid_id = true;
+	strcpy(configurationStruct.ocpp_stop_txn_aligned_data, "");
+	configurationStruct.ocpp_stop_txn_aligned_data_max_length = DEFAULT_CSL_LENGTH;
+	strcpy(configurationStruct.ocpp_stop_txn_sampled_data, "");
+	configurationStruct.ocpp_stop_txn_sampled_data_max_length = DEFAULT_CSL_LENGTH;
+	strcpy(configurationStruct.ocpp_supported_feature_profiles, "Core");
+	configurationStruct.ocpp_supported_feature_profiles_max_length = 1;
+	configurationStruct.ocpp_transaction_message_attempts = 3;
+	configurationStruct.ocpp_transaction_message_retry_interval = 60;
+	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = false;
+
 	//Local settings
 
 	configurationStruct.communicationMode 			= eCONNECTION_LTE;
@@ -167,6 +195,92 @@ void storage_Set_TransmitChangeLevel(float newValue)
 	configurationStruct.transmitChangeLevel = newValue;
 }
 
+// Ocpp settings
+
+void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue)
+{
+	configurationStruct.ocpp_authorize_remote_tx_requests = newValue;
+}
+
+void storage_Set_ocpp_clock_aligned_data_interval(uint32_t newValue)
+{
+	configurationStruct.ocpp_clock_aligned_data_interval = newValue;
+}
+
+void storage_Set_ocpp_connection_timeout(uint32_t newValue)
+{
+	configurationStruct.ocpp_connection_timeout = newValue;
+}
+
+void storage_Set_ocpp_heartbeat_interval(uint32_t newValue)
+{
+	configurationStruct.ocpp_heartbeat_interval = newValue;
+}
+
+void storage_Set_ocpp_local_authorize_offline(bool newValue)
+{
+	configurationStruct.ocpp_local_authorize_offline = newValue;
+}
+
+void storage_Set_ocpp_local_pre_authorize(bool newValue)
+{
+	configurationStruct.ocpp_local_pre_authorize = newValue;
+}
+
+void storage_Set_ocpp_meter_values_aligned_data(const char * newValue)
+{
+	strcpy(configurationStruct.ocpp_meter_values_aligned_data, newValue);
+}
+
+void storage_Set_ocpp_meter_values_sampled_data(const char * newValue)
+{
+	strcpy(configurationStruct.ocpp_meter_values_sampled_data, newValue);
+}
+
+void storage_Set_ocpp_meter_value_sample_interval(uint32_t newValue)
+{
+	configurationStruct.ocpp_meter_value_sample_interval = newValue;
+}
+
+void storage_Set_ocpp_reset_retries(uint8_t newValue)
+{
+	configurationStruct.ocpp_reset_retries = newValue;
+}
+
+void storage_Set_ocpp_stop_transaction_on_ev_side_disconnect(bool newValue)
+{
+	configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect = newValue;
+}
+
+void storage_Set_ocpp_stop_transaction_on_invalid_id(bool newValue)
+{
+	configurationStruct.ocpp_stop_transaction_on_invalid_id = newValue;
+}
+
+void storage_Set_ocpp_stop_txn_aligned_data(const char * newValue)
+{
+	strcpy(configurationStruct.ocpp_stop_txn_aligned_data, newValue);
+}
+
+void storage_Set_ocpp_stop_txn_sampled_data(const char * newValue)
+{
+	strcpy(configurationStruct.ocpp_stop_txn_sampled_data, newValue);
+}
+
+void storage_Set_ocpp_transaction_message_attempts(uint8_t newValue)
+{
+	configurationStruct.ocpp_transaction_message_attempts = newValue;
+}
+
+void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue)
+{
+	configurationStruct.ocpp_transaction_message_retry_interval = newValue;
+}
+
+void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue)
+{
+	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = newValue;
+}
 
 //Local settings
 
@@ -315,6 +429,137 @@ float storage_Get_TransmitChangeLevel()
 	return configurationStruct.transmitChangeLevel;
 }
 
+//Ocpp settings
+
+bool storage_Get_ocpp_authorize_remote_tx_requests()
+{
+	return configurationStruct.ocpp_authorize_remote_tx_requests;
+}
+
+uint32_t storage_Get_ocpp_clock_aligned_data_interval()
+{
+	return configurationStruct.ocpp_clock_aligned_data_interval;
+}
+
+uint32_t storage_Get_ocpp_connection_timeout()
+{
+	return configurationStruct.ocpp_connection_timeout;
+}
+
+uint8_t storage_Get_ocpp_connector_phase_rotation_max_length()
+{
+	return configurationStruct.ocpp_connector_phase_rotation_max_length;
+}
+
+uint8_t storage_Get_ocpp_get_configuration_max_keys()
+{
+	return configurationStruct.ocpp_get_configuration_max_keys;
+}
+
+uint32_t storage_Get_ocpp_heartbeat_interval()
+{
+	return configurationStruct.ocpp_heartbeat_interval;
+}
+
+bool storage_Get_ocpp_local_authorize_offline()
+{
+	return configurationStruct.ocpp_local_authorize_offline;
+}
+
+bool storage_Get_ocpp_local_pre_authorize()
+{
+	return configurationStruct.ocpp_local_pre_authorize;
+}
+
+const char * storage_Get_ocpp_meter_values_aligned_data()
+{
+	return configurationStruct.ocpp_meter_values_aligned_data;
+}
+
+uint8_t storage_Get_ocpp_meter_values_aligned_data_max_length()
+{
+	return configurationStruct.ocpp_meter_values_aligned_data_max_length;
+}
+
+const char * storage_Get_ocpp_meter_values_sampled_data()
+{
+	return configurationStruct.ocpp_meter_values_sampled_data;
+}
+
+uint8_t storage_Get_ocpp_meter_values_sampled_data_max_length()
+{
+	return configurationStruct.ocpp_meter_values_sampled_data_max_length;
+}
+
+uint32_t storage_Get_ocpp_meter_value_sample_interval()
+{
+	return configurationStruct.ocpp_meter_value_sample_interval;
+}
+
+uint8_t storage_Get_ocpp_number_of_connectors()
+{
+	return configurationStruct.ocpp_number_of_connectors;
+}
+
+uint8_t storage_Get_ocpp_reset_retries()
+{
+	return configurationStruct.ocpp_reset_retries;
+}
+
+bool storage_Get_ocpp_stop_transaction_on_ev_side_disconnect()
+{
+	return configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect;
+}
+
+bool storage_Get_ocpp_stop_transaction_on_invalid_id()
+{
+	return configurationStruct.ocpp_stop_transaction_on_invalid_id;
+}
+
+const char * storage_Get_ocpp_stop_txn_aligned_data()
+{
+	return configurationStruct.ocpp_stop_txn_aligned_data;
+}
+
+uint8_t storage_Get_ocpp_stop_txn_aligned_data_max_length()
+{
+	return configurationStruct.ocpp_stop_txn_aligned_data_max_length;
+}
+
+const char * storage_Get_ocpp_stop_txn_sampled_data()
+{
+	return configurationStruct.ocpp_stop_txn_sampled_data;
+}
+
+uint8_t storage_Get_ocpp_stop_txn_sampled_data_max_length()
+{
+	return configurationStruct.ocpp_stop_txn_sampled_data_max_length;
+}
+
+const char * storage_Get_ocpp_supported_feature_profiles()
+{
+	return configurationStruct.ocpp_supported_feature_profiles;
+}
+
+uint8_t storage_Get_ocpp_supported_feature_profiles_max_length()
+{
+	return configurationStruct.ocpp_supported_feature_profiles_max_length;
+}
+
+uint8_t storage_Get_ocpp_transaction_message_attempts()
+{
+	return configurationStruct.ocpp_transaction_message_attempts;
+}
+
+uint16_t storage_Get_ocpp_transaction_message_retry_interval()
+{
+	return configurationStruct.ocpp_transaction_message_retry_interval;
+}
+
+bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect()
+{
+	return configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect;
+}
 
 //Local settings
 
@@ -475,6 +720,42 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u32(configuration_handle, "TxInterval", configurationStruct.transmitInterval);
 	err += nvs_set_zfloat(configuration_handle, "TxChangeLevel", configurationStruct.transmitChangeLevel);
 
+	//OCPP settings
+	//err += nvs_set_u8(configuration_handle, "oAllowTxUnknown", configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
+	//err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
+	err += nvs_set_u8(configuration_handle, "oAuthRemoteTx", configurationStruct.ocpp_authorize_remote_tx_requests);
+	//err += nvs_set_u8(configuration_handle, "oBlinkRequest", configurationStruct.ocpp_blink_repeats);
+	err += nvs_set_u32(configuration_handle, "oClockAligned", configurationStruct.ocpp_clock_aligned_data_interval);
+	err += nvs_set_u32(configuration_handle, "oConTimeout", configurationStruct.ocpp_connection_timeout);
+	//err += nvs_set_str(configuration_handle, "oConPhaseRotate", configurationStruct.ocpp_connector_phase_rotation);
+	err += nvs_set_u8(configuration_handle, "oConPhaseRot_ml", configurationStruct.ocpp_connector_phase_rotation_max_length);
+	err += nvs_set_u8(configuration_handle, "oConfig_mk", configurationStruct.ocpp_get_configuration_max_keys);
+	err += nvs_set_u32(configuration_handle, "oHeartbeatInter", configurationStruct.ocpp_heartbeat_interval);
+	//err += nvs_set_u8(configuration_handle, "oLightIntensity", configurationStruct.ocpp_light_intensity);
+	err += nvs_set_u8(configuration_handle, "oAuthOffline", configurationStruct.ocpp_local_authorize_offline);
+	err += nvs_set_u8(configuration_handle, "oPreAuth", configurationStruct.ocpp_local_pre_authorize);
+	//err += nvs_set_u32(configuration_handle, "oEnergyOnInv_m", configurationStruct.ocpp_max_energy_on_invalid_id);
+	err += nvs_set_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data);
+	err += nvs_set_u8(configuration_handle, "oMtrValAlign_ml", configurationStruct.ocpp_meter_values_aligned_data_max_length);
+	err += nvs_set_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data);
+	err += nvs_set_u8(configuration_handle, "oMtrValSampl_ml", configurationStruct.ocpp_meter_values_sampled_data_max_length);
+	err += nvs_set_u32(configuration_handle, "oMtrValSamplInt", configurationStruct.ocpp_meter_value_sample_interval);
+	//err += nvs_set_u32(configuration_handle, "oStatusDur_min", configurationStruct.ocpp_minimum_status_duration);
+	err += nvs_set_u8(configuration_handle, "oNumbOfConnect", configurationStruct.ocpp_number_of_connectors);
+	err += nvs_set_u8(configuration_handle, "oResetRetries", configurationStruct.ocpp_reset_retries);
+	err += nvs_set_u8(configuration_handle, "oStopTxnEvDisc", configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect);
+	err += nvs_set_u8(configuration_handle, "oStopTxnOnInval", configurationStruct.ocpp_stop_transaction_on_invalid_id);
+	err += nvs_set_str(configuration_handle, "oStopTxnAlign", configurationStruct.ocpp_stop_txn_aligned_data);
+	err += nvs_set_u8(configuration_handle, "oStopTxnAlig_ml", configurationStruct.ocpp_stop_txn_aligned_data_max_length);
+	err += nvs_set_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data);
+	err += nvs_set_u8(configuration_handle, "oStopTxnSamp_ml", configurationStruct.ocpp_stop_txn_sampled_data_max_length);
+	err += nvs_set_str(configuration_handle, "oSuppFeature", configurationStruct.ocpp_supported_feature_profiles);
+	err += nvs_set_u8(configuration_handle, "oSuppFeature_ml", configurationStruct.ocpp_supported_feature_profiles_max_length);
+	err += nvs_set_u8(configuration_handle, "oTxnAttempts", configurationStruct.ocpp_transaction_message_attempts);
+	err += nvs_set_u16(configuration_handle, "oTxnRetryInter", configurationStruct.ocpp_transaction_message_retry_interval);
+	err += nvs_set_u8(configuration_handle, "oUlockConEvDisc", configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
+	//err += nvs_set_(configuration_handle, "oWebSockPingInt", configurationStruct.web_socket_ping_interval);
+
 	//Local settings
 	err += nvs_set_u8(configuration_handle, "ComMode", configurationStruct.communicationMode);
 	err += nvs_set_zfloat(configuration_handle, "HmiBrightness", configurationStruct.hmiBrightness);
@@ -523,6 +804,46 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_u32(configuration_handle, "TxInterval", &configurationStruct.transmitInterval);
 	err += nvs_get_zfloat(configuration_handle, "TxChangeLevel", &configurationStruct.transmitChangeLevel);
 
+	//OCPP settings
+	//err += nvs_get_u8(configuration_handle, "oAllowTxUnknown", &configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
+	//err += nvs_get_u8(configuration_handle, "oAuthCachEnable", &configurationStruct.ocpp_authorization_cache_enabled);
+	err += nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests);
+	//err += nvs_get_u8(configuration_handle, "oBlinkRequest", &configurationStruct.ocpp_blink_repeats);
+	err += nvs_get_u32(configuration_handle, "oClockAligned", &configurationStruct.ocpp_clock_aligned_data_interval);
+	err += nvs_get_u32(configuration_handle, "oConTimeout", &configurationStruct.ocpp_connection_timeout);
+	//err += nvs_get_str(configuration_handle, "oConPhaseRotate", &configurationStruct.ocpp_connector_phase_rotation);
+	err += nvs_get_u8(configuration_handle, "oConPhaseRot_ml", &configurationStruct.ocpp_connector_phase_rotation_max_length);
+	err += nvs_get_u8(configuration_handle, "oConfig_mk", &configurationStruct.ocpp_get_configuration_max_keys);
+	err += nvs_get_u32(configuration_handle, "oHeartbeatInter", &configurationStruct.ocpp_heartbeat_interval);
+	//err += nvs_get_u8(configuration_handle, "oLightIntensity", &configurationStruct.ocpp_light_intensity);
+	err += nvs_get_u8(configuration_handle, "oAuthOffline", (uint8_t *)&configurationStruct.ocpp_local_authorize_offline);
+	err += nvs_get_u8(configuration_handle, "oPreAuth", (uint8_t *)&configurationStruct.ocpp_local_pre_authorize);
+	//err += nvs_get_u32(configuration_handle, "oEnergyOnInv_m", &configurationStruct.ocpp_max_energy_on_invalid_id);
+	readSize = DEFAULT_CSL_SIZE;
+	err += nvs_get_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data, &readSize);
+	err += nvs_get_u8(configuration_handle, "oMtrValAlign_ml", &configurationStruct.ocpp_meter_values_aligned_data_max_length);
+	readSize = DEFAULT_CSL_SIZE;
+	err += nvs_get_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data, &readSize);
+	err += nvs_get_u8(configuration_handle, "oMtrValSampl_ml", &configurationStruct.ocpp_meter_values_sampled_data_max_length);
+	err += nvs_get_u32(configuration_handle, "oMtrValSamplInt", &configurationStruct.ocpp_meter_value_sample_interval);
+	//err += nvs_get_u32(configuration_handle, "oStatusDur_min", &configurationStruct.ocpp_minimum_status_duration);
+	err += nvs_get_u8(configuration_handle, "oNumbOfConnect", &configurationStruct.ocpp_number_of_connectors);
+	err += nvs_get_u8(configuration_handle, "oResetRetries", &configurationStruct.ocpp_reset_retries);
+	err += nvs_get_u8(configuration_handle, "oStopTxnEvDisc", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect);
+	err += nvs_get_u8(configuration_handle, "oStopTxnOnInval", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_invalid_id);
+	readSize = DEFAULT_CSL_SIZE;
+	err += nvs_get_str(configuration_handle, "oStopTxnAlign", configurationStruct.ocpp_stop_txn_aligned_data, &readSize);
+	err += nvs_get_u8(configuration_handle, "oStopTxnAlig_ml", &configurationStruct.ocpp_stop_txn_aligned_data_max_length);
+	readSize = DEFAULT_CSL_SIZE;
+	err += nvs_get_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data, &readSize);
+	err += nvs_get_u8(configuration_handle, "oStopTxnSamp_ml", &configurationStruct.ocpp_stop_txn_sampled_data_max_length);
+	readSize = 5;
+	err += nvs_get_str(configuration_handle, "oSuppFeature", configurationStruct.ocpp_supported_feature_profiles, &readSize);
+	err += nvs_get_u8(configuration_handle, "oSuppFeature_ml", &configurationStruct.ocpp_supported_feature_profiles_max_length);
+	err += nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts);
+	err += nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval);
+	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
+	//err += nvs_get_(configuration_handle, "oWebSockPingInt", &configurationStruct.web_socket_ping_interval);
 
 	//Local settings
 	err += nvs_get_u8(configuration_handle, "ComMode", &configurationStruct.communicationMode);

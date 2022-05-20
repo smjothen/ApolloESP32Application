@@ -8,7 +8,7 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define DISABLE_LOGGING
+//#define DISABLE_LOGGING
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -44,6 +44,9 @@ struct RFIDTokens{
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 #define PREFIX_GUID 41
+
+#define DEFAULT_CSL_LENGTH 3//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
+#define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
 
 // Network IDs
 #define NETWORK_1P3W 1
@@ -96,6 +99,45 @@ struct Configuration
 	uint8_t defaultOfflinePhase;
 	float defaultOfflineCurrent;
 	uint8_t isEnabled;
+
+	// ocpp core profile settings ((commented out settings are optional AND currently not in use) OR superseded by other settings)
+	// See Open charge point protocol 1.6 section 9.1 for more information
+
+	//configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
+	//configurationStruct.ocpp_authorization_cache_enabled = false;
+	bool ocpp_authorize_remote_tx_requests;
+	//int configurationStruct.ocpp_blink_repeats;
+	uint32_t ocpp_clock_aligned_data_interval;
+	uint32_t ocpp_connection_timeout;
+	//char * ocpp_connector_phase_rotation; // use phaseRotation
+	uint8_t ocpp_connector_phase_rotation_max_length;
+	uint8_t ocpp_get_configuration_max_keys;
+	uint32_t ocpp_heartbeat_interval;
+	//int ocpp_light_intensity; // use hmiBrightness instead
+	bool ocpp_local_authorize_offline;
+	bool ocpp_local_pre_authorize;
+	//int ocpp_max_energy_on_invalid_id;
+	char ocpp_meter_values_aligned_data[DEFAULT_CSL_SIZE];
+	uint8_t ocpp_meter_values_aligned_data_max_length;
+	char ocpp_meter_values_sampled_data[DEFAULT_CSL_SIZE];
+	uint8_t ocpp_meter_values_sampled_data_max_length;
+	uint32_t ocpp_meter_value_sample_interval;
+	//int configurationStruct.ocpp_minimum_status_duration;
+	uint8_t ocpp_number_of_connectors;
+	uint8_t ocpp_reset_retries;
+	bool ocpp_stop_transaction_on_ev_side_disconnect;
+	bool ocpp_stop_transaction_on_invalid_id;
+	char ocpp_stop_txn_aligned_data[DEFAULT_CSL_SIZE];
+	uint8_t ocpp_stop_txn_aligned_data_max_length;
+	char ocpp_stop_txn_sampled_data[DEFAULT_CSL_SIZE];
+	uint8_t ocpp_stop_txn_sampled_data_max_length;
+	char ocpp_supported_feature_profiles[5];
+	uint8_t ocpp_supported_feature_profiles_max_length;
+	uint8_t ocpp_transaction_message_attempts;
+	uint16_t ocpp_transaction_message_retry_interval;
+	bool ocpp_unlock_connector_on_ev_side_disconnect;
+	//configurationStruct.web_socket_ping_interval; // Changing ping interval is not a feature of esp_websocket_client
+
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];
