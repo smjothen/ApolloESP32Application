@@ -28,9 +28,7 @@ cJSON * ocpp_create_call_result(const char * unique_id, cJSON * payload){
 		cJSON_AddItemToArray(message, payload_local);
 
 	}else{
-		/* if(cJSON_AddItemReferenceToArray(message, payload) != cJSON_bool) */
-		/* 	goto error; */
-		cJSON_AddItemReferenceToArray(message, payload);
+		cJSON_AddItemToArray(message, payload);
 	}
 
 	return message;

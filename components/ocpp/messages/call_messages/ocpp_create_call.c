@@ -49,9 +49,7 @@ cJSON * ocpp_create_call(const char * action, cJSON * payload){
 		cJSON_AddItemToArray(message, payload_local);
 
 	}else{
-		/* if(cJSON_AddItemReferenceToArray(message, payload) != cJSON_bool) */
-		/* 	goto error; */
-		cJSON_AddItemReferenceToArray(message, payload); // The older cJSON version used here does not indicate error
+		cJSON_AddItemToArray(message, payload);
 	}
 
 	return message;

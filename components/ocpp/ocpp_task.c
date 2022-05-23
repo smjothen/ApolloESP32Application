@@ -189,6 +189,7 @@ int send_call_reply(cJSON * call){
 	}
 
 	int err = esp_websocket_client_send(client, message, strlen(message), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
+	free(message);
 
 	if(err == -1){
 		ESP_LOGE(TAG, "Error sending with websocket");
@@ -304,7 +305,6 @@ void fail_active_call(const char * fail_description){
 
 int send_next_call(){
 	struct ocpp_call_with_cb * call;
-
 	if(ocpp_active_call_lock_1 == NULL){
 		ESP_LOGE(TAG, "The lock is not initialized");
 		return -1;
@@ -364,6 +364,10 @@ int send_next_call(){
 	ESP_LOGI(TAG, "Sending next call (%s)", action);
 
 	char * message_string = cJSON_Print(call->call_message);
+	if(message_string == NULL){
+		goto error;
+	}
+
 	err = esp_websocket_client_send(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message_string);
 
@@ -414,9 +418,9 @@ void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
 	}
 }
 
+//TODO: reset heartbeat timer on OCPP exchanges
 void ocpp_heartbeat(){
 	cJSON * heartbeat_request = ocpp_create_heartbeat_request();
-
 	if(heartbeat_request == NULL){
 		ESP_LOGE(TAG, "Unable to create heartbeat");
 		return;

@@ -181,7 +181,7 @@ void text_frame_handler(esp_websocket_client_handle_t client, esp_websocket_even
 
 	if(err != 0){
 		ESP_LOGE(TAG, "Unable to handle text frame");
-		cJSON_free(ocpp_request);
+		cJSON_Delete(ocpp_request);
 		return;
 	}
 
@@ -229,7 +229,7 @@ void text_frame_handler(esp_websocket_client_handle_t client, esp_websocket_even
 		break;
 	}
 
-	cJSON_free(ocpp_request);
+	cJSON_Delete(ocpp_request);
 }
 
 void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data){

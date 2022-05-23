@@ -41,9 +41,7 @@ cJSON * ocpp_create_call_error(const char * unique_id, const char * error_code, 
 		cJSON_AddItemToArray(message, error_details_local);
 
 	}else{
-		/* if(cJSON_AddItemReferenceToArray(message, error_details) != cJSON_bool) */
-		/* 	goto error; */
-		cJSON_AddItemReferenceToArray(message, error_details);
+		cJSON_AddItemToArray(message, error_details);
 	}
 
 	return message;
