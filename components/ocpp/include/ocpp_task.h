@@ -29,7 +29,7 @@ int send_call_reply(cJSON * call);
  */
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type);
 
-int start_ocpp(const char * charger_id);
+int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval);
 void stop_ocpp(void);
 
 /**
@@ -50,6 +50,7 @@ int complete_boot_notification_process(char * serial_nr);
 
 int start_ocpp_heartbeat(void);
 void stop_ocpp_heartbeat(void);
+void update_heartbeat_timer(uint sec);
 
 /**
  * Check if weboscket is connected to central system

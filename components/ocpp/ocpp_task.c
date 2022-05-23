@@ -47,13 +47,14 @@ QueueHandle_t ocpp_transaction_call_queue; // transactions SHOULD be delivered a
 bool websocket_connected = false;
 enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
 
-int heartbeat_interval = -1; // TODO: implement with ChangeConfiguration (RW) and possibly persist through reboot.
+uint32_t default_heartbeat_interval = 60 * 60 * 24;
+long heartbeat_interval = -1;
 TimerHandle_t heartbeat_handle = NULL;
 
 #define OCPP_TIME_SYNC_MARGIN 5
 #define OCPP_MAX_EXPECTED_OFFSET 60*60 // 1 hour
-#define MAX_HEARTBEAT_INTERVAL 60*60*24*2 // 1 heartbeat every 48 hours
-#define MINIMUM_HEARTBEAT_INTERVAL 2 // To prevent flooding the central service with heartbeat
+#define MAX_HEARTBEAT_INTERVAL UINT32_MAX
+#define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
 #define WEBSOCKET_WRITE_TIMEOUT 3000
 
 // TODO: implement with ChangeConfiguration (RW) and possibly persist through reboot.
@@ -176,6 +177,12 @@ int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callba
 	return err;
 }
 
+static void reset_heartbeat_timer(void){
+	if(heartbeat_handle != NULL){
+		xTimerReset(heartbeat_handle, pdMS_TO_TICKS(100));
+	}
+}
+
 int send_call_reply(cJSON * call){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call reply: NULL");
@@ -195,6 +202,7 @@ int send_call_reply(cJSON * call){
 		ESP_LOGE(TAG, "Error sending with websocket");
 		return -1;
 	}else{
+		reset_heartbeat_timer();
 		return 0;
 	}
 }
@@ -376,6 +384,8 @@ int send_next_call(){
 		goto error;
 	}
 	last_call_timestamp = time(NULL);
+	reset_heartbeat_timer();
+
 	return 0;
 
 error:
@@ -418,7 +428,12 @@ void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
 	}
 }
 
-//TODO: reset heartbeat timer on OCPP exchanges
+void update_heartbeat_timer(uint sec){
+	if(heartbeat_handle != NULL){
+		xTimerChangePeriod(heartbeat_handle, pdMS_TO_TICKS(sec * 1000), pdMS_TO_TICKS(100));
+	}
+}
+
 void ocpp_heartbeat(){
 	cJSON * heartbeat_request = ocpp_create_heartbeat_request();
 	if(heartbeat_request == NULL){
@@ -433,10 +448,10 @@ void ocpp_heartbeat(){
 }
 
 int start_ocpp_heartbeat(void){
-	int actual_interval = heartbeat_interval;
+	long actual_interval = heartbeat_interval;
 
 	if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL || heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
-		ESP_LOGE(TAG, "Unable to start heartbeat with interval %d", heartbeat_interval);
+		ESP_LOGE(TAG, "Unable to start heartbeat with interval %ld", heartbeat_interval);
 
 		if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL){
 			actual_interval = MINIMUM_HEARTBEAT_INTERVAL;
@@ -444,10 +459,10 @@ int start_ocpp_heartbeat(void){
 		}else if(heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
 			actual_interval = MAX_HEARTBEAT_INTERVAL;
 		}
-		ESP_LOGE(TAG, "Using an interval of %d instead", actual_interval);
+		ESP_LOGE(TAG, "Using an interval of %ld instead", actual_interval);
 	}
 
-	ESP_LOGI(TAG, "starting heartbeat with interval %d sec", actual_interval);
+	ESP_LOGI(TAG, "starting heartbeat with interval %ld sec", actual_interval);
 
 	heartbeat_handle = xTimerCreate("Ocpp Heartbeat", pdMS_TO_TICKS(actual_interval * 1000),
 					pdTRUE, NULL, ocpp_heartbeat);
@@ -473,8 +488,9 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * charger_id){
+int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
+	default_heartbeat_interval = ocpp_heartbeat_interval;
 	char uri[64];
 	int written_length = snprintf(uri, sizeof(uri), "ws://%s/%s", "10.4.210.114:9000", charger_id);
 
@@ -532,12 +548,12 @@ int start_ocpp(const char * charger_id){
 			}
 			return 0;
 		}
-		vTaskDelay(pdMS_TO_TICKS(1000));
 
 		if(i+1 == 5){
 			ESP_LOGE(TAG, "Websocket did not connect");
 			goto error;
 		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
 error:
@@ -558,7 +574,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 
 	if(cJSON_HasObjectItem(payload, "interval")){
 		heartbeat_interval = cJSON_GetObjectItem(payload, "interval")->valueint;
-		ESP_LOGI(TAG, "Heartbeat interval is: %d", heartbeat_interval);
+		ESP_LOGI(TAG, "Heartbeat interval is: %ld", heartbeat_interval);
 	}else{
 		ESP_LOGE(TAG, "Boot result is lacking interval");
 	}
@@ -595,9 +611,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 	// "If the Central System returns something other than Accepted, the value of the interval field
 	// indicates the minimum wait time before sending a next BootNotification request"
     	if(registration_status == eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
-		// With websocket, heartbeat is not mandatory but it is recommended to send
-		// one at least every 24 hours for syncronization
-		heartbeat_interval = 60 * 60 * 24;
+		heartbeat_interval = default_heartbeat_interval;
 
 	}else if(registration_status != eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
 		// No recommendations are given for delay to next BootNotification request
@@ -681,8 +695,11 @@ int complete_boot_notification_process(char * serial_nr){
 
 void stop_ocpp(void){
 	ESP_LOGW(TAG, "Closing web socket");
-	esp_websocket_client_stop(client);
-	esp_websocket_client_destroy(client);
+	/* if(esp_websocket_client_is_connected(client)){ */
+	/* 	//Only awailable in newer versions of esp-idf */
+	/* 	esp_websocket_client_close(client, pdMS_TO_TICKS(5000)); */
+	/* } */
+	esp_websocket_client_destroy(client); // Calls esp_websocket_client_stop internaly
 	client = NULL;
 
 	if(ocpp_call_queue != NULL){
@@ -706,6 +723,7 @@ void stop_ocpp(void){
 	}
 
 	clear_active_call();
+	ESP_LOGW(TAG, "Web socket closed and state cleared");
 	return;
 }
 

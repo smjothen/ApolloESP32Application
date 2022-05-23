@@ -1075,6 +1075,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value);
+		if(err == 0)
+			update_heartbeat_timer(storage_Get_ocpp_heartbeat_interval());
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
 		char * endptr;
@@ -1251,7 +1253,7 @@ static void ocpp_task(){
 		unsigned int retry_attempts = 0;
 		unsigned int retry_delay = 5;
 		do{
-			err = start_ocpp(i2cGetLoadedDeviceInfo().serialNumber);
+			err = start_ocpp(i2cGetLoadedDeviceInfo().serialNumber, storage_Get_ocpp_heartbeat_interval());
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
