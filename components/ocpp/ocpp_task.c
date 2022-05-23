@@ -57,9 +57,9 @@ TimerHandle_t heartbeat_handle = NULL;
 #define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
 #define WEBSOCKET_WRITE_TIMEOUT 3000
 
-// TODO: implement with ChangeConfiguration (RW) and possibly persist through reboot.
-#define TRANSACTION_MESSAGE_ATTEMPTS 3
-#define TRANSACTION_MESSAGE_RETRY_INTERVAL 60
+
+static uint8_t transaction_message_attempts = 3;
+static uint8_t transaction_message_retry_interval = 60;
 
 struct ocpp_call_with_cb * failed_transaction = NULL;
 unsigned int failed_transaction_count = 0;
@@ -286,7 +286,7 @@ void fail_active_call(const char * fail_description){
 			const char * action = cJSON_GetArrayItem(active_call->call_message, 2)->valuestring;
 
 			if(is_transaction_related_message(action)){
-				if(failed_transaction_count < TRANSACTION_MESSAGE_ATTEMPTS){
+				if(failed_transaction_count < transaction_message_attempts){
 					ESP_LOGW(TAG, "Preparing failed transaction for retry");
 					failed_transaction = active_call;
 					failed_transaction_count++;
@@ -333,7 +333,7 @@ int send_next_call(){
 		// We check for failed transactions as they SHOULD be delivered chronologically
 		if(failed_transaction != NULL){
 
-			if(time(NULL) > last_transaction_timestamp + TRANSACTION_MESSAGE_RETRY_INTERVAL * failed_transaction_count){
+			if(time(NULL) > last_transaction_timestamp + transaction_message_retry_interval * failed_transaction_count){
 				call = failed_transaction;
 				failed_transaction = NULL;
 				last_transaction_timestamp = time(NULL);
@@ -428,6 +428,11 @@ void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
 	}
 }
 
+void update_transaction_message_related_config(uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
+	transaction_message_attempts = ocpp_transaction_message_attempts;
+	transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
+}
+
 void update_heartbeat_timer(uint sec){
 	if(heartbeat_handle != NULL){
 		xTimerChangePeriod(heartbeat_handle, pdMS_TO_TICKS(sec * 1000), pdMS_TO_TICKS(100));
@@ -488,9 +493,13 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval){
+int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
 	default_heartbeat_interval = ocpp_heartbeat_interval;
+
+	transaction_message_attempts = ocpp_transaction_message_attempts;
+	transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
+
 	char uri[64];
 	int written_length = snprintf(uri, sizeof(uri), "ws://%s/%s", "10.4.210.114:9000", charger_id);
 

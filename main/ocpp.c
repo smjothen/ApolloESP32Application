@@ -1216,9 +1216,17 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
 		err = set_config_u8(storage_Set_ocpp_transaction_message_attempts, value);
+		if(err == 0)
+			update_transaction_message_related_config(
+				storage_Get_ocpp_transaction_message_attempts(),
+				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
 		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value);
+		if(err == 0)
+			update_transaction_message_related_config(
+				storage_Get_ocpp_transaction_message_attempts(),
+				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
 		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value);
@@ -1233,6 +1241,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	if(err == 0){
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
+		storage_SaveConfiguration();
 	}else{
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
 	}
@@ -1253,7 +1262,11 @@ static void ocpp_task(){
 		unsigned int retry_attempts = 0;
 		unsigned int retry_delay = 5;
 		do{
-			err = start_ocpp(i2cGetLoadedDeviceInfo().serialNumber, storage_Get_ocpp_heartbeat_interval());
+			err = start_ocpp(i2cGetLoadedDeviceInfo().serialNumber,
+					storage_Get_ocpp_heartbeat_interval(),
+					storage_Get_ocpp_transaction_message_attempts(),
+					storage_Get_ocpp_transaction_message_retry_interval());
+
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
