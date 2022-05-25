@@ -71,7 +71,7 @@ void storage_Init_Configuration()
 	strcpy(configurationStruct.installationId,"00000000-0000-0000-0000-000000000000");
 	strcpy(configurationStruct.routingId, "default");
 
-	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
+	memset(configurationStruct.chargerName, 0, DEFAULT_STR_SIZE);
 
 	configurationStruct.transmitInterval 			= DEFAULT_TRANSMIT_INTERVAL;
 	configurationStruct.transmitChangeLevel 		= 1.0;
@@ -93,7 +93,13 @@ void storage_Init_Configuration()
 	configurationStruct.networkTypeOverride			= 0;
 	configurationStruct.pulseInterval				= 60;
 
-	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
+	memset(configurationStruct.diagnosticsLog, 0, DIAGNOSTICS_STRING_SIZE);
+
+	memset(configurationStruct.location, 0, 4);
+	memset(configurationStruct.timezone, 0, DEFAULT_STR_SIZE);
+	//configurationStruct.dstUsage = 1;
+	//configurationStruct.useSchedule = false;
+	memset(configurationStruct.timeSchedule, 0, SCHEDULE_SIZE);
 }
 
 
@@ -255,6 +261,52 @@ void storage_Clear_And_Save_DiagnosticsLog()
 	storage_SaveConfiguration();
 
 	ESP_LOGW(TAG, "Cleared diagnosticslog");
+}
+
+
+
+void storage_Set_Location(char * newString)
+{
+	if(strlen(newString) == 3) //Shall always be 3 chars
+	{
+		strcpy(configurationStruct.location, newString);
+		storage_SaveConfiguration();
+		ESP_LOGW(TAG, "Saved location");
+		return;
+	}
+}
+
+void storage_Set_Timezone(char * newString)
+{
+	if(strlen(newString) < DEFAULT_STR_SIZE)
+	{
+		strcpy(configurationStruct.timezone, newString);
+		storage_SaveConfiguration();
+		ESP_LOGW(TAG, "Saved timezone");
+		return;
+	}
+}
+
+/*void storage_Set_DstUsage(uint8_t newValue)
+{
+	configurationStruct.dstUsage = newValue;
+}
+
+void storage_Set_UseSchedule(uint8_t newValue)
+{
+	configurationStruct.useSchedule = newValue;
+}*/
+
+
+void storage_Set_TimeSchedule(char * newString)
+{
+	if(strlen(newString) < SCHEDULE_SIZE)
+	{
+		strcpy(configurationStruct.timeSchedule, newString);
+		storage_SaveConfiguration();
+		ESP_LOGW(TAG, "Saved timeSchedule");
+		return;
+	}
 }
 
 
@@ -495,6 +547,23 @@ esp_err_t nvs_get_zdouble(nvs_handle_t handle, const char* key, double * outputV
 }
 
 
+char * storage_Get_Location()
+{
+	return configurationStruct.location;
+}
+
+char * storage_Get_Timezone()
+{
+	return configurationStruct.timezone;
+}
+
+char * storage_Get_TimeSchedule()
+{
+	return configurationStruct.timeSchedule;
+}
+
+//************************************************
+
 esp_err_t storage_SaveConfiguration()
 {
 	volatile esp_err_t err;
@@ -533,6 +602,10 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u32(configuration_handle, "PulseInterval", configurationStruct.pulseInterval);
 
 	err += nvs_set_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog);
+
+	err += nvs_set_str(configuration_handle, "Location", configurationStruct.location);
+	err += nvs_set_str(configuration_handle, "Timezone", configurationStruct.timezone);
+	err += nvs_set_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -588,11 +661,16 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_str(configuration_handle, "DiagnosticsLog", NULL, &readSize);
 	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog, &readSize);
 
-	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
-	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	nvs_get_str(configuration_handle, "Location", NULL, &readSize);
+	nvs_get_str(configuration_handle, "Location", configurationStruct.location, &readSize);
 
+	nvs_get_str(configuration_handle, "Timezone", NULL, &readSize);
+	nvs_get_str(configuration_handle, "Timezone", configurationStruct.timezone, &readSize);
 
-	//When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
+	nvs_get_str(configuration_handle, "TimeSchedule", NULL, &readSize);
+	nvs_get_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule, &readSize);
+
+	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
 

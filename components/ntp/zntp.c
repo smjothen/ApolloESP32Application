@@ -72,6 +72,14 @@ struct tm zntp_GetLatestNTPTime()
 }
 
 
+void zntp_GetTimeStruct(struct tm *tmUpdatedTime)
+{
+	time_t nowInSeconds;
+
+	time(&nowInSeconds);
+	localtime_r(&nowInSeconds, tmUpdatedTime);
+}
+
 /*
  * This function returns the format required for SignedMeterValue OCMF messages.
  */

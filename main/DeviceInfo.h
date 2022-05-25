@@ -44,6 +44,7 @@ struct RFIDTokens{
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 #define PREFIX_GUID 41
+#define SCHEDULE_SIZE 130	//(13*10)
 #define DIAGNOSTICS_STRING_SIZE 100
 
 // Network IDs
@@ -128,6 +129,12 @@ struct Configuration
 	uint8_t networkTypeOverride;
 
 	char diagnosticsLog[DIAGNOSTICS_STRING_SIZE];
+
+	char location[4];//3 letters + EOL
+	char timezone[DEFAULT_STR_SIZE];
+	//uint8_t dstUsage;
+	//uint8_t useSchedule;
+	char timeSchedule[SCHEDULE_SIZE]; //Length at least 13 bytes * 3
 };
 
 

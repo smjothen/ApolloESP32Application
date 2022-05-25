@@ -6,6 +6,19 @@ extern "C" {
 #endif
 
 
+
+#define MONDAY 		0x01
+#define TUESDAY 	0x02
+#define WEDNESDAY 	0x04
+#define THURSDAY 	0x08
+#define FRIDAY 		0x10
+#define SATURDAY 	0x20
+#define SUNDAY		0x40
+
+#define WEEKDAYS 	0x1F
+#define WEEKEND		0x60
+
+
 enum ChargeSource
 {
 	eCHARGE_SOURCE_STANDALONE 	= 1,
@@ -15,8 +28,10 @@ enum ChargeSource
 	eCHARGE_SOURCE_RAND_DELAY	= 5
 };
 
-static void RunStartChargeTimer();
-static bool chargeController_SendStartCommandToMCU();
+void RunStartChargeTimer();
+
+void chargeController_SetTimes();
+bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
 void chargeController_CancelDelay();

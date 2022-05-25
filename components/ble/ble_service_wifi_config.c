@@ -43,7 +43,7 @@ uint16_t maxAp = 15;
 wifi_ap_record_t ap_records[15];
 
 
-#define USE_PIN
+//#define USE_PIN
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -149,8 +149,14 @@ const uint8_t Phase_Rotation_uid128[ESP_UUID_LEN_128] 	= {0x08, 0xfe, 0xb5, 0xc0
 //static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
 //static uint8_t Phase_Rotation_val[1]          			= {0x0};
 
+//Location 10492c5a-deec-4577-a25a-6950c0b5fcdf
+const uint8_t Location_uid128[ESP_UUID_LEN_128] 		= {0xdf, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
+//Timezone: 10492c5a-deec-4577-a25a-6950c0b5fce0
+const uint8_t Timezone_uid128[ESP_UUID_LEN_128] 		= {0xe0, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
+//TimeSchedule: 10492c5a-deec-4577-a25a-6950c0b5fce1
+const uint8_t TimeSchedule_uid128[ESP_UUID_LEN_128] 	= {0xe1, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
 
 const uint8_t RunCommand_uid128[ESP_UUID_LEN_128] = 	{0x03, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -297,6 +303,18 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	//[CHARGER_PHASE_ROTATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
+	[CHARGER_LOCATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_LOCATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Location_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_LOCATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_TIMEZONE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_TIMEZONE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Timezone_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_TIMEZONE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_TIMESCHEDULE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_TIMESCHEDULE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &TimeSchedule_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_TIMESCHEDULE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
 
 	[CHARGER_RUN_COMMAND_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_RUN_COMMAND_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &RunCommand_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
@@ -359,9 +377,14 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 
 static float hmiBrightness = 0.0;
 static char nrTostr[11] = {0};
+static char charBuf[130] = {0};
 
 static bool configSession = false;
 static int statusSegmentCount = 0;
+static int timeScheduleMessageNo = 0;
+static int nrOfTimeSchedules = 0;
+static char * timeScheduleString = NULL;
+static int timeScheduleLength = 0;
 char *jsonString = NULL;
 cJSON *jsonObject = NULL;
 
@@ -1046,12 +1069,99 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		break;
 
+    case CHARGER_LOCATION_UUID:
 
-    /*case CHARGER_PHASE_ROTATION_DESCR:
-  		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
-  		memcpy(rsp->attr_value.value, Phase_Rotation_descr, sizeof(Phase_Rotation_descr));
-  		rsp->attr_value.len = sizeof(Phase_Rotation_descr);
-  		break;*/
+    	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+    	//Always 3 characters
+		char * location = storage_Get_Location();
+		ESP_LOGI(TAG, "Read location %s ", location);
+
+		memcpy(rsp->attr_value.value, location, 3);
+		rsp->attr_value.len = 3;
+
+    	break;
+
+    case CHARGER_TIMEZONE_UUID:
+
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		char * timezone = storage_Get_Timezone();
+		int timezoneLength = strlen(timezone);
+
+		ESP_LOGI(TAG, "Read timezone %i: %s ", timezoneLength, timezone);
+
+		memcpy(rsp->attr_value.value, timezone, timezoneLength);
+		rsp->attr_value.len = timezoneLength;
+
+		break;
+
+    case CHARGER_TIMESCHEDULE_UUID:
+    	//Read UUID
+
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		if(timeScheduleMessageNo == 0)
+		{
+			timeScheduleString = storage_Get_TimeSchedule();
+
+			if(timeScheduleString[0] != '\0')
+			{
+				timeScheduleLength = strlen(timeScheduleString);
+				if(timeScheduleLength >= 12)
+				{
+					nrOfTimeSchedules = (timeScheduleLength/13) + 1; //12+13 = 25 -> 25/13 + 1 = 2
+					if(nrOfTimeSchedules == 1)
+						timeScheduleLength = 12;
+					else
+						timeScheduleLength = 13;
+
+					timeScheduleMessageNo++;
+				}
+				else
+				{
+					nrOfTimeSchedules = 0;
+					rsp->attr_value.len = 0;
+				}
+			}
+			else
+			{
+				/// No content
+				rsp->attr_value.len = 0;
+			}
+
+			ESP_LOGW(TAG, "Read timezone %i: %s ", timeScheduleLength, timeScheduleString);
+		}
+		else if(timeScheduleMessageNo >= 1)
+		{
+			if(strlen(timeScheduleString) >= 13)
+				//More schedules
+				timeScheduleLength = 13;
+			else
+				//Last schedule
+				timeScheduleLength = 12;
+
+			///Move to next schedule in string
+			timeScheduleString += 13;
+
+			timeScheduleMessageNo++;
+		}
+
+		memcpy(rsp->attr_value.value, timeScheduleString, timeScheduleLength);
+		rsp->attr_value.len = timeScheduleLength;
+
+		ESP_LOGW(TAG, "Read %i / %i schedules", timeScheduleMessageNo, nrOfTimeSchedules);
+
+		/// If all schedules are read, clear to restart
+		if(timeScheduleMessageNo == nrOfTimeSchedules)
+		{
+			timeScheduleMessageNo 	= 0;
+			timeScheduleLength 		= 0;
+			timeScheduleString 		= NULL;
+		}
+
+		break;
+
     }
 }
 
@@ -1493,6 +1603,91 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
    		break;
 
 
+
+    case CHARGER_LOCATION_UUID:
+
+    	memset(charBuf, 0, 130);
+    	memcpy(charBuf, param->write.value, 3);
+
+    	ESP_LOGI(TAG, "Location received %i: %s", param->write.len , param->write.value);
+
+		//Sanity check
+		if(strlen(charBuf) == 3)
+		{
+			storage_Set_Location(charBuf);
+			ESP_LOGI(TAG, "Set location: %s", charBuf);
+			storage_SaveConfiguration();//Not using save button in app
+		}
+
+    	break;
+
+    case CHARGER_TIMEZONE_UUID:
+
+    	memset(charBuf, 0, 130);
+		memcpy(charBuf, param->write.value, param->write.len);
+
+		ESP_LOGI(TAG, "Timezone received %i: %s", param->write.len , param->write.value);
+
+		//Sanity check
+		if(strlen(charBuf) < DEFAULT_STR_SIZE)
+		{
+			storage_Set_Timezone(charBuf);
+			ESP_LOGI(TAG, "Set timezone: %s", charBuf);
+			storage_SaveConfiguration();//Not using save button in app
+		}
+
+		break;
+
+    case CHARGER_TIMESCHEDULE_UUID:
+    	//Write UUID
+
+		if(timeScheduleMessageNo == 0)
+		{
+			if(param->write.len >= 12)
+			{
+				timeScheduleMessageNo++;
+
+				memset(charBuf, 0, 130);
+				memcpy(charBuf, param->write.value, param->write.len);
+				ESP_LOGI(TAG, "Set first timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
+
+				if(param->write.len == 12)
+				{
+					/// First and only schedule
+					storage_Set_TimeSchedule(charBuf);
+					ESP_LOGI(TAG, "Saving only timeSchedule #%i: %s", timeScheduleMessageNo, charBuf);
+					storage_SaveConfiguration();
+					timeScheduleMessageNo = 0;
+				}
+			}
+		}
+		else if(timeScheduleMessageNo >= 1)
+		{
+			/// Intermediate message
+			if(param->write.len == 13 )
+			{
+				//Append schedule to combined string and break
+				memcpy(&charBuf[timeScheduleMessageNo * 13], param->write.value, param->write.len);
+				ESP_LOGI(TAG, "Appending #%i -> %s", timeScheduleMessageNo, charBuf);
+			}
+			///Last message
+			else if(param->write.len == 12 )
+			{
+				///Append schedule to combined string and save
+				memcpy(&charBuf[timeScheduleMessageNo * 13], param->write.value, param->write.len);
+				storage_Set_TimeSchedule(charBuf);
+				ESP_LOGI(TAG, "Appending last timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
+				storage_SaveConfiguration();
+
+				/// Last message received
+				timeScheduleMessageNo = 0;
+			}
+		}
+
+		break;
+
+
+
     case CHARGER_AUTH_UUID:
 
 		ESP_LOGI(TAG, "Adapter pin %02x", param->write.value[0]);
@@ -1620,6 +1815,7 @@ void ClearAuthValue()
 		ESP_LOGW(TAG, "Cleared Auth");
 
 		statusSegmentCount = 0;
+		timeScheduleMessageNo = 0;
 		rfidPairing_SetState(ePairing_Inactive);
 		MCU_StopLedOverride();
 }

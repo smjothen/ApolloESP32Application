@@ -44,6 +44,10 @@ void storage_Set_PulseInterval(uint32_t newValue);
 void storage_Set_And_Save_DiagnosticsLog(char * newString);
 void storage_Clear_And_Save_DiagnosticsLog();
 
+void storage_Set_Location(char * newString);
+void storage_Set_Timezone(char * newString);
+void storage_Set_TimeSchedule(char * newString);
+
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
 float storage_Get_CurrentInMaximum();
@@ -74,6 +78,10 @@ uint8_t storage_Get_NetworkTypeOverride();
 uint32_t storage_Get_PulseInterval();
 char * storage_Get_DiagnosticsLog();
 int storage_Get_DiagnosticsLogLength();
+
+char * storage_Get_Location();
+char * storage_Get_Timezone();
+char * storage_Get_TimeSchedule();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();
