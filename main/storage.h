@@ -47,6 +47,7 @@ void storage_Set_ocpp_stop_txn_sampled_data(const char * newValue);
 void storage_Set_ocpp_transaction_message_attempts(uint8_t newValue);
 void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue);
 void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue);
+void storage_Set_ocpp_local_auth_list_enabled(bool newValue);
 
 //Set Local settings
 void storage_Set_CommunicationMode(uint8_t newValue);
@@ -104,6 +105,9 @@ uint8_t storage_Get_ocpp_supported_feature_profiles_max_length();
 uint8_t storage_Get_ocpp_transaction_message_attempts();
 uint16_t storage_Get_ocpp_transaction_message_retry_interval();
 bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect();
+bool storage_Get_ocpp_local_auth_list_enabled();
+uint16_t storage_Get_ocpp_local_auth_list_max_length();
+uint8_t storage_Get_ocpp_send_local_list_max_length();
 
 //Get Local settings
 uint8_t storage_Get_CommunicationMode();

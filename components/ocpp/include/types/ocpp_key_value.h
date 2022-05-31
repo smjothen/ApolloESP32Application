@@ -6,6 +6,7 @@
 #include <cJSON.h>
 
 // Defines for recognized/implemented keys in GetConfiguration and ChangeConfiguration
+// Core profile keys
 #define OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS "AuthorizeRemoteTxRequests"
 #define OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL "ClockAlignedDataInterval"
 #define OCPP_CONFIG_KEY_CONNECTION_TIMEOUT "ConnectionTimeOut"
@@ -34,8 +35,12 @@
 #define OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS "TransactionMessageAttempts"
 #define OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL "TransactionMessageRetryInterval"
 #define OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT "UnlockConnectorOnEVSideDisconnect"
+// local auth list management profile
+#define OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED "LocalAuthListEnabled"
+#define OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH "LocalAuthListMaxLength"
+#define OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH "SendLocalListMaxLength"
 
-#define OCPP_CONFIG_KEY_COUNT 28
+#define OCPP_CONFIG_KEY_COUNT 31
 
 struct ocpp_key_value{
 	char key[34]; //ocpp defines key as CiString50Type, but longest key in 1.6 core is 33 +'\0'

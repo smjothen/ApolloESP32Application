@@ -12,6 +12,10 @@
 static const char * TAG = "OCPP_LISTENER";
 static TaskHandle_t task_to_notify = NULL;
 
+static const size_t MAX_DYNAMIC_BUFFER_SIZE = 32768;
+static char * dynamic_buffer = NULL; // Used if payload is larger than websocket rx_buffer
+static bool dynamic_failed = false;
+
 struct ocpp_call_callback_with_data{
 	ocpp_call_callback cb;
 	void * cb_data;
@@ -161,8 +165,8 @@ int call_handler(esp_websocket_client_handle_t client, const char * unique_id, c
 	}
 }
 
-void text_frame_handler(esp_websocket_client_handle_t client, esp_websocket_event_data_t * data){
-	cJSON * ocpp_request = cJSON_Parse((char *)data->data_ptr);
+void text_frame_handler(esp_websocket_client_handle_t client, const char * data){
+	cJSON * ocpp_request = cJSON_Parse(data);
 
 	if(ocpp_request == NULL){
 		ESP_LOGE(TAG, "Unable to parse text frame");
@@ -256,7 +260,48 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 			break;
 		case 1:
 			ESP_LOGD(TAG, "Handle text frame");
-			text_frame_handler(client, data);
+
+			if(data->payload_len > data->data_len){ // If payload exceed websocket rx_buffer
+				if(data->payload_len > MAX_DYNAMIC_BUFFER_SIZE){
+					ESP_LOGE(TAG, "Unable to handle websocket request: request size too large: %d", data->payload_len);
+					break;
+				}
+
+				if(data->payload_offset == 0){
+					ESP_LOGW(TAG, "Allocating buffer for unusually large websocket request. Size %d", data->payload_len);
+					if(dynamic_buffer != NULL)
+						free(dynamic_buffer);
+
+					dynamic_buffer = malloc(sizeof(char) * (data->payload_len + 1));
+					if(dynamic_buffer == NULL){
+						ESP_LOGE(TAG, "Unable to allocate additional websocket buffer");
+						dynamic_failed = true;
+						break;
+					}
+
+					ESP_LOGI(TAG, "Allocation successfull");
+					dynamic_failed = false;
+				}
+
+				if(!dynamic_failed){
+					ESP_LOGI(TAG, "Copying to allocated buffer | from %d to %d | size: %d", data->payload_offset, data->payload_offset + data->data_len, data->payload_len);
+					memcpy(dynamic_buffer + data->payload_offset, data->data_ptr, data->data_len);
+
+					if(data->payload_offset + data->data_len == data->payload_len){
+						dynamic_buffer[data->payload_len] = '\0';
+
+						ESP_LOGI(TAG, "Completed buffer, executing request");
+						text_frame_handler(client, dynamic_buffer);
+
+						free(dynamic_buffer);
+						dynamic_buffer = NULL;
+						dynamic_failed = true;
+					}
+				}
+				break;
+			}
+
+			text_frame_handler(client, data->data_ptr);
 			break;
 		case 2:
 			ESP_LOGE(TAG, "Got unexpected binary frame");
@@ -278,9 +323,6 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 			ESP_LOGD(TAG, "Recieved pong");
 			break;
 		}
-
-		ESP_LOGI(TAG, "Websocket data=%.*s", data->data_len, (char *)data->data_ptr);
-		ESP_LOGI(TAG, "length=%d, data_len=%d, current offset=%d\r\n", data->payload_len, data->data_len, data->payload_offset);
 
 		break;
 	case WEBSOCKET_EVENT_ERROR:

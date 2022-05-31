@@ -138,6 +138,11 @@ struct Configuration
 	bool ocpp_unlock_connector_on_ev_side_disconnect;
 	//configurationStruct.web_socket_ping_interval; // Changing ping interval is not a feature of esp_websocket_client
 
+	// ocpp local auth list profile settings
+	bool ocpp_local_auth_list_enabled;
+	uint16_t ocpp_local_auth_max_length;
+	uint8_t ocpp_send_local_list_max_length;
+
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];

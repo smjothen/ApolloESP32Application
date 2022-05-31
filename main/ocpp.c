@@ -1,5 +1,4 @@
 #include <math.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -11,6 +10,7 @@
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
+#include "fat.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
@@ -21,6 +21,12 @@
 #include "types/ocpp_key_value.h"
 #include "types/ocpp_configuration_status.h"
 #include "types/ocpp_meter_value.h"
+#include "types/ocpp_authorization_data.h"
+#include "types/ocpp_authorization_status.h"
+#include "types/ocpp_update_type.h"
+#include "types/ocpp_update_status.h"
+#include "types/ocpp_date_time.h"
+#include "types/ocpp_enum.h"
 
 #define TASK_OCPP_STACK_SIZE 2500
 #define OCPP_PROBLEM_RESET_INTERVAL 30
@@ -433,6 +439,24 @@ static int get_ocpp_configuration(const char * key, struct ocpp_key_value * conf
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out->value);
 
+	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
+		configuration_out->readonly = false;
+
+		return allocate_and_write_configuration_bool(
+			storage_Get_ocpp_local_auth_list_enabled(), &configuration_out->value);
+
+	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH) == 0){
+		configuration_out->readonly = true;
+
+		return allocate_and_write_configuration_u16(
+			storage_Get_ocpp_local_auth_list_max_length(), &configuration_out->value);
+
+	}else if(strcmp(key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0){
+		configuration_out->readonly = true;
+
+		return allocate_and_write_configuration_u8(
+			storage_Get_ocpp_send_local_list_max_length(), &configuration_out->value);
+
 	}else{
 		configuration_out->readonly = true;
 		configuration_out->value = malloc(sizeof(char) * 30);
@@ -697,6 +721,33 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out[index].value);
+	if(err != 0)
+		goto error;
+	index++;
+
+	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED);
+	configuration_out->readonly = false;
+
+	err = allocate_and_write_configuration_bool(
+		storage_Get_ocpp_local_auth_list_enabled(), &configuration_out[index].value);
+	if(err != 0)
+		goto error;
+	index++;
+
+	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH);
+	configuration_out->readonly = true;
+
+	err = allocate_and_write_configuration_u16(
+		storage_Get_ocpp_local_auth_list_max_length(), &configuration_out[index].value);
+	if(err != 0)
+		goto error;
+	index++;
+
+	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH);
+	configuration_out->readonly = true;
+
+	err = allocate_and_write_configuration_u8(
+		storage_Get_ocpp_send_local_list_max_length(), &configuration_out[index].value);
 	if(err != 0)
 		goto error;
 
@@ -1231,6 +1282,9 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}else if(strcmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
 		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value);
 
+	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
+		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value);
+
 	}else if(is_configuration_key(key)){
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
 		return;
@@ -1247,6 +1301,263 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}
 
 	return;
+}
+
+#define SEND_LOCAL_LIST_MAX_INNER_REASON_SIZE 128
+#define SEND_LOCAL_LIST_MAX_REASON_SIZE 256
+
+static int validate_and_convert_auth_data(cJSON * auth_data, bool is_update_type_full, struct ocpp_authorization_data * data_out, char * error_type_out, char * error_reason_out){
+
+	if(!cJSON_HasObjectItem(auth_data, "idTag")){
+		strcpy(error_type_out, OCPPJ_ERROR_FORMATION_VIOLATION);
+		strcpy(error_reason_out, "Expected 'idTag' field");
+		return -1;
+	}
+
+	if(is_update_type_full && !cJSON_HasObjectItem(auth_data, "idTagInfo")){
+		strcpy(error_type_out, OCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION);
+		strcpy(error_reason_out, "Expected 'idTagInfo' field when 'updateType' is Full");
+		return -1;
+	}
+
+	cJSON * id_tag_json = cJSON_GetObjectItem(auth_data, "idTag");
+	if(!cJSON_IsString(id_tag_json) || !is_ci_string_type(id_tag_json->valuestring, 20)){
+		strcpy(error_type_out, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION);
+		strcpy(error_reason_out, "Expected 'idTag' field to be of CiString20Type");
+		return -1;
+	}
+	strcpy(data_out->id_tag, id_tag_json->valuestring);
+
+	if(cJSON_HasObjectItem(auth_data, "idTagInfo")){
+		cJSON * id_tag_info_json = cJSON_GetObjectItem(auth_data, "idTagInfo");
+		if(cJSON_HasObjectItem(id_tag_info_json, "expiryDate")){
+			data_out->id_tag_info.expiry_date = ocpp_parse_date_time(cJSON_GetObjectItem(id_tag_info_json, "expiryDate")->valuestring);
+
+			if(data_out->id_tag_info.expiry_date == -1){
+				strcpy(error_type_out, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION);
+				strcpy(error_reason_out, "Unable to validate 'expiryDate'");
+				return -1;
+			}
+		}else{
+			data_out->id_tag_info.expiry_date = 0;
+		}
+
+		if(cJSON_HasObjectItem(id_tag_info_json, "parentIdTag")){
+			cJSON * parent_id_json = cJSON_GetObjectItem(id_tag_info_json, "parentIdTag");
+
+			if(!cJSON_IsString(parent_id_json) || !is_ci_string_type(parent_id_json->valuestring, 20)){
+				strcpy(error_type_out, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION);
+				strcpy(error_reason_out, "Expected 'parentIdTag' field to be of CiString20Type");
+				return -1;
+			}
+
+			strcpy(data_out->id_tag_info.parent_id_tag, parent_id_json->valuestring);
+		}else{
+			strcpy(data_out->id_tag_info.parent_id_tag, "");
+		}
+
+		if(!cJSON_HasObjectItem(id_tag_info_json, "status")){
+			strcpy(error_type_out, OCPPJ_ERROR_FORMATION_VIOLATION);
+			strcpy(error_reason_out, "Expected 'status' field");
+			return -1;
+		}
+
+		cJSON * status_json = cJSON_GetObjectItem(id_tag_info_json, "status");
+		if(!cJSON_IsString(status_json) || ocpp_validate_enum(status_json->valuestring, 4,
+									OCPP_AUTHORIZATION_STATUS_ACCEPTED,
+									OCPP_AUTHORIZATION_STATUS_BLOCKED,
+									OCPP_AUTHORIZATION_STATUS_EXPIRED,
+									OCPP_AUTHORIZATION_STATUS_INVALID) != 0)
+		{
+			strcpy(error_type_out, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION);
+			strcpy(error_reason_out, "Expected 'status' to be appropriate AuthorizationStatus type");
+			return -1;
+		}
+		strcpy(data_out->id_tag_info.status, status_json->valuestring);
+
+	}else{
+		strcpy(data_out->id_tag_info.status, "DELETE");
+	}
+
+	return 0;
+}
+
+//Will delete items in auth_list to not use excessive memory
+static int validate_and_convert_auth_list(cJSON * auth_list, bool is_update_type_full, struct ocpp_authorization_data ** data_out, char * error_type_out, char * error_reason_out){
+ 	if(auth_list == NULL)
+		return 0;
+
+	int tag_count = cJSON_GetArraySize(auth_list);
+	if(tag_count > storage_Get_ocpp_send_local_list_max_length()){
+		strcpy(error_type_out, OCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION);
+		snprintf(error_reason_out, SEND_LOCAL_LIST_MAX_REASON_SIZE, "Number of elements in 'localAuthorizationList' exceed SendLocalListMaxLength");
+		return -1;
+	}
+
+	char local_error_reason[SEND_LOCAL_LIST_MAX_INNER_REASON_SIZE];
+
+	for(size_t i = 0; i < tag_count; i++){
+		cJSON * auth_data = cJSON_DetachItemFromArray(auth_list, 0);
+		struct ocpp_authorization_data * item_out = malloc(sizeof(struct ocpp_authorization_data));
+		if(item_out == NULL){
+			strcpy(error_type_out, OCPPJ_ERROR_INTERNAL);
+			strcpy(error_reason_out, "Unable to allocate memory");
+			return -1;
+		}
+
+		if(validate_and_convert_auth_data(auth_data, is_update_type_full, item_out, error_type_out, local_error_reason) != 0){
+			cJSON_Delete(auth_data);
+
+			for(size_t j = 0; j < i; j++)
+				free(data_out[i]);
+
+			free(item_out);
+
+			snprintf(error_reason_out, SEND_LOCAL_LIST_MAX_REASON_SIZE, "While parsing element %d: %s", i, local_error_reason);
+			return -1;
+		}
+
+		for(size_t j = 0; j < i; j++){
+			if(strcmp(item_out->id_tag, data_out[j]->id_tag) == 0){
+				strcpy(error_type_out, OCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION);
+				snprintf(error_reason_out, SEND_LOCAL_LIST_MAX_REASON_SIZE, "Duplicate idTag not allowed: %s", item_out->id_tag);
+
+				for(size_t k = 0; k < i; k++)
+					free(data_out[k]);
+
+				free(item_out);
+
+				return -1;
+			}
+		}
+
+		data_out[i] = item_out;
+		cJSON_Delete(auth_data);
+	}
+	return tag_count;
+}
+
+void free_auth_list(struct ocpp_authorization_data ** auth_list, int auth_list_length){
+	for(size_t i = 0; i < auth_list_length; i++)
+		free(auth_list[i]);
+	free(auth_list);
+}
+
+static void send_local_list_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Got request for local auth list update");
+	if(!cJSON_HasObjectItem(payload, "listVersion") || !cJSON_HasObjectItem(payload, "updateType")){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'listVersion' and 'updateType' fields", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * list_version_json = cJSON_GetObjectItem(payload, "listVersion");
+	cJSON * update_type_json = cJSON_DetachItemFromObject(payload, "updateType");
+
+	if(!cJSON_IsString(update_type_json) || !cJSON_IsNumber(list_version_json)){
+
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'listVersion' to be integer type and 'updateType' to be UpdateType", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	bool is_update_full;
+	if(strcmp(update_type_json->valuestring, OCPP_UPDATE_TYPE_DIFFERENTIAL) == 0){
+		is_update_full = false;
+	}
+	else if(strcmp(update_type_json->valuestring, OCPP_UPDATE_TYPE_FULL) == 0){
+		is_update_full = true;
+	}else{
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "'updateType' is not a valid UpdateType", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	struct ocpp_authorization_data ** auth_list = malloc(sizeof(struct ocpp_authorization_data *) * storage_Get_ocpp_send_local_list_max_length());
+
+	char error_type[32];
+	char error_reason[SEND_LOCAL_LIST_MAX_REASON_SIZE];
+	int err = -1;
+
+	int auth_list_length = validate_and_convert_auth_list(cJSON_GetObjectItem(payload, "localAuthorizationList"), is_update_full, auth_list, error_type, error_reason);
+	if(auth_list_length == -1){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, error_type, error_reason, NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for invalid authorization data");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		free_auth_list(auth_list, auth_list_length);
+		return;
+	}
+
+	if(is_update_full){
+		err = fat_UpdateAuthListFull(list_version_json->valueint, auth_list, auth_list_length);
+
+	}else{
+		if(fat_ReadAuthListVersion() >= list_version_json->valueint){
+			cJSON * response = ocpp_create_send_local_list_confirmation(unique_id, OCPP_UPDATE_STATUS_VERSION_MISMATCH);
+			if(response == NULL){
+				ESP_LOGE(TAG, "Unable to create send local list confirmation VERSION_MISMATCH");
+			}else{
+				send_call_reply(response);
+				cJSON_Delete(response);
+			}
+			free_auth_list(auth_list, auth_list_length);
+			return;
+		}
+
+		err = fat_UpdateAuthListDifferential(list_version_json->valueint, auth_list, auth_list_length);
+	}
+
+	cJSON * response = ocpp_create_send_local_list_confirmation(unique_id, (err == 0) ? OCPP_UPDATE_STATUS_ACCEPTED : OCPP_UPDATE_STATUS_FAILED);
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create change configuration confirmation");
+	}else{
+		send_call_reply(response);
+		cJSON_Delete(response);
+	}
+	free_auth_list(auth_list, auth_list_length);
+}
+
+static void get_local_list_version_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Got request for local auth list version");
+	int version = fat_ReadAuthListVersion();
+
+	if(version == -1){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to read version from local list", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for internal error");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * response = ocpp_create_get_local_list_version_confirmation(unique_id, version);
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create get local list confirmation");
+	}else{
+		send_call_reply(response);
+		cJSON_Delete(response);
+	}
 }
 
 static void ocpp_task(){
@@ -1313,7 +1624,8 @@ static void ocpp_task(){
 
 		//Handle features that are not bether handled by other components
 		attach_call_cb(eOCPP_ACTION_RESET_ID, reset_cb, NULL);
-
+		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
@@ -1354,7 +1666,10 @@ static void ocpp_task(){
 
 			switch(connection_status){
 			case eCS_CONNECTION_ONLINE:
-				handle_ocpp_call();
+				if(handle_ocpp_call() != 0){
+					// TODO: Improve error handling, delay was added due to send conflict with large recieve
+					vTaskDelay(pdMS_TO_TICKS(1000));
+				}
 				break;
 			case eCS_CONNECTION_OFFLINE:
 				if(is_connected()){

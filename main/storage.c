@@ -103,6 +103,11 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_transaction_message_retry_interval = 60;
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = false;
 
+	// ocpp local auth list profile settings
+	configurationStruct.ocpp_local_auth_list_enabled = true;
+	configurationStruct.ocpp_local_auth_max_length = UINT8_MAX * 4;
+	configurationStruct.ocpp_send_local_list_max_length = UINT8_MAX;
+
 	//Local settings
 
 	configurationStruct.communicationMode 			= eCONNECTION_LTE;
@@ -280,6 +285,11 @@ void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue)
 void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue)
 {
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = newValue;
+}
+
+void storage_Set_ocpp_local_auth_list_enabled(bool newValue)
+{
+	configurationStruct.ocpp_local_auth_list_enabled = newValue;
 }
 
 //Local settings
@@ -561,6 +571,22 @@ bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect()
 	return configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect;
 }
 
+bool storage_Get_ocpp_local_auth_list_enabled()
+{
+	return configurationStruct.ocpp_local_auth_list_enabled;
+}
+
+uint16_t storage_Get_ocpp_local_auth_list_max_length()
+{
+	return configurationStruct.ocpp_local_auth_max_length;
+}
+
+uint8_t storage_Get_ocpp_send_local_list_max_length()
+{
+	return configurationStruct.ocpp_send_local_list_max_length;
+}
+
+
 //Local settings
 
 uint8_t storage_Get_CommunicationMode()
@@ -755,6 +781,9 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u16(configuration_handle, "oTxnRetryInter", configurationStruct.ocpp_transaction_message_retry_interval);
 	err += nvs_set_u8(configuration_handle, "oUlockConEvDisc", configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_set_(configuration_handle, "oWebSockPingInt", configurationStruct.web_socket_ping_interval);
+	err += nvs_set_u8(configuration_handle, "oAuthLEnabled", configurationStruct.ocpp_local_auth_list_enabled);
+	err += nvs_set_u16(configuration_handle, "oAuthL_ml", configurationStruct.ocpp_local_auth_max_length);
+	err += nvs_set_u8(configuration_handle, "oSendAuthl_ml", configurationStruct.ocpp_send_local_list_max_length);
 
 	//Local settings
 	err += nvs_set_u8(configuration_handle, "ComMode", configurationStruct.communicationMode);
@@ -844,6 +873,9 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval);
 	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_get_(configuration_handle, "oWebSockPingInt", &configurationStruct.web_socket_ping_interval);
+	err += nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled);
+	err += nvs_get_u16(configuration_handle, "oAuthL_ml", &configurationStruct.ocpp_local_auth_max_length);
+	err += nvs_get_u8(configuration_handle, "oSendAuthl_ml", &configurationStruct.ocpp_send_local_list_max_length);
 
 	//Local settings
 	err += nvs_get_u8(configuration_handle, "ComMode", &configurationStruct.communicationMode);

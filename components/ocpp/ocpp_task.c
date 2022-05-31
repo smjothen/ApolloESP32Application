@@ -18,6 +18,7 @@
 #include "ocpp_listener.h"
 #include "messages/call_messages/ocpp_call_request.h"
 #include "types/ocpp_enum.h"
+#include "types/ocpp_date_time.h"
 
 static const char *TAG = "OCPP_TASK";
 
@@ -55,7 +56,7 @@ TimerHandle_t heartbeat_handle = NULL;
 #define OCPP_MAX_EXPECTED_OFFSET 60*60 // 1 hour
 #define MAX_HEARTBEAT_INTERVAL UINT32_MAX
 #define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
-#define WEBSOCKET_WRITE_TIMEOUT 3000
+#define WEBSOCKET_WRITE_TIMEOUT 5000
 
 
 static uint8_t transaction_message_attempts = 3;
@@ -78,36 +79,6 @@ bool is_connected(void){
 
 void set_connected(bool connected){
 	websocket_connected = connected;
-}
-
-struct tm parse_time(const char * string){
-  // the date time in a json schema is compliant with RFC 5.6 https://json-schema.org/understanding-json-schema/reference/string.html
-  // e.g. "1985-04-12T23:20:50.52Z", "1990-12-31T15:59:60-08:00"
-  // parseing based on https://stackoverflow.com/questions/26895428/how-do-i-parse-an-iso-8601-date-with-optional-milliseconds-to-a-struct-tm-in-c
-
-  int y,M,d,h,m;
-  float s;
-  int tzh = 0, tzm = 0;
-
-  int paresed_arguments = sscanf(string, "%d-%d-%dT%d:%d:%f%d:%dZ", &y, &M, &d, &h, &m, &s, &tzh, &tzm);
-
-  if (6 < paresed_arguments) {
-	  if (tzh < 0) {
-		  tzm = -tzm;    // Fix the sign on minutes.
-	  }
-  }
-
-  struct tm time;
-  time.tm_year = y - 1900; // Year since 1900
-  time.tm_mon = M - 1;     // 0-11
-  time.tm_mday = d;        // 1-31
-  time.tm_hour = h;        // 0-23
-  time.tm_min = m;         // 0-59
-  time.tm_sec = (int)s;    // 0-61 (0-60 in C++11)
-
-  //TODO: return tz and maybe handle sub-sec resolution
-
-  return time;
 }
 
 void update_central_system_time_offset(time_t charge_point_time, time_t central_system_time){
@@ -420,8 +391,9 @@ void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
 	time_t charge_point_time = time(NULL);
 
 	if(cJSON_HasObjectItem(payload, "currentTime")){
-		struct tm central_system_time_tm = parse_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
-		time_t central_system_time = mktime(&central_system_time_tm);
+		/*struct tm central_system_time_tm = parse_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
+		time_t central_system_time = mktime(&central_system_time_tm);*/
+		time_t central_system_time = ocpp_parse_date_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
 		update_central_system_time_offset(charge_point_time, central_system_time);
 	}else{
 		ESP_LOGW(TAG, "Response to heartbeat did not contain currentTime");
@@ -511,7 +483,7 @@ int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp2.0",
-		.task_stack = 3000,
+		.task_stack = 4096,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 	};
 
@@ -574,8 +546,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 	time_t charge_point_time = time(NULL);
 
 	if(cJSON_HasObjectItem(payload, "currentTime")){
-		struct tm central_system_time_tm = parse_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
-		time_t central_system_time = mktime(&central_system_time_tm);
+		time_t central_system_time = ocpp_parse_date_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
 		update_central_system_time_offset(charge_point_time, central_system_time);
 	}else{
 		ESP_LOGE(TAG, "Boot result is lacking currentTime");
@@ -736,6 +707,6 @@ void stop_ocpp(void){
 	return;
 }
 
-void handle_ocpp_call(void){
-	send_next_call();
+int handle_ocpp_call(void){
+	return send_next_call();
 }

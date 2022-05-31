@@ -5,6 +5,7 @@
 
 #include "types/ocpp_key_value.h"
 
+//Core profile
 //cJSON * ocpp_create_cancel_reservation_conf(int status);
 cJSON * ocpp_create_change_availability_confirmation(const char * unique_id, const char * status);
 cJSON * ocpp_create_change_configuration_confirmation(const char * unique_id, const char * status);
@@ -24,6 +25,10 @@ cJSON * ocpp_create_reset_confirmation(const char * unique_id, const char * stat
 //cJSON * ocpp_create_trigger_message_conf(const char * unique_id, const char * status);
 cJSON * ocpp_create_unlock_connector_confirmation(const char * unique_id, const char * status);
 cJSON * ocpp_create_update_firmware_confirmation(const char * unique_id);
-cJSON * ocpp_create_call_result(const char * unique_id, cJSON * payload);
 
+//Local Auth List Management Profile
+cJSON * ocpp_create_send_local_list_confirmation(const char * unique_id, const char * status);
+cJSON * ocpp_create_get_local_list_version_confirmation(const char * unique_id, int listVersion);
+
+cJSON * ocpp_create_call_result(const char * unique_id, cJSON * payload);
 #endif /*OCPP_CALL_RESULT_H*/

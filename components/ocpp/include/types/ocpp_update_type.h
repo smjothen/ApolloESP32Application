@@ -1,0 +1,7 @@
+#ifndef OCPP_UPDATE_TYPE_H
+#define OCPP_UPDATE_TYPE_H
+
+#define OCPP_UPDATE_TYPE_DIFFERENTIAL "Differential"
+#define OCPP_UPDATE_TYPE_FULL "Full"
+
+#endif /*OCPP_UPDATE_TYPE_H*/

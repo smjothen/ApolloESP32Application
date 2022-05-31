@@ -44,7 +44,7 @@ struct ocpp_call_with_cb * get_active_call();
 void clear_active_call(void);
 const char * get_active_call_id(void);
 
-void handle_ocpp_call(void);
+int handle_ocpp_call(void);
 
 int complete_boot_notification_process(char * serial_nr);
 
