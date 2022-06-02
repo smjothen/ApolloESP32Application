@@ -682,6 +682,7 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
+			chargeController_SetRandomStartDelay();
 			chargeSession_Start();
 		}
 
@@ -1550,8 +1551,11 @@ void sessionHandler_Pulse()
 
 		if(pulseCounter >= pulseInterval)
 		{
-			ESP_LOGI(TAG, "PULSE");
-			publish_cloud_pulse();
+			//if(isOnline == true)
+			//{
+				ESP_LOGI(TAG, "PULSE %i/%i", pulseCounter, pulseInterval);
+				publish_cloud_pulse();
+			//}
 
 			pulseCounter = 0;
 		}

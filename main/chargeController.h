@@ -25,18 +25,20 @@ enum ChargeSource
 	eCHARGE_SOURCE_CLOUD 	  	= 2,
 	eCHARGE_SOURCE_START_OFFLINE= 3,
 	eCHARGE_SOURCE_GONE_OFFLINE = 4,
-	eCHARGE_SOURCE_RAND_DELAY	= 5
+	eCHARGE_SOURCE_SCHEDULE	= 5
 };
 
 void RunStartChargeTimer();
 
+void chargeController_WriteNewTimeSchedule(char * timeSchedule);
 void chargeController_SetTimes();
 bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
 void chargeController_CancelDelay();
+void chargeController_SetNowTime(char * timeString);
 bool chargeController_SetStartCharging(enum ChargeSource source);
-void chargeController_SetStartTimer();
+void chargeController_SetRandomStartDelay();
 
 
 #ifdef __cplusplus

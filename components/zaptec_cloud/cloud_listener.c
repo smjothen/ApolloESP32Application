@@ -2240,7 +2240,33 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"StartTimer") != NULL)
 				{
 					//chargeController_SetStartTimer();
-					chargeController_SetStartCharging(eCHARGE_SOURCE_RAND_DELAY);
+					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"SS") != NULL)
+				{
+					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					chargeController_WriteNewTimeSchedule(&commandString[4]);
+					chargeController_SetTimes();
+					//chargeController_SetStartTimer();
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"NT") != NULL)
+				{
+					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					chargeController_SetNowTime(&commandString[4]);
 					responseStatus = 200;
 				}
 
@@ -2565,7 +2591,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
-        refresh_token(&mqtt_config);
+
+       	refresh_token(&mqtt_config);
 		ESP_LOGD(TAG, "setting config with the new token");
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         reconnectionAttempt++;
