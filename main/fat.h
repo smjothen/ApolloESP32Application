@@ -1,6 +1,9 @@
+#ifndef FAT_H
+#define FAT_H
+
 #include <stdbool.h>
 #include <stdio.h>
-#include "types/ocpp_authorization_data.h"
+#include "../components/ocpp/include/types/ocpp_authorization_data.h"
 
 void fat_make();
 
@@ -18,3 +21,4 @@ int fat_ReadAuthListVersion();
 
 void fat_static_unmount();
 
+#endif /*FAT_H*/

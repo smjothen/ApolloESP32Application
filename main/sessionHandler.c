@@ -395,7 +395,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 			const char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
 			ESP_LOGI(TAG, "Central system returned status %s", status);
 
-			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
+			if(storage_Get_ocpp_stop_transaction_on_invalid_id() && strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
 				ESP_LOGW(TAG, "Transaction not Autorized");
 				//TODO: Update LocalList
 				/* authentication_AddTag is not implemented and TagItem struct is insufficient for ocpp.
@@ -403,7 +403,6 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 				 *
 				 * authentication_AddTag(ocpp_tag_info_to_TagItem(id_tag_info));
 				 */
-				//TODO: check (required) StopTransactionOnInvalidId before stopping charging
 				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
 				if(ret == MsgCommandAck)
 				{
@@ -545,9 +544,9 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 }
 
 void authorize(){
-	//TODO: use (required) LocalPreAuthorize and potentially the local authentication list
 	//TODO: use (required) LocalAuthorizeOffline
 	//TODO: handle error to deny authorization or retry if timed out.
+
 	cJSON * authorization = ocpp_create_authorize_request(pendingAuthID);
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
@@ -670,7 +669,11 @@ void handle_state_transition(uint32_t old_state, uint32_t new_state){
 }
 
 void handle_requesting(){
-	// if all prerequisit for charging are met, enter charge mode.
+	/**
+	 * From ocpp protocol 1.6 section 3.6:
+	 * "Transaction starts at the point that all conditions for charging are met,
+	 * for instance, EV is connected to Charge Point and user has been authorized."
+	 */
 	if(/*cable_connected() && */ isAuthorized){
 		MessageType ret = MCU_SendCommandId(CommandStartCharging);
 		if(ret != MsgCommandAck)

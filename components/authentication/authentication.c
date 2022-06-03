@@ -1,3 +1,4 @@
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -8,7 +9,8 @@
 #include "../../main/chargeSession.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "cJSON.h"
-
+#include "../../main/fat.h"
+#include "../ocpp/include/types/ocpp_authorization_status.h"
 static const char *TAG = "AUTH     ";
 
 int nrOfUsedTags = 0;
@@ -26,6 +28,26 @@ void authentication_Init()
 uint8_t authentication_CheckId(struct TagInfo tagInfo)
 {
 	uint8_t match = 0;
+
+	struct ocpp_authorization_data auth_data = {0};
+	if(storage_Get_ocpp_local_auth_list_enabled()){
+		ESP_LOGI(TAG, "Attmpting to match tag with local authorization list");
+		if(!tagInfo.tagIsValid){
+			ESP_LOGW(TAG, "Invalid tag, igoring local auth list");
+		}else{
+			if(fat_ReadAuthData(tagInfo.idAsString, &auth_data)){
+				if(strcmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0 &&
+					(time(NULL) < auth_data.id_tag_info.expiry_date || auth_data.id_tag_info.expiry_date == 0)){
+					ESP_LOGI(TAG, "Tag is accepted and not expired");
+					return 1;
+				}else{
+					ESP_LOGI(TAG, "Tag is either expired or not accepted");
+				}
+			}else{
+				ESP_LOGI(TAG, "Tag does not match any tag in local auth list");
+			}
+		}
+	}
 
 	storage_lookupRFIDTagInList(tagInfo.idAsString, &match);
 	

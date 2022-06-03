@@ -223,7 +223,6 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 
 	for(size_t i = 0; i < list_length; i++){
 		size_t written_items = fwrite(auth_list[i], sizeof(struct ocpp_authorization_data), 1, f);
-
 		if(written_items == 0){
 			fclose(f);
 			ESP_LOGI(TAG, "Error when writing full auth list. Changes not saved");
@@ -234,7 +233,7 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 
 	fclose(f);
 
-	ESP_LOGI(TAG, "Auth list update complete, replacing old file");
+	ESP_LOGI(TAG, "Auth list update complete with %d entries, replacing old file", list_length);
 	return fat_replace_file("/spiflash/authlist.tmp", "/spiflash/authlist.txt");
 }
 
@@ -331,26 +330,26 @@ bool fat_ReadAuthData(const char * id_tag, struct ocpp_authorization_data * auth
 	if(mounted == false)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
-		return -1;
+		return false;
 	}
 
-	ESP_LOGI(TAG, "Getting auth data from file given specific tag");
+	ESP_LOGI(TAG, "Getting auth data from file given tag");
 	FILE *f = fopen("/spiflash/authlist.txt", "rb");
 	if (f == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for reading");
-		return -1;
+		return false;
 	}
 
 	int version;
 	fscanf(f, "%d\n", &version);
-
 	if(ferror(f) != 0){
 		fclose(f);
-		return -1;
+		return false;
 	}
 
 	bool found = false;
-	while(fread(&auth_data_out, sizeof(struct ocpp_authorization_data), 1, f) == 1){
+
+	while(fread(auth_data_out, sizeof(struct ocpp_authorization_data), 1, f) == 1){
 		if(strcmp(auth_data_out->id_tag, id_tag) == 0){
 			found = true;
 			break;
