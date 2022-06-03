@@ -14,7 +14,7 @@
 #include "../i2c/include/i2cDevices.h"
 #include "string.h"
 
-#define TAG "ble gap"
+#define TAG "BLE GAP        "
 
 static uint8_t adv_config_done = 0;
 

@@ -27,6 +27,12 @@ int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
 char * MCU_GetSwVersionString();
+uint8_t MCU_ReadHwIdMCUSpeed();
+uint8_t MCU_GetHwIdMCUSpeed();
+
+uint8_t MCU_ReadHwIdMCUPower();
+uint8_t MCU_GetHwIdMCUPower();
+
 char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
 float MCU_GetEmeterTemperature(uint8_t phase);
@@ -40,8 +46,10 @@ float MCU_GetEnergy();
 float MCU_GetMaximumEnergy();
 void MCU_ClearMaximumEnergy();
 
-int8_t MCU_GetchargeMode();
+int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
+void SetTransitionOperatingModeState(bool newTransitionState);
+bool GetTransitionOperatingModeState();
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
@@ -69,6 +77,12 @@ float MCU_GetHWCurrentMaxLimit();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();
+
+uint8_t MCU_UpdateOverrideGridType();
+uint8_t MCU_GetOverrideGridType();
+uint8_t MCU_UpdateIT3OptimizationState();
+uint8_t MCU_GetIT3OptimizationState();
+
 void SetEspNotification(uint16_t notification);
 void ClearNotifications();
 uint32_t GetCombinedNotifications();

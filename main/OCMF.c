@@ -11,21 +11,23 @@
 #include "string.h"
 #include "storage.h"
 #include "protocol_task.h"
+#include "offlineSession.h"
+#include <math.h>
 
-static const char *TAG = "OCMF     ";
+static const char *TAG = "OCMF           ";
 
 static char * formatVersion = "1.0";
 
-static char * logString = NULL;
+static char * OCMFLogEntryString = NULL;
 
 static SemaphoreHandle_t ocmf_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st);
+cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx,  time_t time_in, double energy_in);
 
 
 void OCMF_Init()
 {
-	logString = calloc(LOG_STRING_SIZE, 1);
+	OCMFLogEntryString = calloc(LOG_STRING_SIZE, 1);
 	ocmf_lock = xSemaphoreCreateMutex();
 	xSemaphoreGive(ocmf_lock);
 }
@@ -37,17 +39,20 @@ double get_accumulated_energy(){
 
 	if((max>0.0) && (dspic_session_energy < max)){
 		MCU_ClearMaximumEnergy();
-		ESP_LOGI(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
+		ESP_LOGW(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
 			dspic_session_energy, max
 		);
 		dspic_session_energy = max;
 	}
 
 	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
+
+	accumulated_energy = round(accumulated_energy * 1000) / 1000;/// Rounding to 3 decimal places
+
 	return accumulated_energy;
 }
 
-int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
+int _OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
 {
 	cJSON *OCMFObject = cJSON_CreateObject();
 	if(OCMFObject == NULL){return -10;}
@@ -76,7 +81,7 @@ int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double ene
 	strcpy(newMessage, "OCMF|");
 	strcpy(newMessage+strlen(newMessage), buf);
 
-	ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+	//ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
 
 	cJSON_Delete(OCMFObject);
 
@@ -85,95 +90,157 @@ int _OCMF_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double ene
 	return 0;
 }
 
-int OCMF_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out){
+int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out){
 	char timeBuffer[50] = {0};
 	zntp_GetSystemTime(timeBuffer, time_out);
 	*energy_out = get_accumulated_energy();
 
-	return _OCMF_CreateNewOCMFMessage(newMessage, timeBuffer, *energy_out);
+	return _OCMF_SignedMeterValue_CreateNewOCMFMessage(newMessage, timeBuffer, *energy_out);
 
 }
 
-int  OCMF_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in){
+int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in){
 	char time_buffer[50] = {0};
 	zntp_format_time(time_buffer, time_in);
 
-	return _OCMF_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
+	return _OCMF_SignedMeterValue_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
 }
 
 
+/************************************************************************************/
 static cJSON *logRoot = NULL;
 static cJSON * logReaderArray = NULL;
-//static cJSON *logArrayElement = NULL;
 
 
-char * OCMF_CreateNewOCMFLog()
+esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * messageString)
 {
-	memset(logString, 0, LOG_STRING_SIZE);
-
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
-		ESP_LOGE(TAG, "failed to obtain ocmf lock during log create");
-		goto err;
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
 	}else{
-		ESP_LOGI(TAG, "got ocmf lock OCMF_CreateNewOCMFLog");
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
 	}
 
 
-	//if(logRoot != NULL){return -9;}
+	if(oldestFile < 0)
+	{
+		xSemaphoreGive(ocmf_lock);
+		return ESP_ERR_NOT_FOUND;
+	}
+
+	/// 1. First get cJSON ChargeSession from file
+	cJSON *CompletedSessionObject = offlineSession_ReadChargeSessionFromFile(oldestFile);
+	if(CompletedSessionObject == NULL)
+	{
+		xSemaphoreGive(ocmf_lock);
+		return ESP_ERR_NOT_FOUND;
+	}
+
+
+	/// 2. ..then get OCMF log entires
+	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
 
 	logRoot = cJSON_CreateObject();
-	//if(logRoot == NULL){return -10;}
 
 	cJSON_AddStringToObject(logRoot, "FV", formatVersion);							//FormatVersion
-	cJSON_AddStringToObject(logRoot, "GI", "ZAPTEC GO");								//GatewayIdentification
+	cJSON_AddStringToObject(logRoot, "GI", "ZAPTEC GO");							//GatewayIdentification
 	cJSON_AddStringToObject(logRoot, "GS", i2cGetLoadedDeviceInfo().serialNumber);	//GatewaySerial
 	cJSON_AddStringToObject(logRoot, "GV", GetSoftwareVersion());					//GatewayVersion
-	cJSON_AddStringToObject(logRoot, "PG", "T1");			//Pagination(class)
+	cJSON_AddStringToObject(logRoot, "PG", "T1");									//Pagination(class)
 
-	logReaderArray = cJSON_CreateArray();
-	//logArrayElement = cJSON_CreateObject();
 
-	/*char timeBuffer[50] = {0};
-	zntp_GetSystemTime(timeBuffer);
+	//Array to hold all hourly SignedSession energy elements
+	cJSON *logReaderArray = offlineSession_GetSignedSessionFromActiveFile(oldestFile);
 
-	cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
-	cJSON_AddNumberToObject(logArrayElement, "TX", "B");	//Message status (B, T, E)
-	cJSON_AddNumberToObject(logArrayElement, "RV", chargeSession_Get().Energy * 0.001);	//ReadingValue
-	cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
-	cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
-	cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
-	cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState*/
+	if(logReaderArray != NULL)
+	{
+		ESP_LOGW(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
 
-	logReaderArray = OCMF_AddElementToOCMFLog_no_lock("B", "G");
-	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
-	//logReaderArray = OCMF_AddElementToOCMFLog("B", "G");
+		double sessEnergy = cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble;
+		double signedEnergy = GetEnergySigned();
+		double energyDiff = fabs(sessEnergy - signedEnergy);
+		if(energyDiff >= 0.0001)
+			ESP_LOGW(TAG, "1#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, signedEnergy, energyDiff);
+		else
+			ESP_LOGI(TAG, "1**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, signedEnergy, energyDiff);
 
-	//cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
+		/// Compensate for rounding error by rounding sessionEnergy up or down to match signed value difference
+		/// If case (0.0014 vs 0.002) normal rounding would give different result
+		if(sessEnergy > signedEnergy)
+			sessEnergy = floor(sessEnergy * 1000) / 1000.0;
+		else if(sessEnergy < signedEnergy)
+			sessEnergy = ceil(sessEnergy * 1000) / 1000.0;
 
-	/*char *buf = cJSON_PrintUnformatted(logRoot);
+		energyDiff = fabs(sessEnergy - signedEnergy);
+		if(energyDiff >= 0.0001)
+			ESP_LOGE(TAG, "2#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, signedEnergy, energyDiff);
+		else
+			ESP_LOGI(TAG, "2**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, signedEnergy, energyDiff);
 
-	strcpy(logString, "OCMF|");
-	strcpy(logString+strlen(logString), buf);
+		/// Update the rounded session energy
+		cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble = sessEnergy;
 
-	ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
-	free(buf);*/
+		char *buf = cJSON_PrintUnformatted(logRoot);
+
+		strcpy(OCMFLogEntryString, "OCMF|");
+		strcpy(OCMFLogEntryString+strlen(OCMFLogEntryString), buf);
+
+		//ESP_LOGW(TAG, "OCMF: %i: %s", strlen(buf), buf);
+
+		cJSON_Delete(logRoot);
+
+		logRoot = NULL;
+		logReaderArray = NULL;
+
+		free(buf);
+
+		cJSON_DeleteItemFromObject(CompletedSessionObject, "SignedSession");
+		//ESP_LOGW(TAG, "CompletedSession2: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+		cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", OCMFLogEntryString);
+		//cJSON_GetObjectItem(CompletedSessionObject,"SignedSession")->valuestring = OCMFLogEntryString;
+
+		//ESP_LOGW(TAG, "CompletedSession3: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Could not finalize SignedValues from flash");
+	}
+
+	///3. Create the full message string
+	char *buf = cJSON_PrintUnformatted(CompletedSessionObject);
+
+	strcpy(messageString, buf);
+
+	ESP_LOGW(TAG, "\r\nOCMF: %i:: %s\r\n", strlen(messageString), messageString);
+
+	ESP_LOGI(TAG, "Made CompletedSessionObject");
+
+	cJSON_Delete(CompletedSessionObject);
+	free(buf);
 
 	//For testing maximum message size
-	/*
-	int i;
-	for (i = 0; i < 99; i++)
-		OCMF_AddElementToOCMFLog("T", "G");
-	*/
+	//
+	//int i;
+	//for (i = 0; i < 99; i++)
+	//	OCMF_AddElementToOCMFLog("T", "G");
 
 	xSemaphoreGive(ocmf_lock);
 
-	err:
-	return logString;
+	return ESP_OK;
 }
 
-cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * const st)
+
+void OCMF_CompletedSession_StartStopOCMFLog(char label, time_t startTimeSec)
+{
+	double energyAtStart = get_accumulated_energy();
+	OCMF_CompletedSession_AddElementToOCMFLog(label, startTimeSec, energyAtStart);
+}
+
+
+cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx, time_t time_in, double energy_in)
 {
 
 	if(logReaderArray != NULL)
@@ -185,15 +252,16 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 		{
 			cJSON * logArrayElement = cJSON_CreateObject();
 			char timeBuffer[50] = {0};
-			zntp_GetSystemTime(timeBuffer, NULL);
+			zntp_format_time(timeBuffer, time_in);
+			//zntp_GetSystemTime(timeBuffer, NULL);
 
 			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
 			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
-			cJSON_AddNumberToObject(logArrayElement, "RV", get_accumulated_energy());	//ReadingValue
+			cJSON_AddNumberToObject(logArrayElement, "RV", energy_in);//get_accumulated_energy());	//ReadingValue
 			cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
 			cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
 			cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
-			cJSON_AddStringToObject(logArrayElement, "ST", st);			//MeterState
+			cJSON_AddStringToObject(logArrayElement, "ST", "G");			//MeterState
 
 			cJSON_AddItemToArray(logReaderArray, logArrayElement);
 
@@ -208,26 +276,13 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(const char * const tx, const char * con
 }
 
 
-cJSON * OCMF_AddElementToOCMFLog(const char * const tx, const char * const st)
+void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in)
 {
-	cJSON * result = NULL;
-
-	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
-	{
-		ESP_LOGE(TAG, "failed to obtain ocmf lock during element add");
-		goto err;
-	}else{
-		ESP_LOGI(TAG, "got ocmf lock OCMF_AddElementToOCMFLog");
-	}
-
-	result = OCMF_AddElementToOCMFLog_no_lock(tx, st);
-
-	xSemaphoreGive(ocmf_lock);
-	err:
-	return result;
+	//Add to file log
+	offlineSession_append_energy(tx, time_in, energy_in);
 }
 
-int OCMF_FinalizeOCMFLog()
+/*int OCMF_CompletedSession_FinalizeOCMFLog()
 {
 	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
 	{
@@ -237,9 +292,20 @@ int OCMF_FinalizeOCMFLog()
 		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
 	}
 
+
+	///Save the entry to the offline log in case CompletedSession is not transmitted successfully
+	//offlineSession_append_energy('E', endTime, endEnergy);
+
 	if(logReaderArray != NULL)
 	{
-		OCMF_AddElementToOCMFLog_no_lock("E", "G");
+		//double endEnergy = get_accumulated_energy();
+
+		///Save the entry to the offline log in case CompletedSession is not transmitted successfully
+		//offlineSession_append_energy('E', endTime, endEnergy);
+
+		///Build the OCMF structure for sending instantly
+		//char label = 'E';
+		//OCMF_AddElementToOCMFLog_no_lock(&label, endTime, endEnergy);
 
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
@@ -265,4 +331,45 @@ int OCMF_FinalizeOCMFLog()
 
 	xSemaphoreGive(ocmf_lock);
 	return 0;
-}
+}*/
+
+
+/*int OCMF_MakeAndSaveNewOfflineSessionEntry(time_t time, double energy)
+{
+	if( xSemaphoreTake( ocmf_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain ocmf lock during finalize");
+		return -1;
+	}else{
+		ESP_LOGI(TAG, "got ocmf lock OCMF_FinalizeOCMFLog");
+	}
+
+	if(logReaderArray != NULL)
+	{
+		OCMF_AddElementToOCMFLog_no_lock("T", time, energy);
+
+		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
+
+		char *buf = cJSON_PrintUnformatted(logRoot);
+
+		strcpy(logString, "OCMF|");
+		strcpy(logString+strlen(logString), buf);
+
+		ESP_LOGW(TAG, " After adding OCMF: %i: %s", strlen(buf), buf);
+
+		//cJSON_Delete(logRoot);
+
+		//logRoot = NULL;
+		//logReaderArray = NULL;
+
+		free(buf);
+		chargeSession_SetOCMF(logString);
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Nothing to add");
+	}
+
+	xSemaphoreGive(ocmf_lock);
+	return 0;
+}*/

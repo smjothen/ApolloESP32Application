@@ -13,9 +13,10 @@
 #include "DeviceInfo.h"
 #include "protocol_task.h"
 
-static const char *TAG = "STORAGE:";
+static const char *TAG = "STORAGE        ";
 
 #define CONFIG_FILE "CONFIG_FILE"
+#define DEFAULT_TRANSMIT_INTERVAL 3600
 nvs_handle configuration_handle;
 
 // "wifi"
@@ -35,6 +36,7 @@ void storage_Init()
 {
 	esp_err_t err = nvs_flash_init();
 
+	/// For debug
 	//err = nvs_flash_erase();
 	//err = nvs_flash_init();
 
@@ -71,7 +73,7 @@ void storage_Init_Configuration()
 
 	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
 
-	configurationStruct.transmitInterval 			= 3600;
+	configurationStruct.transmitInterval 			= DEFAULT_TRANSMIT_INTERVAL;
 	configurationStruct.transmitChangeLevel 		= 1.0;
 	configurationStruct.diagnosticsMode				= 0;
 
@@ -123,6 +125,8 @@ void storage_Init_Configuration()
 	configurationStruct.networkType					= 0;
 	configurationStruct.networkTypeOverride			= 0;
 	configurationStruct.pulseInterval				= 60;
+
+	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
 }
 
 
@@ -341,14 +345,40 @@ void storage_Set_NetworkType(uint8_t newValue)
 	configurationStruct.networkType = newValue;
 }
 
-void storage_Set_NetworkTypeOverride(uint8_t newValue)
+/*void storage_Set_NetworkTypeOverride(uint8_t newValue)
 {
 	configurationStruct.networkTypeOverride = newValue;
-}
+}*/
 
 void storage_Set_PulseInterval(uint32_t newValue)
 {
 	configurationStruct.pulseInterval = newValue;
+}
+
+
+//Max string length 37 characters
+void storage_Set_And_Save_DiagnosticsLog(char * newString)
+{
+	if(configurationStruct.diagnosticsLog[0] == '\0')
+	{
+		if(strlen(newString) < DIAGNOSTICS_STRING_SIZE)
+		{
+			strcpy(configurationStruct.diagnosticsLog, newString);
+			storage_SaveConfiguration();
+			ESP_LOGW(TAG, "Saved diagnosticslog");
+			return;
+		}
+	}
+	ESP_LOGE(TAG, "Could not save to diagnosticslog");
+}
+
+
+void storage_Clear_And_Save_DiagnosticsLog()
+{
+	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
+	storage_SaveConfiguration();
+
+	ESP_LOGW(TAG, "Cleared diagnosticslog");
 }
 
 
@@ -422,7 +452,9 @@ uint32_t storage_Get_TransmitInterval()
 {
 	//Sanity check. On old chargers the default is 120. Don't use this frequent defaults when updated with nvs read parameter.
 	if (configurationStruct.transmitInterval == 120)
-		configurationStruct.transmitInterval = 3600;
+		configurationStruct.transmitInterval = DEFAULT_TRANSMIT_INTERVAL;
+	else if (configurationStruct.transmitInterval == 3600)
+		configurationStruct.transmitInterval = DEFAULT_TRANSMIT_INTERVAL;
 	//If 0, return (disable logging)
 	else if(configurationStruct.transmitInterval == 0)
 		return configurationStruct.transmitInterval;
@@ -654,7 +686,8 @@ uint8_t storage_Get_PhaseRotation()
 	return configurationStruct.phaseRotation;
 }
 
-uint8_t storage_Get_NetworkType()
+//This is read from MCU instead and is currently not used
+/*uint8_t storage_Get_NetworkType()
 {
 	//If the override value has been set to a valid value, the override measurement value
 	if(configurationStruct.networkTypeOverride != 0)
@@ -666,12 +699,12 @@ uint8_t storage_Get_NetworkType()
 	{
 		return configurationStruct.networkType;
 	}
-}
+}*/
 
-uint8_t storage_Get_NetworkTypeOverride()
+/*uint8_t storage_Get_NetworkTypeOverride()
 {
 	return configurationStruct.networkTypeOverride;
-}
+}*/
 
 uint32_t storage_Get_PulseInterval()
 {
@@ -684,6 +717,17 @@ uint32_t storage_Get_PulseInterval()
 		configurationStruct.pulseInterval = 3600;
 
 	return configurationStruct.pulseInterval;
+}
+
+
+char * storage_Get_DiagnosticsLog()
+{
+	return configurationStruct.diagnosticsLog;
+}
+
+int storage_Get_DiagnosticsLogLength()
+{
+	return strlen(configurationStruct.diagnosticsLog);
 }
 
 esp_err_t nvs_set_zfloat(nvs_handle_t handle, const char* key, float inputValue)
@@ -798,6 +842,8 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "NetworkTypeOv", configurationStruct.networkTypeOverride);
 	err += nvs_set_u32(configuration_handle, "PulseInterval", configurationStruct.pulseInterval);
 
+	err += nvs_set_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog);
+
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
 
@@ -892,6 +938,9 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_u8(configuration_handle, "NetworkTypeOv", &configurationStruct.networkTypeOverride);
 	nvs_get_u32(configuration_handle, "PulseInterval", &configurationStruct.pulseInterval);
 
+	nvs_get_str(configuration_handle, "DiagnosticsLog", NULL, &readSize);
+	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog, &readSize);
+
 	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
 	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 
@@ -923,17 +972,22 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "MaxInstallationCurrenConfig:	\t\t%f", configurationStruct.maxInstallationCurrentConfig);
 	ESP_LOGI(TAG, "Standalone: 					%i", configurationStruct.standalone);
 	ESP_LOGI(TAG, "Standalone current: 	\t		%2.1f", configurationStruct.standaloneCurrent);
-
+	ESP_LOGI(TAG, "");
+	ESP_LOGI(TAG, "Maximum current: 	\t		%2.1f", configurationStruct.currentInMaximum);
+	ESP_LOGI(TAG, "Minimum current: 	\t		%2.1f", configurationStruct.currentInMinimum);
 	ESP_LOGI(TAG, "");
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
 
 	ESP_LOGI(TAG, "TransmitInterval: 			\t%i", configurationStruct.transmitInterval);
 	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	ESP_LOGI(TAG, "DiagnosticsLog: 				%s", configurationStruct.diagnosticsLog);
 
 
 	//ESP_LOGW(TAG, "*********************************");
 }
+
+/* Obsoleted - Replaced with OfflineSessions
 
 esp_err_t storage_SaveSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode)
 {
@@ -1004,7 +1058,9 @@ esp_err_t storage_clearSessionResetInfo()
 	nvs_close(session_reset_handle);
 
 	return err;
-}
+}*/
+
+
 
 
 /*
@@ -1505,7 +1561,7 @@ double storage_update_accumulated_energy(float session_energy){
 		goto err;
 	}
 
-	ESP_LOGI(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
+	ESP_LOGW(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
 		session_energy, previous_session_energy, previous_accumulated_energy
 	);
 
@@ -1533,14 +1589,14 @@ double storage_update_accumulated_energy(float session_energy){
 		}else{
 			ESP_LOGW(TAG, "no change in energy");
 			result = previous_accumulated_energy;
-			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
+			ESP_LOGW(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
 				previous_accumulated_energy, result, previous_session_energy, session_energy
 			);
 			goto err;
 		}
 	}
 
-	ESP_LOGI(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
+	ESP_LOGW(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
 		previous_accumulated_energy, result, previous_session_energy, session_energy
 	);
 

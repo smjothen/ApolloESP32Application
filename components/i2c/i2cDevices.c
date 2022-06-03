@@ -25,8 +25,8 @@
 #include "../ntp/zntp.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 
-static const char *TAG = "I2C_DEVICES";
-static const char *TAG_EEPROM = "EEPROM STATUS";
+static const char *TAG = "I2C_DEVICES    ";
+static const char *TAG_EEPROM = "EEPROM STATUS  ";
 
 static float temperature = 0.0;
 static float humidity = 0.0;
@@ -343,7 +343,7 @@ static void i2cDevice_task(void *pvParameters)
 			{
 				prodtest_on_nfc_read();
 			}
-			else if((nfcCardDetected > 0) && (MCU_GetchargeMode() == 12) && (isNfcTagPairing == false))
+			else if((nfcCardDetected > 0) && (MCU_GetChargeMode() == 12) && (isNfcTagPairing == false))
 			{
 				audio_play_single_biip();
 				ESP_LOGW(TAG, "Card working, clearing...");
@@ -373,6 +373,25 @@ static void i2cDevice_task(void *pvParameters)
 							{
 								audio_play_nfc_card_accepted();
 								ESP_LOGW(TAG, "Online: Authenticate by Cloud");
+							}
+
+							/// Authenticated session ongoing
+							else
+							{
+								/// See if we should stop due to correct RFID tag
+
+								ESP_LOGW(TAG, "StopTag: %s", NFCGetTagInfo().idAsString);
+								ESP_LOGW(TAG, "SessTag: %s", chargeSession_GetAuthenticationCode());
+
+								if(strcmp(NFCGetTagInfo().idAsString, chargeSession_GetAuthenticationCode()) == 0)
+								{
+									audio_play_nfc_card_accepted();
+									chargeSession_SetStoppedByRFID(true);
+									sessionHandler_InitiateResetChargeSession();
+
+									isAuthenticated = false;
+								}
+
 							}
 						}
 						//Charger offline authentication
@@ -433,7 +452,6 @@ static void i2cDevice_task(void *pvParameters)
 							}
 						}
 					}
-
 				}
 
 			}
@@ -453,11 +471,11 @@ static void i2cDevice_task(void *pvParameters)
 			humidity = SHT30ReadHumidity();
 
 			//Debug
-			struct tm readTime = {0};
+			/*struct tm readTime = {0};
 			readTime = RTCReadTime();
 			char timebuf[30];
 			strftime(timebuf, sizeof(timebuf), "%F %T", &readTime);
-			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);
+			ESP_LOGI(TAG, "Temp: %3.2fC Hum: %3.2f%%, Time is: %s", temperature, humidity, timebuf);*/
 
 			RTCVerifyControlRegisters();
 		}

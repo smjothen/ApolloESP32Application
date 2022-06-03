@@ -23,9 +23,10 @@
 #include "../components/authentication/authentication.h"
 #include "../components/i2c/include/i2cDevices.h"
 #include "offline_log.h"
+#include "offlineSession.h"
+#include "offlineHandler.h"
 
 //#define USE_OCPP // TODO: See if ocpp should be used together with mqtt or if it should be switched during runtime, after reboot or compiletime.
-
 
 #ifdef USE_OCPP
 #include <math.h>
@@ -36,10 +37,11 @@
 #include "types/ocpp_charge_point_error_code.h"
 #endif
 
-static const char *TAG = "SESSION    ";
+static const char *TAG = "SESSION        ";
 
 #define RESEND_REQUEST_TIMER_LIMIT 90
 #define OCMF_INTERVAL_TIME 3600
+#define PULSE_INIT_TIME 10000
 
 static char * completedSessionString = NULL;
 
@@ -55,17 +57,18 @@ void on_send_signed_meter_value()
 	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustment.
 	if(secSinceLastOCMFMessage <= 30)
 	{
-		ESP_LOGE(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
+		ESP_LOGW(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
 		return;
 	}
 
 	secSinceLastOCMFMessage = 0;
 
 	char OCMPMessage[220] = {0};
-	time_t time;
+	time_t timeSec;
 	double energy;
 
-	bool state_charging = MCU_GetchargeMode() == eCAR_CHARGING;
+	enum CarChargeMode chargeMode = MCU_GetChargeMode();
+	bool state_charging = (chargeMode == eCAR_CHARGING);
 	bool state_log_empty = false;
 	int publish_result = -1;
 
@@ -76,8 +79,8 @@ void on_send_signed_meter_value()
 	}
 
 	if(state_charging || hasRemainingEnergy){
-		// sample energy now, dumping the log may be to slow to get the time aligned energy
-		OCMF_CreateNewOCMFMessage(OCMPMessage, &time, &energy);
+		// Sample energy now, dumping the log may be to slow to get the time aligned energy
+		OCMF_SignedMeterValue_CreateNewOCMFMessage(OCMPMessage, &timeSec, &energy);
 	}
 
 	if(hasRemainingEnergy)
@@ -86,7 +89,7 @@ void on_send_signed_meter_value()
 	ESP_LOGI(TAG, "***** Clearing energy log *****");
 
 	if(!isMqttConnected()){
-		// do not attempt sending data when we know that the system is offline
+		// Do not attempt sending data when we know that the system is offline
 	}else if(attempt_log_send()==0){
 		ESP_LOGI(TAG, "energy log empty");
 		state_log_empty = true;
@@ -98,17 +101,22 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
-			append_offline_energy(time, energy);
+			append_offline_energy(timeSec, energy);
 		}
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
-		append_offline_energy(time, energy);
+		append_offline_energy(timeSec, energy);
 	}
 
+
 	if(state_charging || hasRemainingEnergy){
-		// add to log late to increase chance of consistent logs across observation types
-		OCMF_AddElementToOCMFLog("T", "G");
+		// CompletedSession-Log
+		// Add to log late to increase chance of consistent logs across observation types
+
+		//If hasRemainingEnergy, but disconnected -> don't add.
+		if (chargeMode != eCAR_DISCONNECTED)
+			OCMF_CompletedSession_AddElementToOCMFLog('T', timeSec, energy);
 	}
 
 	//If this is the case, remaining energy has been sent -> clear the flag
@@ -145,7 +153,7 @@ void SetAuthorized(bool authFromCloud)
 	{
 		chargeSession_SetAuthenticationCode(pendingAuthID);
 		//Update session on file with RFID-info
-		chargeSession_SaveSessionResetInfo();
+		chargeSession_SaveUpdatedSession();
 	}
 
 	pendingCloudAuthorization = false;
@@ -187,123 +195,18 @@ void log_task_info(void){
 }
 
 
-static uint32_t simulateOfflineTimeout = 180;
-static bool simulateOffline = false;
-void sessionHandler_simulateOffline(int offlineTime)
-{
-	simulateOffline = true;
-	simulateOfflineTimeout = offlineTime;
-}
-
-static bool requestCurrentWhenOnline = false;
-static bool offlineCurrentSent = false;
-void OfflineHandler()
-{
-
-	int activeSessionId = strlen(chargeSession_GetSessionId());
-	uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
-
-	//Handle charge session started offline
-	if((activeSessionId > 0) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))//2 = Requesting, add definitions
-	{
-		//Wait until a valid tag is registered.
-		if((storage_Get_AuthenticationRequired() == 1) && (chargeSession_Get().AuthenticationCode[0] == '\0'))
-			return;
-
-		requestCurrentWhenOnline = true;
-
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "Offline MCU Granted command OK");
-
-			float offlineCurrent = storage_Get_DefaultOfflineCurrent();
-
-			//Scaling is done in MCU
-			//if(MCU_GetGridType() == NETWORK_3P3W)
-			//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
-
-			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-			if(ret == MsgWriteAck)
-			{
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
-				{
-					ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
-
-				}
-				else
-				{
-					ESP_LOGI(TAG, "Offline MCU Start command FAILED");
-				}
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-			}
-
-		}
-		else
-		{
-			ESP_LOGI(TAG, "Offline MCU Granted command FAILED");
-		}
-	}
-
-	//Handel existing charge session that has gone offline
-	//Handle charge session started offline
-	else if((activeSessionId > 0) && ((chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)) && !offlineCurrentSent)//2 = Requesting, add definitions
-	{
-		float offlineCurrent = storage_Get_DefaultOfflineCurrent();
-
-		//Scaling is done in MCU
-		//if(MCU_GetGridType() == NETWORK_3P3W)
-		//	offlineCurrent = offlineCurrent / 1.732; //sqrt(3) Must give IT3 current like Cloud would do
-
-		ESP_LOGI(TAG, "Setting offline current to MCU %f", offlineCurrent);
-
-		requestCurrentWhenOnline = true;
-
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
-		if(ret == MsgWriteAck)
-		{
-			MessageType ret = MCU_SendCommandId(CommandStartCharging);
-			if(ret == MsgCommandAck)
-			{
-				offlineCurrentSent = true;
-				ESP_LOGE(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-			}
-		}
-		else
-		{
-			ESP_LOGE(TAG, "Offline MCU Start command FAILED");
-		}
-	}
-	else if(offlineCurrentSent == true)
-	{
-		ESP_LOGE(TAG, "Offline current mode. SimulateOfflineTimeout: %d", simulateOfflineTimeout);
-	}
-}
-
-void sessionHandler_ClearOfflineCurrentSent()
-{
-	offlineCurrentSent = false;
-}
 
 
 bool startupSent = false;
 bool setTimerSyncronization = false;
 
-static bool stoppedByCloud = false;
+//static bool stoppedByCloud = false;
 
-void sessionHandler_SetStoppedByCloud(bool stateFromCloud)
+/*void sessionHandler_SetStoppedByCloud(bool stateFromCloud)
 {
 	stoppedByCloud = stateFromCloud;
 	SetClearSessionFlag();
-}
+}*/
 
 SemaphoreHandle_t ocmf_sync_semaphore;
 
@@ -348,7 +251,7 @@ static void sessionHandler_PrintParametersFromCloud()
 		actualCurrentSet = currentSetFromCloud;
 	}
 
-	ESP_LOGW(TAG,"******** FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A **************", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
+	ESP_LOGI(TAG,"FromCloud: %2.1f A, MaxInst: %2.1f A -> Set: %2.1f A, Pilot: %2.1f %%   SetPhases: %d, OfflineCurrent: %2.1f A", currentSetFromCloud, storage_Get_MaxInstallationCurrentConfig(), actualCurrentSet, pilot, phasesSetFromCloud, storage_Get_DefaultOfflineCurrent());
 }
 
 static bool offlineMode = false;
@@ -710,6 +613,71 @@ void handle_state(uint32_t state){
 }
 #endif /*USE_OCPP*/
 
+static bool carInterfaceRestartTried = false;
+static bool hasSeenCarStateC = false;
+
+///Call this to make carInterface perform a new reset sequence if car is asleep
+void sessionHandler_ClearCarInterfaceResetConditions()
+{
+	carInterfaceRestartTried = false;
+	hasSeenCarStateC = false;
+}
+
+
+void sessionHandler_CheckAndSendOfflineSessions()
+{
+	int nrOfOfflineSessionFiles = offlineSession_FindNrOfFiles();
+	int nrOfSentSessions = 0;
+	int fileNo;
+	for (fileNo = 0; fileNo < nrOfOfflineSessionFiles; fileNo++)
+	{
+		memset(completedSessionString,0, LOG_STRING_SIZE);
+
+		int fileToUse = offlineSession_FindOldestFile();
+		OCMF_CompletedSession_CreateNewMessageFile(fileToUse, completedSessionString);
+
+		//Try sending 3 times. This transmission has been made a blocking call
+		int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
+		if (ret == 0)
+		{
+			nrOfSentSessions++;
+			/// Sending succeeded -> delete file from flash
+			offlineSession_delete_session(fileToUse);
+			ESP_LOGW(TAG,"Sent CompletedSession: %i/%i", nrOfSentSessions, nrOfOfflineSessionFiles);
+		}
+		else
+		{
+			ESP_LOGE(TAG,"Sending CompletedSession failed! Aborting.");
+			break;
+		}
+
+		/// Give other tasks time to run if there are many offline sessions to send
+		vTaskDelay(50 / portTICK_PERIOD_MS);
+	}
+}
+
+static bool doCheckOfflineSessions = true;
+void sessionHandler_SetOfflineSessionFlag()
+{
+	doCheckOfflineSessions = true;
+}
+
+
+static uint32_t pulseInterval = PULSE_INIT;
+static uint32_t recordedPulseInterval = PULSE_INIT;
+static uint16_t pulseSendFailedCounter = 0;
+static uint8_t chargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
+static bool isOnline = false;
+static bool previousIsOnline = true;
+static uint32_t pulseCounter = PULSE_INIT_TIME;
+
+enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
+{
+	return chargeOperatingMode;
+}
+
+static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
+
 static void sessionHandler_task()
 {
 	int8_t rssi = 0;
@@ -718,27 +686,26 @@ static void sessionHandler_task()
 	uint32_t onCounter = 0;
 
 	uint32_t onTime = 0;
-    uint32_t pulseCounter = 30;
+
+	///Set high to ensure first pulse sent instantly at start
 
     uint32_t dataCounter = 0;
     uint32_t dataInterval = 120;
 
     uint32_t statusCounter = 0;
-    uint32_t statusInterval = 10;
+    uint32_t statusInterval = 15;
 
-    uint32_t signalInterval = 120;
+    uint32_t LTEsignalInterval = 120;
 
     uint32_t signalCounter = 0;
 
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
-    enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
+    //enum CarChargeMode previousCarChargeMode = eCAR_UNINITIALIZED;
 
     enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
-    bool isOnline = false;
-    bool previousIsOnline = true;
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
@@ -750,24 +717,30 @@ static void sessionHandler_task()
     uint32_t resendRequestTimer = 0;
     uint32_t resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
     uint8_t nrOfResendRetries = 0;
+    uint32_t pingReplyTrigger = 0;
 
     uint8_t activeWithoutChargingDuration = 0;
-    bool carInterfaceRestartTried = false;
-    bool hasSeenCarStateC = false;
 
-    //Used to ensure eMeter alarm source is only read once per occurence
+	//Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
 
+    bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
     authentication_Init();
     OCMF_Init();
     uint32_t secondsSinceSync = OCMF_INTERVAL_TIME;
 
+    //TickType_t refresh_ticks = pdMS_TO_TICKS(60*1000); //60 minutes
     TickType_t refresh_ticks = pdMS_TO_TICKS(60*60*1000); //60 minutes
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*60*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     //TickType_t refresh_ticks = pdMS_TO_TICKS(1*5*1000); //1 minutes for testing( also change line in zntp.c for minute sync)
     signedMeterValues_timer = xTimerCreate( "MeterValueTimer", refresh_ticks, pdTRUE, NULL, on_ocmf_sync_time );
+
+    /// For developement testing only
+    //SessionHandler_SetOCMFHighInterval();
+
+    offlineSession_Init();
 
 	while (1)
 	{
@@ -801,32 +774,48 @@ static void sessionHandler_task()
 
 		onCounter++;
 
-		//Allow simulating timelimited offline mode initated with cloud command
-		if(simulateOffline == true)
-		{
-			//Override state
-			//isOnline = false;
-			MqttSetSimulatedOffline(true);
 
-			simulateOfflineTimeout--;
-			if(simulateOfflineTimeout == 0)
-			{
-				simulateOffline= false;
-				MqttSetSimulatedOffline(false);
-			}
-		}
+		/// This function is used to test the offline mode as a debug function from Cloud
+		offlineHandler_CheckForSimulateOffline();
 
 		isOnline = isMqttConnected();
 
-		//Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
-		if(isOnline == true)
+		if(storage_Get_Standalone() == false)
+			offlineHandler_CheckPingReply();
+
+		enum PingReplyState pingReplyState = offlineHandler_GetPingReplyState();
+
+		/// Always ensure offlineCurrentSent is ready to be sent to MCU in case we go offline
+		if((isOnline == true) && (pingReplyState != PING_REPLY_OFFLINE))
 		{
-			offlineCurrentSent = false;
+			offlineHandler_ClearOfflineCurrentSent();
 			offlineTime = 0;
 		}
-		else
+		/// Flag as offline if PING_REPLY i in offline mode to reduce transmissions
+		if((isOnline == true) && (pingReplyState == PING_REPLY_OFFLINE))
 		{
-			offlineTime++;
+			isOnline = false;
+		}
+
+		/// If we are offline and a car has been connected, make sure we
+		if((isOnline == false) && (chargeOperatingMode != CHARGE_OPERATION_STATE_DISCONNECTED))
+			doCheckOfflineSessions = true;
+
+		/// When we are online without a car connected(No active session file), perform check to see if there are offline sessions to send
+		if((isOnline == true) && (doCheckOfflineSessions == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+		{
+			sessionHandler_CheckAndSendOfflineSessions();
+			doCheckOfflineSessions = false;
+
+			/// Send diagnostics if there has been any offline sessions
+			char sessionString[32] = {0};
+			int maxCount = offlineSession_GetMaxSessionCount();
+			if(maxCount >= 0)
+			{
+				snprintf(sessionString, sizeof(sessionString),"MaxOfflineSessions: %i", maxCount);
+				ESP_LOGI(TAG, "%s", sessionString);
+				publish_debug_telemetry_observation_Diagnostics(sessionString);
+			}
 		}
 
 
@@ -841,6 +830,8 @@ static void sessionHandler_task()
 		{
 			ESP_LOGE(TAG, "ESP resetting due to MCUComErrors: %i", mcuCOMErrors);
 			publish_debug_message_event("mcuCOMError reset", cloud_event_level_warning);
+
+			storage_Set_And_Save_DiagnosticsLog("#3 MCU COM-error > 20");
 
 			vTaskDelay(5000 / portTICK_PERIOD_MS);
 
@@ -863,6 +854,8 @@ static void sessionHandler_task()
 				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %i", mcuDebugCounter);
 				publish_debug_message_event("mcuDebugCounter reset", cloud_event_level_warning);
 
+				storage_Set_And_Save_DiagnosticsLog("#4 MCU debug counter stopped incrementing");
+
 				vTaskDelay(5000 / portTICK_PERIOD_MS);
 
 				esp_restart();
@@ -872,21 +865,10 @@ static void sessionHandler_task()
 		if(networkInterface == eCONNECTION_NONE)
 		{
 			if((onCounter % 10) == 0)
-				ESP_LOGI(TAG, "No connection configured");
+				ESP_LOGI(TAG, "CommunicationMode == eCONNECTION_NONE");
 
-			//vTaskDelay(pdMS_TO_TICKS(1000));
-			//continue;
 		}
-		else if(!isOnline)
-		{
-			if((onCounter % 10) == 0)
-			{
-				if(storage_Get_Standalone() == 1)
-					ESP_LOGI(TAG, "Offline - Standalone");
-				else
-					ESP_LOGI(TAG, "Offline - System");
-			}
-		}
+
 
 		if(chargeSession_HasNewSessionId() == true)
 		{
@@ -895,8 +877,20 @@ static void sessionHandler_task()
 				chargeSession_ClearHasNewSession();
 		}
 
-		uint8_t chargeOperatingMode = MCU_GetChargeOperatingMode();
-		currentCarChargeMode = MCU_GetchargeMode();
+		currentCarChargeMode = MCU_GetChargeMode();
+		chargeOperatingMode = MCU_GetChargeOperatingMode();
+
+
+		/// If a car is connected when booting, check for incomplete offline session and resume if incomplete
+		if((firstTimeAfterBoot == true) && (chargeOperatingMode != CHARGE_OPERATION_STATE_DISCONNECTED))
+		{
+			chargeSession_CheckIfLastSessionIncomplete();
+			firstTimeAfterBoot = false;
+		}
+
+		/// Hold new StartDateTime from requesting Observed time. Cloud expects the same timestamp to be used.
+		if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) && (previousChargeOperatingMode != CHARGE_OPERATION_STATE_REQUESTING) && (chargeSession_Get().StartDateTime[0] == '\0'))
+			InitiateHoldRequestTimeStamp();
 
 #ifdef USE_OCPP
 		if(chargeOperatingMode != previousChargeOperatingMode){
@@ -915,14 +909,34 @@ static void sessionHandler_task()
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) && requestCurrentWhenOnline)
+		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
 		{
-			publish_debug_telemetry_observation_RequestNewStartChargingCommand();
-			requestCurrentWhenOnline = false;
+			if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED))
+			{
+				ESP_LOGW(TAG, "Got online - Send requesting");
+
+				MessageType ret = MCU_SendCommandId(CommandStopCharging);
+				if(ret == MsgCommandAck)
+				{
+
+					ESP_LOGI(TAG, "MCU Stop command OK");
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU Stop command FAILED");
+				}
+
+				publish_debug_telemetry_observation_RequestNewStartChargingCommand();
+				offlineHandler_SetRequestingCurrentWhenOnline(false);
+			}
+			else
+			{
+				ESP_LOGW(TAG, "Got online - Unexpected state requesting");
+			}
 		}
 
-
-		if(isOnline)
+		/// MQTT connected and pingReply not in offline state
+		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
 		{
 			//Allow disabling send on change in standalone when TransmitInterval is 0
 			if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
@@ -935,10 +949,22 @@ static void sessionHandler_task()
 			if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
 			{
 				resendRequestTimer++;
-				ESP_LOGE(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
+					/// On second request transmission, do the ping-reply to ensure inCharge is responding.
+					/// If Cloud does not reply with PingReply command, then go to offline mode.
+					pingReplyTrigger++;
+					if(pingReplyTrigger == 1)
+					{
+						update_mqtt_event_pattern(true);
+						offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
+					}
+
 					publish_debug_telemetry_observation_ChargingStateParameters();
+
+					if(pingReplyTrigger == 1)
+						update_mqtt_event_pattern(false);
 
 					// Reset timer
 					resendRequestTimer = 0;
@@ -954,24 +980,25 @@ static void sessionHandler_task()
 			}
 			else
 			{
-				//if(resendRequestTimerLimit != RESEND_REQUEST_TIMER_LIMIT)
-					//ESP_LOGE(TAG, "CHARGE STATE timer reset!");
 
 				resendRequestTimer = 0;
 				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
 				nrOfResendRetries = 0;
+				pingReplyTrigger = 0;
 			}
 
 
 			offlineTime = 0;
 			offlineMode = false;
 		}
-		else
+		else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
 		{
 			if(storage_Get_Standalone() == false)
 			{
 				offlineTime++;
-				if(offlineTime > 120)
+
+				/// Use pulseInterval * 2 reported to Cloud to ensure charging is not started until Cloud has flagged the charger as offline
+				if(offlineTime > (recordedPulseInterval * 2))
 				{
 					if(secondsSinceLastCheck < 10)
 					{
@@ -979,14 +1006,14 @@ static void sessionHandler_task()
 					}
 					if(secondsSinceLastCheck >= 10)
 					{
-						OfflineHandler();
+						offlineHandler_CheckForOffline();
 						secondsSinceLastCheck = 0;
 						offlineMode = true;
 					}
 				}
 				else
 				{
-					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d", offlineTime);
+					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
 				}
 			}
 			else
@@ -997,7 +1024,7 @@ static void sessionHandler_task()
 		}
 
 
-		if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
+		/*if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
 			if(storage_CheckSessionResetFile() > 0)
 			{
@@ -1008,7 +1035,7 @@ static void sessionHandler_task()
 			{
 				ESP_LOGI(TAG, "No session in csResetSession file");
 			}
-		}
+		}*/
 
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
@@ -1031,16 +1058,22 @@ static void sessionHandler_task()
 
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true))
 		{
+			if(isOnline)
+			{
+				/// Authorized session has cleared by cloud. Send the held autorization to reautorize the connected car.
+				if((sessionSession_IsHoldingUserUUID() == true) && (sessionResetMode == eSESSION_RESET_NONE))
+				{
+					ESP_LOGW(TAG, "Sending and clearing hold-auth: %s", NFCGetTagInfo().idAsString);
+					SetPendingRFIDTag(sessionSession_GetHeldUserUUID());
+					publish_debug_telemetry_observation_NFC_tag_id(sessionSession_GetHeldUserUUID());
+					publish_debug_telemetry_observation_ChargingStateParameters();
+					chargeSession_ClearHeldUserUUID();
+				}
+			}
 
 			if((NFCGetTagInfo().tagIsValid == true) && (stoppedByRfid == false))
 			{
-//				int i = 0;
-//				for (i = 0; i < NFCGetTagInfo().idLength; i++)
-//				{
-//					sprintf(NFCGetTagInfo().idAsString+(i*2),"%02X ", NFCGetTagInfo().id[i] );
-//				}
-
-				if (isMqttConnected() == true)
+				if(isOnline)
 				{
 					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 					if(ret == MsgWriteAck)
@@ -1048,6 +1081,7 @@ static void sessionHandler_task()
 					else
 						ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
+					ESP_LOGW(TAG, "Sending auth: %s", NFCGetTagInfo().idAsString);
 					publish_debug_telemetry_observation_NFC_tag_id(NFCGetTagInfo().idAsString);
 					publish_debug_telemetry_observation_ChargingStateParameters();
 				}
@@ -1066,7 +1100,8 @@ static void sessionHandler_task()
 					{
 						chargeSession_SetAuthenticationCode(NFCGetTagInfo().idAsString);
 						//Update session on file with RFID-info
-						chargeSession_SaveSessionResetInfo();
+						chargeSession_SaveUpdatedSession();
+						//chargeSession_SaveSessionResetInfo();
 					}
 				}
 
@@ -1074,18 +1109,18 @@ static void sessionHandler_task()
 
 			}
 			//De-authorize in cloud?
-			else if(stoppedByRfid == true)
+			/*else if(stoppedByRfid == true)
 			{
 				if((strcmp(chargeSession_Get().AuthenticationCode, NFCGetTagInfo().idAsString) == 0))
 				{
-					if (isMqttConnected() == true)
+					if(isOnline)
 					{
 						publish_debug_telemetry_observation_NFC_tag_id(NULL);
 						publish_debug_telemetry_observation_ChargingStateParameters();
 					}
 					//NFCTagInfoClearValid();
 				}
-			}
+			}*/
 		}
 
 
@@ -1129,46 +1164,45 @@ static void sessionHandler_task()
 		else if(currentCarChargeMode == eCAR_DISCONNECTED)
 			hasSeenCarStateC = false;
 
+		/// Make sure that a held UserUUID is clear after disconnect (needed when offline)
+		if((sessionSession_IsHoldingUserUUID() == true) && (currentCarChargeMode == eCAR_DISCONNECTED))
+		{
+			chargeSession_ClearHeldUserUUID();
+		}
 
-
-		if(chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)
+		if(chargeOperatingMode > CHARGE_OPERATION_STATE_REQUESTING)//CHARGE_OPERATION_STATE_DISCONNECTED)
 			chargeSession_UpdateEnergy();
 
 		// Check if car connecting -> start a new session
-		if(((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
+		//if(((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED)) || (stoppedByRfid == true) || (stoppedByCloud == true))
+		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
-				OCMF_FinalizeOCMFLog();
+				//Set end time, end energy and OCMF data
 				chargeSession_Finalize();
-				chargeSession_PrintSession();
+				chargeSession_PrintSession(isOnline, offlineHandler_IsPingReplyOffline());
 
-				//char completedSessionString[200] = {0};
-				memset(completedSessionString,0, LOG_STRING_SIZE);
-				chargeSession_GetSessionAsString(completedSessionString);
 
-				// Delay to space data recorded i cloud.
-				//vTaskDelay(pdMS_TO_TICKS(2000));
-
-				if (isMqttConnected() == true)
+				/// If it is a systemSession without SessionId from Cloud and no energy, delete it.
+				if((storage_Get_Standalone() == 0) && (chargeSession_IsLocalSession() == true))
 				{
-					int i;
-					for (i = 1; i <= 3; i++)
+					if(chargeSession_Get().Energy == 0.0)
 					{
-						//Try sending 3 times. This transmission has been made a blocking call
-						int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
-						if (ret == 0)
-							break;
-						else
-							ESP_LOGE(TAG," CompletedSession failed %i/3", i);
+						offlineSession_DeleteLastUsedFile();
 					}
 				}
 
+				if(isOnline)
+				{
+					sessionHandler_CheckAndSendOfflineSessions();
+
+				}
 			}
 
 			//Reset if set
-			if(stoppedByCloud == true)
+			/*if(stoppedByCloud == true)
 			{
 				stoppedByCloud = false;
 				sessionIDClearedByCloud = true;
@@ -1176,7 +1210,7 @@ static void sessionHandler_task()
 
 				//char empty[] = "\0";
 				publish_string_observation(SessionIdentifier, NULL);
-			}
+			}*/
 			chargeSession_Clear();
 
 			NFCClearTag();
@@ -1185,6 +1219,7 @@ static void sessionHandler_task()
 			i2cClearAuthentication();
 		}
 		
+
 		//If the FinalStopActive bit is set when a car disconnect, make sure to clear the status value used by Cloud
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
 		{
@@ -1207,7 +1242,7 @@ static void sessionHandler_task()
 		}
 
 
-		previousCarChargeMode = currentCarChargeMode;
+		//previousCarChargeMode = currentCarChargeMode;
 		previousChargeOperatingMode = chargeOperatingMode;
 
 		onTime++;
@@ -1215,23 +1250,15 @@ static void sessionHandler_task()
 
 		if (onTime > 600)
 		{
-			if (networkInterface == eCONNECTION_WIFI)
+			if ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE))
 			{
-				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
+				if ((MCU_GetChargeMode() == 12) || (MCU_GetChargeMode() == 9))
+					dataInterval = storage_Get_TransmitInterval() * 12;	//When car is disconnected or not charging
 				else
-					dataInterval = 900;	//When car is in charging state
-
-			}
-			else if (networkInterface == eCONNECTION_LTE)
-			{
-				if ((MCU_GetchargeMode() == 12) || (MCU_GetchargeMode() == 9))
-					dataInterval = storage_Get_TransmitInterval();//3600;	//When car is disconnected or not charging
-				else
-					dataInterval = 900;	//When car is in charging state
+					dataInterval = storage_Get_TransmitInterval();	//When car is in charging state
 
 				//LTE SignalQuality internal update interval
-				signalInterval = 7200;
+				LTEsignalInterval = 7200;
 			}
 		}
 
@@ -1242,7 +1269,7 @@ static void sessionHandler_task()
 		if((dataCounter >= dataInterval) && (storage_Get_TransmitInterval() > 0))
 		{
 
-			if (isMqttConnected() == true)
+			if(isOnline)
 			{
 				if (networkInterface == eCONNECTION_WIFI)
 				{
@@ -1276,9 +1303,9 @@ static void sessionHandler_task()
 		if (networkInterface == eCONNECTION_LTE)
 		{
 			signalCounter++;
-			if((signalCounter >= signalInterval) && (otaIsRunning() == false))
+			if((signalCounter >= LTEsignalInterval) && (otaIsRunning() == false))
 			{
-				if (isMqttConnected() == true)
+				if (isOnline)
 				{
 					//log_task_info();
 					log_cellular_quality(); // check if OTA is in progress before calling this
@@ -1288,16 +1315,79 @@ static void sessionHandler_task()
 			}
 		}
 
-		pulseCounter++;
-		if((pulseCounter >= storage_Get_PulseInterval()) || (!previousIsOnline && isOnline))
+		//pulseCounter++;
+
+		//if(isOnline)
+		/*if(connectivity_GetMQTTInitialized())
 		{
-			if (isMqttConnected() == true)
+			if(storage_Get_Standalone() == true)
 			{
-				publish_cloud_pulse();
+				pulseInterval = PULSE_STANDALONE;
+
+				/// If other than default on storage, use this to override pulseInterval
+				if(storage_Get_PulseInterval() != 60)
+					pulseInterval = storage_Get_PulseInterval();
+			}
+			else if(storage_Get_Standalone() == false)
+			{
+				if(chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)
+				{
+					pulseInterval = PULSE_SYSTEM_CHARGING;
+				}
+				else
+				{
+					pulseInterval = PULSE_SYSTEM_NOT_CHARGING;
+
+					/// If other than default on storage, use this to override pulseInterval
+					if(storage_Get_PulseInterval() != 60)
+						pulseInterval = storage_Get_PulseInterval();
+				}
 			}
 
-			pulseCounter = 0;
-		}
+
+			/// Send new pulse interval to Cloud when it changes with ChargeOperatingMode in System mode.
+			/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
+			if(pulseInterval != recordedPulseInterval)
+			{
+				ESP_LOGW(TAG,"Sending pulse interval %d (blocking)", pulseInterval);
+				int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);
+
+				if(ret == ESP_OK)
+				{
+					recordedPulseInterval = pulseInterval;
+					ESP_LOGW(TAG,"Registered pulse interval");
+					pulseSendFailedCounter = 0;
+				}
+				else
+				{
+					ESP_LOGE(TAG,"Pulse interval send failed");
+
+					//If sending fails, don't continue sending forever -> timeout and set anyway
+					pulseSendFailedCounter++;
+					if(pulseSendFailedCounter == 90)
+					{
+						recordedPulseInterval = pulseInterval;
+						pulseSendFailedCounter = 0;
+					}
+				}
+			}
+
+
+
+			/// If going from offline to online - ensure new pulse is sent instantly
+			/// Cloud sets charger as online within one minute after new pulse is received.
+			if((isOnline == true) && (previousIsOnline == false))
+				pulseCounter = PULSE_INIT_TIME;
+
+			if(pulseCounter >= pulseInterval)
+			{
+				ESP_LOGW(TAG, "PULSE");
+				publish_cloud_pulse();
+
+				pulseCounter = 0;
+			}
+		}*/
+
 
 		statusCounter++;
 		if(statusCounter >= statusInterval)
@@ -1305,7 +1395,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGW(TAG,"******** LTE: %d %%  DataInterval: %d  Pulse: %d *******", GetCellularQuality(), dataInterval, storage_Get_PulseInterval());
+				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %d  Pulse: %d/%d", GetCellularQuality(), dataInterval, pulseCounter, pulseInterval);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -1314,14 +1404,14 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGW(TAG,"******** WIFI: %d dBm  DataInterval: %d  Pulse: %d *******", rssi, dataInterval, storage_Get_PulseInterval());
+				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %d  Pulse: %d/%d", rssi, dataInterval, pulseCounter, pulseInterval);
 			}
 
 			//This is to make cloud settings visible during developement
 			if(storage_Get_Standalone() == false)
 			{
 				sessionHandler_PrintParametersFromCloud();
-				if((MCU_GetchargeMode() == 12))
+				if((MCU_GetChargeMode() == 12))
 				{
 					//Clear if car is disconnected
 					currentSetFromCloud = 0.0;
@@ -1329,13 +1419,13 @@ static void sessionHandler_task()
 				}
 			}
 
-			chargeSession_PrintSession();
+			chargeSession_PrintSession(isOnline, offlineHandler_IsPingReplyOffline());
 
 			statusCounter = 0;
 		}
 
 
-		if (isMqttConnected() == true)
+		if (isOnline)
 		{
 			if (startupSent == false)
 			{
@@ -1360,6 +1450,15 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
+				publish_debug_telemetry_observation_power();
+
+
+				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
+				if(storage_Get_DiagnosticsLogLength() > 0)
+				{
+					publish_debug_telemetry_observation_DiagnosticsLog();
+					storage_Clear_And_Save_DiagnosticsLog();
+				}
 
 				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
 				//publish_debug_telemetry_observation_cloud_settings();
@@ -1529,7 +1628,7 @@ static void sessionHandler_task()
 				uint16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
 				uint16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
 
-				sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
+				snprintf(payload, sizeof(payload), "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
 				ESP_LOGI(TAG, "ServoCheckParams: %s", payload);
 				publish_debug_telemetry_observation_Diagnostics(payload);
 
@@ -1549,14 +1648,15 @@ static void sessionHandler_task()
 
 			if(logCurrents == true)
 			{
-				if(logCurrentsCounter < 1000)
+				if(logCurrentsCounter < 300)
 					logCurrentsCounter++;
-				if(logCurrentsCounter == 1000)
+				if(logCurrentsCounter == 300)
 					logCurrents = false;
 
 				if(logCurrentsCounter % 2 == 0)
 					publish_debug_telemetry_observation_power();
 			}
+
 
 			if(MCU_GetWarnings() & 0x1000000) /// WARNING_EMETER_ALARM
 			{
@@ -1569,7 +1669,7 @@ static void sessionHandler_task()
 					if((rxMsg.length == 2) && (rxMsg.identifier == ParamEmeterAlarm))
 					{
 						char buf[50] = {0};
-						sprintf(buf, "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
+						snprintf(buf, sizeof(buf), "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
 						publish_debug_message_event(buf, cloud_event_level_warning);
 					}
 				}
@@ -1580,6 +1680,27 @@ static void sessionHandler_task()
 			{
 				eMeterAlarmBlock = false;
 			}
+			
+
+
+			if(onTime % 15 == 0)//15
+			{
+				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
+				char buf[150]={0};
+				snprintf(buf, sizeof(buf), "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
+				ESP_LOGI(TAG, "**** %s ****", buf);
+
+				if(onTime % 7200 == 0)
+				{
+					//Only publish if activated by command
+					if(GetDatalog())
+						publish_debug_telemetry_observation_Diagnostics(buf);
+
+					MqttDataReset();
+					ESP_LOGW(TAG, "**** Hourly MQTT data reset ****");
+				}
+			}
+
 
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
@@ -1605,14 +1726,108 @@ static void sessionHandler_task()
 
 		}
 
+
+		/// Indicate offline with led LED
+		if((storage_Get_Standalone() == false) && ((networkInterface == eCONNECTION_WIFI) || (networkInterface == eCONNECTION_LTE)))
+		{
+			if((offlineTime % 30 == 0) && (isOnline == false))
+			{
+				MessageType ret = MCU_SendCommandId(CommandIndicateOffline);
+				if(ret == MsgCommandAck)
+					ESP_LOGI(TAG, "MCU LED offline pulse OK. ");
+				else
+					ESP_LOGE(TAG, "MCU LED offline pulse FAILED");
+			}
+		}
+
+
+		/*if((useTransitionState == true) && (chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+		{
+			SetTransitionOperatingModeState(false);
+			useTransitionState = false;
+			ESP_LOGE(TAG, "Transition state END");
+		}*/
+
 		previousIsOnline = isOnline;
+
+
+		if(sessionResetMode != eSESSION_RESET_NONE)
+		{
+			sessionHandler_StopAndResetChargeSession();
+		}
 
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
 
+
+
+void sessionHandler_InitiateResetChargeSession()
+{
+	sessionResetMode = eSESSION_RESET_INITIATED;
+	ESP_LOGW(TAG, "ResetSession initiated");
+}
+
+void sessionHandler_StopAndResetChargeSession()
+{
+	///First send STOP command
+	if(sessionResetMode == eSESSION_RESET_INITIATED)
+	{
+		MessageType ret = MCU_SendCommandId(CommandStopCharging);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU Reset-Stop command OK");
+
+			sessionResetMode = eSESSION_RESET_STOP_SENT;
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU ResetSession command FAILED");
+			sessionResetMode= eSESSION_RESET_NONE;
+		}
+	}
+
+	///When charging has stopped(9) -Finalize session
+	else if(sessionResetMode == eSESSION_RESET_STOP_SENT)
+	{
+		if(MCU_GetChargeMode() != eCAR_CHARGING)
+		{
+			sessionResetMode = eSESSION_RESET_FINALIZE;
+		}
+	}
+
+
+	else if(sessionResetMode == eSESSION_RESET_FINALIZE)
+	{
+		ESP_LOGI(TAG, "Transition state START");
+		SetTransitionOperatingModeState(true);
+		sessionResetMode = eSESSION_RESET_DO_RESET;
+	}
+
+	else if((sessionResetMode == eSESSION_RESET_DO_RESET) && (chargeSession_HasSessionId() == false))
+	{
+
+		MessageType ret = MCU_SendCommandId(CommandResetSession);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU ResetSession command OK");
+			SetTransitionOperatingModeState(false);
+			sessionResetMode = eSESSION_RESET_NONE;
+			ESP_LOGI(TAG, "Transition state STOP");
+			//return 200;
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU ResetSession command FAILED");
+			//return 400;
+		}
+	}
+}
+
+
+
 /*
- * If we have received an already set SesssionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
+ * If we have received an already set SessionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
  * This indicates that cloud does not have the correct chargeOperatingMode recorded.
 */
 void ChargeModeUpdateToCloudNeeded()
@@ -1653,6 +1868,108 @@ int sessionHandler_GetStackWatermark()
 		return uxTaskGetStackHighWaterMark(taskSessionHandle);
 	else
 		return -1;
+}
+
+
+void sessionHandler_Pulse()
+{
+	pulseCounter++;
+
+	if(connectivity_GetMQTTInitialized())
+	{
+		if(storage_Get_Standalone() == true)
+		{
+			pulseInterval = PULSE_STANDALONE;
+
+			/// If other than default on storage, use this to override pulseInterval
+			if(storage_Get_PulseInterval() != 60)
+				pulseInterval = storage_Get_PulseInterval();
+		}
+		else if(storage_Get_Standalone() == false)
+		{
+			if(chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING)
+			{
+				pulseInterval = PULSE_SYSTEM_CHARGING;
+			}
+			else
+			{
+				pulseInterval = PULSE_SYSTEM_NOT_CHARGING;
+
+				/// If other than default on storage, use this to override pulseInterval
+				if(storage_Get_PulseInterval() != 60)
+					pulseInterval = storage_Get_PulseInterval();
+			}
+		}
+
+
+		/// Send new pulse interval to Cloud when it changes with ChargeOperatingMode in System mode.
+		/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
+		if(pulseInterval != recordedPulseInterval)
+		{
+			ESP_LOGI(TAG,"Sending pulse interval %d (blocking)", pulseInterval);
+			int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);
+
+			if(ret == ESP_OK)
+			{
+				recordedPulseInterval = pulseInterval;
+				ESP_LOGI(TAG,"Registered pulse interval");
+				pulseSendFailedCounter = 0;
+			}
+			else
+			{
+				ESP_LOGE(TAG,"Pulse interval send failed");
+
+				//If sending fails, don't continue sending forever -> timeout and set anyway
+				pulseSendFailedCounter++;
+				if(pulseSendFailedCounter == 90)
+				{
+					recordedPulseInterval = pulseInterval;
+					pulseSendFailedCounter = 0;
+				}
+			}
+		}
+
+
+
+		/// If going from offline to online - ensure new pulse is sent instantly
+		/// Cloud sets charger as online within one minute after new pulse is received.
+		if((isOnline == true) && (previousIsOnline == false))
+			pulseCounter = PULSE_INIT_TIME;
+
+		if(pulseCounter >= pulseInterval)
+		{
+			ESP_LOGI(TAG, "PULSE");
+			publish_cloud_pulse();
+
+			pulseCounter = 0;
+		}
+	}
+}
+
+
+void sessionHandler_TestOfflineSessions(int nrOfSessions, int nrOfSignedValues)
+{
+	MqttSetSimulatedOffline(true);
+
+	int i, j;
+	for(i = 0; i < nrOfSessions; i++)
+	{
+		ESP_LOGI(TAG, "Generating OfflineSession nr: %i", i);
+		chargeSession_Start();
+
+		for(j = 0; j < nrOfSignedValues; j++)
+		{
+			OCMF_CompletedSession_AddElementToOCMFLog('T', i, j*1.0);
+		}
+
+		chargeSession_SetEnergyForTesting(j*1.0);
+
+		chargeSession_Finalize();
+
+		chargeSession_Clear();
+	}
+
+	MqttSetSimulatedOffline(false);
 }
 
 void sessionHandler_init(){

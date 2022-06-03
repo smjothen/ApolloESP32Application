@@ -26,7 +26,7 @@
 #define MAX_HTTP_RECV_BUFFER 		512
 
 
-static const char *TAG = "CERT    ";
+static const char *TAG = "CERT           ";
 
 static TaskHandle_t taskCertHandle = NULL;
 static bool certificateIsOk = false;

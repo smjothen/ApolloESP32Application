@@ -126,6 +126,8 @@
 
 		DebugCounter = 731,
 		ParamWarningValue = 732,
+		ParamGridTypeOverride = 733,
+		ParamIT3OptimizationEnabled = 734,
 
 		NrOfChargeCards = 749,
 	    NewChargeCard = 750,

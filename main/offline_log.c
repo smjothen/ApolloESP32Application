@@ -1,6 +1,6 @@
 #include "offline_log.h"
 
-#define TAG "OFFLINE_LOG"
+#define TAG "OFFLINE_LOG    "
 
 #include "esp_log.h"
 #include "errno.h"
@@ -11,8 +11,8 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 
-const char *tmp_path = "/tmp";
-const char *log_path = "/tmp/log554.bin";
+static const char *tmp_path = "/tmp";
+static const char *log_path = "/tmp/log554.bin";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 static const int max_log_items = 1000;
@@ -227,7 +227,7 @@ int attempt_log_send(void){
         );
 
         if(crc_on_file==calculated_crc){
-            OCMF_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
+            OCMF_SignedMeterValue_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
             int publish_result = publish_string_observation_blocked(
 			    SignedMeterValue, ocmf_text, 2000
 		    );

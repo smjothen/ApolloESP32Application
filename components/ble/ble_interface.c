@@ -18,7 +18,7 @@
 #include "ble_gatt_server.h"
 #include "ble_interface.h"
 
-#define TAG "ble interface"
+#define TAG "BLE INTERFACE  "
 
 esp_err_t ble_interface_init(void)
 {

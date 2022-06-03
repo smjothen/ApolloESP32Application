@@ -61,7 +61,7 @@ static esp_netif_t *netif = NULL;
 static esp_ip6_addr_t s_ipv6_addr;
 #endif
 
-static const char *TAG = "NETWORK ";
+static const char *TAG = "NETWORK        ";
 
 bool isProductionSetup = false;
 bool isConnected = false;

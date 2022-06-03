@@ -44,6 +44,7 @@ struct RFIDTokens{
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 #define PREFIX_GUID 41
+#define DIAGNOSTICS_STRING_SIZE 100
 
 #define DEFAULT_CSL_LENGTH 3//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
@@ -53,6 +54,13 @@ struct RFIDTokens{
 #define NETWORK_3P3W 2
 #define NETWORK_1P4W 3
 #define NETWORK_3P4W 4
+
+//PulseRates
+#define PULSE_INIT 120
+#define PULSE_STANDALONE 900
+#define PULSE_SYSTEM_NOT_CHARGING 600
+#define PULSE_SYSTEM_CHARGING 180
+
 
 //Numbers should match Pro
 enum CommunicationMode
@@ -165,6 +173,8 @@ struct Configuration
 	uint8_t phaseRotation;
 	uint8_t networkType;
 	uint8_t networkTypeOverride;
+
+	char diagnosticsLog[DIAGNOSTICS_STRING_SIZE];
 };
 
 
