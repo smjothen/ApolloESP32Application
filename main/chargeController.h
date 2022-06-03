@@ -35,6 +35,9 @@ void chargeController_SetTimes();
 bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
+
+char * chargeController_GetNextStartString();
+
 void chargeController_CancelDelay();
 void chargeController_SetNowTime(char * timeString);
 bool chargeController_SetStartCharging(enum ChargeSource source);
