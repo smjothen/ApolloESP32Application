@@ -1065,6 +1065,9 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_local_settings();
 				publish_debug_telemetry_observation_power();
 
+				if(chargeController_IsScheduleActive())
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
 
 				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)

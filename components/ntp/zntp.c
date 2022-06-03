@@ -80,6 +80,16 @@ void zntp_GetTimeStruct(struct tm *tmUpdatedTime)
 	localtime_r(&nowInSeconds, tmUpdatedTime);
 }
 
+
+void zntp_GetLocalTimeZoneStruct(struct tm *tmUpdatedTime, time_t offsetSeconds)
+{
+	time_t nowInSeconds;
+
+	time(&nowInSeconds);
+	nowInSeconds += offsetSeconds;
+	localtime_r(&nowInSeconds, tmUpdatedTime);
+}
+
 /*
  * This function returns the format required for SignedMeterValue OCMF messages.
  */

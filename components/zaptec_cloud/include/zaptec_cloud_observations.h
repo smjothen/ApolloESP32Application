@@ -63,6 +63,8 @@ int publish_debug_telemetry_observation_LteParameters();
 
 int publish_debug_telemetry_observation_all(double rssi);
 
+int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask);
+
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
 
 void SetClearSessionFlag();

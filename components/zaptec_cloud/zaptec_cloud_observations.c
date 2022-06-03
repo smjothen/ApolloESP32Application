@@ -24,6 +24,7 @@
 #include "../components/adc/adc_control.h"
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
+#include "chargeController.h"
 #include "mqtt_client.h"
 #include <math.h>
 
@@ -523,6 +524,27 @@ int publish_debug_telemetry_observation_LteParameters()
     return publish_json(observations);
 }
 
+/*
+ * Use bitmask to pick which observations are to be sedt
+ */
+int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask)
+{
+    ESP_LOGD(TAG, "sending Location");
+
+    cJSON *observations = create_observation_collection();
+
+    if(bitmask & 0x01)
+    	add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+
+    if(bitmask & 0x02)
+    	add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+
+    if(bitmask & 0x04)
+    	add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 {
@@ -1005,6 +1027,13 @@ int publish_telemetry_observation_on_change(){
 			isChange = true;
 		}
 	}
+
+	if(chargeController_CheckForNewScheduleEvent())
+	{
+		add_observation_to_collection(observations, create_observation(NextScheduleEvent, chargeController_GetNextStartString()));
+		isChange = true;
+	}
+
 	//Check ret and retry?
     int ret = 0;
 

@@ -135,6 +135,12 @@
 		EnabledNfcTechnologies = 752,
 		LteRoamingDisabled = 753,
 
+		/// TimeSchedule observations
+        Location = 760,
+        TimeZone = 761,
+        TimeSchedule = 762,
+        NextScheduleEvent = 763,
+
         InstallationId = 800, // String / Guid
         RoutingId = 801, // Int
         ChargePointName = 802, // String

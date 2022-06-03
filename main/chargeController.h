@@ -36,11 +36,14 @@ bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
 
+bool chargeController_CheckForNewScheduleEvent();
 char * chargeController_GetNextStartString();
+bool chargeController_IsScheduleActive();
 
 void chargeController_CancelDelay();
 void chargeController_SetNowTime(char * timeString);
 bool chargeController_SetStartCharging(enum ChargeSource source);
+void chargeController_StartWithRandomDelay();
 void chargeController_SetRandomStartDelay();
 
 
