@@ -447,9 +447,21 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 }
 
 void authorize(){
-	//TODO: use (required) LocalAuthorizeOffline
 	//TODO: handle error to deny authorization or retry if timed out.
+	if(storage_Get_ocpp_local_pre_authorize()){
+		ESP_LOGI(TAG, "Attempting local pre authorization");
+		struct TagInfo tag = {0};
+		strcpy(tag.idAsString, pendingAuthID);
+		tag.tagIsValid = true;
 
+		if(authentication_CheckId(tag) == 1){
+			ESP_LOGI(TAG, "Local authentication accepted");
+			authentication_Execute(tag.idAsString);
+			return;
+		}
+	}
+
+	ESP_LOGI(TAG, "Authenticating with central system");
 	cJSON * authorization = ocpp_create_authorize_request(pendingAuthID);
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
@@ -507,6 +519,7 @@ void status_notification(enum ChargerOperatingMode new_state){
 void handle_state_transition(uint32_t old_state, uint32_t new_state){
 	switch(new_state){
 	case CHARGE_OPERATION_STATE_DISCONNECTED: // Part of ocpp Available
+		//ESP_LOGI(TAG, "DISCONNECTED");
 		switch(old_state){
 		case CHARGE_OPERATION_STATE_REQUESTING: // B1
 			break;
@@ -521,6 +534,7 @@ void handle_state_transition(uint32_t old_state, uint32_t new_state){
 		}
 		break;
 	case CHARGE_OPERATION_STATE_REQUESTING: // Part of ocpp Preparing
+		//ESP_LOGI(TAG, "REQUESTING");
 		switch(old_state){
 		case CHARGE_OPERATION_STATE_DISCONNECTED: //A2
 			authorize();
@@ -536,6 +550,7 @@ void handle_state_transition(uint32_t old_state, uint32_t new_state){
 		}
 		break;
 	case CHARGE_OPERATION_STATE_CHARGING: // Equivalent to ocpp Charging
+		//ESP_LOGI(TAG, "CHARGING");
 		switch(old_state){
 		case CHARGE_OPERATION_STATE_DISCONNECTED: // A3
 		case CHARGE_OPERATION_STATE_REQUESTING: // B3
@@ -549,6 +564,7 @@ void handle_state_transition(uint32_t old_state, uint32_t new_state){
 		}
 		break;
 	case CHARGE_OPERATION_STATE_PAUSED: // Equivalent to ocpp Suspended EV/EVSE
+		//ESP_LOGI(TAG, "PAUSED");
 		switch(old_state){
 		case CHARGE_OPERATION_STATE_DISCONNECTED: // A4/A5
 			break;
