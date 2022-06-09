@@ -31,10 +31,17 @@
 #ifdef USE_OCPP
 #include <math.h>
 #include "ocpp_task.h"
+#include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/call_messages/ocpp_call_request.h"
+#include "messages/result_messages/ocpp_call_result.h"
+#include "messages/error_messages/ocpp_call_error.h"
+#include "types/ocpp_enum.h"
 #include "types/ocpp_authorization_status.h"
+#include "types/ocpp_availability_type.h"
+#include "types/ocpp_availability_status.h"
 #include "types/ocpp_charge_point_status.h"
 #include "types/ocpp_charge_point_error_code.h"
+#include "ocpp_listener.h"
 #endif
 
 static const char *TAG = "SESSION        ";
@@ -288,7 +295,11 @@ void SessionHandler_SetLogCurrents()
 }
 
 #ifdef USE_OCPP
+enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_AVAILABLE; // Different from mcu state as it depends on IsEnabled
 int transaction_id = -1;
+bool pending_change_availability = false;
+uint8_t	pending_change_availability_state;
+time_t preparing_started = 0;
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
@@ -354,9 +365,13 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 	}
 }
 
+bool pending_ocpp_authorize = false;
+
 static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
 	const char * action = (const char *) cb_data;
-	ESP_LOGE(TAG, "Got ocpp error from central system when attemting start transaction");
+
+	if(strcmp(action, "authorize"))
+		pending_ocpp_authorize = false;
 
 	if(unique_id != NULL && error_code != NULL && error_description != NULL){
 		if(error_details == NULL){
@@ -368,10 +383,13 @@ static void error_cb(const char * unique_id, const char * error_code, const char
 				free(details);
 			}
 		}
+	}else{
+		ESP_LOGE(TAG, "Error reply from ocpp '%s' call", action);
 	}
 }
 
-void stop_transaction(){
+void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
+
 	if(transaction_id == -1){
 		ESP_LOGE(TAG, "Transaction id not set, unable to stop transaction");
 		return;
@@ -405,13 +423,13 @@ void start_transaction(){
 }
 
 static void authorize_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
-	ESP_LOGW(TAG, "Got auth response");
+	ESP_LOGI(TAG, "Got auth response");
+	pending_ocpp_authorize = false;
+
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		ESP_LOGW(TAG, "Got auth tag");
 		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
 
 		if(cJSON_HasObjectItem(id_tag_info, "status")){
-			ESP_LOGW(TAG, "Got status");
 			char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
 
 			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
@@ -422,7 +440,7 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 					ESP_LOGE(TAG, "Unable to grant authorization to MCU");
 				}
 				else{
-					ESP_LOGW(TAG, "granted ok");
+					ESP_LOGI(TAG, "Authorization granted ok");
 					SetAuthorized(true);
 				}
 			}else{
@@ -446,62 +464,86 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 	}
 }
 
-void authorize(){
+void authorize(struct TagInfo tag){
 	//TODO: handle error to deny authorization or retry if timed out.
 	if(storage_Get_ocpp_local_pre_authorize()){
 		ESP_LOGI(TAG, "Attempting local pre authorization");
-		struct TagInfo tag = {0};
-		strcpy(tag.idAsString, pendingAuthID);
-		tag.tagIsValid = true;
 
 		if(authentication_CheckId(tag) == 1){
 			ESP_LOGI(TAG, "Local authentication accepted");
 			authentication_Execute(tag.idAsString);
+
+			SetPendingRFIDTag(tag.idAsString);
+			SetAuthorized(true);
+
 			return;
 		}
 	}
 
 	ESP_LOGI(TAG, "Authenticating with central system");
-	cJSON * authorization = ocpp_create_authorize_request(pendingAuthID);
+	cJSON * authorization = ocpp_create_authorize_request(tag.idAsString);
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
 	}else{
-		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "start", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue authorization request");
+		}else{
+			pending_ocpp_authorize = true;
+			SetPendingRFIDTag(tag.idAsString);
 		}
 	}
 }
 
-// Currently the used states are Disconnected (1), Requesting (2) and charging (3)
-// its value -1 is used as index ([from][to]).
-// TODO: update approach to support all relevant transitions and use settings from ChangeConfigurations
-bool want_status_notification[3][3] = {
-	{false, false, true},
-	{false, false, true},
-	{true, true, false}
+// Index in is equivalent to integer used to identify column in table in ocpp protocol specification section on status notification -1
+// Index is used as [from state][to state]
+bool want_status_notification[9][9] = {
+	{false, false, true,  false, false, false, false, true,  true},
+	{false, false, true,  false, false, false, false, false, true},
+	{true,  false, false, false, false, false, false, true,  true},
+	{true,  false, false, false, false, false, false, true,  true},
+	{true,  true,  false, false, false, false, false, true,  true},
+	{true,  false, false, false, false, false, false, true,  true},
+	{false, false, false, false, false, false, false, true,  true},
+	{true,  true,  true,  true,  true,  false, false, false, true},
+	{false, false, true,  false, false, false, false, false, false},
 };
 
-void status_notification(enum ChargerOperatingMode new_state){
+void status_notification(enum ocpp_cp_status_id new_state){
 	ESP_LOGD(TAG, "Sending status notification");
 
 	char state[15];
 
 	switch(new_state){
-	case CHARGE_OPERATION_STATE_DISCONNECTED:
+	case eOCPP_CP_STATUS_AVAILABLE:
 		strcpy(state, OCPP_CP_STATUS_AVAILABLE);
 		break;
-	case CHARGE_OPERATION_STATE_REQUESTING:
+	case eOCPP_CP_STATUS_PREPARING:
 		strcpy(state, OCPP_CP_STATUS_PREPARING);
 		break;
-	case CHARGE_OPERATION_STATE_CHARGING:
+	case eOCPP_CP_STATUS_CHARGING:
 		strcpy(state, OCPP_CP_STATUS_CHARGING);
 		break;
-	case CHARGE_OPERATION_STATE_PAUSED:
-		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV); // Change if EVSE is capable of suspending without EV
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV);
+		break;
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EVSE);
+		break;
+	case eOCPP_CP_STATUS_FINISHING:
+		strcpy(state, OCPP_CP_STATUS_FINISHING);
+		break;
+	case eOCPP_CP_STATUS_RESERVED:
+		strcpy(state, OCPP_CP_STATUS_RESERVED);
+		break;
+	case eOCPP_CP_STATUS_UNAVAILABLE:
+		strcpy(state, OCPP_CP_STATUS_UNAVAILABLE);
+		break;
+	case eOCPP_CP_STATUS_FAULTED:
+		strcpy(state, OCPP_CP_STATUS_FAULTED);
 		break;
 	default:
-		ESP_LOGE(TAG, "Unhandled transition for status notification");
+		ESP_LOGE(TAG, "Unknown status id: %d", new_state);
 		return;
 	}
 
@@ -515,79 +557,330 @@ void status_notification(enum ChargerOperatingMode new_state){
 		}
 	}
 }
+static int change_availability(uint8_t is_operative){
+	MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, is_operative);
+	if(ret == MsgWriteAck)
+	{
+		storage_Set_IsEnabled(is_operative);
+		storage_SaveConfiguration();
 
-void handle_state_transition(uint32_t old_state, uint32_t new_state){
+		ESP_LOGW(TAG, "Availability changed successfully to %d", is_operative);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Unable to change availability to %d", is_operative);
+		return -1;
+	}
+}
+
+static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMode mcu_state){
+
+	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first
+	if(storage_Get_IsEnabled() == 0){
+		return eOCPP_CP_STATUS_UNAVAILABLE;
+	}
+
+	switch(mcu_state){
+	case CHARGE_OPERATION_STATE_UNINITIALIZED:
+	case CHARGE_OPERATION_STATE_DISCONNECTED:
+		return eOCPP_CP_STATUS_AVAILABLE;
+
+	case CHARGE_OPERATION_STATE_REQUESTING:
+		return eOCPP_CP_STATUS_PREPARING;
+
+	case CHARGE_OPERATION_STATE_ACTIVE:
+		return eOCPP_CP_STATUS_AVAILABLE;
+
+	case CHARGE_OPERATION_STATE_CHARGING:
+		return eOCPP_CP_STATUS_CHARGING;
+
+	case CHARGE_OPERATION_STATE_STOPPING:
+		return eOCPP_CP_STATUS_FINISHING;
+
+	case CHARGE_OPERATION_STATE_PAUSED:
+		//TODO: If go supports SUSPENDED_EVSE then update
+		//"If charging is suspended both by the EV and the EVSE, status SuspendedEVSE SHALL have precedence over status SuspendedEV"
+		return eOCPP_CP_STATUS_SUSPENDED_EV;
+
+	case CHARGE_OPERATION_STATE_STOPPED:
+		return eOCPP_CP_STATUS_AVAILABLE;
+
+	case CHARGE_OPERATION_STATE_WARNING:
+		return eOCPP_CP_STATUS_FAULTED;
+	default:
+		ESP_LOGE(TAG, "Unexpected value of MCU charger operating mode: %d", mcu_state);
+		return eOCPP_CP_STATUS_FAULTED;
+	}
+
+}
+
+static void change_availability_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGW(TAG, "Request to change availability");
+	pending_change_availability = false;
+
+	if(payload == NULL || !cJSON_HasObjectItem(payload, "connectorId") || !cJSON_HasObjectItem(payload, "type")){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' and 'type' fields", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
+	cJSON * type_json = cJSON_GetObjectItem(payload, "type");
+
+	if(!cJSON_IsNumber(connector_id_json) || !cJSON_IsString(type_json) || !ocpp_validate_enum(type_json->valuestring, 2,
+													OCPP_AVAILABILITY_TYPE_INOPERATIVE,
+													OCPP_AVAILABILITY_TYPE_OPERATIVE) == 0){
+
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer and 'type' to be AvailabilityType", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	if(connector_id_json->valueint < 0 || connector_id_json->valueint > storage_Get_ocpp_number_of_connectors()){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify a valid connector", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	uint8_t new_operative = (strcmp(type_json->valuestring, OCPP_AVAILABILITY_TYPE_INOPERATIVE) == 0) ? 0 : 1;
+	char availability_status[16] = "";
+	uint8_t old_is_enabled = storage_Get_IsEnabled();
+
+	if(new_operative != old_is_enabled)
+	{
+		enum ocpp_cp_status_id ocpp_state = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode());
+		if((ocpp_state == eOCPP_CP_STATUS_AVAILABLE && new_operative == 0) || ocpp_state == eOCPP_CP_STATUS_UNAVAILABLE){
+			if(change_availability(new_operative) == 0)
+			{
+				strcpy(availability_status, OCPP_AVAILABILITY_STATUS_ACCEPTED);
+			}
+			else
+			{
+				cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to update availability", NULL);
+				if(ocpp_error == NULL){
+					ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+				}else{
+					send_call_reply(ocpp_error);
+					cJSON_Delete(ocpp_error);
+				}
+				return;
+			}
+		}
+		// "When a transaction is in progress Charge Point SHALL respond with availability status 'Scheduled' to indicate that it is scheduled to occur after the transaction has finished"
+		else{
+			pending_change_availability = true;
+			pending_change_availability_state = new_operative;
+			strcpy(availability_status, OCPP_AVAILABILITY_STATUS_SCHEDULED);
+		}
+	}else{
+		strcpy(availability_status, OCPP_AVAILABILITY_STATUS_ACCEPTED);
+	}
+
+	if(strlen(availability_status) != 0){
+		cJSON * response = ocpp_create_change_availability_confirmation(unique_id, availability_status);
+		if(response == NULL){
+			ESP_LOGE(TAG, "Unable to create accepted response");
+		}else{
+			send_call_reply(response);
+			cJSON_Delete(response);
+		}
+	}
+	ESP_LOGI(TAG, "Change availability complete %d->%d", old_is_enabled, storage_Get_IsEnabled());
+}
+
+// TODO: ocpp status transition table transition description indicate that pending is used on end of transaction, not entry of new transaction
+bool change_availability_if_pending(const uint8_t allowed_new_state){
+	if(pending_change_availability && pending_change_availability_state == allowed_new_state){
+		change_availability(pending_change_availability_state);
+		pending_change_availability = false;
+		return true;
+	}
+	return false;
+}
+
+void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_status_id new_state){
+
 	switch(new_state){
-	case CHARGE_OPERATION_STATE_DISCONNECTED: // Part of ocpp Available
-		//ESP_LOGI(TAG, "DISCONNECTED");
-		switch(old_state){
-		case CHARGE_OPERATION_STATE_REQUESTING: // B1
+	case eOCPP_CP_STATUS_AVAILABLE:
+		ESP_LOGI(TAG, "OCPP STATE AVAILABLE");
+
+		if(change_availability_if_pending(0)) // TODO: check if needed elsewhere
 			break;
-		case CHARGE_OPERATION_STATE_CHARGING: // C1
-		case CHARGE_OPERATION_STATE_PAUSED: // D1/E1
-			//TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_PREPARING:
+			break;
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_FINISHING:
 			stop_transaction();
 			break;
+		case eOCPP_CP_STATUS_RESERVED:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
+			break;
 		default:
-			ESP_LOGE(TAG, "Unknown new state transition from %d to DISCONNECTED", old_state);
+			ESP_LOGE(TAG, "Invalid state transition from %d to Available", old_state);
 			return;
 		}
 		break;
-	case CHARGE_OPERATION_STATE_REQUESTING: // Part of ocpp Preparing
-		//ESP_LOGI(TAG, "REQUESTING");
+	case eOCPP_CP_STATUS_PREPARING:
+		ESP_LOGI(TAG, "OCPP STATE PREPARING");
+
+		preparing_started = time(NULL);
+
 		switch(old_state){
-		case CHARGE_OPERATION_STATE_DISCONNECTED: //A2
-			authorize();
+		case eOCPP_CP_STATUS_AVAILABLE:
 			break;
-		case CHARGE_OPERATION_STATE_CHARGING:
-		case CHARGE_OPERATION_STATE_PAUSED:
-			ESP_LOGE(TAG, "Transition not defined in ocpp: from %d to REQUESTING", old_state);
-			return;
+		case eOCPP_CP_STATUS_FINISHING:
+		case eOCPP_CP_STATUS_RESERVED:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
-			ESP_LOGE(TAG, "Unknown new state transition from %d to REQUESTING", old_state);
+			ESP_LOGE(TAG, "Invalid state transition from %d to Preparing", old_state);
 			return;
 		}
 		break;
-	case CHARGE_OPERATION_STATE_CHARGING: // Equivalent to ocpp Charging
-		//ESP_LOGI(TAG, "CHARGING");
+	case eOCPP_CP_STATUS_CHARGING:
+		ESP_LOGI(TAG, "OCPP STATE CHARGING");
+
 		switch(old_state){
-		case CHARGE_OPERATION_STATE_DISCONNECTED: // A3
-		case CHARGE_OPERATION_STATE_REQUESTING: // B3
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
 			break;
-		case CHARGE_OPERATION_STATE_PAUSED: // D3/E3
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
-			ESP_LOGE(TAG, "Unknown new state transition from %d to CHARGING", old_state);
+			ESP_LOGE(TAG, "Invalid state transition from %d to Charging", old_state);
 			return;
 		}
 		break;
-	case CHARGE_OPERATION_STATE_PAUSED: // Equivalent to ocpp Suspended EV/EVSE
-		//ESP_LOGI(TAG, "PAUSED");
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_EV");
+
 		switch(old_state){
-		case CHARGE_OPERATION_STATE_DISCONNECTED: // A4/A5
-			break;
-		case CHARGE_OPERATION_STATE_REQUESTING: // B4/B5
-			break;
-		case CHARGE_OPERATION_STATE_CHARGING: // C4/C5
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_PREPARING:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
-			ESP_LOGE(TAG, "Unknown new state transition from %d to PAUSED", old_state);
+			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended EV", old_state);
 			return;
 		}
 		break;
-	default:
-		ESP_LOGE(TAG, "Unknown new state (%d)", new_state);
-		return;
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_EVSE");
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_PREPARING:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
+			break;
+		default:
+			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended EVSE", old_state);
+			return;
+		}
+		break;
+	case eOCPP_CP_STATUS_FINISHING:
+		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_FINISHING");
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_PREPARING:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_FAULTED:
+			break;
+		default:
+			ESP_LOGE(TAG, "Invalid state transition from %d to Finishing", old_state);
+			return;
+		}
+		break;
+	case eOCPP_CP_STATUS_RESERVED:
+		ESP_LOGI(TAG, "OCPP STATE RESERVED");
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_FAULTED:
+			break;
+		default:
+			ESP_LOGE(TAG, "Invalid state transition from %d to Reserved", old_state);
+			return;
+		}
+		break;
+	case eOCPP_CP_STATUS_UNAVAILABLE:
+		ESP_LOGI(TAG, "OCPP STATE UNAVAILABLE");
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_FINISHING:
+		case eOCPP_CP_STATUS_RESERVED:
+		case eOCPP_CP_STATUS_FAULTED:
+			break;
+		default:
+			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended Unavailable", old_state);
+			return;
+		}
+		break;
+	case eOCPP_CP_STATUS_FAULTED:
+		ESP_LOGI(TAG, "OCPP STATE FAULTED");
+
+		switch(old_state){
+		case eOCPP_CP_STATUS_AVAILABLE:
+		case eOCPP_CP_STATUS_PREPARING:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_FINISHING:
+		case eOCPP_CP_STATUS_RESERVED:
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+			break;
+		default:
+			ESP_LOGE(TAG, "Invalid state transition from %d to Faulted", old_state);
+			return;
+		}
+		break;
 	}
 
 	if(want_status_notification[old_state-1][new_state-1]){
 		status_notification(new_state);
 	}
+
+	ocpp_old_state = new_state;
 }
 
-void handle_requesting(){
+static void handle_preparing(){
 	/**
 	 * From ocpp protocol 1.6 section 3.6:
 	 * "Transaction starts at the point that all conditions for charging are met,
@@ -608,23 +901,33 @@ void handle_requesting(){
 			//This must be set to stop replying the same SessionIds to cloud
 			chargeSession_SetReceivedStartChargingCommand();
 		}
+	}else if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+		authorize(NFCGetTagInfo());
 	}
 }
 
-void handle_state(uint32_t state){
+static void handle_state(enum ocpp_cp_status_id state){
 	switch(state){
-	case CHARGE_OPERATION_STATE_DISCONNECTED:
+	case eOCPP_CP_STATUS_AVAILABLE:
 		break;
-	case CHARGE_OPERATION_STATE_REQUESTING:
-		handle_requesting();
+	case eOCPP_CP_STATUS_PREPARING:
+		handle_preparing();
 		break;
-	case CHARGE_OPERATION_STATE_CHARGING:
-		break;
-	case CHARGE_OPERATION_STATE_PAUSED:
-		break;
-	default:
-		ESP_LOGE(TAG, "Currently in unknown charge operation state");
+	case eOCPP_CP_STATUS_CHARGING:
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+	case eOCPP_CP_STATUS_FINISHING:
+	case eOCPP_CP_STATUS_RESERVED:
+		//break;
+	case eOCPP_CP_STATUS_UNAVAILABLE:
+		/*		if(pending_change_availability){
+			change_availability(pending_change_availability_state);
+			pending_change_availability = false;
+		}
 		return;
+		*/
+	case eOCPP_CP_STATUS_FAULTED:
+		break;
 	}
 }
 #endif /*USE_OCPP*/
@@ -742,6 +1045,10 @@ static void sessionHandler_task()
 
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
+
+#ifdef USE_OCPP
+    attach_call_cb(eOCPP_ACTION_CHANGE_AVAILABILITY_ID, change_availability_cb, NULL);
+#endif /*USE_OCPP*/
 
     authentication_Init();
     OCMF_Init();
@@ -909,10 +1216,12 @@ static void sessionHandler_task()
 			InitiateHoldRequestTimeStamp();
 
 #ifdef USE_OCPP
-		if(chargeOperatingMode != previousChargeOperatingMode){
-			handle_state_transition(previousChargeOperatingMode, chargeOperatingMode);
+		enum ocpp_cp_status_id ocpp_new_state = ocpp_state_from_mcu_state(chargeOperatingMode);
+
+		if(ocpp_new_state != ocpp_old_state){
+			handle_state_transition(ocpp_old_state, ocpp_new_state);
 		}else{
-			handle_state(chargeOperatingMode);
+			handle_state(ocpp_new_state);
 		}
 #endif /*USE_OCPP*/
 		//We need to inform the ChargeSession if a car is connected.

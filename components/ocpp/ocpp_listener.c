@@ -153,7 +153,7 @@ int call_handler(esp_websocket_client_handle_t client, const char * unique_id, c
 		return 0;
 	}
 	else{
-		ESP_LOGE(TAG, "Call to action with missing handler");
+		ESP_LOGE(TAG, "Call to action with missing handler: '%s'", action);
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_NOT_IMPLEMENTED, "", NULL);
 		if(ocpp_error == NULL){
 			ESP_LOGE(TAG, "Unable to create response for missing action");
