@@ -27,6 +27,7 @@
 #include "types/ocpp_update_status.h"
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
+#include "types/ocpp_data_transfer_status.h"
 
 #define TASK_OCPP_STACK_SIZE 2500
 #define OCPP_PROBLEM_RESET_INTERVAL 30
@@ -1560,6 +1561,64 @@ static void get_local_list_version_cb(const char * unique_id, const char * actio
 	}
 }
 
+const char known_vendors[0][256]; // 0 known vendors with type CiString255Type
+
+static void data_transfer_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	if(!cJSON_HasObjectItem(payload, "vendorId")){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'vendorId' field", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * vendor_id_json = cJSON_GetObjectItem(payload, "vendorId");
+	if(!cJSON_IsString(vendor_id_json) || !is_ci_string_type(vendor_id_json->valuestring, 255)){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected vendorId to be CiString255Type", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	bool found_match = false;
+	for(size_t i = 0; i < sizeof(known_vendors); i++){
+		if(strcmp(vendor_id_json->valuestring, known_vendors[i]) == 0){
+			found_match = true;
+			break;
+		}
+	}
+
+	if(found_match == false){
+		cJSON * response = ocpp_create_data_transfer_confirmation(unique_id, OCPP_DATA_TRANSFER_STATUS_UNKNOWN_VENDOR_ID, NULL);
+		if(response == NULL){
+			ESP_LOGE(TAG, "Unable to respond to unknown vendor id");
+		}else{
+			send_call_reply(response);
+			cJSON_Delete(response);
+		}
+		return;
+	}
+
+	// If vendor specific implementation is added, then add it here
+	// Untill then, this should not happen and we return error
+
+	cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Matching vendor id but no implementations found", NULL);
+	if(ocpp_error == NULL){
+		ESP_LOGE(TAG, "Unable to create internal error response");
+	}else{
+		send_call_reply(ocpp_error);
+		cJSON_Delete(ocpp_error);
+	}
+	return;
+}
+
 static void ocpp_task(){
 	while(true){
 		// TODO: see if there is a better way to check connectivity
@@ -1626,6 +1685,7 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_RESET_ID, reset_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
