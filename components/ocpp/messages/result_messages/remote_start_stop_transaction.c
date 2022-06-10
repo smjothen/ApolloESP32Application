@@ -35,10 +35,10 @@ error:
 	return NULL;
 }
 
-cJSON * remote_start_transaction_confirmation(const char * unique_id, const char * status){
+cJSON * ocpp_create_remote_start_transaction_confirmation(const char * unique_id, const char * status){
 	return remote_start_stop_transaction_confirmation(unique_id, status);
 }
 
-cJSON * remote_stop_transaction_confirmation(const char * unique_id, const char * status){
+cJSON * ocpp_create_remote_stop_transaction_confirmation(const char * unique_id, const char * status){
 	return remote_start_stop_transaction_confirmation(unique_id, status);
 }

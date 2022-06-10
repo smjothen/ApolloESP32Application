@@ -40,7 +40,9 @@
 #include "types/ocpp_availability_type.h"
 #include "types/ocpp_availability_status.h"
 #include "types/ocpp_charge_point_status.h"
+#include "types/ocpp_remote_start_stop_status.h"
 #include "types/ocpp_charge_point_error_code.h"
+#include "types/ocpp_ci_string_type.h"
 #include "ocpp_listener.h"
 #endif
 
@@ -301,6 +303,18 @@ bool pending_change_availability = false;
 uint8_t	pending_change_availability_state;
 time_t preparing_started = 0;
 
+void unauthorize(){
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret != MsgCommandAck)
+	{
+		ESP_LOGE(TAG, "Unable to deny authorization");
+	}
+	else{
+		ESP_LOGI(TAG, "Authorization denial ok");
+		SetAuthorized(false);
+	}
+}
+
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
 		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
@@ -311,33 +325,18 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 
 			if(storage_Get_ocpp_stop_transaction_on_invalid_id() && strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
 				ESP_LOGW(TAG, "Transaction not Autorized");
-				//TODO: Update LocalList
-				/* authentication_AddTag is not implemented and TagItem struct is insufficient for ocpp.
-				 * TagInfo is closer but still not sufficient
-				 *
-				 * authentication_AddTag(ocpp_tag_info_to_TagItem(id_tag_info));
-				 */
-				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+				MessageType ret = MCU_SendCommandId(CommandStopCharging);
 				if(ret == MsgCommandAck)
 				{
-					ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
-					SetFinalStopActiveStatus(1);
+					ESP_LOGI(TAG, "MCU stop charging command OK");
 				}
 				else
 				{
-					ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED");
+					ESP_LOGE(TAG, "MCU stop charging final command FAILED");
 					//TODO: Handle error. If this occurs there might be charging without valid token or payment
 				}
 
-				ret = MCU_SendCommandId(CommandAuthorizationDenied);
-				if(ret == MsgCommandAck)
-				{
-					ESP_LOGI(TAG, "MCU command CommandAuthorizationDenied OK");
-				}
-				else
-				{
-					ESP_LOGE(TAG, "MCU command CommandAuthorizationDenied FAILED");
-				}
+				unauthorize();
 			}
 		}
 	}else{
@@ -395,12 +394,12 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		return;
 	}
 
-	cJSON * stop_transaction  = ocpp_create_stop_transaction_request(chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), time(NULL), transaction_id, NULL, 0, NULL);
+	cJSON * response  = ocpp_create_stop_transaction_request(chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), time(NULL), transaction_id, NULL, 0, NULL);
 
-	if(stop_transaction == NULL){
+	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create stop transaction request");
 	}else{
-		int err = enqueue_call(stop_transaction, NULL, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(response, NULL, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
 		}
@@ -445,16 +444,7 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 				}
 			}else{
 				ESP_LOGW(TAG, "Transaction is not authorized");
-				MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-				if(ret != MsgCommandAck)
-				{
-					ESP_LOGE(TAG, "Unable to deny authorization");
-				}
-				else{
-					ESP_LOGI(TAG, "Authorization denial ok");
-					SetAuthorized(false);
-				}
-
+				unauthorize();
 			}
 		}else{
 			ESP_LOGE(TAG, "Authorization tag info lacks required 'status'");
@@ -485,9 +475,14 @@ void authorize(struct TagInfo tag){
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
 	}else{
-		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_GENERIC);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue authorization request");
+			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+			if(ret == MsgWriteAck)
+				ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+			else
+				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 		}else{
 			pending_ocpp_authorize = true;
 			SetPendingRFIDTag(tag.idAsString);
@@ -574,16 +569,26 @@ static int change_availability(uint8_t is_operative){
 	}
 }
 
-static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMode mcu_state){
+static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMode operation_mode, enum CarChargeMode charge_mode){
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first
 	if(storage_Get_IsEnabled() == 0){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 	}
 
-	switch(mcu_state){
+	if(GetFinalStopActiveStatus()){
+		return eOCPP_CP_STATUS_FINISHING;
+	}
+
+	switch(operation_mode){
 	case CHARGE_OPERATION_STATE_UNINITIALIZED:
 	case CHARGE_OPERATION_STATE_DISCONNECTED:
+		//TODO:
+		// "When a Charge Point is configured with StopTransactionOnEVSideDisconnect set to false, a transaction is running and
+		// the EV becomes disconnected on EV side, then a StatusNotification.req with the state: SuspendedEV
+		// SHOULD be send to the Central System, with the 'errorCode' field set to: 'NoError'.
+		// The Charge Point SHOULD add additional information in the 'info' field, Notifying the Central System with the reason of suspension:
+		// 'EV side disconnected'. The current transaction is not stopped."
 		return eOCPP_CP_STATUS_AVAILABLE;
 
 	case CHARGE_OPERATION_STATE_REQUESTING:
@@ -599,24 +604,167 @@ static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMod
 		return eOCPP_CP_STATUS_FINISHING;
 
 	case CHARGE_OPERATION_STATE_PAUSED:
-		//TODO: If go supports SUSPENDED_EVSE then update
-		//"If charging is suspended both by the EV and the EVSE, status SuspendedEVSE SHALL have precedence over status SuspendedEV"
-		return eOCPP_CP_STATUS_SUSPENDED_EV;
+		if(charge_mode == eCAR_CHARGING){
 
+			return eOCPP_CP_STATUS_SUSPENDED_EVSE;
+		}else{
+			return eOCPP_CP_STATUS_SUSPENDED_EV;
+		}
 	case CHARGE_OPERATION_STATE_STOPPED:
 		return eOCPP_CP_STATUS_AVAILABLE;
 
 	case CHARGE_OPERATION_STATE_WARNING:
 		return eOCPP_CP_STATUS_FAULTED;
 	default:
-		ESP_LOGE(TAG, "Unexpected value of MCU charger operating mode: %d", mcu_state);
+		ESP_LOGE(TAG, "Unexpected value of MCU charger operating mode: %d", operation_mode);
 		return eOCPP_CP_STATUS_FAULTED;
 	}
 
 }
 
+static void remote_start_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Request to strat transaction");
+
+	if(payload == NULL || !cJSON_HasObjectItem(payload, "idTag")){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'idTag' field", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	int connector_id = 1;
+	if(cJSON_HasObjectItem(payload, "connectorId")){
+		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
+		if(cJSON_IsNumber(connector_id_json)){
+			connector_id = connector_id_json->valueint;
+		}else{
+			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be interger type", NULL);
+			if(ocpp_error == NULL){
+				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+			}else{
+				send_call_reply(ocpp_error);
+				cJSON_Delete(ocpp_error);
+			}
+			return;
+		}
+
+		if(connector_id <= 0 || connector_id > storage_Get_ocpp_number_of_connectors()){
+			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify an existing connector", NULL);
+			if(ocpp_error == NULL){
+				ESP_LOGE(TAG, "Unable to create call error property constraint violation");
+			}else{
+				send_call_reply(ocpp_error);
+				cJSON_Delete(ocpp_error);
+			}
+			return;
+
+		}
+	}
+
+	cJSON * id_tag_json = cJSON_GetObjectItem(payload, "idTag");
+	if(!cJSON_IsString(id_tag_json) || !is_ci_string_type(id_tag_json->valuestring, 20)){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be CiSstring20Type", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+
+	}
+
+	bool accept_request = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode()) == eOCPP_CP_STATUS_PREPARING;
+	cJSON * response;
+	if(accept_request){
+		response = ocpp_create_remote_start_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
+	}else{
+		response = ocpp_create_remote_start_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_REJECTED);
+	}
+
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create remote start transaction response");
+		return;
+	}else{
+		send_call_reply(response);
+		cJSON_Delete(response);
+	}
+
+	if(!accept_request)
+		return;
+
+	struct TagInfo tag ={
+		.tagIsValid = true,
+	};
+	strcpy(tag.idAsString, id_tag_json->valuestring);
+
+	if(storage_Get_ocpp_authorize_remote_tx_requests()){
+		authorize(tag);
+	}
+}
+
+static void remote_stop_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Request to remote stop transaction");
+	if(payload == NULL || !cJSON_HasObjectItem(payload, "transactionId")){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'transactionId' field", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * transaction_id_json = cJSON_GetObjectItem(payload, "transactionID");
+	if(!cJSON_IsNumber(transaction_id_json)){
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected transactionId to be integer", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	//TODO: change from using transaction_id == -1 to meant no transaction as the id from central system is not limited by ocpp
+	cJSON * response;
+	if(transaction_id == transaction_id_json->valueint){
+		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
+	}
+	else{
+		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_REJECTED);
+	}
+
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create remote stop transaction confirmation");
+	}
+	else{
+		send_call_reply(response);
+		cJSON_Delete(response);
+	}
+
+	if(transaction_id == transaction_id_json->valueint){
+		MessageType ret = MCU_SendCommandId(CommandStopCharging);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU stop charging OK");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU stop charging Failed");
+		}
+	}
+	//TODO: "[...]and, if applicable, unlock the connector"
+}
+
 static void change_availability_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
-	ESP_LOGW(TAG, "Request to change availability");
+	ESP_LOGI(TAG, "Request to change availability");
 	pending_change_availability = false;
 
 	if(payload == NULL || !cJSON_HasObjectItem(payload, "connectorId") || !cJSON_HasObjectItem(payload, "type")){
@@ -664,7 +812,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 
 	if(new_operative != old_is_enabled)
 	{
-		enum ocpp_cp_status_id ocpp_state = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode());
+		enum ocpp_cp_status_id ocpp_state = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode());
 		if((ocpp_state == eOCPP_CP_STATUS_AVAILABLE && new_operative == 0) || ocpp_state == eOCPP_CP_STATUS_UNAVAILABLE){
 			if(change_availability(new_operative) == 0)
 			{
@@ -729,9 +877,9 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
-		case eOCPP_CP_STATUS_FINISHING:
 			stop_transaction();
 			break;
+		case eOCPP_CP_STATUS_FINISHING:
 		case eOCPP_CP_STATUS_RESERVED:
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 		case eOCPP_CP_STATUS_FAULTED:
@@ -748,7 +896,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
-			break;
 		case eOCPP_CP_STATUS_FINISHING:
 		case eOCPP_CP_STATUS_RESERVED:
 		case eOCPP_CP_STATUS_UNAVAILABLE:
@@ -810,13 +957,17 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
-		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_FINISHING");
+		ESP_LOGI(TAG, "OCPP STATE FINISHING");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
+			break;
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+			stop_transaction();
+			unauthorize();
+			break;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
@@ -886,7 +1037,7 @@ static void handle_preparing(){
 	 * "Transaction starts at the point that all conditions for charging are met,
 	 * for instance, EV is connected to Charge Point and user has been authorized."
 	 */
-	if(/*cable_connected() && */ isAuthorized){
+	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
 		MessageType ret = MCU_SendCommandId(CommandStartCharging);
 		if(ret != MsgCommandAck)
 		{
@@ -918,14 +1069,7 @@ static void handle_state(enum ocpp_cp_status_id state){
 	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 	case eOCPP_CP_STATUS_FINISHING:
 	case eOCPP_CP_STATUS_RESERVED:
-		//break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
-		/*		if(pending_change_availability){
-			change_availability(pending_change_availability_state);
-			pending_change_availability = false;
-		}
-		return;
-		*/
 	case eOCPP_CP_STATUS_FAULTED:
 		break;
 	}
@@ -1048,6 +1192,8 @@ static void sessionHandler_task()
 
 #ifdef USE_OCPP
     attach_call_cb(eOCPP_ACTION_CHANGE_AVAILABILITY_ID, change_availability_cb, NULL);
+    attach_call_cb(eOCPP_ACTION_REMOTE_START_TRANSACTION_ID, remote_start_transaction_cb, NULL);
+    attach_call_cb(eOCPP_ACTION_REMOTE_STOP_TRANSACTION_ID, remote_stop_transaction_cb, NULL);
 #endif /*USE_OCPP*/
 
     authentication_Init();
@@ -1216,7 +1362,7 @@ static void sessionHandler_task()
 			InitiateHoldRequestTimeStamp();
 
 #ifdef USE_OCPP
-		enum ocpp_cp_status_id ocpp_new_state = ocpp_state_from_mcu_state(chargeOperatingMode);
+		enum ocpp_cp_status_id ocpp_new_state = ocpp_state_from_mcu_state(chargeOperatingMode, currentCarChargeMode);
 
 		if(ocpp_new_state != ocpp_old_state){
 			handle_state_transition(ocpp_old_state, ocpp_new_state);

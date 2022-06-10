@@ -1622,7 +1622,7 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 static void ocpp_task(){
 	while(true){
 		// TODO: see if there is a better way to check connectivity
-		while(!connectivity_GetActivateInterface() != eCONNECTION_NONE){
+		while(connectivity_GetActivateInterface() == eCONNECTION_NONE){
 			ESP_LOGI(TAG, "Waiting for connection...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 		}
