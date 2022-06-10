@@ -237,3 +237,32 @@ uint8_t zntp_enabled()
 {
 	return sntp_enabled();
 }
+
+
+/*
+ * This function provides the UTC time a give number of seconds into the future
+ */
+/*void GetUTCTimeStringWithOffset(char * timeString, uint32_t offset)
+{
+	time_t now = 0;
+	struct tm timeinfo = { 0 };
+	char strftime_buf[64] = {0};
+
+	time(&now);
+
+	setenv("TZ", "UTC-0", 1);
+	tzset();
+
+	now += offset;
+
+	localtime_r(&now, &timeinfo);
+
+	struct timeval t_now;
+	gettimeofday(&t_now, NULL);
+
+	strftime(strftime_buf, sizeof(strftime_buf), "%Y-%02m-%02dT%02H:%02M:%02S", &timeinfo);
+
+	sprintf(strftime_buf+strlen(strftime_buf), ".%06dZ", (uint32_t)t_now.tv_usec);
+	strcpy(timeString, strftime_buf);
+
+}*/

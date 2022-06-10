@@ -203,7 +203,7 @@ static uint16_t espNotifications = 0;
 static uint16_t mcuNotifications = 0;
 
 int holdSetPhases = 0;
-static uint8_t finalStopActive = false;
+static uint8_t finalStopActive = 0;
 
 float GetFloat(uint8_t * input)
 {

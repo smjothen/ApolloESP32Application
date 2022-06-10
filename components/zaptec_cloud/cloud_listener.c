@@ -1381,6 +1381,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
 			SetFinalStopActiveStatus(1);
+			chargeController_CancelOverride();
 		}
 		else
 		{
@@ -1400,6 +1401,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
 			sessionHandler_ClearCarInterfaceResetConditions();
+			chargeController_Override();
 		}
 		else
 		{
@@ -2269,6 +2271,37 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					chargeController_SetNowTime(&commandString[4]);
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"SIMSTOP") != NULL)
+				{
+					//505
+					sessionHandler_InitiateResetChargeSession();
+
+					//504
+					sessionHandler_InitiateResetChargeSession();
+					chargeSession_HoldUserUUID();
+
+					//502
+					MessageType ret = MCU_SendCommandId(CommandStopCharging);
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU Stop command OK");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGE(TAG, "MCU Stop command FAILED");
+					}
+
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"StartNow") != NULL)
+				{
+					chargeController_Override();
+
+					responseStatus = 200;
+				}
+
 
 			}
 	}

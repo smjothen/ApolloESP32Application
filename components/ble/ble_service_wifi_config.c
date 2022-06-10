@@ -24,6 +24,7 @@
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
 #include "../../main/sessionHandler.h"
 #include "../../main/chargeSession.h"
+#include "../../main/chargeController.h"
 #include "../../components/authentication/rfidPairing.h"
 #include "../../components/authentication/authentication.h"
 
@@ -1585,6 +1586,12 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				ESP_LOGI(TAG, "MCU Start command FAILED");
 			}
 		}
+		else if(command == CommandStartCharging)
+		{
+			ESP_LOGW(TAG, "Override delayed start");
+			chargeController_Override();
+		}
+
 		else if(command == CommandDisableCertificateOnce)
 		{
 			storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ONCE);

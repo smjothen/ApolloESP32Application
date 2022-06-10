@@ -370,7 +370,7 @@ void app_main(void)
 	// #define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
 	eeprom_wp_disable_nfc_disable();
-	EEPROM_WriteFactoryStage(FactoryStageUnknown2);
+	EEPROM_WriteFactoryStage(FactoryStageFinnished);
 	eeprom_wp_enable_nfc_enable();
 	#endif
 

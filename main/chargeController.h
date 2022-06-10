@@ -40,7 +40,8 @@ bool chargeController_CheckForNewScheduleEvent();
 char * chargeController_GetNextStartString();
 bool chargeController_IsScheduleActive();
 
-void chargeController_CancelDelay();
+void chargeController_Override();
+void chargeController_CancelOverride();
 void chargeController_SetNowTime(char * timeString);
 bool chargeController_SetStartCharging(enum ChargeSource source);
 void chargeController_StartWithRandomDelay();
