@@ -113,6 +113,7 @@ struct Configuration
 
 	//configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
 	//configurationStruct.ocpp_authorization_cache_enabled = false;
+	bool session_type_ocpp; // TODO: Consider changing to session_controller_ocpp if future use dictates
 	bool ocpp_authorize_remote_tx_requests;
 	//int configurationStruct.ocpp_blink_repeats;
 	uint32_t ocpp_clock_aligned_data_interval;
