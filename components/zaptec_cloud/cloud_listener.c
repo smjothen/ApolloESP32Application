@@ -609,10 +609,11 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				if(standalone != (int)storage_Get_Standalone())
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
-					if(ret == MsgWriteAck)
+					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+					//if(ret == MsgWriteAck)
+					if(chargeController_SetStandaloneState(standalone))
 					{
-						storage_Set_Standalone((uint8_t)standalone);
+						//storage_Set_Standalone((uint8_t)standalone);
 						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
 
 						cloud_listener_SetMQTTKeepAliveTime(standalone);
@@ -810,10 +811,11 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((standalone == 0) || (standalone == 1))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
-					if(ret == MsgWriteAck)
+					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
+					//if(ret == MsgWriteAck)
+					if(chargeController_SetStandaloneState(standalone))
 					{
-						storage_Set_Standalone(standalone);
+						//storage_Set_Standalone(standalone);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
 

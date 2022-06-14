@@ -838,6 +838,9 @@ static void sessionHandler_task()
 
 			//Ensure the authentication status is cleared at disconnect
 			i2cClearAuthentication();
+
+			chargeController_ClearRandomStartDelay();
+			chargeController_SetHasBeenDisconnected();
 		}
 		
 

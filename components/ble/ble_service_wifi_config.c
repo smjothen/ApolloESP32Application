@@ -1387,7 +1387,16 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	if((standalone == 0) || (standalone == 1))
 		{
-			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+    		if(chargeController_SetStandaloneState(standalone))
+    		{
+    			saveConfiguration = true;
+    			SAVE_SERV_CHAR_val[0] = '0';
+    		}
+    		else
+    		{
+    			ESP_LOGE(TAG, "MCU standalone parameter error");
+    		}
+			/*MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
 			if(ret == MsgWriteAck)
 			{
 				storage_Set_Standalone((uint8_t)standalone);
@@ -1398,7 +1407,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			else
 			{
 				ESP_LOGE(TAG, "MCU standalone parameter error");
-			}
+			}*/
 		}
 		else
 		{
@@ -1586,9 +1595,11 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				ESP_LOGI(TAG, "MCU Start command FAILED");
 			}
 		}
-		else if(command == CommandStartCharging)
+		else if(command == CommandResumeChargingESP)
 		{
 			ESP_LOGW(TAG, "Override delayed start");
+			SetFinalStopActiveStatus(0);
+			sessionHandler_ClearCarInterfaceResetConditions();
 			chargeController_Override();
 		}
 

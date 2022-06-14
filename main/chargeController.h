@@ -44,8 +44,11 @@ void chargeController_Override();
 void chargeController_CancelOverride();
 void chargeController_SetNowTime(char * timeString);
 bool chargeController_SetStartCharging(enum ChargeSource source);
+bool chargeController_SetStandaloneState(uint8_t isStandalone);
 void chargeController_StartWithRandomDelay();
 void chargeController_SetRandomStartDelay();
+void chargeController_ClearRandomStartDelay();
+void chargeController_SetHasBeenDisconnected();
 
 
 #ifdef __cplusplus
