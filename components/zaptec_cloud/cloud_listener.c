@@ -2236,11 +2236,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString, "set session type ocpp") != NULL)
 				{
 					storage_Set_session_type_ocpp(true);
+					storage_SaveConfiguration();
 				}
 				// Select session type zaptec_cloud
 				else if(strstr(commandString, "set session type zaptec_cloud") != NULL)
 				{
 					storage_Set_session_type_ocpp(false);
+					storage_SaveConfiguration();
 				}
 			}
 	}

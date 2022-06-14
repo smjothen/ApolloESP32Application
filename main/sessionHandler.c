@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -26,10 +28,6 @@
 #include "offlineSession.h"
 #include "offlineHandler.h"
 
-//#define USE_OCPP // TODO: See if ocpp should be used together with mqtt or if it should be switched during runtime, after reboot or compiletime.
-
-#ifdef USE_OCPP
-#include <math.h>
 #include "ocpp_task.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/call_messages/ocpp_call_request.h"
@@ -44,7 +42,6 @@
 #include "types/ocpp_charge_point_error_code.h"
 #include "types/ocpp_ci_string_type.h"
 #include "ocpp_listener.h"
-#endif
 
 static const char *TAG = "SESSION        ";
 
@@ -296,24 +293,12 @@ void SessionHandler_SetLogCurrents()
 	}
 }
 
-#ifdef USE_OCPP
-enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_AVAILABLE; // Different from mcu state as it depends on IsEnabled
+enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
 int transaction_id = -1;
 bool pending_change_availability = false;
-uint8_t	pending_change_availability_state;
+bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
+uint8_t pending_change_availability_state;
 time_t preparing_started = 0;
-
-void unauthorize(){
-	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-	if(ret != MsgCommandAck)
-	{
-		ESP_LOGE(TAG, "Unable to deny authorization");
-	}
-	else{
-		ESP_LOGI(TAG, "Authorization denial ok");
-		SetAuthorized(false);
-	}
-}
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
@@ -336,7 +321,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 					//TODO: Handle error. If this occurs there might be charging without valid token or payment
 				}
 
-				unauthorize();
+				SetAuthorized(false);
 			}
 		}
 	}else{
@@ -444,7 +429,17 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 				}
 			}else{
 				ESP_LOGW(TAG, "Transaction is not authorized");
-				unauthorize();
+				MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU authorization denied command OK");
+				}
+				else
+				{
+					ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+				}
+
+				SetAuthorized(false);
 			}
 		}else{
 			ESP_LOGE(TAG, "Authorization tag info lacks required 'status'");
@@ -466,6 +461,7 @@ void authorize(struct TagInfo tag){
 			SetPendingRFIDTag(tag.idAsString);
 			SetAuthorized(true);
 
+			NFCTagInfoClearValid();
 			return;
 		}
 	}
@@ -488,6 +484,8 @@ void authorize(struct TagInfo tag){
 			SetPendingRFIDTag(tag.idAsString);
 		}
 	}
+
+	NFCTagInfoClearValid();
 }
 
 // Index in is equivalent to integer used to identify column in table in ocpp protocol specification section on status notification -1
@@ -569,19 +567,20 @@ static int change_availability(uint8_t is_operative){
 	}
 }
 
-static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMode operation_mode, enum CarChargeMode charge_mode){
+// See transition table in section on Status notification in ocpp 1.6 specification
+static enum ocpp_cp_status_id get_ocpp_state(){
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first
 	if(storage_Get_IsEnabled() == 0){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 	}
 
-	if(GetFinalStopActiveStatus()){
-		return eOCPP_CP_STATUS_FINISHING;
-	}
+	enum CarChargeMode charge_mode = MCU_GetChargeMode();
 
-	switch(operation_mode){
+	switch(MCU_GetChargeOperatingMode()){
 	case CHARGE_OPERATION_STATE_UNINITIALIZED:
+		return eOCPP_CP_STATUS_UNAVAILABLE;
+
 	case CHARGE_OPERATION_STATE_DISCONNECTED:
 		//TODO:
 		// "When a Charge Point is configured with StopTransactionOnEVSideDisconnect set to false, a transaction is running and
@@ -591,8 +590,16 @@ static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMod
 		// 'EV side disconnected'. The current transaction is not stopped."
 		return eOCPP_CP_STATUS_AVAILABLE;
 
-	case CHARGE_OPERATION_STATE_REQUESTING:
-		return eOCPP_CP_STATUS_PREPARING;
+	case CHARGE_OPERATION_STATE_REQUESTING: // TODO: Add support for transition B6
+		if(ocpp_finishing_session // not transitioning away from FINISHED
+			|| ocpp_old_state == eOCPP_CP_STATUS_CHARGING // transition C6
+			|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EV // transition D6
+			|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EVSE){ // transition E6
+
+		        return eOCPP_CP_STATUS_FINISHING;
+		}else{ // Else it must be transition A2, F2, G2, H2 or not transitioning away from perparing
+			return eOCPP_CP_STATUS_PREPARING;
+		}
 
 	case CHARGE_OPERATION_STATE_ACTIVE:
 		return eOCPP_CP_STATUS_AVAILABLE;
@@ -616,7 +623,7 @@ static enum ocpp_cp_status_id ocpp_state_from_mcu_state(enum ChargerOperatingMod
 	case CHARGE_OPERATION_STATE_WARNING:
 		return eOCPP_CP_STATUS_FAULTED;
 	default:
-		ESP_LOGE(TAG, "Unexpected value of MCU charger operating mode: %d", operation_mode);
+		ESP_LOGE(TAG, "Unexpected value of MCU charger operating mode");
 		return eOCPP_CP_STATUS_FAULTED;
 	}
 
@@ -678,7 +685,7 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 
 	}
 
-	bool accept_request = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode()) == eOCPP_CP_STATUS_PREPARING;
+	bool accept_request = get_ocpp_state() == eOCPP_CP_STATUS_PREPARING;
 	cJSON * response;
 	if(accept_request){
 		response = ocpp_create_remote_start_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
@@ -710,6 +717,7 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 static void remote_stop_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Request to remote stop transaction");
 	if(payload == NULL || !cJSON_HasObjectItem(payload, "transactionId")){
+		ESP_LOGW(TAG, "Request has invalid formation");
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'transactionId' field", NULL);
 		if(ocpp_error == NULL){
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
@@ -722,6 +730,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 
 	cJSON * transaction_id_json = cJSON_GetObjectItem(payload, "transactionID");
 	if(!cJSON_IsNumber(transaction_id_json)){
+		ESP_LOGW(TAG, "Request has invalid type");
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected transactionId to be integer", NULL);
 		if(ocpp_error == NULL){
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
@@ -735,9 +744,11 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	//TODO: change from using transaction_id == -1 to meant no transaction as the id from central system is not limited by ocpp
 	cJSON * response;
 	if(transaction_id == transaction_id_json->valueint){
+		ESP_LOGI(TAG, "Stop request id matches ongoing transaction id");
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
 	}
 	else{
+		ESP_LOGW(TAG, "Stop request id does not match any ongoing transaction id");
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_REJECTED);
 	}
 
@@ -760,6 +771,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 			ESP_LOGE(TAG, "MCU stop charging Failed");
 		}
 	}
+	SetAuthorized(false);
 	//TODO: "[...]and, if applicable, unlock the connector"
 }
 
@@ -812,7 +824,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 
 	if(new_operative != old_is_enabled)
 	{
-		enum ocpp_cp_status_id ocpp_state = ocpp_state_from_mcu_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode());
+		enum ocpp_cp_status_id ocpp_state = get_ocpp_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode());
 		if((ocpp_state == eOCPP_CP_STATUS_AVAILABLE && new_operative == 0) || ocpp_state == eOCPP_CP_STATUS_UNAVAILABLE){
 			if(change_availability(new_operative) == 0)
 			{
@@ -863,6 +875,8 @@ bool change_availability_if_pending(const uint8_t allowed_new_state){
 }
 
 void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_status_id new_state){
+	if(old_state == eOCPP_CP_STATUS_FINISHING && new_state != eOCPP_CP_STATUS_FAULTED)
+		ocpp_finishing_session = false;
 
 	switch(new_state){
 	case eOCPP_CP_STATUS_AVAILABLE:
@@ -878,6 +892,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 			stop_transaction();
+			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FINISHING:
 		case eOCPP_CP_STATUS_RESERVED:
@@ -886,7 +901,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Available", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_PREPARING:
@@ -903,7 +917,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Preparing", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_CHARGING:
@@ -921,7 +934,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Charging", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_SUSPENDED_EV:
@@ -937,7 +949,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended EV", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
@@ -953,7 +964,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended EVSE", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
@@ -966,13 +976,12 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 			stop_transaction();
-			unauthorize();
+			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Finishing", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_RESERVED:
@@ -984,7 +993,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Reserved", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
@@ -1001,7 +1009,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Suspended Unavailable", old_state);
-			return;
 		}
 		break;
 	case eOCPP_CP_STATUS_FAULTED:
@@ -1019,7 +1026,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			break;
 		default:
 			ESP_LOGE(TAG, "Invalid state transition from %d to Faulted", old_state);
-			return;
 		}
 		break;
 	}
@@ -1038,6 +1044,7 @@ static void handle_preparing(){
 	 * for instance, EV is connected to Charge Point and user has been authorized."
 	 */
 	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
+		ESP_LOGI(TAG, "Preparing complete; Attempting to start charging");
 		MessageType ret = MCU_SendCommandId(CommandStartCharging);
 		if(ret != MsgCommandAck)
 		{
@@ -1057,6 +1064,14 @@ static void handle_preparing(){
 	}
 }
 
+static void handle_finishing(){
+	if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+		authorize(NFCGetTagInfo());
+		ocpp_finishing_session = false;
+	}
+
+}
+
 static void handle_state(enum ocpp_cp_status_id state){
 	switch(state){
 	case eOCPP_CP_STATUS_AVAILABLE:
@@ -1067,14 +1082,16 @@ static void handle_state(enum ocpp_cp_status_id state){
 	case eOCPP_CP_STATUS_CHARGING:
 	case eOCPP_CP_STATUS_SUSPENDED_EV:
 	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		break;
 	case eOCPP_CP_STATUS_FINISHING:
+		handle_finishing();
+		break;
 	case eOCPP_CP_STATUS_RESERVED:
 	case eOCPP_CP_STATUS_UNAVAILABLE:
 	case eOCPP_CP_STATUS_FAULTED:
 		break;
 	}
 }
-#endif /*USE_OCPP*/
 
 static bool carInterfaceRestartTried = false;
 static bool hasSeenCarStateC = false;
@@ -1190,11 +1207,10 @@ static void sessionHandler_task()
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
-#ifdef USE_OCPP
+    // Prepare for incomming ocpp messages
     attach_call_cb(eOCPP_ACTION_CHANGE_AVAILABILITY_ID, change_availability_cb, NULL);
     attach_call_cb(eOCPP_ACTION_REMOTE_START_TRANSACTION_ID, remote_start_transaction_cb, NULL);
     attach_call_cb(eOCPP_ACTION_REMOTE_STOP_TRANSACTION_ID, remote_stop_transaction_cb, NULL);
-#endif /*USE_OCPP*/
 
     authentication_Init();
     OCMF_Init();
@@ -1260,6 +1276,7 @@ static void sessionHandler_task()
 			offlineHandler_ClearOfflineCurrentSent();
 			offlineTime = 0;
 		}
+
 		/// Flag as offline if PING_REPLY i in offline mode to reduce transmissions
 		if((isOnline == true) && (pingReplyState == PING_REPLY_OFFLINE))
 		{
@@ -1361,15 +1378,17 @@ static void sessionHandler_task()
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) && (previousChargeOperatingMode != CHARGE_OPERATION_STATE_REQUESTING) && (chargeSession_Get().StartDateTime[0] == '\0'))
 			InitiateHoldRequestTimeStamp();
 
-#ifdef USE_OCPP
-		enum ocpp_cp_status_id ocpp_new_state = ocpp_state_from_mcu_state(chargeOperatingMode, currentCarChargeMode);
+		// Handle ocpp state if session type is ocpp and not standalone
+		if(storage_Get_session_type_ocpp() && storage_Get_Standalone() == 0){
+			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state(chargeOperatingMode, currentCarChargeMode);
 
-		if(ocpp_new_state != ocpp_old_state){
-			handle_state_transition(ocpp_old_state, ocpp_new_state);
-		}else{
-			handle_state(ocpp_new_state);
+			if(ocpp_new_state != ocpp_old_state){
+				handle_state_transition(ocpp_old_state, ocpp_new_state);
+			}else{
+				handle_state(ocpp_new_state);
+			}
 		}
-#endif /*USE_OCPP*/
+
 		//We need to inform the ChargeSession if a car is connected.
 		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
 		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
@@ -1377,10 +1396,10 @@ static void sessionHandler_task()
 		else
 			SetCarConnectedState(true);
 
-		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
+		//If we are charging when going from offline to online while using zaptec_cloud, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
+		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline() && (storage_Get_session_type_ocpp() == false))
 		{
 			if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED))
 			{
@@ -1407,93 +1426,94 @@ static void sessionHandler_task()
 		}
 
 		/// MQTT connected and pingReply not in offline state
-		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
-		{
-			//Allow disabling send on change in standalone when TransmitInterval is 0
-			if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
-				publish_telemetry_observation_on_change();
-			else
-				ESP_LOGE(TAG, "TransmitInterval = 0 in Standalone");
-
-			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
-			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
-			if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
+		if(storage_Get_session_type_ocpp() == false){
+			if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
 			{
-				resendRequestTimer++;
-				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
-				if(resendRequestTimer >= resendRequestTimerLimit)
+				//Allow disabling send on change in standalone when TransmitInterval is 0
+				if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
+					publish_telemetry_observation_on_change();
+				else
+					ESP_LOGE(TAG, "TransmitInterval = 0 in Standalone");
+
+				// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
+				//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+				if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
 				{
-					/// On second request transmission, do the ping-reply to ensure inCharge is responding.
-					/// If Cloud does not reply with PingReply command, then go to offline mode.
-					pingReplyTrigger++;
-					if(pingReplyTrigger == 1)
+					resendRequestTimer++;
+					ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+					if(resendRequestTimer >= resendRequestTimerLimit)
 					{
-						update_mqtt_event_pattern(true);
-						offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
-					}
+						/// On second request transmission, do the ping-reply to ensure inCharge is responding.
+						/// If Cloud does not reply with PingReply command, then go to offline mode.
+						pingReplyTrigger++;
+						if(pingReplyTrigger == 1)
+						{
+							update_mqtt_event_pattern(true);
+							offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
+						}
 
-					publish_debug_telemetry_observation_ChargingStateParameters();
+						publish_debug_telemetry_observation_ChargingStateParameters();
 
-					if(pingReplyTrigger == 1)
-						update_mqtt_event_pattern(false);
+						if(pingReplyTrigger == 1)
+							update_mqtt_event_pattern(false);
 
-					// Reset timer
-					resendRequestTimer = 0;
+						// Reset timer
+						resendRequestTimer = 0;
 
-					// Increase timer limit as a backoff routine if Cloud does not answer
-					if(resendRequestTimerLimit < 1800)
-					{
-						resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT << nrOfResendRetries; //pow(2.0, nrOfResendRetries) => 150 300 600 1200 2400
-						//ESP_LOGE(TAG, "CHARGE STATE resendRequestTimerLimit: %d nrOfResendRetries %d", resendRequestTimerLimit, nrOfResendRetries);
-						nrOfResendRetries++;
-					}
-				}
-			}
-			else
-			{
-
-				resendRequestTimer = 0;
-				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
-				nrOfResendRetries = 0;
-				pingReplyTrigger = 0;
-			}
-
-
-			offlineTime = 0;
-			offlineMode = false;
-		}
-		else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
-		{
-			if(storage_Get_Standalone() == false)
-			{
-				offlineTime++;
-
-				/// Use pulseInterval * 2 reported to Cloud to ensure charging is not started until Cloud has flagged the charger as offline
-				if(offlineTime > (recordedPulseInterval * 2))
-				{
-					if(secondsSinceLastCheck < 10)
-					{
-						secondsSinceLastCheck++;
-					}
-					if(secondsSinceLastCheck >= 10)
-					{
-						offlineHandler_CheckForOffline();
-						secondsSinceLastCheck = 0;
-						offlineMode = true;
+						// Increase timer limit as a backoff routine if Cloud does not answer
+						if(resendRequestTimerLimit < 1800)
+						{
+							resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT << nrOfResendRetries; //pow(2.0, nrOfResendRetries) => 150 300 600 1200 2400
+							//ESP_LOGE(TAG, "CHARGE STATE resendRequestTimerLimit: %d nrOfResendRetries %d", resendRequestTimerLimit, nrOfResendRetries);
+							nrOfResendRetries++;
+						}
 					}
 				}
 				else
 				{
-					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
+
+					resendRequestTimer = 0;
+					resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
+					nrOfResendRetries = 0;
+					pingReplyTrigger = 0;
 				}
-			}
-			else
-			{
-				//OfflineMode is only for System use
+
+
+				offlineTime = 0;
 				offlineMode = false;
 			}
-		}
+			else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
+			{
+				if(storage_Get_Standalone() == false)
+				{
+					offlineTime++;
 
+					/// Use pulseInterval * 2 reported to Cloud to ensure charging is not started until Cloud has flagged the charger as offline
+					if(offlineTime > (recordedPulseInterval * 2))
+					{
+						if(secondsSinceLastCheck < 10)
+						{
+							secondsSinceLastCheck++;
+						}
+						if(secondsSinceLastCheck >= 10)
+						{
+							offlineHandler_CheckForOffline();
+							secondsSinceLastCheck = 0;
+							offlineMode = true;
+						}
+					}
+					else
+					{
+						ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
+					}
+				}
+				else
+				{
+					//OfflineMode is only for System use
+					offlineMode = false;
+				}
+			}
+		}
 
 		/*if((previousCarChargeMode == eCAR_UNINITIALIZED) && (currentCarChargeMode == eCAR_DISCONNECTED))
 		{
@@ -1527,7 +1547,7 @@ static void sessionHandler_task()
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true)  && (storage_Get_session_type_ocpp() == false))
 		{
 			if(isOnline)
 			{
@@ -2303,7 +2323,7 @@ void sessionHandler_StopAndResetChargeSession()
 */
 void ChargeModeUpdateToCloudNeeded()
 {
-	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_CHARGING)
+	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_CHARGING && storage_Get_session_type_ocpp() == false)
 		publish_debug_telemetry_observation_ChargingStateParameters();
 }
 
@@ -2375,7 +2395,7 @@ void sessionHandler_Pulse()
 
 		/// Send new pulse interval to Cloud when it changes with ChargeOperatingMode in System mode.
 		/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
-		if(pulseInterval != recordedPulseInterval)
+		if(pulseInterval != recordedPulseInterval && storage_Get_session_type_ocpp() == false)
 		{
 			ESP_LOGI(TAG,"Sending pulse interval %d (blocking)", pulseInterval);
 			int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);

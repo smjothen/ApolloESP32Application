@@ -40,6 +40,7 @@
 #ifdef useAdvancedConsole
 	//#include "apollo_console.h"
 #endif
+#include "ocpp.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -443,6 +444,8 @@ void app_main(void)
     sessionHandler_init();
 	#endif
 
+    ocpp_init();
+
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
     char onTimeString[20]= {0};
@@ -465,7 +468,7 @@ void app_main(void)
 
     	if(onTimeCounter % 10 == 0)
     	{
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d, ocpp: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), ocpp_get_stack_watermark());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
