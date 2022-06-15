@@ -22,7 +22,7 @@ static bool runStartimer = false;
 static uint8_t overrideTimer = 0;
 
 //static char fullTimeScheduleString[] = {"31:0812:1234;96:2200:2330;03:1130:1245"};
-static char fullTimeScheduleString[] = {"31:0800:1500;31:1600:1800"};
+static char fullTimeScheduleString[] = {"31:0800:1200;31:1600:1800"};
 static int nrOfSchedules = 0;
 static bool enforceScheduleAndDelay = false;
 
@@ -414,12 +414,49 @@ void chargeController_SetHasBeenDisconnected()
 	hasBeenDisconnected = true;
 }
 
+//#include "zones.h"
+//#include "../components/micro_tz_db/zones.h"
+/*#include "../components/utz/utz.h"
+#include "../components/utz/zones.h"
+*/
 static uint16_t isPausedByAnySchedule = 0x0000;
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[150] = {0};
 
 void RunStartChargeTimer()
 {
+	/*printf("Total library db size: %d B\n", sizeof(zone_rules) + sizeof(zone_abrevs) + sizeof(zone_defns) + sizeof(zone_names));
+
+	udatetime_t dt = {0};
+	dt.date.year = 17;
+	dt.date.month = 9;
+	dt.date.dayofmonth = 26;
+	dt.time.hour = 1;
+	dt.time.minute = 0;
+	dt.time.second = 0;
+
+	uzone_t active_zone;
+	get_zone_by_name("Europe/Oslo", active_zone);
+	uoffset_t offset;
+	char c = get_current_offset(&active_zone, &dt, &offset);
+	printf("%s, current offset: %d.%d\n", active_zone.name, offset.hours, offset.minutes / 60);
+	printf(active_zone.abrev_formatter, c);
+	printf("\n");*/
+
+	/*time_t now;
+	time(&now);
+	struct tm timeinfo;
+	char strftime_buf[64];
+	const char * posix_str = micro_tz_db_get_posix_str("Europe/Oslo");
+	ESP_LOGE(TAG, "********************** TIME LIB STRING %s ************************", posix_str);
+*/
+    /*setenv("TZ", posix_str, 1);
+    tzset();
+
+    localtime_r(&now, &timeinfo);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    printf("The current date/time is: %s\n", strftime_buf);
+*/
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
