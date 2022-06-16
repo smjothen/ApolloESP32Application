@@ -27,6 +27,7 @@
 #include "offline_log.h"
 #include "offlineSession.h"
 #include "offlineHandler.h"
+#include "../components/audioBuzzer/audioBuzzer.h"
 
 #include "ocpp_task.h"
 #include "messages/call_messages/ocpp_call_cb.h"
@@ -34,6 +35,7 @@
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
 #include "types/ocpp_enum.h"
+#include "types/ocpp_reason.h"
 #include "types/ocpp_authorization_status.h"
 #include "types/ocpp_availability_type.h"
 #include "types/ocpp_availability_status.h"
@@ -320,8 +322,18 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 					ESP_LOGE(TAG, "MCU stop charging final command FAILED");
 					//TODO: Handle error. If this occurs there might be charging without valid token or payment
 				}
-
+				chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
 				SetAuthorized(false);
+			}
+
+			if(cJSON_HasObjectItem(id_tag_info, "parentIdTag")){
+				cJSON * parent_id_json = cJSON_GetObjectItem(id_tag_info, "parentIdTag");
+				if(cJSON_IsString(parent_id_json) && is_ci_string_type(parent_id_json->valuestring, 20)){
+					ESP_LOGI(TAG, "Adding parent id to current charge session");
+					chargeSession_SetParentId(parent_id_json->valuestring);
+				}else{
+					ESP_LOGE(TAG, "Recieved start transaction with invalid parent id");
+				}
 			}
 		}
 	}else{
@@ -379,7 +391,12 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		return;
 	}
 
-	cJSON * response  = ocpp_create_stop_transaction_request(chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), time(NULL), transaction_id, NULL, 0, NULL);
+	cJSON * response;
+	if(chargeSession_Get().StoppedByRFID){
+		response  = ocpp_create_stop_transaction_request(chargeSession_Get().StoppedById, floor(MCU_GetEnergy()), time(NULL), transaction_id, chargeSession_Get().StoppedReason, 0, NULL);
+	}else{
+		response  = ocpp_create_stop_transaction_request(NULL, floor(MCU_GetEnergy()), time(NULL), transaction_id, chargeSession_Get().StoppedReason, 0, NULL);
+	}
 
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create stop transaction request");
@@ -418,6 +435,8 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 
 			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
 				ESP_LOGI(TAG, "Authorized to start transaction");
+
+				audio_play_nfc_card_accepted();
 				MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
 				if(ret != MsgCommandAck)
 				{
@@ -429,6 +448,7 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 				}
 			}else{
 				ESP_LOGW(TAG, "Transaction is not authorized");
+				audio_play_nfc_card_denied();
 				MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
 				if(ret == MsgCommandAck)
 				{
@@ -474,18 +494,184 @@ void authorize(struct TagInfo tag){
 		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_GENERIC);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue authorization request");
+		}else{
 			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 			if(ret == MsgWriteAck)
 				ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
 			else
 				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
-		}else{
+
 			pending_ocpp_authorize = true;
 			SetPendingRFIDTag(tag.idAsString);
 		}
 	}
 
 	NFCTagInfoClearValid();
+}
+
+static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
+
+void authorize_and_stop_transaction(const char * id_tag){
+		ESP_LOGI(TAG, "Authorized to stop transaction");
+
+		audio_play_nfc_card_accepted();
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "Authorization granted ok");
+		}
+		else{
+			ESP_LOGE(TAG, "Unable to grant authorization to MCU");
+		}
+
+		ret = MCU_SendCommandId(CommandStopCharging);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU stop charging OK");
+			sessionResetMode = eSESSION_RESET_STOP_SENT;
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU stop charging Failed");
+		}
+		chargeSession_SetStoppedByRFID(true, id_tag);
+}
+
+void authorize_stop_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Recieved authorization response for stop transaction");
+	pending_ocpp_authorize = false;
+
+	if(chargeSession_Get().parent_id[0] == 0){
+		ESP_LOGE(TAG, "Chargesession lacks parent id, authorization request was unnecessary or charge session changed");
+		goto denied;
+	}
+
+	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+		cJSON * id_tag_info_json = cJSON_GetObjectItem(payload, "idTagInfo");
+
+		if(cJSON_HasObjectItem(id_tag_info_json, "status")){
+
+			cJSON * status_json = cJSON_GetObjectItem(id_tag_info_json, "status");
+			if(!cJSON_IsString(status_json) || strcmp(status_json->valuestring, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
+				ESP_LOGW(TAG, "Status not accepted %s", status_json->valuestring );
+				goto denied;
+			}
+		}else{
+			goto denied;
+		}
+
+		if(cJSON_HasObjectItem(id_tag_info_json, "parentIdTag")){
+
+			cJSON * parent_id_json = cJSON_GetObjectItem(id_tag_info_json, "parentIdTag");
+			if(!cJSON_IsString(parent_id_json) || !is_ci_string_type(parent_id_json->valuestring, 20)
+				|| strcmp(parent_id_json->valuestring, chargeSession_Get().parent_id) != 0){
+
+				ESP_LOGW(TAG, "parent id tag does not match transaction parent");
+			}else{
+				authorize_and_stop_transaction((char *)cb_data);
+				free(cb_data);
+				return;
+			}
+		}
+	}
+
+denied:
+	free(cb_data);
+	ESP_LOGW(TAG, "Stop transaction not authorized");
+	audio_play_nfc_card_denied();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
+}
+
+void authorize_stop_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+
+	error_cb(unique_id, error_code, error_description, error_details, "authorize");
+
+	ESP_LOGW(TAG, "Stop transaction not authorized: %s", (char *)cb_data);
+	free(cb_data);
+
+	audio_play_nfc_card_denied();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
+}
+
+void authorize_stop(const char * presented_id_tag)
+{
+	struct ChargeSession charge_session = chargeSession_Get();
+
+	if(strcmp(charge_session.AuthenticationCode, presented_id_tag) == 0){
+		ESP_LOGI(TAG, "Transaction id tag is same as presented id tag");
+		authorize_and_stop_transaction(presented_id_tag);
+		return;
+	}
+
+	if(charge_session.parent_id[0] != '\0'){
+
+		if(storage_Get_ocpp_local_pre_authorize()){
+			ESP_LOGI(TAG, "Attemting local stop authorization");
+			if(authentication_check_parent(presented_id_tag, charge_session.parent_id)){
+				ESP_LOGI(TAG, "Transaction id tag is in same group as presented id tag");
+				authorize_and_stop_transaction(presented_id_tag);
+				return;
+			}
+		}
+
+
+		ESP_LOGI(TAG, "Requeting presented id tag from central system");
+		cJSON * authorization = ocpp_create_authorize_request(presented_id_tag);
+		if(authorization != NULL){
+			char * id_tag_buffer = malloc(sizeof(char) * 21);
+			if(id_tag_buffer == NULL){
+				ESP_LOGE(TAG, "Unable to allocate id tag buffer");
+				goto denied;
+			}
+			strncpy(id_tag_buffer, presented_id_tag, 20);
+			id_tag_buffer[21] = '\0';
+
+			int err = enqueue_call(authorization, authorize_stop_response_cb, authorize_stop_error_cb, id_tag_buffer, eOCPP_CALL_GENERIC);
+			if(err == 0){
+				MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+				if(ret == MsgWriteAck)
+					ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+				else
+					ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
+				pending_ocpp_authorize = true;
+				return;
+			}else{
+				ESP_LOGE(TAG, "Unable to enqueue authorization request");
+			}
+		}else{
+			ESP_LOGE(TAG, "Unable to create authorize request");
+		}
+	}
+	else{
+		ESP_LOGW(TAG, "Charge session has no parent id to check");
+	}
+denied:
+	audio_play_nfc_card_denied();
+	if(MCU_SendCommandId(CommandAuthorizationDenied) == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
 }
 
 // Index in is equivalent to integer used to identify column in table in ocpp protocol specification section on status notification -1
@@ -765,6 +951,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		if(ret == MsgCommandAck)
 		{
 			ESP_LOGI(TAG, "MCU stop charging OK");
+			sessionResetMode = eSESSION_RESET_STOP_SENT;
 		}
 		else
 		{
@@ -772,6 +959,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		}
 	}
 	SetAuthorized(false);
+	chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
 	//TODO: "[...]and, if applicable, unlock the connector"
 }
 
@@ -891,6 +1079,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
+			chargeSession_SetStoppedReason(OCPP_REASON_EV_DISCONNECT);
 			stop_transaction();
 			SetAuthorized(false);
 			break;
@@ -1064,6 +1253,13 @@ static void handle_preparing(){
 	}
 }
 
+static void handle_charging(){
+	if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+		authorize_stop(NFCGetTagInfo().idAsString);
+		NFCTagInfoClearValid();
+	}
+}
+
 static void handle_finishing(){
 	if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
 		authorize(NFCGetTagInfo());
@@ -1082,6 +1278,7 @@ static void handle_state(enum ocpp_cp_status_id state){
 	case eOCPP_CP_STATUS_CHARGING:
 	case eOCPP_CP_STATUS_SUSPENDED_EV:
 	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		handle_charging();
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
 		handle_finishing();
@@ -1156,7 +1353,6 @@ enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 	return chargeOperatingMode;
 }
 
-static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
 
 static void sessionHandler_task()
 {

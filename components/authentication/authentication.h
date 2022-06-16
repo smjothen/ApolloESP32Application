@@ -18,6 +18,7 @@ struct TagItem
 
 void authentication_Init();
 uint8_t authentication_CheckId(struct TagInfo tagInfo);
+bool authentication_check_parent(const char * id_tag1, const char * id_tag2);
 uint8_t authentication_CheckBLEId(char * bleUUID);
 void authentication_Execute(char * authId);
 void authentication_AddTag(struct TagItem tagItem);

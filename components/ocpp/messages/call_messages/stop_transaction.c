@@ -14,7 +14,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 							OCPP_REASON_EMERGENCY_STOP,
 							OCPP_REASON_EV_DISCONNECT,
 							OCPP_REASON_HARD_RESET,
-							OCPP_REASON_LOACL,
+							OCPP_REASON_LOCAL,
 							OCPP_REASON_OTHER,
 							OCPP_REASON_POWER_LOSS,
 							OCPP_REASON_REBOOT,

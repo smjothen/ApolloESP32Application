@@ -31,7 +31,7 @@ uint8_t authentication_CheckId(struct TagInfo tagInfo)
 
 	struct ocpp_authorization_data auth_data = {0};
 	if(storage_Get_ocpp_local_auth_list_enabled()){
-		ESP_LOGI(TAG, "Attmpting to match tag with local authorization list");
+		ESP_LOGI(TAG, "Attempting to match tag with local authorization list");
 		if(!tagInfo.tagIsValid){
 			ESP_LOGW(TAG, "Invalid tag, igoring local auth list");
 		}else{
@@ -59,6 +59,25 @@ uint8_t authentication_CheckId(struct TagInfo tagInfo)
 	return match;
 }
 
+bool authentication_check_parent(const char * id_tag, const char * parent_id)
+{
+	if(storage_Get_ocpp_local_auth_list_enabled()){
+		ESP_LOGI(TAG, "Attempting parent id tag comparison");
+
+		struct ocpp_authorization_data auth_data = {0};
+		if(!fat_ReadAuthData(id_tag, &auth_data)){
+			return false;
+		}
+
+		if(strcmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0
+			&& strcmp(auth_data.id_tag_info.parent_id_tag, parent_id) == 0){
+
+			return true;
+		}
+	}
+
+	return false;
+}
 
 uint8_t authentication_CheckBLEId(char * bleUUID)
 {

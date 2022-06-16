@@ -5,7 +5,7 @@
 #define OCPP_REASON_EMERGENCY_STOP "EmergencyStop"
 #define OCPP_REASON_EV_DISCONNECT "EVDisconnected"
 #define OCPP_REASON_HARD_RESET "HardReset"
-#define OCPP_REASON_LOACL "Local"
+#define OCPP_REASON_LOCAL "Local"
 #define OCPP_REASON_OTHER "Other"
 #define OCPP_REASON_POWER_LOSS "PowerLoss"
 #define OCPP_REASON_REBOOT "Reboot"

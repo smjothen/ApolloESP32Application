@@ -14,7 +14,10 @@ struct ChargeSession
 	char EndDateTime[32]; //27
 	bool ReliableClock;
 	bool StoppedByRFID;
+	char StoppedById[21];
+	char StoppedReason[16];
 	char AuthenticationCode[41];//Up to GUID string.
+	char parent_id[21];
 	uint32_t unixStartTime;
 	time_t EpochStartTimeSec;
 	uint32_t EpochStartTimeUsec;
@@ -44,10 +47,12 @@ void chargeSession_Clear();
 bool chargeSession_IsLocalSession();
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
 void chargeSession_SetAuthenticationCode(char * idAsString);
+void chargeSession_SetParentId(const char * id_token);
 char* chargeSession_GetAuthenticationCode();
 void chargeSession_ClearAuthenticationCode();
 //void chargeSession_SetEnergy(float energy);
-void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
+void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag);
+void chargeSession_SetStoppedReason(const char * reason);
 void chargeSession_SetEnergyForTesting(float e);
 void chargeSession_SetOCMF(char * OCMDString);
 void chargeSession_HoldUserUUID();

@@ -74,10 +74,10 @@ async def call_runner(cp):
     print('Adding known test tags')
     result = await cp.call(
         call.SendLocalListPayload(
-            list_version = 10,
+            list_version = 12,
             local_authorization_list = [{'idTag' : 'nfc-0307A5CC',
-                                         'idTagInfo' : {'parentIdTag' : "fd65bbe2-edc8-4940-9",
-                                                        'status' : 'Expired'}},
+                                         'idTagInfo' : {'parentIdTag' : "other",
+                                                        'status' : 'Accepted'}},
                                         {'idTag' : 'nfc-73F776CC',
                                          'idTagInfo' : {'parentIdTag' : "fd65bbe2-edc8-4940-9",
                                                         'status' : 'Accepted'}}
@@ -393,13 +393,13 @@ class ChargePoint(cp):
     def on_authorize_request(self, id_tag):
         print(f'authorizing {id_tag}')
         return call_result.AuthorizePayload(
-            dict(expiry_date='2021-01-01', status='Expired')
+            dict(expiry_date='2021-01-01', parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         )
 
     @on('StartTransaction')
     def on_start_transaction(self, connector_id, id_tag, meter_start, **kwargs):
         print('Replying to start transaction')
-        info=dict(expiryDate='2021-01-01', status='Accepted')
+        info=dict(expiryDate='2021-01-01', parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         return call_result.StartTransactionPayload(
             id_tag_info=info,
             transaction_id=1231312
@@ -407,7 +407,7 @@ class ChargePoint(cp):
 
     @on('StopTransaction')
     def on_stop_transaction(self, **kwargs):
-        print('Replying to stop transaction')
+        print(f'Replying to stop transaction {kwargs}')
         return call_result.StopTransactionPayload()
 
     @on('StatusNotification')

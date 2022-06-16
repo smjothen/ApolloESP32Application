@@ -15,7 +15,7 @@
 #include "offlineSession.h"
 #include <math.h>
 #include "../components/zaptec_cloud/include/zaptec_cloud_observations.h"
-
+#include "types/ocpp_reason.h"
 
 
 static const char *TAG = "CHARGESESSION  ";
@@ -280,7 +280,8 @@ void chargeSession_Start()
 		memset(&chargeSession, 0, sizeof(chargeSession));
 		ChargeSession_Set_GUID();
 		ChargeSession_Set_StartTime();
-
+		chargeSession_SetStoppedReason(OCPP_REASON_OTHER);
+		chargeSession_SetParentId("\0");
 
 		if(connectivity_GetSNTPInitialized() == true)
 		{
@@ -434,6 +435,10 @@ void chargeSession_SetAuthenticationCode(char * idAsString)
 	strcpy(chargeSession.AuthenticationCode, idAsString);
 }
 
+void chargeSession_SetParentId(const char * id_token){
+	strcpy(chargeSession.parent_id, id_token);
+}
+
 char* chargeSession_GetAuthenticationCode()
 {
 	return chargeSession.AuthenticationCode;
@@ -445,10 +450,22 @@ void chargeSession_ClearAuthenticationCode()
 }
 
 
-void chargeSession_SetStoppedByRFID(bool stoppedByRFID)
+void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag)
 {
-	if(chargeSession.SessionId[0] != '\0')
+	if(chargeSession.SessionId[0] != '\0'){
 		chargeSession.StoppedByRFID = stoppedByRFID;
+		chargeSession_SetStoppedReason(OCPP_REASON_LOCAL);
+
+		strncpy(chargeSession.StoppedById, id_tag, 20);
+		chargeSession.StoppedById[20] = '\0';
+	}else{
+		ESP_LOGE(TAG, "Unable to set rfid due to unknown sessionId");
+	}
+}
+
+void chargeSession_SetStoppedReason(const char * reason)
+{
+	strcpy(chargeSession.StoppedReason, reason);
 }
 
 /*void chargeSession_SetEnergy(float energy)

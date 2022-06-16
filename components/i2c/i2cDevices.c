@@ -386,7 +386,7 @@ static void i2cDevice_task(void *pvParameters)
 								if(strcmp(NFCGetTagInfo().idAsString, chargeSession_GetAuthenticationCode()) == 0)
 								{
 									audio_play_nfc_card_accepted();
-									chargeSession_SetStoppedByRFID(true);
+									chargeSession_SetStoppedByRFID(true, NFCGetTagInfo().idAsString);
 									sessionHandler_InitiateResetChargeSession();
 
 									isAuthenticated = false;
