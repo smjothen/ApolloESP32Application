@@ -55,6 +55,23 @@ config_keys=['AllowOfflineTxForUnknownId',
 
 async def call_runner(cp):
     await asyncio.sleep(2)
+
+    try:
+        print('unlocking connector (expect not supported)')
+        result = await cp.call(
+            call.ClearCachePayload()
+        )
+        print(result)
+    except Exception as e:
+        print(e)
+
+    print('clearing authorization cach (expect not supported)')
+    result = await cp.call(
+        call.UnlockConnectorPayload(
+            connector_id = 1)
+    )
+    print(result)
+
     print('Enabling LocalAuthListEnabled')
     result = await cp.call(
         call.ChangeConfigurationPayload(
