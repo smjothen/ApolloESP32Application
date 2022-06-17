@@ -268,6 +268,10 @@ void SetOnlineWatchdog()
 
 void app_main(void)
 {
+
+	volatile char values[5] = {"abcd"};
+	memset(values, 0, 4);
+
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL

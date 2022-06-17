@@ -378,7 +378,7 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 
 static float hmiBrightness = 0.0;
 static char nrTostr[11] = {0};
-static char charBuf[130] = {0};
+static char charBuf[SCHEDULE_SIZE] = {0};
 
 static bool configSession = false;
 static int statusSegmentCount = 0;
@@ -1109,13 +1109,13 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			if(timeScheduleString[0] != '\0')
 			{
 				timeScheduleLength = strlen(timeScheduleString);
-				if(timeScheduleLength >= 12)
+				if(timeScheduleLength >= 13)
 				{
-					nrOfTimeSchedules = (timeScheduleLength/13) + 1; //12+13 = 25 -> 25/13 + 1 = 2
+					nrOfTimeSchedules = (timeScheduleLength/14) + 1; //13+14 = 27 -> 27/14 + 1 = 2
 					if(nrOfTimeSchedules == 1)
-						timeScheduleLength = 12;
-					else
 						timeScheduleLength = 13;
+					else
+						timeScheduleLength = 14;
 
 					timeScheduleMessageNo++;
 				}
@@ -1135,15 +1135,15 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		}
 		else if(timeScheduleMessageNo >= 1)
 		{
-			if(strlen(timeScheduleString) >= 13)
+			if(strlen(timeScheduleString) >= 14)
 				//More schedules
-				timeScheduleLength = 13;
+				timeScheduleLength = 14;
 			else
 				//Last schedule
-				timeScheduleLength = 12;
+				timeScheduleLength = 13;
 
 			///Move to next schedule in string
-			timeScheduleString += 13;
+			timeScheduleString += 14;
 
 			timeScheduleMessageNo++;
 		}
@@ -1624,7 +1624,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_LOCATION_UUID:
 
-    	memset(charBuf, 0, 130);
+    	memset(charBuf, 0, SCHEDULE_SIZE);
     	memcpy(charBuf, param->write.value, 3);
 
     	ESP_LOGI(TAG, "Location received %i: %s", param->write.len , param->write.value);
@@ -1641,7 +1641,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_TIMEZONE_UUID:
 
-    	memset(charBuf, 0, 130);
+    	memset(charBuf, 0, SCHEDULE_SIZE);
 		memcpy(charBuf, param->write.value, param->write.len);
 
 		ESP_LOGI(TAG, "Timezone received %i: %s", param->write.len , param->write.value);
@@ -1659,40 +1659,48 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     case CHARGER_TIMESCHEDULE_UUID:
     	//Write UUID
 
-		if(timeScheduleMessageNo == 0)
+		/*if(timeScheduleMessageNo == 0)
 		{
-			if(param->write.len >= 12)
+			if(param->write.len >= 13)
 			{
-				timeScheduleMessageNo++;
-
-				memset(charBuf, 0, 130);
+				memset(charBuf, 0, SCHEDULE_SIZE);
 				memcpy(charBuf, param->write.value, param->write.len);
 				ESP_LOGI(TAG, "Set first timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
 
-				if(param->write.len == 12)
+				if(param->write.len == 13)
 				{
 					/// First and only schedule
 					storage_Set_TimeSchedule(charBuf);
-					ESP_LOGI(TAG, "Saving only timeSchedule #%i: %s", timeScheduleMessageNo, charBuf);
+					ESP_LOGI(TAG, "Saving only timeSchedule #%i: %s", timeScheduleMessageNo,
+);
 					storage_SaveConfiguration();
 					timeScheduleMessageNo = 0;
 				}
 			}
-		}
-		else if(timeScheduleMessageNo >= 1)
+		}*/
+		if(timeScheduleMessageNo >= 0)
 		{
+			if (SCHEDULE_SIZE - strlen(charBuf) < param->write.len)
+			{
+				ESP_LOGW(TAG, "To long string");
+				break;
+			}
+
 			/// Intermediate message
-			if(param->write.len == 13 )
+			if(param->write.len == 14 )
 			{
 				//Append schedule to combined string and break
-				memcpy(&charBuf[timeScheduleMessageNo * 13], param->write.value, param->write.len);
+				memcpy(&charBuf[timeScheduleMessageNo * 14], param->write.value, param->write.len);
 				ESP_LOGI(TAG, "Appending #%i -> %s", timeScheduleMessageNo, charBuf);
+				timeScheduleMessageNo++;
 			}
 			///Last message
-			else if(param->write.len == 12 )
+			else if(param->write.len == 13)
 			{
+				//timeScheduleMessageNo++;
+
 				///Append schedule to combined string and save
-				memcpy(&charBuf[timeScheduleMessageNo * 13], param->write.value, param->write.len);
+				memcpy(&charBuf[timeScheduleMessageNo * 14], param->write.value, param->write.len);
 				storage_Set_TimeSchedule(charBuf);
 				ESP_LOGI(TAG, "Appending last timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
 				storage_SaveConfiguration();

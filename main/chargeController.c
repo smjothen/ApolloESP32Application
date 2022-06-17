@@ -22,7 +22,7 @@ static bool runStartimer = false;
 static uint8_t overrideTimer = 0;
 
 //static char fullTimeScheduleString[] = {"31:0812:1234;96:2200:2330;03:1130:1245"};
-static char fullTimeScheduleString[] = {"31:0800:1200;31:1600:1800"};
+static char fullTimeScheduleString[] = {"031:0800:1200;031:1600:1800"};
 static int nrOfSchedules = 0;
 static bool enforceScheduleAndDelay = false;
 
@@ -39,7 +39,7 @@ struct TimeSchedule
 	bool	isPaused;
 };
 
-static struct TimeSchedule timeSchedules[10] = {0};
+static struct TimeSchedule timeSchedules[14] = {0};
 static bool isScheduleActive = true;
 
 void chargeController_Init()
@@ -124,36 +124,38 @@ void chargeController_SetTimes()
 {
 	int scheduleLen = strlen(fullTimeScheduleString);
 
-	nrOfSchedules = scheduleLen / 12;
+	nrOfSchedules = (scheduleLen + 1) / 14;
 
 	int i = 0;
 	for (i = 0; i < nrOfSchedules; i++)
 	{
-		int base = i*13;
-		if((fullTimeScheduleString[base+2] == ':' ) && (fullTimeScheduleString[base+7] == ':'))
+		int base = i*14;
+		if((fullTimeScheduleString[base+3] == ':' ) && (fullTimeScheduleString[base+8] == ':'))
 		{
-			char parseBuf[3] = {0};
+			char parseBuf[4] = {0};
 
 			/// Days
-			memcpy(parseBuf, &fullTimeScheduleString[base], 2);
+			memcpy(parseBuf, &fullTimeScheduleString[base], 3);
 			timeSchedules[i].Days = atoi(parseBuf);
 
+			memset(parseBuf, 0, 4);
+
 			/// StartHour
-			memcpy(parseBuf, &fullTimeScheduleString[base+3], 2);
+			memcpy(parseBuf, &fullTimeScheduleString[base+4], 2);
 			timeSchedules[i].StartHour = atoi(parseBuf);
 
 			/// StartMin
-			memcpy(parseBuf, &fullTimeScheduleString[base+5], 2);
+			memcpy(parseBuf, &fullTimeScheduleString[base+6], 2);
 			timeSchedules[i].StartMin = atoi(parseBuf);
 
 			timeSchedules[i].StartTotalMinutes = timeSchedules[i].StartHour * 60 + timeSchedules[i].StartMin;
 
 			/// StopHour
-			memcpy(parseBuf, &fullTimeScheduleString[base+8], 2);
+			memcpy(parseBuf, &fullTimeScheduleString[base+9], 2);
 			timeSchedules[i].StopHour = atoi(parseBuf);
 
 			/// StopMin
-			memcpy(parseBuf, &fullTimeScheduleString[base+10], 2);
+			memcpy(parseBuf, &fullTimeScheduleString[base+11], 2);
 			timeSchedules[i].StopMin = atoi(parseBuf);
 
 			timeSchedules[i].StopTotalMinutes = timeSchedules[i].StopHour * 60 + timeSchedules[i].StopMin;
