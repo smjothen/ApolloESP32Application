@@ -1418,10 +1418,12 @@ static void sessionHandler_task()
 }
 
 
-
+static uint8_t waitForCarCountDown = 0;
 void sessionHandler_InitiateResetChargeSession()
 {
 	sessionResetMode = eSESSION_RESET_INITIATED;
+	waitForCarCountDown = 5;
+
 	ESP_LOGW(TAG, "ResetSession initiated");
 }
 
@@ -1430,6 +1432,7 @@ void sessionHandler_StopAndResetChargeSession()
 	///First send STOP command
 	if(sessionResetMode == eSESSION_RESET_INITIATED)
 	{
+		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_PAUSED);
 		MessageType ret = MCU_SendCommandId(CommandStopCharging);
 		if(ret == MsgCommandAck)
 		{
@@ -1447,17 +1450,19 @@ void sessionHandler_StopAndResetChargeSession()
 	///When charging has stopped(9) -Finalize session
 	else if(sessionResetMode == eSESSION_RESET_STOP_SENT)
 	{
-		if(MCU_GetChargeMode() != eCAR_CHARGING)
+		if((MCU_GetChargeMode() != eCAR_CHARGING) || (waitForCarCountDown == 0))
 		{
 			sessionResetMode = eSESSION_RESET_FINALIZE;
 		}
+
+		waitForCarCountDown--;
 	}
 
 
 	else if(sessionResetMode == eSESSION_RESET_FINALIZE)
 	{
 		ESP_LOGI(TAG, "Transition state START");
-		SetTransitionOperatingModeState(true);
+		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_DISCONNECTED);
 		sessionResetMode = eSESSION_RESET_DO_RESET;
 	}
 
@@ -1468,9 +1473,7 @@ void sessionHandler_StopAndResetChargeSession()
 		if(ret == MsgCommandAck)
 		{
 			ESP_LOGI(TAG, "MCU ResetSession command OK");
-			SetTransitionOperatingModeState(false);
-			sessionResetMode = eSESSION_RESET_NONE;
-			ESP_LOGI(TAG, "Transition state STOP");
+
 			//return 200;
 		}
 		else
@@ -1478,7 +1481,19 @@ void sessionHandler_StopAndResetChargeSession()
 			ESP_LOGE(TAG, "MCU ResetSession command FAILED");
 			//return 400;
 		}
+
+		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+		sessionResetMode = eSESSION_RESET_NONE;
+		ESP_LOGI(TAG, "Transition state STOP");
 	}
+
+	//Any failed or final state - cleare opModeOverride
+	if(sessionResetMode == eSESSION_RESET_NONE)
+	{
+		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+	}
+
+	ESP_LOGE(TAG, "sessionResetMode: %i cnt %i", sessionResetMode, waitForCarCountDown);
 }
 
 

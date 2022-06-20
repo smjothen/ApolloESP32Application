@@ -50,6 +50,7 @@ void chargeSession_ClearAuthenticationCode();
 void chargeSession_SetStoppedByRFID(bool stoppedByRFID);
 void chargeSession_SetEnergyForTesting(float e);
 void chargeSession_SetOCMF(char * OCMDString);
+void SetUUIDFlagAsCleared();
 void chargeSession_HoldUserUUID();
 char * sessionSession_GetHeldUserUUID();
 bool sessionSession_IsHoldingUserUUID();
