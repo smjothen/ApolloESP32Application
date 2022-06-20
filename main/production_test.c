@@ -906,8 +906,8 @@ int run_component_tests(){
 		return -1;
 }
 
-static const uint8_t eCAR_DISCONNECTED = 12;
-static const uint8_t eCAR_CHARGING = 6;
+//static const uint8_t eCAR_DISCONNECTED = 12;
+//static const uint8_t eCAR_CHARGING = 6;
 
 int charge_cycle_test(){
 

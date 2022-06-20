@@ -88,11 +88,18 @@ void chargeSession_ClearHasNewSession()
 	hasNewSessionIdFromCloud = false;
 }
 
+///When OCPP in cloud receives a RemoteStopTransaction, it leads to a user UUID reset and Session reset command being sent from cloud.
+///To avoid the user UUID being held in memory despite the first user UUID reset command, this flag should be set.
+static bool UUIDClearedFlag = false;
+void SetUUIDFlagAsCleared()
+{
+	UUIDClearedFlag = true;
+}
 
 static char holdAuthenticationCode[41] = {0};
 void chargeSession_HoldUserUUID()
 {
-	if(chargeSession.AuthenticationCode[0] != '\0')
+	if((chargeSession.AuthenticationCode[0] != '\0') && (UUIDClearedFlag == false))
 	{
 		ESP_LOGE(TAG,"Holding userUUID in mem");
 		strcpy(holdAuthenticationCode, chargeSession.AuthenticationCode);
@@ -382,6 +389,9 @@ bool chargeSession_IsLocalSession()
 void chargeSession_SetAuthenticationCode(char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
+
+	/// Once a new auth string is registered, allow holding it during session reset from cloud
+	UUIDClearedFlag = false;
 }
 
 char* chargeSession_GetAuthenticationCode()

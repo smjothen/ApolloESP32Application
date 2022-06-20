@@ -898,19 +898,23 @@ int8_t MCU_GetChargeMode()
 	return chargeMode;
 }
 
-static bool useTransitionState = false;
-void SetTransitionOperatingModeState(bool newTransitionState)
+
+static enum ChargerOperatingMode overrideOpModeState = CHARGE_OPERATION_STATE_UNINITIALIZED;
+void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState)
 {
-	useTransitionState = newTransitionState;
+	overrideOpModeState = newTransitionState;
 }
-bool GetTransitionOperatingModeState()
+enum ChargerOperatingMode GetTransitionOperatingModeState()
 {
-	return useTransitionState;
+	return overrideOpModeState;
 }
 
 uint8_t MCU_GetChargeOperatingMode()
 {
-	if((useTransitionState == true) && (chargeMode != eCAR_CHARGING))
+	if((overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED))// && (chargeMode != eCAR_CHARGING))
+			return CHARGE_OPERATION_STATE_PAUSED;
+
+	if((overrideOpModeState == CHARGE_OPERATION_STATE_DISCONNECTED))// && (chargeMode != eCAR_CHARGING))
 		return CHARGE_OPERATION_STATE_DISCONNECTED;
 
 	return chargeOperationMode;

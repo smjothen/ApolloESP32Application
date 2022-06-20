@@ -1320,7 +1320,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
-		sessionHandler_InitiateResetChargeSession();
+		//sessionHandler_InitiateResetChargeSession();
 
 		//Clear user UUID
 		//if((storage_Get_AuthenticationRequired() == 1) && (storage_Get_Standalone() == 0))//Only in system mode
@@ -1334,6 +1334,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				if((storage_Get_Standalone() == 0))
 				{
 					//Clear session
+					SetUUIDFlagAsCleared();
 					sessionHandler_InitiateResetChargeSession();
 				}
 				return 200;
