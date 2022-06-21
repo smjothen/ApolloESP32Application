@@ -10,6 +10,7 @@
 #include "time.h"
 #include "../components/ntp/zntp.h"
 #include "storage.h"
+#include "zaptec_cloud_observations.h"
 
 static const char *TAG = "CHARGECONTROL  ";
 
@@ -252,47 +253,25 @@ static char startTimeString[32] = {0};
 static bool hasNewStartTime = false;
 static void chargeController_SetNextStartTime(int dayNr, int currentSchedule)
 {
-	//snprintf(startTimeString, sizeof(startTimeString), "0 : %02i:%02iZ", timeSchedules[currentSchedule].StopHour - chargeController_GetLocalTimeOffset(), timeSchedules[currentSchedule].StopMin);
-	int startSec = randomStartDelay % 60;			//Remaining seconds
+
+	//int startSec = randomStartDelay % 60;			//Remaining seconds
 	int addMin = (int)(randomStartDelay / 60);	//Whole 60-seconds rolling over to next minutes
 
 	int allMin = timeSchedules[currentSchedule].StopMin + addMin; //All Schedule and rollover minutes
-	int startMin = allMin % 60;
+	//int startMin = allMin % 60;
 
-	int allHours =  timeSchedules[currentSchedule].StopHour + (int)(allMin/60);
+/*	int allHours =  timeSchedules[currentSchedule].StopHour + (int)(allMin/60);
 
 	int startHours;
 	if(allHours < 24)
 		startHours = allHours;
 	else
 		startHours = allHours - 24; //23:55:00 + 600 seconds -> 00:05:00
-
+*/
 	int offsetFromUTC = chargeController_GetLocalTimeOffset();
 
-	int UTCStop = timeSchedules[currentSchedule].StopHour - offsetFromUTC;
+	//int UTCStop = timeSchedules[currentSchedule].StopHour - offsetFromUTC;
 
-	/// Check if rolling over midnight backwards
-	/*bool isSameDay = false;
-	if(UTCStop < 0)
-	{
-		UTCStop += 24;
-		isSameDay = true;
-	}*/
-
-
-
-
-	/*int duration;
-	if(timeSchedules[currentSchedule].StopTotalMinutes > timeSchedules[currentSchedule].StartTotalMinutes)
-	{
-		/// Sum of minutes
-		duration = timeSchedules[currentSchedule].StopTotalMinutes - timeSchedules[currentSchedule].StartTotalMinutes;
-	}
-	else
-	{
-		/// Sum of minutes before and after midnight
-		duration = 1440 - timeSchedules[currentSchedule].StartTotalMinutes + timeSchedules[currentSchedule].StopTotalMinutes;
-	}*/
 
 	//Make UTC time string for the same day
 	time_t nowSecUTC = 0;
@@ -309,7 +288,7 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule)
 	timeinfo.tm_min = 59;
 	timeinfo.tm_sec = 59;
 
-	time_t secAtMidnightUTC = mktime(&timeinfo) + 1 - (3600 * offsetFromUTC);
+	//time_t secAtMidnightUTC = mktime(&timeinfo) + 1 - (3600 * offsetFromUTC);
 
 	timeinfo.tm_hour = timeSchedules[currentSchedule].StopHour;
 	timeinfo.tm_min = timeSchedules[currentSchedule].StopMin;
@@ -357,38 +336,6 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule)
 	///Add the random delay to the stop time before converting to tm-struct time
 	secAtUTCStop += randomStartDelay;
 
-
-
-	///StopTime
-	/*if(nowSecUTC < secAtMidnightUTC )
-	{
-		ESP_LOGE(TAG, "1 We are on stop day ");
-		if(secAtUTCStop > secAtMidnightUTC)
-		{
-			secAtUTCStop += 86400;
-			ESP_LOGE(TAG, "2 Start next day");
-		}
-	}
-	else
-	{
-		//secAtUTCStop += 86400;
-		ESP_LOGE(TAG, "3 We are on next day, don't add");
-	}*/
-
-
-	//localtime_r(&nowUTCSec, &inTWentyFourHours);
-
-	///Construct the local stop time tm
-	//struct tm localStopTime;
-
-	//timeinfoUTC.tm_year =
-
-	//localStopTime.tm_hour = timeSchedules[currentSchedule].stopHour;
-	//localStopTime.tm_min = timeSchedules[currentSchedule].stopMin;
-
-	//time_t localStopTimeSec = mktime(&localStopTime);
-
-
 	localtime_r(&secAtUTCStop, &timeinfo);
 
 	char strftime_buf[64] = {0};
@@ -429,6 +376,12 @@ static bool hasBeenDisconnected = false;
 void chargeController_SetHasBeenDisconnected()
 {
 	hasBeenDisconnected = true;
+}
+
+static bool sendScheduleDiagnostics = false;
+void chargeController_SetSendScheduleDiagnosticsFlag()
+{
+	sendScheduleDiagnostics = true;
 }
 
 //#include "zones.h"
@@ -505,7 +458,7 @@ void RunStartChargeTimer()
 			struct tm updatedTimeStruct = {0};
 			zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * 2);
 
-			// Enable for testing
+			/// For testing - overrides time by command
 			if(testWithNowTime)
 			{
 				updatedTimeStruct.tm_wday = nowTime.tm_wday;
@@ -528,20 +481,6 @@ void RunStartChargeTimer()
 					timeSchedules[scheduleNr].isPaused = false;
 				}
 
-				/*uint8_t stopdays = 0;
-				if(timeSchedules[scheduleNr].StopNextDay)
-				{
-					///Bitshift to get stopday byte
-					stopdays = timeSchedules[scheduleNr].Days << 1;
-
-					/// Check for overflow - move bit 7 -> bit 0
-					if(stopdays & 0x80)
-					{
-						stopdays += 1;
-						stopdays &= ~0x80;
-					}
-				}*/
-
 				/// On the same day
 				uint8_t shiftPositions = 0;
 				if(updatedTimeStruct.tm_wday == 0)
@@ -551,16 +490,10 @@ void RunStartChargeTimer()
 
 				volatile bool isPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << (shiftPositions - 1)));
 
-				/// StopNextDay					110									2
-				//volatile bool isTheNextResumeDay= (stopdays & (0x01 << (shiftPositions - 1)));
-
 				/// Check if schedule is applicable
-				if((isPauseDay))// || isTheNextResumeDay))
+				if((isPauseDay))
 				{
 					/// ARE WE INSIDE PAUSE INTERVAL?
-
-					/// Stop on same day
-					//if(!timeSchedules[scheduleNr].StopNextDay && (minutesNow >= timeSchedules[scheduleNr].StartTotalMinutes) && (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes))
 					if((minutesNow >= timeSchedules[scheduleNr].StartTotalMinutes) && (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes))
 					{
 						if(timeSchedules[scheduleNr].isPaused== false)
@@ -578,54 +511,15 @@ void RunStartChargeTimer()
 
 						int localTimeOffset = chargeController_GetLocalTimeOffset();
 						if(timeSchedules[scheduleNr].SpanToNextDay == false)
-							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i %02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
+							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
 						else
-							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i %02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffset);
+							snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffset);
 					}
-
-					/// Stop on next day							2300-1380											1400			0100-60								0200-120
-					/*else if(timeSchedules[scheduleNr].StopNextDay && ((timeSchedules[scheduleNr].StartTotalMinutes <= minutesNow) || (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes)))
-					{
-						if(timeSchedules[scheduleNr].isPaused == false)
-						{
-							/// Handle rollover 6->0
-							if(updatedTimeStruct.tm_wday == 6)
-								chargeController_SetNextStartTime(0, scheduleNr);
-							else
-								chargeController_SetNextStartTime(updatedTimeStruct.tm_wday+1, scheduleNr);
-
-
-							/// Make sure the randomStartDelay is reset for each schedule start
-							startDelayCounter = randomStartDelay;
-						}
-
-						timeSchedules[scheduleNr].isPaused= true;
-
-						int localTimeOffset = chargeController_GetLocalTimeOffset();
-
-						if((timeSchedules[scheduleNr].StartTotalMinutes <= minutesNow) && (minutesNow < 1440))
-						{
-							int remainingMinutes = (1440 - minutesNow) + timeSchedules[scheduleNr].StopTotalMinutes;
-							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval #%i: [%02i:%02i] ->> %i %02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (2)", scheduleNr, timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)(remainingMinutes/60), (remainingMinutes) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
-						}
-						else
-						{
-							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval #%i: [%02i:%02i] ->> %i %02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (3)", scheduleNr, timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
-						}
-					}*/
 
 					/// WE ARE IN THE ALLOW CHARGING STATE
 					else
 					{
 						timeSchedules[scheduleNr].isPaused = false;
-
-						/*if(minutesNow < timeSchedules[scheduleNr].StartTotalMinutes)
-							//ESP_LOGW(TAG, "Before pause interval %i %02i:%02i -> [%02i:%02i] - [%02i:%02i] (4)", updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min,    timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin);
-							snprintf(scheduleString, sizeof(scheduleString), "Before pause interval %i %02i:%02i -> [%02i:%02i] - [%02i:%02i] (4)", updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min,    timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin);
-						else if(minutesNow >= timeSchedules[scheduleNr].StopTotalMinutes)
-							//ESP_LOGW(TAG, "After pause interval [%02i:%02i] - [%02i:%02i] -> %i %02i:%02i (5)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min);
-							snprintf(scheduleString, sizeof(scheduleString), "After pause interval [%02i:%02i] - [%02i:%02i] -> %i %02i:%02i (5)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min);
-							*/
 					}
 
 				}
@@ -642,13 +536,6 @@ void RunStartChargeTimer()
 					isPausedByAnySchedule |= (0x1 << scheduleNr);
 				else
 					isPausedByAnySchedule &= ~(0x1 << scheduleNr);
-
-
-				/*if(timeSchedules[scheduleNr].isPaused == false)
-				{
-					startTimeString[0] = '\0';
-					hasNewStartTime = false;
-				}*/
 			}
 
 			previousOverrideTimer = overrideTimer;
@@ -663,7 +550,6 @@ void RunStartChargeTimer()
 			}
 
 
-
 			if(isPausedByAnySchedule == 0)// || (overrideTimer == true))
 			{
 				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
@@ -674,17 +560,11 @@ void RunStartChargeTimer()
 				}
 				else
 				{
-					//connectedWhileActive = true;
 					if(startDelayCounter >= 1)
 						startDelayCounter = 1;
 				}
 
 				chargeController_StartWithRandomDelay();
-
-				//Clear info variables
-				//startTimeString[0] = '\0';
-				//hasNewStartTime = false;
-
 			}
 			else
 			{
@@ -725,8 +605,15 @@ void RunStartChargeTimer()
 			}*/
 
 		}
-
 	}
+
+
+	if(sendScheduleDiagnostics == true)
+	{
+		publish_debug_telemetry_observation_Diagnostics(scheduleString);
+		sendScheduleDiagnostics = false;
+	}
+
 
 	if((storage_Get_Standalone() == 1) && (opMode == CHARGE_OPERATION_STATE_REQUESTING))
 	{
@@ -757,9 +644,7 @@ void chargeController_StartWithRandomDelay()
 			chargeController_SendStartCommandToMCU();
 
 			runStartimer = false;
-			//overrideTimer = false;
 			startDelayCounter = 0;
-			//connectedWhileActive = false;
 		}
 	}
 }
@@ -821,7 +706,7 @@ bool chargeController_SendStartCommandToMCU()
 			}
 
 		}
-	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))// && (GetFinalStopActiveStatus() == true))
+	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))
 	{
 		ESP_LOGW(TAG, "********* Resuming from state CHARGE_OPERATION_STATE_PAUSED && FinalStop == true **************");
 

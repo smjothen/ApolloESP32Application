@@ -49,6 +49,7 @@ void chargeController_StartWithRandomDelay();
 void chargeController_SetRandomStartDelay();
 void chargeController_ClearRandomStartDelay();
 void chargeController_SetHasBeenDisconnected();
+void chargeController_SetSendScheduleDiagnosticsFlag();
 
 
 #ifdef __cplusplus

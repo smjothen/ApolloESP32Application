@@ -2305,6 +2305,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+				else if(strstr(commandString,"SchedDiag") != NULL)
+				{
+					chargeController_SetSendScheduleDiagnosticsFlag();
+
+					responseStatus = 200;
+				}
+
 
 			}
 	}
