@@ -382,7 +382,8 @@ static char charBuf[SCHEDULE_SIZE] = {0};
 
 static bool configSession = false;
 static int statusSegmentCount = 0;
-static int timeScheduleMessageNo = 0;
+static int readTimeScheduleMessageNo = 0;
+static int writeTimeScheduleMessageNo = 0;
 static int nrOfTimeSchedules = 0;
 static char * timeScheduleString = NULL;
 static int timeScheduleLength = 0;
@@ -1102,13 +1103,19 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
-		if(timeScheduleMessageNo == 0)
+		if(timeScheduleString == NULL)
+			readTimeScheduleMessageNo = 0;
+
+		if(readTimeScheduleMessageNo == 0)
 		{
 			timeScheduleString = storage_Get_TimeSchedule();
+
+			ESP_LOGW(TAG, "Read full schedule %s ", timeScheduleString);
 
 			if(timeScheduleString[0] != '\0')
 			{
 				timeScheduleLength = strlen(timeScheduleString);
+				ESP_LOGW(TAG, "Read full schedule %i: %s ", timeScheduleLength, timeScheduleString);
 				if(timeScheduleLength >= 13)
 				{
 					nrOfTimeSchedules = (timeScheduleLength/14) + 1; //13+14 = 27 -> 27/14 + 1 = 2
@@ -1117,7 +1124,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 					else
 						timeScheduleLength = 14;
 
-					timeScheduleMessageNo++;
+					readTimeScheduleMessageNo++;
 				}
 				else
 				{
@@ -1131,9 +1138,8 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 				rsp->attr_value.len = 0;
 			}
 
-			ESP_LOGW(TAG, "Read timezone %i: %s ", timeScheduleLength, timeScheduleString);
 		}
-		else if(timeScheduleMessageNo >= 1)
+		else if(readTimeScheduleMessageNo >= 1)
 		{
 			if(strlen(timeScheduleString) >= 14)
 				//More schedules
@@ -1145,20 +1151,24 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			///Move to next schedule in string
 			timeScheduleString += 14;
 
-			timeScheduleMessageNo++;
+			readTimeScheduleMessageNo++;
 		}
+
+		ESP_LOGW(TAG, "Schedule remaining %i: %s (%i<=%i)", timeScheduleLength, timeScheduleString, readTimeScheduleMessageNo, nrOfTimeSchedules);
 
 		memcpy(rsp->attr_value.value, timeScheduleString, timeScheduleLength);
 		rsp->attr_value.len = timeScheduleLength;
 
-		ESP_LOGW(TAG, "Read %i / %i schedules", timeScheduleMessageNo, nrOfTimeSchedules);
+		//ESP_LOGW(TAG, "Read %i / %i schedules", timeScheduleMessageNo, nrOfTimeSchedules);
 
 		/// If all schedules are read, clear to restart
-		if(timeScheduleMessageNo == nrOfTimeSchedules)
+		if(readTimeScheduleMessageNo == nrOfTimeSchedules)
 		{
-			timeScheduleMessageNo 	= 0;
+			readTimeScheduleMessageNo 	= 0;
 			timeScheduleLength 		= 0;
+			//memset(timeScheduleString, 0, SCHEDULE_SIZE);
 			timeScheduleString 		= NULL;
+			nrOfTimeSchedules 		= 0;
 		}
 
 		break;
@@ -1170,6 +1180,31 @@ static bool saveWifi = false;
 static bool saveConfiguration = false;
 static enum CommunicationMode interface = eCONNECTION_NONE;
 static enum CommunicationMode previousInterface = eCONNECTION_NONE;
+
+static bool newLocation = false;
+static bool newTimezone = false;
+static bool newTimeSchedule = false;
+
+bool BLE_CheckForNewLocation()
+{
+	bool tmp = newLocation;
+	newLocation = false;
+	return tmp;
+}
+
+bool BLE_CheckForNewTimezone()
+{
+	bool tmp = newTimezone;
+	newTimezone = false;
+	return tmp;
+}
+
+bool BLE_CheckForNewTimeSchedule()
+{
+	bool tmp = newTimeSchedule;
+	newTimeSchedule = false;
+	return tmp;
+}
 
 void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
@@ -1635,6 +1670,8 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			storage_Set_Location(charBuf);
 			ESP_LOGI(TAG, "Set location: %s", charBuf);
 			storage_SaveConfiguration();//Not using save button in app
+			newLocation = true;
+			chargeController_Activation();
 		}
 
     	break;
@@ -1652,6 +1689,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			storage_Set_Timezone(charBuf);
 			ESP_LOGI(TAG, "Set timezone: %s", charBuf);
 			storage_SaveConfiguration();//Not using save button in app
+			newTimezone = true;
 		}
 
 		break;
@@ -1678,7 +1716,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				}
 			}
 		}*/
-		if(timeScheduleMessageNo >= 0)
+		if(writeTimeScheduleMessageNo >= 0)
 		{
 			if (SCHEDULE_SIZE - strlen(charBuf) < param->write.len)
 			{
@@ -1686,13 +1724,21 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				break;
 			}
 
+			ESP_LOGW(TAG, "write.len: %i", param->write.len);
+
+			if(param->write.len < 13)
+				break;
+
+			if(param->write.value[param->write.len - 1] == '\0')
+				param->write.len--;
+
 			/// Intermediate message
 			if(param->write.len == 14 )
 			{
 				//Append schedule to combined string and break
-				memcpy(&charBuf[timeScheduleMessageNo * 14], param->write.value, param->write.len);
-				ESP_LOGI(TAG, "Appending #%i -> %s", timeScheduleMessageNo, charBuf);
-				timeScheduleMessageNo++;
+				memcpy(&charBuf[writeTimeScheduleMessageNo * 14], param->write.value, param->write.len);
+				ESP_LOGI(TAG, "Appending #%i -> %s", writeTimeScheduleMessageNo, charBuf);
+				writeTimeScheduleMessageNo++;
 			}
 			///Last message
 			else if(param->write.len == 13)
@@ -1700,13 +1746,19 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				//timeScheduleMessageNo++;
 
 				///Append schedule to combined string and save
-				memcpy(&charBuf[timeScheduleMessageNo * 14], param->write.value, param->write.len);
+				memcpy(&charBuf[writeTimeScheduleMessageNo * 14], param->write.value, param->write.len);
 				storage_Set_TimeSchedule(charBuf);
-				ESP_LOGI(TAG, "Appending last timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
+				ESP_LOGW(TAG, "Appending");
+				ESP_LOGW(TAG, "Saving timeSchedule: %s", charBuf);
 				storage_SaveConfiguration();
+				newTimeSchedule = true;
+				chargeController_Activation();
+				ESP_LOGW(TAG, "Readback timeSchedule: %s", storage_Get_TimeSchedule());
+
 
 				/// Last message received
-				timeScheduleMessageNo = 0;
+				memset(charBuf, 0, SCHEDULE_SIZE);
+				writeTimeScheduleMessageNo = 0;
 			}
 		}
 
@@ -1841,7 +1893,8 @@ void ClearAuthValue()
 		ESP_LOGW(TAG, "Cleared Auth");
 
 		statusSegmentCount = 0;
-		timeScheduleMessageNo = 0;
+		readTimeScheduleMessageNo = 0;
+		writeTimeScheduleMessageNo = 0;
 		rfidPairing_SetState(ePairing_Inactive);
 		MCU_StopLedOverride();
 }

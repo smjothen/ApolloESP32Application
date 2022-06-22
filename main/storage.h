@@ -13,6 +13,7 @@ extern "C" {
 
 void storage_Init();
 void storage_Init_Configuration();
+void storage_Initialize_ScheduleParameteres();
 
 //Set Cloud settings
 void storage_Set_AuthenticationRequired(uint8_t newValue);

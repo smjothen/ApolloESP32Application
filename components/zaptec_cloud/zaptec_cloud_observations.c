@@ -22,6 +22,7 @@
 #include "../../main/certificate.h"
 #include "sessionHandler.h"
 #include "../components/adc/adc_control.h"
+#include "../components/ble/ble_service_wifi_config.h"
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
 #include "chargeController.h"
@@ -1031,6 +1032,25 @@ int publish_telemetry_observation_on_change(){
 	if(chargeController_CheckForNewScheduleEvent())
 	{
 		add_observation_to_collection(observations, create_observation(NextScheduleEvent, chargeController_GetNextStartString()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewLocation())
+	{
+		add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+		isChange = true;
+	}
+
+
+	if(BLE_CheckForNewTimezone())
+	{
+		add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewTimeSchedule())
+	{
+		add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
 		isChange = true;
 	}
 

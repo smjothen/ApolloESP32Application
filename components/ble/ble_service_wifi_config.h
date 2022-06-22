@@ -170,6 +170,10 @@
     void setPinAsChar(char * pin);
     void charInit();
 
+    bool BLE_CheckForNewLocation();
+    bool BLE_CheckForNewTimezone();
+    bool BLE_CheckForNewTimeSchedule();
+
     void ClearAuthValue();
 
 #endif /* WIFI_CONFIG_SERVICE_H_ */

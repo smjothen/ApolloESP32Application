@@ -95,13 +95,16 @@ void storage_Init_Configuration()
 
 	memset(configurationStruct.diagnosticsLog, 0, DIAGNOSTICS_STRING_SIZE);
 
-	memset(configurationStruct.location, 0, 4);
-	memset(configurationStruct.timezone, 0, DEFAULT_STR_SIZE);
-	//configurationStruct.dstUsage = 1;
-	//configurationStruct.useSchedule = false;
-	memset(configurationStruct.timeSchedule, 0, SCHEDULE_SIZE);
+	storage_Initialize_ScheduleParameteres();
 }
 
+
+void storage_Initialize_ScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "---");
+	strcpy(configurationStruct.timezone, "Etc/UTC");
+	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+}
 
 struct Configuration storage_GetConfigurationParameers()
 {

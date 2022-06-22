@@ -2249,6 +2249,35 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+
+				else if(strstr(commandString,"Loc ") != NULL)
+				{
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					storage_Set_Location(&commandString[6]);
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"Tz ") != NULL)
+				{
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					storage_Set_Timezone(&commandString[5]);
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					responseStatus = 200;
+				}
+
 				else if(strstr(commandString,"SS") != NULL)
 				{
 					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
@@ -2308,6 +2337,19 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"SchedDiag") != NULL)
 				{
 					chargeController_SetSendScheduleDiagnosticsFlag();
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"ResetSchedule") != NULL)
+				{
+					storage_Initialize_ScheduleParameteres();
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					chargeController_ClearNextStartTime();
 
 					responseStatus = 200;
 				}
