@@ -36,6 +36,7 @@ bool chargeController_SendStartCommandToMCU();
 
 void chargeController_Init();
 void chargeController_Activation();
+bool chargecontroller_IsPauseBySchedule();
 
 void chargeController_ClearNextStartTime();
 bool chargeController_CheckForNewScheduleEvent();

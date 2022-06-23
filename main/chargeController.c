@@ -433,6 +433,19 @@ void chargeController_SetSendScheduleDiagnosticsFlag()
 #include "../components/utz/zones.h"
 */
 static uint16_t isPausedByAnySchedule = 0x0000;
+
+
+
+bool chargecontroller_IsPauseBySchedule()
+{
+	if ((isScheduleActive == true) && (isPausedByAnySchedule > 0))
+		return true;
+	else
+		return false;
+}
+
+
+
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[150] = {0};
 
@@ -725,10 +738,12 @@ bool chargeController_SendStartCommandToMCU()
 {
 	bool retval = false;
 
+	sessionHandler_ClearCarInterfaceResetConditions();
+
 	enum ChargerOperatingMode chOpMode = MCU_GetChargeOperatingMode();
 	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1))
 	{
-		ESP_LOGW(TAG, "********* Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
+		ESP_LOGW(TAG, "********* 1 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
 
 		MessageType ret = MCU_SendCommandId(CommandStartCharging);
 		if(ret == MsgCommandAck)
@@ -745,7 +760,7 @@ bool chargeController_SendStartCommandToMCU()
 	}
 	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0))
 		{
-			ESP_LOGW(TAG, "********* Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
+			ESP_LOGW(TAG, "********* 2 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
 
 			MessageType ret = MCU_SendCommandId(CommandStartCharging);
 			if(ret == MsgCommandAck)
@@ -762,7 +777,7 @@ bool chargeController_SendStartCommandToMCU()
 		}
 	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))
 	{
-		ESP_LOGW(TAG, "********* Resuming from state CHARGE_OPERATION_STATE_PAUSED && FinalStop == true **************");
+		ESP_LOGW(TAG, "********* 3 Resuming from state CHARGE_OPERATION_STATE_PAUSED && FinalStop == true **************");
 
 		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);// = 509
 		if(ret == MsgCommandAck)

@@ -15,6 +15,7 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
+#include "../../main/chargeController.h"
 
 const char *TAG = "MCU            ";
 
@@ -911,11 +912,21 @@ enum ChargerOperatingMode GetTransitionOperatingModeState()
 
 uint8_t MCU_GetChargeOperatingMode()
 {
-	if((overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED))// && (chargeMode != eCAR_CHARGING))
-			return CHARGE_OPERATION_STATE_PAUSED;
 
-	if((overrideOpModeState == CHARGE_OPERATION_STATE_DISCONNECTED))// && (chargeMode != eCAR_CHARGING))
+	/// Used for Session reset
+	if(overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED)
+		return CHARGE_OPERATION_STATE_PAUSED;
+
+	/// Used for Session reset
+	if(overrideOpModeState == CHARGE_OPERATION_STATE_DISCONNECTED)
 		return CHARGE_OPERATION_STATE_DISCONNECTED;
+
+	///Used to avoid sending requesting while in paused schedule state
+	if((chargeOperationMode == CHARGE_OPERATION_STATE_REQUESTING) && (chargecontroller_IsPauseBySchedule() == true))
+	{
+		ESP_LOGE(TAG, "# Replaced REQUESTING with PAUSED #");
+		return CHARGE_OPERATION_STATE_PAUSED;
+	}
 
 	return chargeOperationMode;
 }
