@@ -56,19 +56,19 @@ config_keys=['AllowOfflineTxForUnknownId',
 async def call_runner(cp):
     await asyncio.sleep(2)
 
-    try:
-        print('unlocking connector (expect not supported)')
-        result = await cp.call(
-            call.ClearCachePayload()
-        )
-        print(result)
-    except Exception as e:
-        print(e)
-
-    print('clearing authorization cach (expect not supported)')
+    print('Changing clock aligned interval (valid uint32)')
     result = await cp.call(
-        call.UnlockConnectorPayload(
-            connector_id = 1)
+        call.ChangeConfigurationPayload(
+            key='ClockAlignedDataInterval',
+            value='10')
+    )
+    print(result)
+
+    print('Changing MeterValuesAlignedData (valid csl)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='MeterValuesAlignedData',
+            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
     )
     print(result)
 
@@ -128,6 +128,22 @@ async def call_runner(cp):
     except Exception as e:
         print(e)
     return
+
+    try:
+        print('unlocking connector (expect not supported)')
+        result = await cp.call(
+            call.ClearCachePayload()
+        )
+        print(result)
+    except Exception as e:
+        print(e)
+
+    print('clearing authorization cach (expect not supported)')
+    result = await cp.call(
+        call.UnlockConnectorPayload(
+            connector_id = 1)
+    )
+    print(result)
 
     print('Starting data transfer')
     result = await cp.call(
@@ -279,24 +295,6 @@ async def call_runner(cp):
     print(result)
     time.sleep(1)
 
-    print('Changing heartbeat interval (valid uint32)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='HeartbeatInterval',
-            value='86400')
-    )
-    print(result)
-    time.sleep(1)
-
-    print('Changing MeterValuesAlignedData (valid csl)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='MeterValuesAlignedData',
-            value='Energy.Active.Import.Register')
-    )
-    print(result)
-    time.sleep(1)
-
     print('Changing feature profiles (invalid Supported)')
     result = await cp.call(
         call.ChangeConfigurationPayload(
@@ -421,6 +419,11 @@ class ChargePoint(cp):
             id_tag_info=info,
             transaction_id=1231312
         )
+
+    @on('MeterValues')
+    def on_meter_value(self, **kwargs):
+        print(f'Meter value: {kwargs}')
+        return call_result.MeterValuesPayload()
 
     @on('StopTransaction')
     def on_stop_transaction(self, **kwargs):

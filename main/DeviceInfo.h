@@ -46,7 +46,7 @@ struct RFIDTokens{
 #define PREFIX_GUID 41
 #define DIAGNOSTICS_STRING_SIZE 100
 
-#define DEFAULT_CSL_LENGTH 3//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
+#define DEFAULT_CSL_LENGTH 6//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
 
 // Network IDs

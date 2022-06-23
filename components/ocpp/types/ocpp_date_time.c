@@ -1,5 +1,6 @@
-#include <time.h>
 #include <stdio.h>
+
+#include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
 
 time_t ocpp_parse_date_time(const char * date_time){

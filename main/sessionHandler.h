@@ -61,6 +61,7 @@ int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
 void sessionHandler_CheckAndSendOfflineSessions();
 void sessionHandler_SetOfflineSessionFlag();
+bool sessionHandler_OcppTransactionIsActive();
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();

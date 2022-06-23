@@ -302,6 +302,10 @@ bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_S
 uint8_t pending_change_availability_state;
 time_t preparing_started = 0;
 
+bool sessionHandler_OcppTransactionIsActive(){
+	return (transaction_id != -1);
+}
+
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
 		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");

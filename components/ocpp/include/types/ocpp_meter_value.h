@@ -1,13 +1,15 @@
 #ifndef OCPP_METER_VALUE_H
 #define OCPP_METER_VALUE_H
 
+#include "cJSON.h"
+
 /*
  * The structures/values defined here apart from sampled value are only directly or indirectly by
  * the meter_value type in the ocpp specification.
  */
 
-#define OCPP_READING_CONTEXT_INTERRUPT_BEGIN "Interruption.Begin"
-#define OCPP_READING_CONTEXT_INTERRUPT_END "Interruption.End"
+#define OCPP_READING_CONTEXT_INTERRUPTION_BEGIN "Interruption.Begin"
+#define OCPP_READING_CONTEXT_INTERRUPTION_END "Interruption.End"
 #define OCPP_READING_CONTEXT_OTHER "Other"
 #define OCPP_READING_CONTEXT_SAMPLE_CLOCK "Sample.Clock"
 #define OCPP_READING_CONTEXT_SAMPLE_PERIODIC "Sample.Periodic"
@@ -38,7 +40,7 @@
 #define OCPP_MEASURAND_POWER_REACTIVE_IMPORT "Power.Reactive.Import"
 #define OCPP_MEASURAND_RPM "RPM"
 #define OCPP_MEASURAND_SOC "SoC"
-#define OCPP_MEASURAND_TEMERATURE "Temperature"
+#define OCPP_MEASURAND_TEMPERATURE "Temperature"
 #define OCPP_MEASURAND_VOLTAGE "Voltage"
 
 #define OCPP_PHASE_L1 "L1"
@@ -75,20 +77,31 @@
 #define OCPP_UNIT_OF_MEASURE_PERCENT "Percent"
 
 struct ocpp_sampled_value{
-	const char * value;
-	const char * context;
-	const char * format;
-	const char * measurand;
-	const char * phase;
-	const char * location;
-	const char * unit;
+	char value[32]; // TODO: find a reasonable max length
+	char context[32];
+	char format[16];
+	char measurand[32];
+	char phase[8];
+	char location[8];
+	char unit[16];
+};
+
+struct ocpp_sampled_value_list{
+	struct ocpp_sampled_value * value;
+	struct ocpp_sampled_value_list * next;
 };
 
 struct ocpp_meter_value{
 	time_t timestamp;
-	struct ocpp_sampled_value sampled_value;
+	struct ocpp_sampled_value_list sampled_value;
 };
 
+void ocpp_sampled_list_delete(struct ocpp_sampled_value_list list);
+
+// returns the new last node in the list
+struct ocpp_sampled_value_list * ocpp_sampled_list_add(struct ocpp_sampled_value_list * list, struct ocpp_sampled_value value);
+struct ocpp_sampled_value_list * ocpp_sampled_list_get_last(struct ocpp_sampled_value_list * list);
+size_t ocpp_sampled_list_get_length(struct ocpp_sampled_value_list * list);
 cJSON * create_meter_value_json(struct ocpp_meter_value meter_value);
 
 #endif /*OCPP_METER_VALUE_H*/

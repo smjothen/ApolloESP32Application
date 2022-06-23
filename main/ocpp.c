@@ -1,16 +1,20 @@
 #include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 
 #include "esp_log.h"
 
+#include "ocpp.h"
 #include "connectivity.h"
 #include "i2cDevices.h"
 #include "storage.h"
+#include "sessionHandler.h"
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "fat.h"
+#include "messages/call_messages/ocpp_call_request.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
@@ -20,7 +24,6 @@
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_key_value.h"
 #include "types/ocpp_configuration_status.h"
-#include "types/ocpp_meter_value.h"
 #include "types/ocpp_authorization_data.h"
 #include "types/ocpp_authorization_status.h"
 #include "types/ocpp_update_type.h"
@@ -28,6 +31,8 @@
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_data_transfer_status.h"
+
+#include "protocol_task.h"
 
 #define TASK_OCPP_STACK_SIZE 2500
 #define OCPP_PROBLEM_RESET_INTERVAL 30
@@ -112,6 +117,427 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			cJSON_Delete(ocpp_error);
 			return;
 		}
+	}
+}
+
+
+static int populate_sample_current_import(const char * context, struct ocpp_sampled_value_list * value_list_out){
+	//Because the go only has 1 connector, we can get the current in the same way regardless of connector id
+
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_CURRENT_IMPORT,
+		.phase = OCPP_PHASE_L1,
+		.location = OCPP_LOCATION_OUTLET,
+		.unit = OCPP_UNIT_OF_MEASURE_A
+	};
+	strcpy(new_value.context, context);
+
+	//Phase 1
+	sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	//Phase 2
+	strcpy(new_value.phase, OCPP_PHASE_L2);
+	sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 1;
+
+	//Phase 3
+	strcpy(new_value.phase, OCPP_PHASE_L3);
+	sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 2;
+
+	return 3;
+}
+
+//TODO: consider changing from using standalone current and if value should be changed as offered changes and prsence of car
+static int populate_sample_current_offered(const char * context, struct ocpp_sampled_value_list * value_list_out){
+
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_CURRENT_OFFERED,
+		.unit = OCPP_UNIT_OF_MEASURE_A
+	};
+	strcpy(new_value.context, context);
+
+	sprintf(new_value.value, "%f", MCU_StandAloneCurrent());
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	return 1;
+}
+
+static float last_aligned_energy_active_import_interval = 0;
+static float last_sampled_energy_active_import_interval = 0;
+
+static int populate_sample_energy_active_import_interval(const char * context, struct ocpp_sampled_value_list * value_list_out){
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
+		.unit = OCPP_UNIT_OF_MEASURE_WH
+	};
+	strcpy(new_value.context, context);
+
+	if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_CLOCK) == 0){
+		sprintf(new_value.value, "%f", MCU_GetEnergy() - last_aligned_energy_active_import_interval);
+	}
+	else if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_PERIODIC) == 0
+		|| strcmp(context, OCPP_READING_CONTEXT_TRANSACTION_END) == 0){
+		sprintf(new_value.value, "%f", MCU_GetEnergy() - last_sampled_energy_active_import_interval);
+	}
+
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	return 1;
+}
+
+static float populate_sample_power_active_import(const char * context, struct ocpp_sampled_value_list * value_list_out){
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
+		.location = OCPP_LOCATION_OUTLET,
+		.unit = OCPP_UNIT_OF_MEASURE_W
+	};
+	strcpy(new_value.context, context);
+
+	sprintf(new_value.value, "%f", MCU_GetPower());
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	return 1;
+}
+
+static int populate_sample_temperature(uint connector_id, const char * context, struct ocpp_sampled_value_list * value_list_out){
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_TEMPERATURE,
+		.location = OCPP_LOCATION_BODY,
+		.unit = OCPP_UNIT_OF_MEASURE_CELSIUS
+	};
+	strcpy(new_value.context, context);
+
+	if(connector_id == 0){
+		// Body
+		sprintf(new_value.value, "%f", MCU_GetTemperaturePowerBoard(0));
+		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
+			return 0;
+		}
+
+		sprintf(new_value.value, "%f", MCU_GetTemperaturePowerBoard(1));
+		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
+			return 1;
+		}
+
+		return 2;
+	}else if(connector_id == 1){
+		strcpy(new_value.location, OCPP_LOCATION_OUTLET);
+
+		//phase 1
+		strcpy(new_value.phase, OCPP_PHASE_L1);
+		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(0));
+		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+			return 0;
+
+		//phase 2
+		strcpy(new_value.phase, OCPP_PHASE_L2);
+		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(1));
+		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+			return 1;
+
+		//phase 3
+		strcpy(new_value.phase, OCPP_PHASE_L3);
+		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(2));
+		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+			return 2;
+
+		return 3;
+	}else{
+		ESP_LOGE(TAG, "Unexpected connector id");
+		return 0;
+	}
+}
+
+static int populate_sample_voltage(const char * context, struct ocpp_sampled_value_list * value_list_out){
+	struct ocpp_sampled_value new_value = {
+		.format = OCPP_VALUE_FORMAT_RAW,
+		.measurand = OCPP_MEASURAND_VOLTAGE,
+		.phase = OCPP_PHASE_L1,
+		.location = OCPP_LOCATION_OUTLET,
+		.unit = OCPP_UNIT_OF_MEASURE_A
+	};
+	strcpy(new_value.context, context);
+
+	//Phase 1
+	sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	//Phase 2
+	strcpy(new_value.phase, OCPP_PHASE_L2);
+	sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 1;
+
+	//Phase 3
+	strcpy(new_value.phase, OCPP_PHASE_L3);
+	sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 2;
+
+	return 3;
+}
+
+void save_interval_measurands(const char * context){
+	if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_CLOCK) == 0){
+		last_aligned_energy_active_import_interval = MCU_GetEnergy();
+
+	}else if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_PERIODIC) == 0
+		|| strcmp(context, OCPP_READING_CONTEXT_TRANSACTION_BEGIN) == 0
+		|| strcmp(context, OCPP_READING_CONTEXT_TRANSACTION_END) == 0){
+
+		last_sampled_energy_active_import_interval = MCU_GetEnergy();
+	}
+
+}
+
+// TODO: consider adding OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER
+int populate_sample(const char * measurand, uint connector_id, const char * context, struct ocpp_sampled_value_list * value_list_out){
+        if(strcmp(measurand, OCPP_MEASURAND_CURRENT_IMPORT) == 0){
+		return populate_sample_current_import(context, value_list_out);
+
+	}else if(strcmp(measurand, OCPP_MEASURAND_CURRENT_OFFERED) == 0){
+		return populate_sample_current_offered(context, value_list_out);
+
+	}else if(strcmp(measurand, OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL) == 0){
+		return populate_sample_energy_active_import_interval(context, value_list_out);
+
+	}else if(strcmp(measurand, OCPP_MEASURAND_POWER_ACTIVE_IMPORT) == 0){
+		return populate_sample_power_active_import(context, value_list_out);
+
+	}else if(strcmp(measurand, OCPP_MEASURAND_TEMPERATURE) == 0){
+		return populate_sample_temperature(connector_id, context, value_list_out);
+
+	}else if(strcmp(measurand, OCPP_MEASURAND_VOLTAGE) == 0){
+		return populate_sample_voltage(context, value_list_out);
+
+	}else{
+		ESP_LOGE(TAG, "Invalid measurand '%s'!!", measurand);
+		return 0;
+	}
+}
+
+//TODO: "All "per-period" data [...] should be [...] transmitted [...] at the end of each interval, bearing the interval start time timestamp"
+//TODO: Optionally add ISO8601 duration to meter value timestamp
+int ocpp_populate_meter_values(uint connector_id, const char * context,
+			const char * measurand_csl, struct ocpp_meter_value * meter_value_out){
+
+	if(strlen(measurand_csl) == 0){
+		return 0;
+	}
+
+	/**
+	 * The amount of samples to add to any ocpp meter value may depend on:
+	 * how many measurands in the measurand_csl (comma seperated list),
+	 * how many measurands are supported on the current connector_id,
+	 * how many locations a measurand can be measured,
+	 * and how many phases should be measured
+	 */
+
+	char * measurands = strdup(measurand_csl);
+	if(measurands == NULL){
+		ESP_LOGE(TAG, "Unable to duplicate measurands");
+		return -1;
+	}
+
+
+	struct ocpp_sampled_value_list * last_ptr = &meter_value_out->sampled_value;
+	char * item = strtok(measurands, ",");
+
+	while(item != NULL){
+		ESP_LOGI(TAG, "Attempting to add %s to meter value", item);
+
+		int new_item_count = 0;
+
+		new_item_count = populate_sample(item, connector_id, context, last_ptr);
+
+		if(new_item_count < 0){
+			ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
+		}else{
+			last_ptr = ocpp_sampled_list_get_last(last_ptr);
+		}
+
+		item = strtok(NULL, ",");
+	}
+
+	free(measurands);
+
+	return ocpp_sampled_list_get_length(&meter_value_out->sampled_value);
+}
+
+int ocpp_populate_meter_values_from_existing(uint connector_id, const char * context, const char * measurand_csl,
+					struct ocpp_sampled_value_list existing_list, struct ocpp_meter_value * meter_value_out){
+
+	struct ocpp_sampled_value_list * last_ptr = &meter_value_out->sampled_value;
+	char * measurands = strdup(measurand_csl);
+	if(measurands == NULL){
+		ESP_LOGE(TAG, "Unable to duplicate measurands");
+		return -1;
+	}
+
+	char * item = strtok(measurands, ",");
+
+	while(item != NULL){
+		bool added = false;
+		struct ocpp_sampled_value_list * existing_value = &existing_list;
+
+		while(existing_value != NULL){
+			if(strcmp(item, existing_value->value->measurand) == 0){
+				if(ocpp_sampled_list_add(last_ptr, *existing_value->value) == NULL){
+					ESP_LOGE(TAG, "Unable to add exiting measurand");
+				}
+
+				added = true;
+			}
+		}
+
+		if(added == false){
+			int new_item_count = populate_sample(item, connector_id, context, last_ptr);
+
+			if(new_item_count < 0){
+				ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
+			}else if(new_item_count > 0){
+				added = true;
+			}
+		}
+
+		if(added)
+			last_ptr = ocpp_sampled_list_get_last(last_ptr);
+
+		item = strtok(NULL, ",");
+	}
+
+	free(measurands);
+
+	return ocpp_sampled_list_get_length(&meter_value_out->sampled_value);
+}
+
+
+TimerHandle_t clock_aligned_handle = NULL;
+
+static void meter_values_response_cb(){
+	ESP_LOGI(TAG, "Meter values complete");
+}
+
+static void meter_values_error_cb(){
+	ESP_LOGE(TAG, "Meter values completed with errors");
+}
+
+static void clock_aligned_meter_values(){
+	ESP_LOGI(TAG, "Starting clock aligned meter values");
+
+	for(size_t i = 0; i <= storage_Get_ocpp_number_of_connectors(); i++){
+		ESP_LOGI(TAG, "Creating meter values for connector %d", i);
+		struct ocpp_meter_value meter_value = {0};
+		meter_value.timestamp = time(NULL);
+
+		int length = ocpp_populate_meter_values(i, OCPP_READING_CONTEXT_SAMPLE_CLOCK, storage_Get_ocpp_meter_values_aligned_data(), &meter_value);
+		if(length < 1){
+			ESP_LOGW(TAG, "No elements in meter value list. Cancel sending of meter value");
+			continue; // TODO: do not skip stoptxn
+		}
+
+		// TODO: consider splitting some of the SampledValues into separate MeterValues
+		cJSON * request = ocpp_create_meter_values_request(i, NULL, 1, &meter_value);
+		if(request == NULL){
+			ESP_LOGE(TAG, "Unable to create meter value request for clock aligned meter values");
+			return;
+		}
+
+		char * request_value = cJSON_Print(request);
+		free(request_value);
+
+		ESP_LOGW(TAG, "Sending meter values");
+		if(enqueue_call(request, meter_values_response_cb, meter_values_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
+			ESP_LOGE(TAG, "Unable to send meter values");
+			cJSON_Delete(request);
+		}
+
+		if(sessionHandler_OcppTransactionIsActive()){
+
+			struct ocpp_meter_value stoptxn_meter_value = {0};
+			int length = ocpp_populate_meter_values_from_existing(i, OCPP_READING_CONTEXT_SAMPLE_CLOCK, storage_Get_ocpp_stop_txn_aligned_data(),
+								meter_value.sampled_value, &stoptxn_meter_value);
+
+			if(length > 0){
+				//TODO: Inform session of new clock aligned value
+			}
+		}
+		ocpp_sampled_list_delete(meter_value.sampled_value);
+	}
+
+	// Interval measurands are saved regardless of related CSL in case the CSL configuration is changed
+	save_interval_measurands(OCPP_READING_CONTEXT_SAMPLE_CLOCK);
+
+}
+
+static void clock_aligned_meter_values_on_aligned_start(){
+	ESP_LOGI(TAG, "Aligned for meter values, sending values and starting repeating timer");
+
+	clock_aligned_meter_values();
+	clock_aligned_handle = xTimerCreate("Ocpp clock aligned",
+					pdMS_TO_TICKS(storage_Get_ocpp_clock_aligned_data_interval() * 1000),
+					pdTRUE, NULL, clock_aligned_meter_values);
+
+	if(clock_aligned_handle == NULL){
+		ESP_LOGE(TAG, "Unable to create repeating clock aligned meter values timer");
+
+	}else{
+		xTimerStart(clock_aligned_handle, pdMS_TO_TICKS(200));
+	}
+}
+
+static void restart_clock_aligned_meter_values(){
+	ESP_LOGI(TAG, "Restarting clock aligned meter value timer");
+
+	if(clock_aligned_handle != NULL){
+		xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(200));
+		clock_aligned_handle = NULL;
+	}
+
+	uint32_t interval = storage_Get_ocpp_clock_aligned_data_interval();
+
+	if(interval != 0){
+		time_t current_time = time(NULL);
+		struct tm * t = localtime(&current_time);
+
+		// offset from 00:00:00 (midnight)
+		uint offset = t->tm_sec + t->tm_min * 60 + t->tm_hour * 60 * 60;
+
+		// offset to next clock aligned meter value
+		offset = interval - (offset % interval);
+
+		if(offset > 0){ // If we are not already aligned, wait for alignment
+			ESP_LOGI(TAG, "Meter value alignment in %d seconds", offset);
+
+			clock_aligned_handle = xTimerCreate("Ocpp clock aligned first",
+							pdMS_TO_TICKS(offset * 1000),
+							pdFALSE, NULL, clock_aligned_meter_values_on_aligned_start);
+			if(clock_aligned_handle == NULL){
+				ESP_LOGE(TAG, "Unable to create clock aligned meter values timer");
+
+			}else{
+				xTimerStart(clock_aligned_handle, pdMS_TO_TICKS(200));
+			}
+
+		}else{ // If we are aligned, we start the repeating timer imediatly
+			clock_aligned_meter_values_on_aligned_start();
+		}
+	}else{
+		ESP_LOGW(TAG, "Clock aligned meter values are disabled");
 	}
 }
 
@@ -933,14 +1359,31 @@ static void change_config_confirm(const char * unique_id, const char * configura
 	}
 }
 
-static int set_config_u8(void (*config_function)(uint8_t), const char * value){
+static bool is_valid_alignment_interval(uint32_t sec){
+	return (86400 % sec) == 0 ? true : false;
+}
+
+static long validate_u(const char * value, uint32_t upper_bounds){
 	char * endptr;
 	long value_long = strtol(value, &endptr, 0);
 
-	if(endptr[0] != '\0')
+	if(endptr[0] != '\0'){
+		ESP_LOGE(TAG, "Negative value");
 		return -1;
+	}
 
-	if(value_long < 0 || value_long > UINT8_MAX)
+	if(value_long < 0 || value_long > upper_bounds){
+		ESP_LOGE(TAG, "%ld Exceeds %d", value_long, upper_bounds);
+		return -1;
+	}
+
+	return value_long;
+}
+
+static int set_config_u8(void (*config_function)(uint8_t), const char * value){
+	long value_long = validate_u(value, UINT8_MAX);
+
+	if(value_long == -1)
 		return -1;
 
 	config_function((uint8_t)value_long);
@@ -948,27 +1391,22 @@ static int set_config_u8(void (*config_function)(uint8_t), const char * value){
 }
 
 static int set_config_u16(void (*config_function)(uint16_t), const char * value){
-	char * endptr;
-	long value_long = strtol(value, &endptr, 0);
+	long value_long = validate_u(value, UINT16_MAX);
 
-	if(endptr[0] != '\0')
-		return -1;
-
-	if(value_long < 0 || value_long > UINT16_MAX)
+	if(value_long == -1)
 		return -1;
 
 	config_function((uint16_t)value_long);
 	return 0;
 }
 
-static int set_config_u32(void (*config_function)(uint32_t), const char * value){
-	char * endptr;
-	long value_long = strtol(value, &endptr, 0);
+static int set_config_u32(void (*config_function)(uint32_t), const char * value, bool (*additional_validation)(uint32_t)){
+	long value_long = validate_u(value, UINT32_MAX);
 
-	if(endptr[0] != '\0')
+	if(value_long == -1)
 		return -1;
 
-	if(value_long < 0 || value_long > UINT32_MAX)
+	if(additional_validation != NULL && additional_validation((uint32_t)value_long) == false)
 		return -1;
 
 	config_function((uint32_t)value_long);
@@ -995,6 +1433,8 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 
 	//Remove whitespace and check for control chars
 	char * value_prepared = malloc(len +1);
+	char * config_str = NULL;
+
 	size_t prepared_index = 0;
 	for(size_t i = 0; i < len+1; i++){
 		if(!isspace(value[i])){
@@ -1003,6 +1443,7 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 					value_prepared[prepared_index++] = value[i];
 					break;
 				}else{
+					ESP_LOGW(TAG, "CSL contains unexpected control character");
 					goto error; // Dont trust input with unexpected control characters
 				}
 			}
@@ -1011,9 +1452,10 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 	}
 
 	//Check if given configuration was only space
-	if(strlen(value_prepared) == 0)
+	if(strlen(value_prepared) == 0){
+		ESP_LOGW(TAG, "CSL contained no relevant data");
 		goto error;
-
+	}
 	size_t item_count = 1;
 
 	// Check if number of items exceed max
@@ -1024,12 +1466,21 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 		if(delimiter_ptr == NULL){
 			break;
 		}else{
+			delimiter_ptr++;
 			item_count++;
 		}
 	}
 
-	if(item_count > max_items)
+	if(item_count > max_items){
+		ESP_LOGW(TAG, "CSL item count exceed maximum number of values: %d/%d", item_count, max_items);
 		goto error;
+	}
+
+	config_str = strdup(value_prepared);
+	if(config_str == NULL){
+		ESP_LOGE(TAG, "Unable to duplicat CSL");
+		goto error;
+	}
 
 	// Check if each item is among options
 	char * token = strtok(value_prepared, ",");
@@ -1046,22 +1497,28 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 			}
 		}
 		va_end(argument_ptr);
-		if(!is_valid)
+		if(!is_valid){
+			ESP_LOGW(TAG, "CSL contained invalid item: '%s'", token);
 			goto error;
-
+		}
 		token = strtok(NULL, ",");
 	}
-	config_function(value_prepared);
-
 	free(value_prepared);
+
+	ESP_LOGI(TAG, "Writing CSL value: '%s'", config_str);
+	config_function(config_str);
+	free(config_str);
+
 	return 0;
 
 error:
 	free(value_prepared);
+	free(config_str);
 	return -1;
 }
 
 static void change_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Recieved request to change configuration");
 	if(!cJSON_HasObjectItem(payload, "key") || !cJSON_HasObjectItem(payload, "value")){
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'key' and 'value' fields", NULL);
 		if(ocpp_error == NULL){
@@ -1095,15 +1552,18 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	const char * key = key_json->valuestring;
 	const char * value = value_json->valuestring;
 
+	ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
 	int err = -1;
 	if(strcmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
 		err = set_config_bool(storage_Set_ocpp_authorize_remote_tx_requests, value);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_clock_aligned_data_interval, value);
+		err = set_config_u32(storage_Set_ocpp_clock_aligned_data_interval, value, is_valid_alignment_interval);
+		if(err == 0)
+			restart_clock_aligned_meter_values();
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
-		err = set_config_u32(storage_Set_ocpp_connection_timeout, value);
+		err = set_config_u32(storage_Set_ocpp_connection_timeout, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
 		char * endptr;
@@ -1126,7 +1586,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value);
+		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, NULL);
 		if(err == 0)
 			update_heartbeat_timer(storage_Get_ocpp_heartbeat_interval());
 
@@ -1150,60 +1610,28 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_SIZE, 22,
-					OCPP_MEASURAND_CURRENT_EXPORT,
-					OCPP_MEASURAND_CURRENT_IMPORT,
-					OCPP_MEASURAND_CURRENT_OFFERED,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_FREQUENCY,
-					OCPP_MEASURAND_POWER_ACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
-					OCPP_MEASURAND_POWER_FACTOR,
-					OCPP_MEASURAND_POWER_OFFERED,
-					OCPP_MEASURAND_POWER_REACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_REACTIVE_IMPORT,
-					OCPP_MEASURAND_RPM,
-					OCPP_MEASURAND_SOC,
-					OCPP_MEASURAND_TEMERATURE,
-					OCPP_MEASURAND_VOLTAGE
-				        );
+		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
+				OCPP_MEASURAND_CURRENT_IMPORT,
+				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
+				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
+				OCPP_MEASURAND_TEMPERATURE,
+				OCPP_MEASURAND_VOLTAGE
+				);
 
 		// TODO: "where applicable, the Measurand is combined with the optional phase; for instance: Voltage.L1"
 	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_SIZE, 22,
-					OCPP_MEASURAND_CURRENT_EXPORT,
-					OCPP_MEASURAND_CURRENT_IMPORT,
-					OCPP_MEASURAND_CURRENT_OFFERED,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_FREQUENCY,
-					OCPP_MEASURAND_POWER_ACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
-					OCPP_MEASURAND_POWER_FACTOR,
-					OCPP_MEASURAND_POWER_OFFERED,
-					OCPP_MEASURAND_POWER_REACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_REACTIVE_IMPORT,
-					OCPP_MEASURAND_RPM,
-					OCPP_MEASURAND_SOC,
-					OCPP_MEASURAND_TEMERATURE,
-					OCPP_MEASURAND_VOLTAGE
-				        );
+		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
+				OCPP_MEASURAND_CURRENT_IMPORT,
+				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
+				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
+				OCPP_MEASURAND_TEMPERATURE,
+				OCPP_MEASURAND_VOLTAGE
+				);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value);
+		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
 		err = set_config_u8(storage_Set_ocpp_reset_retries, value);
@@ -1215,56 +1643,24 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_invalid_id, value);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_SIZE, 22,
-					OCPP_MEASURAND_CURRENT_EXPORT,
-					OCPP_MEASURAND_CURRENT_IMPORT,
-					OCPP_MEASURAND_CURRENT_OFFERED,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_FREQUENCY,
-					OCPP_MEASURAND_POWER_ACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
-					OCPP_MEASURAND_POWER_FACTOR,
-					OCPP_MEASURAND_POWER_OFFERED,
-					OCPP_MEASURAND_POWER_REACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_REACTIVE_IMPORT,
-					OCPP_MEASURAND_RPM,
-					OCPP_MEASURAND_SOC,
-					OCPP_MEASURAND_TEMERATURE,
-					OCPP_MEASURAND_VOLTAGE
-				        );
+		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
+				OCPP_MEASURAND_CURRENT_IMPORT,
+				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
+				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
+				OCPP_MEASURAND_TEMPERATURE,
+				OCPP_MEASURAND_VOLTAGE
+				);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_SIZE, 22,
-					OCPP_MEASURAND_CURRENT_EXPORT,
-					OCPP_MEASURAND_CURRENT_IMPORT,
-					OCPP_MEASURAND_CURRENT_OFFERED,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_REGISTER,
-					OCPP_MEASURAND_ENERGY_ACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_EXPORT_INTERVAL,
-					OCPP_MEASURAND_ENERGY_REACTIVE_IMPORT_INTERVAL,
-					OCPP_MEASURAND_FREQUENCY,
-					OCPP_MEASURAND_POWER_ACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
-					OCPP_MEASURAND_POWER_FACTOR,
-					OCPP_MEASURAND_POWER_OFFERED,
-					OCPP_MEASURAND_POWER_REACTIVE_EXPORT,
-					OCPP_MEASURAND_POWER_REACTIVE_IMPORT,
-					OCPP_MEASURAND_RPM,
-					OCPP_MEASURAND_SOC,
-					OCPP_MEASURAND_TEMERATURE,
-					OCPP_MEASURAND_VOLTAGE
-				        );
+		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
+				OCPP_MEASURAND_CURRENT_IMPORT,
+				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
+				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
+				OCPP_MEASURAND_TEMPERATURE,
+				OCPP_MEASURAND_VOLTAGE
+				);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
 		err = set_config_u8(storage_Set_ocpp_transaction_message_attempts, value);
@@ -1688,6 +2084,9 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
+
+		//Handle ClockAlignedDataInterval
+		restart_clock_aligned_meter_values();
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);

@@ -16,11 +16,7 @@ cJSON * ocpp_create_diagnostics_status_notification_request(const char * status)
 cJSON * ocpp_create_firmware_status_notification_request(const char * status);
 cJSON * ocpp_create_heartbeat_request();
 
-/**
- * use transaction_id -1 to omitt value
- * @TODO: Check if there is a value that is guarantied not to be valid or use NULL
- */
-cJSON * ocpp_create_meter_values_request(unsigned int connector_id, int transaction_id, size_t sampled_values_count, struct ocpp_meter_value * meter_values);
+cJSON * ocpp_create_meter_values_request(unsigned int connector_id, const int * transaction_id, size_t values_count, struct ocpp_meter_value * meter_values);
 
 /**
  * use reservation_id -1 to omitt value
