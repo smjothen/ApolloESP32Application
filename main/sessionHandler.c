@@ -30,10 +30,12 @@
 #include "../components/audioBuzzer/audioBuzzer.h"
 
 #include "ocpp_task.h"
+#include "ocpp.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/call_messages/ocpp_call_request.h"
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
+#include "types/ocpp_meter_value.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_reason.h"
 #include "types/ocpp_authorization_status.h"
@@ -388,6 +390,57 @@ static void error_cb(const char * unique_id, const char * error_code, const char
 	}
 }
 
+TimerHandle_t sample_handle = NULL;
+
+static void sample_meter_values(){
+	ESP_LOGI(TAG, "Starting periodic meter values");
+
+	struct ocpp_meter_value meter_value = {0};
+	meter_value.timestamp = time(NULL);
+
+	int length = ocpp_populate_meter_values(1, OCPP_READING_CONTEXT_SAMPLE_PERIODIC, storage_Get_ocpp_meter_values_sampled_data(), &meter_value);
+
+	if(length < 0){
+		ESP_LOGW(TAG, "No meter values to send");
+
+	}else{
+		cJSON * request = ocpp_create_meter_values_request(1, NULL, 1, &meter_value);
+		if(request == NULL){
+			ESP_LOGE(TAG, "Unable to create meter value request for sampled meter values");
+			return;
+		}
+
+		ESP_LOGI(TAG, "Sending meter values");
+		if(enqueue_call(request, NULL, error_cb, "Meter value", eOCPP_CALL_TRANSACTION_RELATED) != 0){
+			ESP_LOGE(TAG, "Unable to send meter values");
+			cJSON_Delete(request);
+		}
+	}
+}
+
+static void start_sample_interval(){
+	sample_handle = xTimerCreate("Ocpp sample",
+				pdMS_TO_TICKS(storage_Get_ocpp_meter_value_sample_interval() * 1000),
+				pdTRUE, NULL, sample_meter_values);
+
+	if(sample_handle == NULL){
+		ESP_LOGE(TAG, "Unable to create sample handle");
+	}else{
+		if(xTimerStart(sample_handle, pdMS_TO_TICKS(200)) != pdPASS){
+			ESP_LOGE(TAG, "Unable to start sample interval");
+		}else{
+			ESP_LOGI(TAG, "Started sample interval");
+		}
+	}
+}
+
+static void stop_sample_interval(){
+	if(sample_handle != NULL){
+		xTimerDelete(sample_handle, pdMS_TO_TICKS(200));
+		sample_handle = NULL;
+	}
+}
+
 void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
 
 	if(transaction_id == -1){
@@ -411,6 +464,8 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		}
 	}
 
+	stop_sample_interval();
+
 	transaction_id = -1; // Clear the transaction id
 }
 
@@ -425,6 +480,9 @@ void start_transaction(){
 			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
 		}
 	}
+
+	if(storage_Get_ocpp_meter_value_sample_interval() > 0)
+		start_sample_interval();
 }
 
 static void authorize_response_cb(const char * unique_id, cJSON * payload, void * cb_data){

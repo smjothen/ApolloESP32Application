@@ -60,7 +60,15 @@ async def call_runner(cp):
     result = await cp.call(
         call.ChangeConfigurationPayload(
             key='ClockAlignedDataInterval',
-            value='10')
+            value='900')
+    )
+    print(result)
+
+    print('Changing sample interval (valid uint32)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='MeterValueSampleInterval',
+            value='30')
     )
     print(result)
 
@@ -68,6 +76,14 @@ async def call_runner(cp):
     result = await cp.call(
         call.ChangeConfigurationPayload(
             key='MeterValuesAlignedData',
+            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
+    )
+    print(result)
+
+    print('Changing MeterValuesSampledData (valid csl)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='MeterValuesSampledData',
             value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
     )
     print(result)

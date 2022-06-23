@@ -457,9 +457,6 @@ static void clock_aligned_meter_values(){
 			return;
 		}
 
-		char * request_value = cJSON_Print(request);
-		free(request_value);
-
 		ESP_LOGW(TAG, "Sending meter values");
 		if(enqueue_call(request, meter_values_response_cb, meter_values_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
 			ESP_LOGE(TAG, "Unable to send meter values");
