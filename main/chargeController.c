@@ -438,7 +438,9 @@ static uint16_t isPausedByAnySchedule = 0x0000;
 
 bool chargecontroller_IsPauseBySchedule()
 {
-	if ((isScheduleActive == true) && (isPausedByAnySchedule > 0))
+	if((isScheduleActive == true) && (isPausedByAnySchedule > 0))
+		return true;
+	else if((isScheduleActive == true) && (startDelayCounter > 0))
 		return true;
 	else
 		return false;
@@ -448,6 +450,8 @@ bool chargecontroller_IsPauseBySchedule()
 
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[150] = {0};
+enum ChargerOperatingMode prevOpMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
+static bool startBySchedule = true;
 
 void RunStartChargeTimer()
 {
@@ -507,8 +511,8 @@ void RunStartChargeTimer()
 	if(isScheduleActive == true)
 	{
 
-		if((randomStartDelay > 0) || (overrideTimer > 0))
-		{
+		//if((randomStartDelay > 0) || (overrideTimer > 0))
+		//{
 			/// Check if we are in active or passive time interval
 
 			struct tm updatedTimeStruct = {0};
@@ -561,7 +565,7 @@ void RunStartChargeTimer()
 					{
 						volatile bool isNextDayPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << shiftPositions));
 
-						if(timeSchedules[scheduleNr].isPaused == false)
+						if((timeSchedules[scheduleNr].isPaused == false))// || ((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)))
 						{
 							if(updatedTimeStruct.tm_wday == 6)
 								chargeController_SetNextStartTime(0, scheduleNr, isNextDayPauseDay);
@@ -607,6 +611,18 @@ void RunStartChargeTimer()
 
 			previousOverrideTimer = overrideTimer;
 
+
+			/*if(isPausedByAnySchedule == 0)
+			{
+				if((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+				{
+					if(startDelayCounter >= 1)
+						startDelayCounter = 1;
+
+					ESP_LOGW(TAG, "CONNECTED OUTSIDE SCHDULE -> NO DELAY");
+				}
+			}*/
+
 			/// If overriding by Cloud or BLE, replace the value of isPauseByAnySchedule
 			if((isPausedByAnySchedule > 0) && (overrideTimer > 0))
 					isPausedByAnySchedule = 0;
@@ -620,21 +636,44 @@ void RunStartChargeTimer()
 			if(isPausedByAnySchedule == 0)
 			{
 				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
-				if(previousIsPausedByAnySchedule > 0)
-				{
-					previousIsPausedByAnySchedule = 0;
-					chargeController_ClearNextStartTime();
-				}
-				else
+
+
+				if((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED))
 				{
 					if(startDelayCounter >= 1)
 						startDelayCounter = 1;
+
+					ESP_LOGW(TAG, "CONNECTED OUTSIDE SCHDULE -> NO DELAY");
 				}
 
-				chargeController_StartWithRandomDelay();
+				if((startDelayCounter > 0))// || (overrideTimer == 1))
+				{
+					startDelayCounter--;
+				}
+
+				ESP_LOGE(TAG, "RandomDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
+				/*if(previousIsPausedByAnySchedule > 0)
+				{
+					previousIsPausedByAnySchedule = 0;
+					//startBySchedule = true;
+					//chargeController_ClearNextStartTime();
+				}*/
+				//else
+
+				/*else if(connectedWhileBooting == true//(previousIsPausedByAnySchedule == false) && (startBySchedule == false))
+				{
+					//startDelayCounter = randomStartDelay;
+					//if(startDelayCounter >= 1)
+						//startDelayCounter = 1;
+				}*/
+
+				if((opMode == CHARGE_OPERATION_STATE_REQUESTING) || (startDelayCounter == 1))
+					chargeController_StartWithRandomDelay();
 			}
 			else
 			{
+				startDelayCounter = randomStartDelay;
+
 				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
 
 				// /When schedule is paused, but MCU is active (e.g. ESP restart), then pause the MCU
@@ -657,9 +696,9 @@ void RunStartChargeTimer()
 			}
 
 			ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
-		}
-		else
-		{
+		//}
+		//else
+		//{
 			/*ESP_LOGE(TAG, "Schedule conditions not met, clearing all paused-flags");
 			int scheduleNr;
 			for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
@@ -671,7 +710,7 @@ void RunStartChargeTimer()
 				}
 			}*/
 
-		}
+		//}
 	}
 
 
@@ -687,16 +726,18 @@ void RunStartChargeTimer()
 		chargeController_SendStartCommandToMCU();
 	}
 
+	prevOpMode = opMode;
+	previousIsPausedByAnySchedule = isPausedByAnySchedule;
 }
 
 void chargeController_StartWithRandomDelay()
 {
-	if((startDelayCounter > 0) || (overrideTimer == 1))
-	{
-		startDelayCounter--;
+	//if((startDelayCounter > 0) || (overrideTimer == 1))
+	//{
+		//startDelayCounter--;
 
 		//if(startDelayCounter % 5 == 0)
-			ESP_LOGE(TAG, "RandomDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
+			//ESP_LOGE(TAG, "RandomDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
 
 		if((startDelayCounter == 0) || (overrideTimer == 1))
 		{
@@ -708,12 +749,13 @@ void chargeController_StartWithRandomDelay()
 			}
 
 			chargeController_ClearNextStartTime();
-			chargeController_SendStartCommandToMCU();
+			//chargeController_SendStartCommandToMCU();
 
 			runStartimer = false;
 			startDelayCounter = 0;
+			startBySchedule = true;
 		}
-	}
+	//}
 }
 
 

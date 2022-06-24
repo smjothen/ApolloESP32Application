@@ -399,7 +399,7 @@ static void sessionHandler_task()
 
     /// For developement testing only
     //SessionHandler_SetOCMFHighInterval();
-
+    chargeController_SetRandomStartDelay();
     chargeController_Init();
 
     offlineSession_Init();
@@ -682,7 +682,7 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
-			chargeController_SetRandomStartDelay();
+			//chargeController_SetRandomStartDelay();
 			chargeSession_Start();
 		}
 
@@ -841,6 +841,7 @@ static void sessionHandler_task()
 
 			chargeController_ClearRandomStartDelay();
 			chargeController_SetHasBeenDisconnected();
+			chargeController_SetRandomStartDelay();
 		}
 		
 
