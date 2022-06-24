@@ -912,7 +912,6 @@ enum ChargerOperatingMode GetTransitionOperatingModeState()
 
 uint8_t MCU_GetChargeOperatingMode()
 {
-
 	/// Used for Session reset
 	if(overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED)
 		return CHARGE_OPERATION_STATE_PAUSED;
@@ -927,12 +926,6 @@ uint8_t MCU_GetChargeOperatingMode()
 		ESP_LOGE(TAG, "# Replaced REQUESTING with PAUSED #");
 		return CHARGE_OPERATION_STATE_PAUSED;
 	}
-
-	/*else if((chargeOperationMode == CHARGE_OPERATION_STATE_PAUSED) && (chargecontroller_IsPauseBySchedule() == false) && chargeController_IsScheduleActive() && chargeController_DoResumeCharging())// && GetFinalStopActiveStatus())
-	{
-		ESP_LOGE(TAG, "# Replaced PAUSED with REQUESTING #");
-		return CHARGE_OPERATION_STATE_REQUESTING;
-	}*/
 
 	return chargeOperationMode;
 }

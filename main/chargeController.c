@@ -54,22 +54,6 @@ void chargeController_Init()
 	xTimerReset( startTimerHandle, portMAX_DELAY);
 
 	chargeController_Activation();
-
-
-
-	//chargeController_SetTimes();
-
-	/*ESP_LOGW(TAG, " #### SizeOf time_t: %i", sizeof(time_t));
-
-	struct tm tmUpdatedTime;
-
-	time_t nowInSeconds = 0xF0000001;
-
-	//time(&nowInSeconds);
-	localtime_r(&nowInSeconds, &tmUpdatedTime);
-
-	ESP_LOGW(TAG, " #### Date: %i:%i:%i", tmUpdatedTime.tm_year, tmUpdatedTime.tm_mon, tmUpdatedTime.tm_mday);
-*/
 }
 
 void chargeController_Activation()
@@ -178,11 +162,6 @@ void chargeController_SetTimes()
 
 			timeSchedules[i].StopTotalMinutes = timeSchedules[i].StopHour * 60 + timeSchedules[i].StopMin;
 
-			/*if(timeSchedules[i].StopHour < timeSchedules[i].StartHour)
-				timeSchedules[i].StopNextDay = true;
-			else
-				timeSchedules[i].StopNextDay = false;*/
-
 			if(i > 0)
 			{
 				//If once schedule stops at 00:00 and nest start at 00:00, then set continuous schedule flag in first schedule
@@ -266,59 +245,14 @@ static char startTimeString[32] = {0};
 static bool hasNewStartTime = false;
 static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bool isNextDayPauseDay)
 {
-
-	//int startSec = randomStartDelay % 60;			//Remaining seconds
-	//int addMin = (int)(randomStartDelay / 60);	//Whole 60-seconds rolling over to next minutes
-
-
-
-	/*uint8_t stopdays = 0;
-	if(timeSchedules[scheduleNr].StopNextDay)
-	{
-		///Bitshift to get stopday byte
-		stopdays = timeSchedules[scheduleNr].Days << 1;
-
-		/// Check for overflow - move bit 7 -> bit 0
-		if(stopdays & 0x80)
-		{
-			stopdays += 1;
-			stopdays &= ~0x80;
-		}
-	}*/
-
-	/*int tomorrow = dayNr + 1;
-	if (tomorrow == 7)
-		tomorrow = 0;
-
-	/// On the same day
-	uint8_t shiftPositions = 0;
-	if(dayNr == 0)
-		shiftPositions = 6;
-	else
-		shiftPositions = dayNr;
-
-	volatile bool isNextDayPauseDay = (timeSchedules[currentSchedule].Days & (0x01 << shiftPositions));*/
-
-	/// StopNextDay					110									2
-	//volatile bool isTheNextResumeDay= (stopdays & (0x01 << (shiftPositions - 1)));
-
-
-	//int allMin = 0;
 	int stopSchedule = currentSchedule;
 
 	if((timeSchedules[currentSchedule].SpanToNextDay == true) && (isNextDayPauseDay == true))
 		stopSchedule = currentSchedule + 1;
 
-	//allMin = timeSchedules[stopSchedule].StopMin + addMin; //All Schedule and rollover minutes
-
-
-
 	int offsetFromUTC = chargeController_GetLocalTimeOffset();
 
-	//int UTCStop = timeSchedules[currentSchedule].StopHour - offsetFromUTC;
-
-
-	//Make UTC time string for the same day
+	/// Make UTC time string for the same day
 	time_t nowSecUTC = 0;
 	struct tm timeinfo = { 0 };
 
@@ -394,10 +328,16 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bo
 
 void chargeController_ClearNextStartTime()
 {
-	strcpy(startTimeString, "");
-	hasNewStartTime = true;
-
-	ESP_LOGW(TAG, "Cleared start time");
+	if(startTimeString[0] != '\0')
+	{
+		strcpy(startTimeString, "");
+		hasNewStartTime = true;
+		ESP_LOGI(TAG, "Cleared start time");
+	}
+	else
+	{
+		ESP_LOGW(TAG, "Start time already cleared");
+	}
 }
 
 bool chargeController_CheckForNewScheduleEvent()
@@ -449,12 +389,6 @@ bool chargecontroller_IsPauseBySchedule()
 }
 
 
-static bool doResumeCharging = false;
-bool chargeController_DoResumeCharging()
-{
-	return doResumeCharging;
-}
-
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[150] = {0};
 enum ChargerOperatingMode prevOpMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
@@ -500,7 +434,6 @@ void RunStartChargeTimer()
 	/// When booting with car connected, the random delay should always be applied
 	if((applyDelayAtBoot == true) && (opMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 	{
-		//ESP_LOGW(TAG, "******* Applying at boot: %i *********", opMode);
 		startDelayCounter = randomStartDelay;
 		applyDelayAtBoot = false;
 	}
@@ -526,232 +459,188 @@ void RunStartChargeTimer()
 
 	if(isScheduleActive == true)
 	{
+		/// Check if now-time is within pause interval
 
-		//if((randomStartDelay > 0) || (overrideTimer > 0))
-		//{
-			/// Check if we are in active or passive time interval
+		struct tm updatedTimeStruct = {0};
+		zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * 2);
 
-			struct tm updatedTimeStruct = {0};
-			zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * 2);
+		/// For testing - overrides time by command
+		if(testWithNowTime)
+		{
+			updatedTimeStruct.tm_wday = nowTime.tm_wday;
+			updatedTimeStruct.tm_hour = nowTime.tm_hour;
+			updatedTimeStruct.tm_min = nowTime.tm_min;
+			updatedTimeStruct.tm_sec = 00;
+		}
 
-			/// For testing - overrides time by command
-			if(testWithNowTime)
+		int minutesNow = updatedTimeStruct.tm_hour * 60 + updatedTimeStruct.tm_min;
+
+		int tomorrow = updatedTimeStruct.tm_wday + 1;
+		if (tomorrow == 7)
+			tomorrow = 0;
+
+		/// On the same day
+		uint8_t shiftPositions = 0;
+		if(updatedTimeStruct.tm_wday == 0)
+			shiftPositions = 6;
+		else
+			shiftPositions = updatedTimeStruct.tm_wday;
+
+		strcpy(scheduleString, "");
+
+		int scheduleNr;
+		for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
+		{
+
+			///When ending override, clear all paused schedules to be able to re-pause and reset nextStopTime
+			if((overrideTimer == 0) && (previousOverrideTimer > 0))
 			{
-				updatedTimeStruct.tm_wday = nowTime.tm_wday;
-				updatedTimeStruct.tm_hour = nowTime.tm_hour;
-				updatedTimeStruct.tm_min = nowTime.tm_min;
-				updatedTimeStruct.tm_sec = 00;
+				timeSchedules[scheduleNr].isPaused = false;
 			}
 
-			int minutesNow = updatedTimeStruct.tm_hour * 60 + updatedTimeStruct.tm_min;
+			volatile bool isPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << (shiftPositions - 1)));
 
-
-
-			int tomorrow = updatedTimeStruct.tm_wday + 1;
-			if (tomorrow == 7)
-				tomorrow = 0;
-
-			/// On the same day
-			uint8_t shiftPositions = 0;
-			if(updatedTimeStruct.tm_wday == 0)
-				shiftPositions = 6;
-			else
-				shiftPositions = updatedTimeStruct.tm_wday;
-
-
-			strcpy(scheduleString, "");
-
-			int scheduleNr;
-			for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
+			/// Check if schedule is applicable
+			if((isPauseDay))
 			{
+				/// ARE WE INSIDE PAUSE INTERVAL?
+				if((minutesNow >= timeSchedules[scheduleNr].StartTotalMinutes) && (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes))
+				{
+					volatile bool isNextDayPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << shiftPositions));
 
-				///When ending override, clear all paused schedules to be able to re-pause and reset nextStopTime
-				if((overrideTimer == 0) && (previousOverrideTimer > 0))
+					if((timeSchedules[scheduleNr].isPaused == false))// || ((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)))
+					{
+						if(updatedTimeStruct.tm_wday == 6)
+							chargeController_SetNextStartTime(0, scheduleNr, isNextDayPauseDay);
+						else
+							chargeController_SetNextStartTime(updatedTimeStruct.tm_wday, scheduleNr, isNextDayPauseDay);
+
+						/// Make sure the randomStartDelay is reset for each schedule start
+						startDelayCounter = randomStartDelay;
+					}
+
+					timeSchedules[scheduleNr].isPaused= true;
+
+					int localTimeOffset = chargeController_GetLocalTimeOffset();
+					if((timeSchedules[scheduleNr].SpanToNextDay == false) || (isNextDayPauseDay == false))
+						snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
+					else if(timeSchedules[scheduleNr].SpanToNextDay == true)
+						snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffset);
+					else
+						snprintf(scheduleString, sizeof(scheduleString), "Undefined");
+				}
+
+				/// WE ARE IN THE ALLOW CHARGING STATE
+				else
 				{
 					timeSchedules[scheduleNr].isPaused = false;
 				}
-
-				volatile bool isPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << (shiftPositions - 1)));
-
-				/// Check if schedule is applicable
-				if((isPauseDay))
-				{
-					/// ARE WE INSIDE PAUSE INTERVAL?
-					if((minutesNow >= timeSchedules[scheduleNr].StartTotalMinutes) && (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes))
-					{
-						volatile bool isNextDayPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << shiftPositions));
-
-						if((timeSchedules[scheduleNr].isPaused == false))// || ((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)))
-						{
-							if(updatedTimeStruct.tm_wday == 6)
-								chargeController_SetNextStartTime(0, scheduleNr, isNextDayPauseDay);
-							else
-								chargeController_SetNextStartTime(updatedTimeStruct.tm_wday, scheduleNr, isNextDayPauseDay);
-
-							/// Make sure the randomStartDelay is reset for each schedule start
-							startDelayCounter = randomStartDelay;
-						}
-
-						timeSchedules[scheduleNr].isPaused= true;
-
-						int localTimeOffset = chargeController_GetLocalTimeOffset();
-						if((timeSchedules[scheduleNr].SpanToNextDay == false) || (isNextDayPauseDay == false))
-							snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
-						else if(timeSchedules[scheduleNr].SpanToNextDay == true)
-							snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffset);
-						else
-							snprintf(scheduleString, sizeof(scheduleString), "Undefined");
-					}
-
-					/// WE ARE IN THE ALLOW CHARGING STATE
-					else
-					{
-						timeSchedules[scheduleNr].isPaused = false;
-					}
-
-				}
-				else
-				{
-					if(timeSchedules[scheduleNr].isPaused == true)
-					{
-						ESP_LOGW(TAG, "No schedule for today - %i - Allowing charging", updatedTimeStruct.tm_wday);
-						timeSchedules[scheduleNr].isPaused = false;
-					}
-				}
-
-				if(timeSchedules[scheduleNr].isPaused)
-					isPausedByAnySchedule |= (0x1 << scheduleNr);
-				else
-					isPausedByAnySchedule &= ~(0x1 << scheduleNr);
-			}
-
-			previousOverrideTimer = overrideTimer;
-
-
-			/*if(isPausedByAnySchedule == 0)
-			{
-				if((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED))
-				{
-					if(startDelayCounter >= 1)
-						startDelayCounter = 1;
-
-					ESP_LOGW(TAG, "CONNECTED OUTSIDE SCHDULE -> NO DELAY");
-				}
-			}*/
-
-			/// If overriding by Cloud or BLE, replace the value of isPauseByAnySchedule
-			if((isPausedByAnySchedule > 0) && (overrideTimer > 0))
-					isPausedByAnySchedule = 0;
-			else if((isPausedByAnySchedule == 0) && (overrideTimer > 0) && (opMode == CHARGE_OPERATION_STATE_DISCONNECTED))
-			{
-				overrideTimer = 0;
-				ESP_LOGW(TAG, "***** Stopped OVERRIDE when car id disconnected ******");
-			}
-			else if((isPausedByAnySchedule == 0) && (startDelayCounter == 0) && (overrideTimer > 0))
-			{
-				overrideTimer = 0;
-				ESP_LOGW(TAG, "***** Clear OVERRIDE between pausing ******");
-			}
-
-
-			if(isPausedByAnySchedule == 0)
-			{
-				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
-
-
-				if((opMode == CHARGE_OPERATION_STATE_DISCONNECTED) || (overrideTimer == 1))
-				{
-					startDelayCounter = 0;
-
-					ESP_LOGW(TAG, "DISCONNECTED OUTSIDE SCHDULE -> REMOVE DELAY");
-
-					if(overrideTimer == 1)
-					{
-						ESP_LOGW(TAG, "Starting due to OVERRIDE!");
-						overrideTimer = 2;
-					}
-				}
-
-				if((startDelayCounter > 0) && (opMode == CHARGE_OPERATION_STATE_PAUSED))// || (overrideTimer == 1))
-				{
-					startDelayCounter--;
-				}
-
-
-
-				if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0) && (GetFinalStopActiveStatus() == true))
-				{
-					ESP_LOGW(TAG, "***** Schedule ended -> sending resume command to MCU ******");
-					if(chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE))
-					doResumeCharging = true;
-					//SetFinalStopActiveStatus(0);
-				}
-					//chargeController_StartWithRandomDelay();)
-				//ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
-
-				//if((opMode == CHARGE_OPERATION_STATE_REQUESTING) || (startDelayCounter == 1))
-					//chargeController_StartWithRandomDelay();
 			}
 			else
-			{
-				startDelayCounter = randomStartDelay;
-
-				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
-
-				// /When schedule is paused, but MCU is active (e.g. ESP restart), then pause the MCU
-				if((opMode == CHARGE_OPERATION_STATE_CHARGING) || ((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == false)))
-				{
-					ESP_LOGE(TAG, "***** MCU active: %i - pausing it ******", opMode);
-
-					//502
-					MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
-					if(ret == MsgCommandAck)
-					{
-						ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
-						SetFinalStopActiveStatus(1);
-					}
-					else
-					{
-						ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED");
-					}
-				}
-			}
-
-
-			//If booting outside pause, ensure any scheduled start time is cleared in Cloud
-			if((sentClearStartTimeAtBoot == false) && (isPausedByAnySchedule == 0))
-			{
-				chargeController_ClearNextStartTime();
-				sentClearStartTimeAtBoot = true;
-			}
-
-
-			ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
-			ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
-		//}
-		//else
-		//{
-			/*ESP_LOGE(TAG, "Schedule conditions not met, clearing all paused-flags");
-			int scheduleNr;
-			for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
 			{
 				if(timeSchedules[scheduleNr].isPaused == true)
 				{
-					ESP_LOGE(TAG, "******* SETTING TO FALSE *********");
+					ESP_LOGW(TAG, "No schedule for today - %i - Allowing charging", updatedTimeStruct.tm_wday);
 					timeSchedules[scheduleNr].isPaused = false;
 				}
-			}*/
+			}
 
-		//}
+			if(timeSchedules[scheduleNr].isPaused)
+				isPausedByAnySchedule |= (0x1 << scheduleNr);
+			else
+				isPausedByAnySchedule &= ~(0x1 << scheduleNr);
+		}
+
+		previousOverrideTimer = overrideTimer;
+
+		/// If overriding by Cloud or BLE, replace the value of isPauseByAnySchedule
+		if((isPausedByAnySchedule > 0) && (overrideTimer > 0))
+				isPausedByAnySchedule = 0;
+		else if((isPausedByAnySchedule == 0) && (overrideTimer > 0) && (opMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+		{
+			overrideTimer = 0;
+			ESP_LOGW(TAG, "***** Stopped OVERRIDE when car id disconnected ******");
+		}
+		else if((isPausedByAnySchedule == 0) && (startDelayCounter == 0) && (overrideTimer > 0))
+		{
+			overrideTimer = 0;
+			ESP_LOGW(TAG, "***** Clear OVERRIDE between pausing ******");
+		}
+
+
+		if(isPausedByAnySchedule == 0)
+		{
+			/// ACTIVE
+
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
+
+			if((opMode == CHARGE_OPERATION_STATE_DISCONNECTED) || (overrideTimer == 1))
+			{
+				startDelayCounter = 0;
+
+				ESP_LOGW(TAG, "DISCONNECTED OUTSIDE SCHDULE -> REMOVE DELAY");
+
+				if(overrideTimer == 1)
+				{
+					ESP_LOGW(TAG, "Starting due to OVERRIDE!");
+					overrideTimer = 2;
+				}
+			}
+
+			if((startDelayCounter > 0) && (opMode == CHARGE_OPERATION_STATE_PAUSED))// || (overrideTimer == 1))
+			{
+				startDelayCounter--;
+			}
+
+			if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0) && (GetFinalStopActiveStatus() == true))
+			{
+				ESP_LOGW(TAG, "***** Schedule ended -> sending resume command to MCU ******");
+				chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+			}
+		}
+		else
+		{
+			/// PAUSED
+
+			startDelayCounter = randomStartDelay;
+
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
+
+			/// When schedule is paused, but MCU is active (e.g. ESP restart), then pause the MCU
+			if((opMode == CHARGE_OPERATION_STATE_CHARGING) || ((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == false)))
+			{
+				ESP_LOGE(TAG, "***** MCU active: %i - pausing it ******", opMode);
+
+				//502
+				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
+					SetFinalStopActiveStatus(1);
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED");
+				}
+			}
+		}
+
+		/// If booting outside pause, ensure any scheduled start time is cleared in Cloud
+		if((sentClearStartTimeAtBoot == false) && (isPausedByAnySchedule == 0))
+		{
+			hasNewStartTime = true;
+			sentClearStartTimeAtBoot = true;
+		}
+
+		ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+		ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 	}
-
 
 	if(sendScheduleDiagnostics == true)
 	{
 		publish_debug_telemetry_observation_Diagnostics(scheduleString);
 		sendScheduleDiagnostics = false;
 	}
-
 
 	if((storage_Get_Standalone() == 1) && (opMode == CHARGE_OPERATION_STATE_REQUESTING))
 	{
@@ -763,59 +652,15 @@ void RunStartChargeTimer()
 }
 
 
-//Cloud command: 			StartCharging
-//OfflineHandler command:	ChargeCurrentUserMax
-
-
-//Scheduletimer blocks
-
-//TimeDelay blocks
-
-
-
-
-
-
-
-/*void chargeController_StartWithRandomDelay()
-{
-	//if((startDelayCounter > 0) || (overrideTimer == 1))
-	//{
-		//startDelayCounter--;
-
-		//if(startDelayCounter % 5 == 0)
-			//ESP_LOGE(TAG, "RandomDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
-
-		if((startDelayCounter == 0) || (overrideTimer == 1))
-		{
-
-			if(overrideTimer == 1)
-			{
-				ESP_LOGW(TAG, "Starting due to OVERRIDE!");
-				overrideTimer = 2;
-			}
-
-			chargeController_ClearNextStartTime();
-			//chargeController_SendStartCommandToMCU();
-
-			runStartimer = false;
-			startDelayCounter = 0;
-			startBySchedule = true;
-		}
-	//}
-}*/
-
-
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	randomStartDelay = 12;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
+	randomStartDelay = 9;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
 	startDelayCounter = randomStartDelay;
 
 	ESP_LOGE(TAG, "********* StartDelayCounter set to %i **************", startDelayCounter);
-
-	//runStartimer = true;
 }
+
 
 void chargeController_ClearRandomStartDelay()
 {
@@ -846,10 +691,8 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 			ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
 			retval =  false;
 		}
-
 	}
-
-	else if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))// && (doResumeCharging == false))
+	else if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))
 	{
 		ESP_LOGW(TAG, "********* 2 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
 
@@ -864,19 +707,16 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 			ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
 			retval =  false;
 		}
-
 	}
-	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))// || (doResumeCharging && (chOpMode == CHARGE_OPERATION_STATE_REQUESTING)))
+	else if(chOpMode == CHARGE_OPERATION_STATE_PAUSED)
 	{
 		ESP_LOGW(TAG, "********* 3 Resuming from state CHARGE_OPERATION_STATE_PAUSED && FinalStop == true **************");
 
-		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);// = 509
+		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
 		if(ret == MsgCommandAck)
 		{
-
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
-			doResumeCharging = false;
 			chargeController_ClearNextStartTime();
 			retval = true;
 		}
@@ -891,36 +731,9 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 		ESP_LOGE(TAG, "######## Failed to start: STATE: opmode: %i, std: %i, isPaused: %i, cnt %i ########", chOpMode, storage_Get_Standalone(), isPausedByAnySchedule, startDelayCounter);
 	}
 
-	//if(retval == true)
-
-
 	return retval;
 }
 
-
-
-
-
-
-/*bool chargeController_SetStartCharging(enum ChargeSource source)
-{
-	ESP_LOGW(TAG, "Charging Requested by %i", source);
-
-	bool retValue = false;
-
-	if(source == eCHARGE_SOURCE_SCHEDULE)
-	{
-		///Start Timer
-		//chargeController_SetStartTimer();
-		retValue = true;
-	}
-	else
-	{
-		retValue = chargeController_SendStartCommandToMCU();
-	}
-
-	return retValue;
-}*/
 
 
 /*
@@ -945,5 +758,4 @@ bool chargeController_SetStandaloneState(uint8_t isStandalone)
 		ESP_LOGE(TAG, "MCU standalone parameter error");
 		return false;
 	}
-
 }
