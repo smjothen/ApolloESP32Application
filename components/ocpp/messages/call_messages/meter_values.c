@@ -1,5 +1,5 @@
 #include "messages/call_messages/ocpp_call_request.h"
-#include "types/ocpp_meter_value.h"
+#include "types/ocpp_create_meter_value.h"
 
 cJSON * ocpp_create_meter_values_request(unsigned int connector_id, const int * transaction_id, size_t values_count, struct ocpp_meter_value * meter_values){
 	if(values_count < 1 || meter_values == NULL)

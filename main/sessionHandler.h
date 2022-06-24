@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#include "../components/ocpp/include/types/ocpp_meter_value.h"
 
 enum CarChargeMode
 {
@@ -61,7 +62,9 @@ int sessionHandler_GetStackWatermarkOCMF();
 int sessionHandler_GetStackWatermark();
 void sessionHandler_CheckAndSendOfflineSessions();
 void sessionHandler_SetOfflineSessionFlag();
-bool sessionHandler_OcppTransactionIsActive();
+bool sessionHandler_OcppTransactionIsActive(uint connector_id);
+// Transfers the ownership of the meter values to sessionHandler
+void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_sampled_value_list * values);
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();

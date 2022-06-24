@@ -6,6 +6,7 @@
 
 #include "esp_log.h"
 #include "types/ocpp_meter_value.h"
+#include "types/ocpp_create_meter_value.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
 

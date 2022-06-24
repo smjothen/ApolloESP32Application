@@ -60,7 +60,7 @@ async def call_runner(cp):
     result = await cp.call(
         call.ChangeConfigurationPayload(
             key='ClockAlignedDataInterval',
-            value='900')
+            value='0')
     )
     print(result)
 
@@ -68,7 +68,7 @@ async def call_runner(cp):
     result = await cp.call(
         call.ChangeConfigurationPayload(
             key='MeterValueSampleInterval',
-            value='30')
+            value='10')
     )
     print(result)
 
@@ -84,6 +84,22 @@ async def call_runner(cp):
     result = await cp.call(
         call.ChangeConfigurationPayload(
             key='MeterValuesSampledData',
+            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
+    )
+    print(result)
+
+    print('Changing StopTxnAlignedData (valid csl)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='StopTxnAlignedData',
+            value='Energy.Active.Import.Interval')
+    )
+    print(result)
+
+    print('Changing StopTxnSampledData (valid csl)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='StopTxnSampledData',
             value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
     )
     print(result)
@@ -443,7 +459,9 @@ class ChargePoint(cp):
 
     @on('StopTransaction')
     def on_stop_transaction(self, **kwargs):
+        print("----------------------------------------")
         print(f'Replying to stop transaction {kwargs}')
+        print("----------------------------------------")
         return call_result.StopTransactionPayload()
 
     @on('StatusNotification')

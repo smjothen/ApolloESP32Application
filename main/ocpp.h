@@ -8,8 +8,8 @@ extern "C" {
 #include "types/ocpp_meter_value.h"
 
 int ocpp_get_stack_watermark();
-int ocpp_populate_meter_values(uint connector_id, const char * context,
-			const char * measurand_csl, struct ocpp_meter_value * meter_value_out);
+void save_interval_measurands(const char * context);
+void handle_meter_value(const char * context, const char * csl, int * transaction_id, uint * connectors, size_t connector_count);
 void ocpp_init();
 
 #ifdef __cplusplus

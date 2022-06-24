@@ -293,15 +293,17 @@ static int populate_sample_voltage(const char * context, struct ocpp_sampled_val
 
 void save_interval_measurands(const char * context){
 	if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_CLOCK) == 0){
+
+		ESP_LOGI(TAG, "Updating clock aligned interval measurands");
 		last_aligned_energy_active_import_interval = MCU_GetEnergy();
 
 	}else if(strcmp(context, OCPP_READING_CONTEXT_SAMPLE_PERIODIC) == 0
 		|| strcmp(context, OCPP_READING_CONTEXT_TRANSACTION_BEGIN) == 0
 		|| strcmp(context, OCPP_READING_CONTEXT_TRANSACTION_END) == 0){
 
+		ESP_LOGI(TAG, "Updating periodic interval measurands");
 		last_sampled_energy_active_import_interval = MCU_GetEnergy();
 	}
-
 }
 
 // TODO: consider adding OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER
@@ -391,6 +393,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, const char * con
 	char * item = strtok(measurands, ",");
 
 	while(item != NULL){
+		ESP_LOGI(TAG, "Looking through existing for: '%s'", item);
 		bool added = false;
 		struct ocpp_sampled_value_list * existing_value = &existing_list;
 
@@ -402,6 +405,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, const char * con
 
 				added = true;
 			}
+			existing_value = existing_value->next;
 		}
 
 		if(added == false){
@@ -436,49 +440,64 @@ static void meter_values_error_cb(){
 	ESP_LOGE(TAG, "Meter values completed with errors");
 }
 
-static void clock_aligned_meter_values(){
-	ESP_LOGI(TAG, "Starting clock aligned meter values");
+void handle_meter_value(const char * context, const char * csl, int * transaction_id, uint * connectors, size_t connector_count){
 
-	for(size_t i = 0; i <= storage_Get_ocpp_number_of_connectors(); i++){
-		ESP_LOGI(TAG, "Creating meter values for connector %d", i);
+	for(size_t i = 0; i < connector_count; i++){
+		uint connector = connectors[i];
+
+		ESP_LOGI(TAG, "Creating meter values for connector %d", connector);
 		struct ocpp_meter_value meter_value = {0};
 		meter_value.timestamp = time(NULL);
 
-		int length = ocpp_populate_meter_values(i, OCPP_READING_CONTEXT_SAMPLE_CLOCK, storage_Get_ocpp_meter_values_aligned_data(), &meter_value);
-		if(length < 1){
-			ESP_LOGW(TAG, "No elements in meter value list. Cancel sending of meter value");
-			continue; // TODO: do not skip stoptxn
-		}
-
 		// TODO: consider splitting some of the SampledValues into separate MeterValues
-		cJSON * request = ocpp_create_meter_values_request(i, NULL, 1, &meter_value);
-		if(request == NULL){
-			ESP_LOGE(TAG, "Unable to create meter value request for clock aligned meter values");
-			return;
+		int length = ocpp_populate_meter_values(connector, context, csl, &meter_value);
+
+		if(length < 0){
+			ESP_LOGW(TAG, "No meter values to send");
+
+		}else{
+			cJSON * request = ocpp_create_meter_values_request(connector, transaction_id, 1, &meter_value);
+			if(request == NULL){
+				ESP_LOGE(TAG, "Unable to create meter value request for %s values", context);
+				return;
+			}
+
+			ESP_LOGI(TAG, "Sending meter values");
+			if(enqueue_call(request, meter_values_response_cb, meter_values_error_cb,
+						"Meter value", eOCPP_CALL_TRANSACTION_RELATED) != 0){
+
+				ESP_LOGE(TAG, "Unable to send meter values");
+				cJSON_Delete(request);
+			}
 		}
 
-		ESP_LOGW(TAG, "Sending meter values");
-		if(enqueue_call(request, meter_values_response_cb, meter_values_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
-			ESP_LOGE(TAG, "Unable to send meter values");
-			cJSON_Delete(request);
-		}
-
-		if(sessionHandler_OcppTransactionIsActive()){
-
+		if(sessionHandler_OcppTransactionIsActive(connector)){
+			ESP_LOGI(TAG, "Creating stoptxn meter values");
 			struct ocpp_meter_value stoptxn_meter_value = {0};
-			int length = ocpp_populate_meter_values_from_existing(i, OCPP_READING_CONTEXT_SAMPLE_CLOCK, storage_Get_ocpp_stop_txn_aligned_data(),
+			length = ocpp_populate_meter_values_from_existing(connector, context, csl,
 								meter_value.sampled_value, &stoptxn_meter_value);
-
 			if(length > 0){
-				//TODO: Inform session of new clock aligned value
+				sessionHandler_OcppTransferMeterValues(connector, &stoptxn_meter_value.sampled_value);
 			}
 		}
 		ocpp_sampled_list_delete(meter_value.sampled_value);
 	}
+	save_interval_measurands(context);
+}
 
-	// Interval measurands are saved regardless of related CSL in case the CSL configuration is changed
-	save_interval_measurands(OCPP_READING_CONTEXT_SAMPLE_CLOCK);
+static void clock_aligned_meter_values(){
+	ESP_LOGI(TAG, "Starting clock aligned meter values");
 
+	size_t connector_count = storage_Get_ocpp_number_of_connectors() + 1;
+	uint * connectors = malloc(sizeof(uint) * connector_count);
+	for(size_t i =0; i <= storage_Get_ocpp_number_of_connectors(); i++){
+		connectors[i] = i;
+	}
+
+	handle_meter_value(OCPP_READING_CONTEXT_SAMPLE_CLOCK, storage_Get_ocpp_meter_values_aligned_data(),
+			NULL, connectors, connector_count);
+
+	free(connectors);
 }
 
 static void clock_aligned_meter_values_on_aligned_start(){
@@ -1357,6 +1376,9 @@ static void change_config_confirm(const char * unique_id, const char * configura
 }
 
 static bool is_valid_alignment_interval(uint32_t sec){
+	if(sec == 0)
+		return true;
+
 	return (86400 % sec) == 0 ? true : false;
 }
 

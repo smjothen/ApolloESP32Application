@@ -1,8 +1,6 @@
 #ifndef OCPP_METER_VALUE_H
 #define OCPP_METER_VALUE_H
 
-#include "cJSON.h"
-
 /*
  * The structures/values defined here apart from sampled value are only directly or indirectly by
  * the meter_value type in the ocpp specification.
@@ -102,6 +100,5 @@ void ocpp_sampled_list_delete(struct ocpp_sampled_value_list list);
 struct ocpp_sampled_value_list * ocpp_sampled_list_add(struct ocpp_sampled_value_list * list, struct ocpp_sampled_value value);
 struct ocpp_sampled_value_list * ocpp_sampled_list_get_last(struct ocpp_sampled_value_list * list);
 size_t ocpp_sampled_list_get_length(struct ocpp_sampled_value_list * list);
-cJSON * create_meter_value_json(struct ocpp_meter_value meter_value);
 
 #endif /*OCPP_METER_VALUE_H*/

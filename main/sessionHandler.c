@@ -35,7 +35,6 @@
 #include "messages/call_messages/ocpp_call_request.h"
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
-#include "types/ocpp_meter_value.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_reason.h"
 #include "types/ocpp_authorization_status.h"
@@ -304,8 +303,12 @@ bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_S
 uint8_t pending_change_availability_state;
 time_t preparing_started = 0;
 
-bool sessionHandler_OcppTransactionIsActive(){
-	return (transaction_id != -1);
+bool sessionHandler_OcppTransactionIsActive(uint connector_id){
+	if(connector_id == 1){
+		return (transaction_id != -1);
+	}else{
+		return false;
+	}
 }
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
@@ -390,35 +393,43 @@ static void error_cb(const char * unique_id, const char * error_code, const char
 	}
 }
 
+static struct ocpp_sampled_value_list current_meter_values = {0};
+
+void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_sampled_value_list * values){
+	if(connector_id != 1 || sessionHandler_OcppTransactionIsActive(connector_id) == false){
+		ESP_LOGE(TAG, "sessionHandler got notified of meter values without ongoing transaction, value recieved too late and transactionData might be wrong");
+		ocpp_sampled_list_delete(*values);
+		return;
+	}
+
+	struct ocpp_sampled_value_list * last_ptr = ocpp_sampled_list_get_last(&current_meter_values);
+	if(last_ptr->value != NULL){
+		last_ptr->next = calloc(sizeof(struct ocpp_sampled_value_list), 1);
+		if(last_ptr->next == NULL){
+			ESP_LOGE(TAG, "Unable to allocate space for StopTxnData");
+			return;
+		}
+
+		last_ptr = last_ptr->next;
+	}
+
+	last_ptr->value = values->value;
+	last_ptr->next = values->next;
+}
+
 TimerHandle_t sample_handle = NULL;
 
 static void sample_meter_values(){
 	ESP_LOGI(TAG, "Starting periodic meter values");
 
-	struct ocpp_meter_value meter_value = {0};
-	meter_value.timestamp = time(NULL);
-
-	int length = ocpp_populate_meter_values(1, OCPP_READING_CONTEXT_SAMPLE_PERIODIC, storage_Get_ocpp_meter_values_sampled_data(), &meter_value);
-
-	if(length < 0){
-		ESP_LOGW(TAG, "No meter values to send");
-
-	}else{
-		cJSON * request = ocpp_create_meter_values_request(1, NULL, 1, &meter_value);
-		if(request == NULL){
-			ESP_LOGE(TAG, "Unable to create meter value request for sampled meter values");
-			return;
-		}
-
-		ESP_LOGI(TAG, "Sending meter values");
-		if(enqueue_call(request, NULL, error_cb, "Meter value", eOCPP_CALL_TRANSACTION_RELATED) != 0){
-			ESP_LOGE(TAG, "Unable to send meter values");
-			cJSON_Delete(request);
-		}
-	}
+	uint connector = 1;
+	handle_meter_value(OCPP_READING_CONTEXT_SAMPLE_PERIODIC, storage_Get_ocpp_meter_values_sampled_data(),
+			NULL, &connector, 1);
 }
 
 static void start_sample_interval(){
+	ESP_LOGI(TAG, "Starting sample interval");
+
 	sample_handle = xTimerCreate("Ocpp sample",
 				pdMS_TO_TICKS(storage_Get_ocpp_meter_value_sample_interval() * 1000),
 				pdTRUE, NULL, sample_meter_values);
@@ -432,13 +443,19 @@ static void start_sample_interval(){
 			ESP_LOGI(TAG, "Started sample interval");
 		}
 	}
+	save_interval_measurands(OCPP_READING_CONTEXT_TRANSACTION_BEGIN);
+	ESP_LOGW(TAG, "EXIT");
 }
 
 static void stop_sample_interval(){
+	ESP_LOGI(TAG, "Stopping sample interval");
+
 	if(sample_handle != NULL){
 		xTimerDelete(sample_handle, pdMS_TO_TICKS(200));
 		sample_handle = NULL;
 	}
+	ocpp_sampled_list_delete(current_meter_values);
+	save_interval_measurands(OCPP_READING_CONTEXT_TRANSACTION_END);
 }
 
 void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
@@ -448,11 +465,21 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		return;
 	}
 
+	struct ocpp_meter_value meter_value = {0};
+	meter_value.sampled_value = current_meter_values;
+
+	struct ocpp_meter_value * meter_value_ptr = &meter_value;
+	if(ocpp_sampled_list_get_length(&meter_value_ptr->sampled_value) == 0){
+		meter_value_ptr = NULL;
+	}
+
 	cJSON * response;
 	if(chargeSession_Get().StoppedByRFID){
-		response  = ocpp_create_stop_transaction_request(chargeSession_Get().StoppedById, floor(MCU_GetEnergy()), time(NULL), transaction_id, chargeSession_Get().StoppedReason, 0, NULL);
+		response  = ocpp_create_stop_transaction_request(chargeSession_Get().StoppedById, floor(MCU_GetEnergy()),
+								time(NULL), transaction_id, chargeSession_Get().StoppedReason, (meter_value_ptr != NULL) ? 1 : 0, &meter_value);
 	}else{
-		response  = ocpp_create_stop_transaction_request(NULL, floor(MCU_GetEnergy()), time(NULL), transaction_id, chargeSession_Get().StoppedReason, 0, NULL);
+		response  = ocpp_create_stop_transaction_request(NULL, floor(MCU_GetEnergy()),
+								time(NULL), transaction_id, chargeSession_Get().StoppedReason, (meter_value_ptr != NULL) ? 1 : 0, &meter_value);
 	}
 
 	if(response == NULL){
@@ -465,7 +492,6 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 	}
 
 	stop_sample_interval();
-
 	transaction_id = -1; // Clear the transaction id
 }
 
