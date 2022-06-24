@@ -184,7 +184,7 @@ void offlineHandler_CheckForOffline()
 				MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 				if(ret == MsgWriteAck)
 				{
-					bool isSent = chargeController_SetStartCharging(eCHARGE_SOURCE_START_OFFLINE);
+					bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_START_OFFLINE);
 					//MessageType ret = MCU_SendCommandId(CommandStartCharging);
 					if(isSent)
 					{
@@ -231,7 +231,7 @@ void offlineHandler_CheckForOffline()
 			if(ret == MsgWriteAck)
 			{
 				//MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				bool isSent = chargeController_SetStartCharging(eCHARGE_SOURCE_GONE_OFFLINE);
+				bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_GONE_OFFLINE);
 				if(isSent)
 				{
 					offlineCurrentSent = true;

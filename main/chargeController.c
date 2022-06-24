@@ -201,7 +201,7 @@ void chargeController_SetTimes()
 
 
 	}
-
+	startDelayCounter = 0;
 }
 
 
@@ -396,6 +396,8 @@ void chargeController_ClearNextStartTime()
 {
 	strcpy(startTimeString, "");
 	hasNewStartTime = true;
+
+	ESP_LOGW(TAG, "Cleared start time");
 }
 
 bool chargeController_CheckForNewScheduleEvent()
@@ -447,11 +449,17 @@ bool chargecontroller_IsPauseBySchedule()
 }
 
 
+static bool doResumeCharging = false;
+bool chargeController_DoResumeCharging()
+{
+	return doResumeCharging;
+}
 
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[150] = {0};
 enum ChargerOperatingMode prevOpMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
-static bool startBySchedule = true;
+static bool applyDelayAtBoot = true;
+static bool sentClearStartTimeAtBoot = false;
 
 void RunStartChargeTimer()
 {
@@ -488,6 +496,14 @@ void RunStartChargeTimer()
     printf("The current date/time is: %s\n", strftime_buf);
 */
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
+
+	/// When booting with car connected, the random delay should always be applied
+	if((applyDelayAtBoot == true) && (opMode > CHARGE_OPERATION_STATE_DISCONNECTED))
+	{
+		//ESP_LOGW(TAG, "******* Applying at boot: %i *********", opMode);
+		startDelayCounter = randomStartDelay;
+		applyDelayAtBoot = false;
+	}
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
@@ -626,10 +642,15 @@ void RunStartChargeTimer()
 			/// If overriding by Cloud or BLE, replace the value of isPauseByAnySchedule
 			if((isPausedByAnySchedule > 0) && (overrideTimer > 0))
 					isPausedByAnySchedule = 0;
-			else if((isPausedByAnySchedule == 0) && (overrideTimer > 0))
+			else if((isPausedByAnySchedule == 0) && (overrideTimer > 0) && (opMode == CHARGE_OPERATION_STATE_DISCONNECTED))
 			{
 				overrideTimer = 0;
-				ESP_LOGW(TAG, "***** Stopped OVERRIDE ******");
+				ESP_LOGW(TAG, "***** Stopped OVERRIDE when car id disconnected ******");
+			}
+			else if((isPausedByAnySchedule == 0) && (startDelayCounter == 0) && (overrideTimer > 0))
+			{
+				overrideTimer = 0;
+				ESP_LOGW(TAG, "***** Clear OVERRIDE between pausing ******");
 			}
 
 
@@ -638,37 +659,38 @@ void RunStartChargeTimer()
 				snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
 
 
-				if((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED))
+				if((opMode == CHARGE_OPERATION_STATE_DISCONNECTED) || (overrideTimer == 1))
 				{
-					if(startDelayCounter >= 1)
-						startDelayCounter = 1;
+					startDelayCounter = 0;
 
-					ESP_LOGW(TAG, "CONNECTED OUTSIDE SCHDULE -> NO DELAY");
+					ESP_LOGW(TAG, "DISCONNECTED OUTSIDE SCHDULE -> REMOVE DELAY");
+
+					if(overrideTimer == 1)
+					{
+						ESP_LOGW(TAG, "Starting due to OVERRIDE!");
+						overrideTimer = 2;
+					}
 				}
 
-				if((startDelayCounter > 0))// || (overrideTimer == 1))
+				if((startDelayCounter > 0) && (opMode == CHARGE_OPERATION_STATE_PAUSED))// || (overrideTimer == 1))
 				{
 					startDelayCounter--;
 				}
 
-				ESP_LOGE(TAG, "RandomDelayCounter %i/%i, Override: %i", startDelayCounter, randomStartDelay, overrideTimer);
-				/*if(previousIsPausedByAnySchedule > 0)
-				{
-					previousIsPausedByAnySchedule = 0;
-					//startBySchedule = true;
-					//chargeController_ClearNextStartTime();
-				}*/
-				//else
 
-				/*else if(connectedWhileBooting == true//(previousIsPausedByAnySchedule == false) && (startBySchedule == false))
-				{
-					//startDelayCounter = randomStartDelay;
-					//if(startDelayCounter >= 1)
-						//startDelayCounter = 1;
-				}*/
 
-				if((opMode == CHARGE_OPERATION_STATE_REQUESTING) || (startDelayCounter == 1))
-					chargeController_StartWithRandomDelay();
+				if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0) && (GetFinalStopActiveStatus() == true))
+				{
+					ESP_LOGW(TAG, "***** Schedule ended -> sending resume command to MCU ******");
+					if(chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE))
+					doResumeCharging = true;
+					//SetFinalStopActiveStatus(0);
+				}
+					//chargeController_StartWithRandomDelay();)
+				//ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+
+				//if((opMode == CHARGE_OPERATION_STATE_REQUESTING) || (startDelayCounter == 1))
+					//chargeController_StartWithRandomDelay();
 			}
 			else
 			{
@@ -695,6 +717,16 @@ void RunStartChargeTimer()
 				}
 			}
 
+
+			//If booting outside pause, ensure any scheduled start time is cleared in Cloud
+			if((sentClearStartTimeAtBoot == false) && (isPausedByAnySchedule == 0))
+			{
+				chargeController_ClearNextStartTime();
+				sentClearStartTimeAtBoot = true;
+			}
+
+
+			ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 			ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 		//}
 		//else
@@ -730,7 +762,22 @@ void RunStartChargeTimer()
 	previousIsPausedByAnySchedule = isPausedByAnySchedule;
 }
 
-void chargeController_StartWithRandomDelay()
+
+//Cloud command: 			StartCharging
+//OfflineHandler command:	ChargeCurrentUserMax
+
+
+//Scheduletimer blocks
+
+//TimeDelay blocks
+
+
+
+
+
+
+
+/*void chargeController_StartWithRandomDelay()
 {
 	//if((startDelayCounter > 0) || (overrideTimer == 1))
 	//{
@@ -756,13 +803,13 @@ void chargeController_StartWithRandomDelay()
 			startBySchedule = true;
 		}
 	//}
-}
+}*/
 
 
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	randomStartDelay = (esp_random() % (maxStartDelay- 1 + 1) + 1);
+	randomStartDelay = 12;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
 	startDelayCounter = randomStartDelay;
 
 	ESP_LOGE(TAG, "********* StartDelayCounter set to %i **************", startDelayCounter);
@@ -776,8 +823,9 @@ void chargeController_ClearRandomStartDelay()
 }
 
 
-bool chargeController_SendStartCommandToMCU()
+bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 {
+	ESP_LOGW(TAG, "Charging Requested by %i", source);
 	bool retval = false;
 
 	sessionHandler_ClearCarInterfaceResetConditions();
@@ -800,24 +848,25 @@ bool chargeController_SendStartCommandToMCU()
 		}
 
 	}
-	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0))
+
+	else if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))// && (doResumeCharging == false))
+	{
+		ESP_LOGW(TAG, "********* 2 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
+
+		MessageType ret = MCU_SendCommandId(CommandStartCharging);
+		if(ret == MsgCommandAck)
 		{
-			ESP_LOGW(TAG, "********* 2 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
-
-			MessageType ret = MCU_SendCommandId(CommandStartCharging);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGW(TAG, "Sent start Command to MCU OK");
-				retval =  true;
-			}
-			else
-			{
-				ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
-				retval =  false;
-			}
-
+			ESP_LOGW(TAG, "Sent start Command to MCU OK");
+			retval =  true;
 		}
-	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))
+		else
+		{
+			ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
+			retval =  false;
+		}
+
+	}
+	else if((chOpMode == CHARGE_OPERATION_STATE_PAUSED))// || (doResumeCharging && (chOpMode == CHARGE_OPERATION_STATE_REQUESTING)))
 	{
 		ESP_LOGW(TAG, "********* 3 Resuming from state CHARGE_OPERATION_STATE_PAUSED && FinalStop == true **************");
 
@@ -827,6 +876,8 @@ bool chargeController_SendStartCommandToMCU()
 
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
+			doResumeCharging = false;
+			chargeController_ClearNextStartTime();
 			retval = true;
 		}
 		else
@@ -837,8 +888,11 @@ bool chargeController_SendStartCommandToMCU()
 	}
 	else
 	{
-		ESP_LOGW(TAG, "********* OTHER STATE: %i **************", chOpMode);
+		ESP_LOGE(TAG, "######## Failed to start: STATE: opmode: %i, std: %i, isPaused: %i, cnt %i ########", chOpMode, storage_Get_Standalone(), isPausedByAnySchedule, startDelayCounter);
 	}
+
+	//if(retval == true)
+
 
 	return retval;
 }
@@ -848,7 +902,7 @@ bool chargeController_SendStartCommandToMCU()
 
 
 
-bool chargeController_SetStartCharging(enum ChargeSource source)
+/*bool chargeController_SetStartCharging(enum ChargeSource source)
 {
 	ESP_LOGW(TAG, "Charging Requested by %i", source);
 
@@ -866,7 +920,7 @@ bool chargeController_SetStartCharging(enum ChargeSource source)
 	}
 
 	return retValue;
-}
+}*/
 
 
 /*

@@ -1141,15 +1141,15 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		}
 		else if(readTimeScheduleMessageNo >= 1)
 		{
+			///Move to next schedule in string
+			timeScheduleString += 14;
+
 			if(strlen(timeScheduleString) >= 14)
 				//More schedules
 				timeScheduleLength = 14;
 			else
 				//Last schedule
 				timeScheduleLength = 13;
-
-			///Move to next schedule in string
-			timeScheduleString += 14;
 
 			readTimeScheduleMessageNo++;
 		}

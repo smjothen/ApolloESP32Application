@@ -928,6 +928,12 @@ uint8_t MCU_GetChargeOperatingMode()
 		return CHARGE_OPERATION_STATE_PAUSED;
 	}
 
+	/*else if((chargeOperationMode == CHARGE_OPERATION_STATE_PAUSED) && (chargecontroller_IsPauseBySchedule() == false) && chargeController_IsScheduleActive() && chargeController_DoResumeCharging())// && GetFinalStopActiveStatus())
+	{
+		ESP_LOGE(TAG, "# Replaced PAUSED with REQUESTING #");
+		return CHARGE_OPERATION_STATE_REQUESTING;
+	}*/
+
 	return chargeOperationMode;
 }
 

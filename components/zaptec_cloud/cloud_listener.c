@@ -1201,7 +1201,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				responseStatus = 200;
 				ESP_LOGW(TAG, "Charge Start from Cloud: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
 
-				bool isSent = chargeController_SetStartCharging(eCHARGE_SOURCE_CLOUD);
+				bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_CLOUD);
 				//MessageType ret = MCU_SendCommandId(CommandStartCharging);
 				if(isSent)
 				{
@@ -2242,12 +2242,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
-				else if(strstr(commandString,"StartTimer") != NULL)
+				/*else if(strstr(commandString,"StartTimer") != NULL)
 				{
 					//chargeController_SetStartTimer();
-					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+					chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
 					responseStatus = 200;
-				}
+				}*/
 
 
 				else if(strstr(commandString,"Loc ") != NULL)
@@ -2280,7 +2280,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"SS") != NULL)
 				{
-					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
 
 					//Remove end of string formatting
 					int end = strlen(commandString);
@@ -2295,7 +2295,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"NT") != NULL)
 				{
-					chargeController_SetStartCharging(eCHARGE_SOURCE_SCHEDULE);
+					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
 
 					//Remove end of string formatting
 					int end = strlen(commandString);

@@ -37,6 +37,7 @@ bool chargeController_SendStartCommandToMCU();
 void chargeController_Init();
 void chargeController_Activation();
 bool chargecontroller_IsPauseBySchedule();
+bool chargeController_DoResumeCharging();
 
 void chargeController_ClearNextStartTime();
 bool chargeController_CheckForNewScheduleEvent();
@@ -46,7 +47,7 @@ bool chargeController_IsScheduleActive();
 void chargeController_Override();
 void chargeController_CancelOverride();
 void chargeController_SetNowTime(char * timeString);
-bool chargeController_SetStartCharging(enum ChargeSource source);
+//bool chargeController_SetStartCharging(enum ChargeSource source);
 bool chargeController_SetStandaloneState(uint8_t isStandalone);
 void chargeController_StartWithRandomDelay();
 void chargeController_SetRandomStartDelay();
