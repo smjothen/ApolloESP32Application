@@ -2285,9 +2285,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					//Remove end of string formatting
 					int end = strlen(commandString);
 					commandString[end-2] = '\0';
-
-					chargeController_WriteNewTimeSchedule(&commandString[4]);
-					chargeController_SetTimes();
+					if(end >= 19)
+						chargeController_WriteNewTimeSchedule(&commandString[4]);
+					else
+					{
+						char* p = "";
+						chargeController_WriteNewTimeSchedule(p);
+					}
+					//chargeController_SetTimes();
+					chargeController_Activation();
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 					//chargeController_SetStartTimer();
 					responseStatus = 200;

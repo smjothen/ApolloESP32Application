@@ -530,7 +530,7 @@ int publish_debug_telemetry_observation_LteParameters()
  */
 int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask)
 {
-    ESP_LOGE(TAG, "sending Location");
+    ESP_LOGD(TAG, "sending Loc, TZ and Schedule");
 
     cJSON *observations = create_observation_collection();
 

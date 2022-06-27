@@ -29,7 +29,7 @@
 #include "../../components/authentication/authentication.h"
 
 
-static const char *TAG = "BLE SERVICE";
+static const char *TAG = "BLE SERVICE    ";
 
 const uint16_t WIFI_SERV_uuid 				        = 0x00FF;
 
@@ -1669,9 +1669,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		{
 			storage_Set_Location(charBuf);
 			ESP_LOGI(TAG, "Set location: %s", charBuf);
-			storage_SaveConfiguration();//Not using save button in app
 			newLocation = true;
 			chargeController_Activation();
+			storage_SaveConfiguration();//Not using save button in app
 		}
 
     	break;
@@ -1718,6 +1718,20 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		}*/
 		if(writeTimeScheduleMessageNo >= 0)
 		{
+
+			if((param->write.len == 1) && (param->write.value[0] == '\0'))
+			{
+				strcpy(charBuf, "");
+				storage_Set_TimeSchedule(charBuf);
+				newTimeSchedule = true;
+				chargeController_Activation();
+				ESP_LOGW(TAG, "Saving EMPTY timeSchedule: %s", charBuf);
+				storage_SaveConfiguration();
+				ESP_LOGW(TAG, "Readback EMPTY timeSchedule: %s", storage_Get_TimeSchedule());
+				break;
+			}
+
+
 			if (SCHEDULE_SIZE - strlen(charBuf) < param->write.len)
 			{
 				ESP_LOGW(TAG, "To long string");
@@ -1749,12 +1763,12 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				memcpy(&charBuf[writeTimeScheduleMessageNo * 14], param->write.value, param->write.len);
 				storage_Set_TimeSchedule(charBuf);
 				ESP_LOGW(TAG, "Appending");
-				ESP_LOGW(TAG, "Saving timeSchedule: %s", charBuf);
-				storage_SaveConfiguration();
+
 				newTimeSchedule = true;
 				chargeController_Activation();
 				ESP_LOGW(TAG, "Readback timeSchedule: %s", storage_Get_TimeSchedule());
-
+				ESP_LOGW(TAG, "Saving timeSchedule: %s", charBuf);
+				storage_SaveConfiguration();
 
 				/// Last message received
 				memset(charBuf, 0, SCHEDULE_SIZE);

@@ -273,8 +273,7 @@ void storage_Set_Location(char * newString)
 	if(strlen(newString) == 3) //Shall always be 3 chars
 	{
 		strcpy(configurationStruct.location, newString);
-		storage_SaveConfiguration();
-		ESP_LOGW(TAG, "Saved location");
+		ESP_LOGW(TAG, "Set location");
 		return;
 	}
 }
@@ -284,8 +283,7 @@ void storage_Set_Timezone(char * newString)
 	if(strlen(newString) < DEFAULT_STR_SIZE)
 	{
 		strcpy(configurationStruct.timezone, newString);
-		storage_SaveConfiguration();
-		ESP_LOGW(TAG, "Saved timezone");
+		ESP_LOGW(TAG, "Set timezone");
 		return;
 	}
 }
@@ -306,8 +304,7 @@ void storage_Set_TimeSchedule(char * newString)
 	if(strlen(newString) < SCHEDULE_SIZE)
 	{
 		strcpy(configurationStruct.timeSchedule, newString);
-		storage_SaveConfiguration();
-		ESP_LOGW(TAG, "Saved timeSchedule");
+		ESP_LOGW(TAG, "Set timeSchedule");
 		return;
 	}
 }

@@ -655,8 +655,16 @@ void RunStartChargeTimer()
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	randomStartDelay = 9;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
-	startDelayCounter = randomStartDelay;
+	if(strlen(scheduleString) >= 13)
+	{
+		randomStartDelay = 9;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
+		startDelayCounter = randomStartDelay;
+	}
+	else
+	{
+		randomStartDelay = 0;
+		startDelayCounter = 0;
+	}
 
 	ESP_LOGE(TAG, "********* StartDelayCounter set to %i **************", startDelayCounter);
 }
@@ -678,21 +686,36 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 	enum ChargerOperatingMode chOpMode = MCU_GetChargeOperatingMode();
 	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1))
 	{
-		ESP_LOGW(TAG, "********* 1 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
+		//Use Standalone current as if from cloud command
+		float standAloneCurrent = storage_Get_StandaloneCurrent();
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standAloneCurrent);
 
-		MessageType ret = MCU_SendCommandId(CommandStartCharging);
-		if(ret == MsgCommandAck)
+		ESP_LOGW(TAG, "********* 1 Starting from state \"Standalone\" : CHARGE_OPERATION_STATE_REQUESTING ST-AC: %2.2fA **************", standAloneCurrent);
+
+		if(ret == MsgWriteAck)
 		{
-			ESP_LOGW(TAG, "Sent start Command to MCU OK");
-			retval =  true;
+			MessageType ret = MCU_SendCommandId(CommandStartCharging);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGW(TAG, "Sent start Command to MCU OK");
+				retval =  true;
+			}
+			else
+			{
+				ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
+				retval =  false;
+			}
+
 		}
 		else
 		{
 			ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
-			retval =  false;
 		}
+
+
+
 	}
-	else if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))
+	else if(((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) || (chOpMode == CHARGE_OPERATION_STATE_CHARGING)) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))
 	{
 		ESP_LOGW(TAG, "********* 2 Starting from state CHARGE_OPERATION_STATE_REQUESTING **************");
 
