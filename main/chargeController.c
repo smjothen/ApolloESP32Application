@@ -15,11 +15,10 @@
 static const char *TAG = "CHARGECONTROL  ";
 
 
-const uint32_t maxStartDelay = 10;//600;
+const uint32_t maxStartDelay = 15;//600;
 
 static uint32_t startDelayCounter = 0;
 static uint32_t randomStartDelay = 0;
-static bool runStartimer = false;
 static uint8_t overrideTimer = 0;
 
 //static char fullTimeScheduleString[] = {"31:0812:1234;96:2200:2330;03:1130:1245"};
@@ -83,6 +82,7 @@ void chargeController_Activation()
 
 	ESP_LOGW(TAG, "Schedule: %s, %s, %s, SCHEDULE %s", storage_Get_Location(), storage_Get_Timezone(), storage_Get_TimeSchedule(), isScheduleActive ? "ON" : "OFF");
 }
+
 
 int chargeController_GetLocalTimeOffset()
 {
@@ -675,7 +675,7 @@ void chargeController_SetRandomStartDelay()
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
 	if(strlen(scheduleString) >= 13)
 	{
-		randomStartDelay = 9;//(esp_random() % (maxStartDelay- 7 + 1) + 7);
+		randomStartDelay = (esp_random() % (maxStartDelay- 1 + 1) + 1);
 		startDelayCounter = randomStartDelay;
 	}
 	else

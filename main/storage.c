@@ -103,6 +103,20 @@ void storage_Initialize_ScheduleParameteres()
 {
 	strcpy(configurationStruct.location, "---");
 	strcpy(configurationStruct.timezone, "Etc/UTC");
+	strcpy(configurationStruct.timeSchedule, "");
+}
+
+void storage_Initialize_UK_TestScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "GBR");
+	strcpy(configurationStruct.timezone, "Europe/London");
+	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+}
+
+void storage_Initialize_NO_TestScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "GBR");
+	strcpy(configurationStruct.timezone, "Europe/Oslo");
 	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
 }
 

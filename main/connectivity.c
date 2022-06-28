@@ -120,7 +120,9 @@ static void OneSecondTimer()
 static void connectivity_task()
 {
 	//Read from Flash. If no interface is configured, use none and wait for setting
-	staticNewInterface = eCONNECTION_WIFI;//(enum CommunicationMode)storage_Get_CommunicationMode();
+	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
+	//Override - debug only
+	//staticNewInterface = eCONNECTION_WIFI;
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished){

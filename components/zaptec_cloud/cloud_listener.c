@@ -2349,9 +2349,27 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
-				else if(strstr(commandString,"ResetSchedule") != NULL)
+				/*else if(strstr(commandString,"ClearSchedule") != NULL)
 				{
 					storage_Initialize_ScheduleParameteres();
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					chargeController_ClearNextStartTime();
+
+					responseStatus = 200;
+				}*/
+				else if(strstr(commandString,"SetSchedule") != NULL)
+				{
+					if(strstr(commandString,"SetScheduleUK") != NULL)
+						storage_Initialize_UK_TestScheduleParameteres();
+					else if(strstr(commandString,"SetScheduleNO") != NULL)
+						storage_Initialize_NO_TestScheduleParameteres();
+					else
+						storage_Initialize_ScheduleParameteres();
+
 					storage_SaveConfiguration();
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 

@@ -60,6 +60,7 @@ struct RFIDTokens{
 #define PULSE_SYSTEM_CHARGING 180
 
 
+
 //Numbers should match Pro
 enum CommunicationMode
 {
