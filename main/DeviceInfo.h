@@ -46,6 +46,7 @@ struct RFIDTokens{
 #define PREFIX_GUID 41
 #define DIAGNOSTICS_STRING_SIZE 100
 
+#define URL_OCPP_MAX_LENGTH 128
 #define DEFAULT_CSL_LENGTH 6//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
 
@@ -113,6 +114,7 @@ struct Configuration
 
 	//configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
 	//configurationStruct.ocpp_authorization_cache_enabled = false;
+	char url_ocpp[URL_OCPP_MAX_LENGTH];
 	bool session_type_ocpp; // TODO: Consider changing to session_controller_ocpp if future use dictates
 	bool ocpp_authorize_remote_tx_requests;
 	//int configurationStruct.ocpp_blink_repeats;

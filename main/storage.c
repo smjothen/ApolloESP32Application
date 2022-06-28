@@ -78,6 +78,7 @@ void storage_Init_Configuration()
 	configurationStruct.diagnosticsMode				= 0;
 
 	// ocpp settings
+	strcpy(configurationStruct.url_ocpp, "");
 	configurationStruct.session_type_ocpp = false;
 
 	// ocpp core profile settings
@@ -208,6 +209,11 @@ void storage_Set_TransmitChangeLevel(float newValue)
 }
 
 // Ocpp settings
+void storage_Set_url_ocpp(const char * newValue)
+{
+	strcpy(configurationStruct.url_ocpp, newValue);
+}
+
 void storage_Set_session_type_ocpp(bool newValue)
 {
 	configurationStruct.session_type_ocpp = newValue;
@@ -479,6 +485,10 @@ float storage_Get_TransmitChangeLevel()
 }
 
 //Ocpp settings
+const char * storage_Get_url_ocpp()
+{
+	return configurationStruct.url_ocpp;
+}
 
 bool storage_Get_session_type_ocpp()
 {
@@ -803,9 +813,10 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_zfloat(configuration_handle, "TxChangeLevel", configurationStruct.transmitChangeLevel);
 
 	//OCPP settings
+	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
+	err += nvs_set_u8(configuration_handle, "sessionType", configurationStruct.session_type_ocpp);
 	//err += nvs_set_u8(configuration_handle, "oAllowTxUnknown", configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
 	//err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
-	err += nvs_set_u8(configuration_handle, "sessionType", configurationStruct.session_type_ocpp);
 	err += nvs_set_u8(configuration_handle, "oAuthRemoteTx", configurationStruct.ocpp_authorize_remote_tx_requests);
 	//err += nvs_set_u8(configuration_handle, "oBlinkRequest", configurationStruct.ocpp_blink_repeats);
 	err += nvs_set_u32(configuration_handle, "oClockAligned", configurationStruct.ocpp_clock_aligned_data_interval);
@@ -893,9 +904,11 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_zfloat(configuration_handle, "TxChangeLevel", &configurationStruct.transmitChangeLevel);
 
 	//OCPP settings
+	readSize = URL_OCPP_MAX_LENGTH;
+	err += nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize);
+	err += nvs_get_u8(configuration_handle, "sessionType", (uint8_t *)&configurationStruct.session_type_ocpp);
 	//err += nvs_get_u8(configuration_handle, "oAllowTxUnknown", &configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
 	//err += nvs_get_u8(configuration_handle, "oAuthCachEnable", &configurationStruct.ocpp_authorization_cache_enabled);
-	err += nvs_get_u8(configuration_handle, "sessionType", (uint8_t *)&configurationStruct.session_type_ocpp);
 	err += nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests);
 	//err += nvs_get_u8(configuration_handle, "oBlinkRequest", &configurationStruct.ocpp_blink_repeats);
 	err += nvs_get_u32(configuration_handle, "oClockAligned", &configurationStruct.ocpp_clock_aligned_data_interval);

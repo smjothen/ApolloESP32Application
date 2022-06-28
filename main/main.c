@@ -444,7 +444,8 @@ void app_main(void)
     sessionHandler_init();
 	#endif
 
-    ocpp_init();
+    if(storage_Get_session_type_ocpp() && storage_Get_url_ocpp()[0] != '\0')
+	    ocpp_init();
 
     size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 

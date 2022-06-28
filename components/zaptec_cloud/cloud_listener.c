@@ -30,6 +30,7 @@
 #include "../../main/offline_log.h"
 #include "../../main/offlineHandler.h"
 #include "../../main/offlineSession.h"
+#include "../../main/ocpp.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -2232,17 +2233,101 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 					responseStatus = 200;
 				}
+
+				// ocpp url
+				else if(strstr(commandString, "set ocpp url") != NULL)
+				{
+					ESP_LOGI(TAG, "Recieved set ocpp url command");
+
+					char * cmd_begin = strstr(commandString, "set ocpp url");
+					char * url = strstr(cmd_begin, "ws");
+
+					size_t url_length = 0;
+					bool url_is_valid = true;
+					char url_buffer[URL_OCPP_MAX_LENGTH];
+					if(url != NULL){
+						if(strncmp(url, "ws://", 5) == 0){
+							url_length += 5;
+						}else if(strncmp(url, "wss://", 6) == 0){
+							url_length += 6;
+						}else{
+							ESP_LOGW(TAG, "Recieved invalid url '%s' for ocpp", url);
+							url_is_valid = false;
+						}
+
+						if(url_is_valid){
+							size_t scheme_length = url_length;
+							for(;url_length < URL_OCPP_MAX_LENGTH; url_length++){
+								if(isspace(url[url_length]) || url[url_length] == '\0' || url[url_length] == '"'){
+									break;
+
+								}else if(iscntrl(url[url_length])){
+									url_is_valid = false;
+									break;
+								}
+							}
+
+							if(scheme_length == url_length){
+								ESP_LOGW(TAG, "Recived url did only contain scheme and no path");
+								url_is_valid = false;
+							}
+						}
+					}else{
+						ESP_LOGW(TAG, "Attempt to set ocpp url failed due to invalid or no url");
+						url_is_valid = false;
+					}
+
+					if(url_is_valid){
+						strncpy(url_buffer, url, url_length);
+						url_buffer[url_length] = '\0';
+
+						ESP_LOGI(TAG, "Writing ocpp url: '%s'", url_buffer);
+						storage_Set_url_ocpp(url_buffer);
+						storage_SaveConfiguration();
+
+						if(ocpp_is_running()){
+							ocpp_restart();
+						}
+
+						responseStatus = 200;
+					}else{
+						ESP_LOGW(TAG, "Rejecting setting ocpp url");
+						responseStatus = 400;
+					}
+				}
 				// Select session type ocpp
 				else if(strstr(commandString, "set session type ocpp") != NULL)
 				{
-					storage_Set_session_type_ocpp(true);
-					storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Requested to change session type to ocpp");
+					if(strlen(storage_Get_url_ocpp()) > 0){
+						storage_Set_session_type_ocpp(true);
+						storage_SaveConfiguration();
+						responseStatus = 200;
+
+						if(!ocpp_is_running()){
+							ocpp_init();
+						}else{
+							ESP_LOGW(TAG, "Ocpp is already running");
+							if(ocpp_task_exists()){
+								ESP_LOGE(TAG, "Ocpp task is scheduled to be deleted");
+								responseStatus = 409;
+							}
+						}
+					}else{
+						ESP_LOGW(TAG, "Can not start ocpp as url has not been set");
+						responseStatus = 400;
+					}
 				}
 				// Select session type zaptec_cloud
 				else if(strstr(commandString, "set session type zaptec_cloud") != NULL)
 				{
+					ESP_LOGI(TAG, "Requested to change session type to zaptec_cloud");
 					storage_Set_session_type_ocpp(false);
 					storage_SaveConfiguration();
+
+					if(ocpp_is_running()){
+						ocpp_end();
+					}
 				}
 			}
 	}

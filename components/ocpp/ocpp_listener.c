@@ -23,6 +23,14 @@ struct ocpp_call_callback_with_data{
 
 static struct ocpp_call_callback_with_data callbacks[OCPP_CALL_ACTION_ID_COUNT] = {0};
 
+void clean_listener(){
+	if(dynamic_buffer != NULL){
+		free(dynamic_buffer);
+		dynamic_buffer = NULL;
+		dynamic_failed = true;
+	}
+}
+
 void set_task_to_notify(TaskHandle_t task){
 	task_to_notify = task;
 }

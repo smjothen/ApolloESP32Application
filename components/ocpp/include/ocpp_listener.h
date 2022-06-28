@@ -8,7 +8,7 @@
 int attach_call_cb(enum ocpp_call_action_id action_id, ocpp_call_callback call_cb, void * cb_data);
 void set_task_to_notify(TaskHandle_t);
 void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
-
+void clean_listener();
 enum{
 	eOCPP_WEBSOCKET_NO_EVENT = 0,
 	eOCPP_WEBSOCKET_CONNECTED,

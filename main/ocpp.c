@@ -2034,20 +2034,48 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 	return;
 }
 
+static bool should_run = false;
+static bool should_restart = false;
+
 static void ocpp_task(){
-	while(true){
+	while(should_run){
+		ESP_LOGI(TAG, "Attempting to start ocpp task");
 		// TODO: see if there is a better way to check connectivity
 		while(connectivity_GetActivateInterface() == eCONNECTION_NONE){
+			if(should_run == false || should_restart)
+				goto clean;
+
 			ESP_LOGI(TAG, "Waiting for connection...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 		}
+
+		//Indicate features that are not supported
+		attach_call_cb(eOCPP_ACTION_RESERVE_NOW_ID, not_supported_cb, "Does not support reservations");
+		attach_call_cb(eOCPP_ACTION_CANCEL_RESERVATION_ID, not_supported_cb, "Does not support reservations");
+		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
+		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, not_supported_cb, "Does not support authorization cache");
+
+		//Handle ocpp related configurations
+		attach_call_cb(eOCPP_ACTION_GET_CONFIGURATION_ID, get_configuration_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_CHANGE_CONFIGURATION_ID, change_configuration_cb, NULL);
+
+		//Handle features that are not bether handled by other components
+		attach_call_cb(eOCPP_ACTION_RESET_ID, reset_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
+
 		ESP_LOGI(TAG, "Starting connection with Central System");
 
 		int err = -1;
 		unsigned int retry_attempts = 0;
 		unsigned int retry_delay = 5;
 		do{
-			err = start_ocpp(i2cGetLoadedDeviceInfo().serialNumber,
+			if(should_run == false || should_restart)
+				goto clean;
+
+			err = start_ocpp(storage_Get_url_ocpp(),
+					i2cGetLoadedDeviceInfo().serialNumber,
 					storage_Get_ocpp_heartbeat_interval(),
 					storage_Get_ocpp_transaction_message_attempts(),
 					storage_Get_ocpp_transaction_message_retry_interval());
@@ -2072,6 +2100,10 @@ static void ocpp_task(){
 		retry_attempts = 0;
 		retry_delay = 5;
 		do{
+
+			if(should_run == false || should_restart)
+				goto clean;
+
 			err = complete_boot_notification_process(i2cGetLoadedDeviceInfo().serialNumber);
 			if(err != 0){
 				if(retry_attempts < 7){
@@ -2088,29 +2120,13 @@ static void ocpp_task(){
 
 		start_ocpp_heartbeat();
 
-		//Indicate features that are not supported
-		attach_call_cb(eOCPP_ACTION_RESERVE_NOW_ID, not_supported_cb, "Does not support reservations");
-		attach_call_cb(eOCPP_ACTION_CANCEL_RESERVATION_ID, not_supported_cb, "Does not support reservations");
-		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
-		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, not_supported_cb, "Does not support authorization cache");
-
-		//Handle ocpp related configurations
-		attach_call_cb(eOCPP_ACTION_GET_CONFIGURATION_ID, get_configuration_cb, NULL);
-		attach_call_cb(eOCPP_ACTION_CHANGE_CONFIGURATION_ID, change_configuration_cb, NULL);
-
-		//Handle features that are not bether handled by other components
-		attach_call_cb(eOCPP_ACTION_RESET_ID, reset_cb, NULL);
-		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
-		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
-		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
-
 		//Handle ClockAlignedDataInterval
 		restart_clock_aligned_meter_values();
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
 		time_t last_online_timestamp = time(NULL);
-		while(true){
+		while(should_run && should_restart == false){
 			uint32_t data = ulTaskNotifyTake(pdTRUE,0);
 
 			if(data != eOCPP_WEBSOCKET_NO_EVENT){
@@ -2162,12 +2178,18 @@ static void ocpp_task(){
 				}
 			}
 		}
-
-		ESP_LOGE(TAG, "Exited ocpp handling, tearing down to retry");
+clean:
+		ESP_LOGE(TAG, "Exited ocpp handling, tearing down");
 
 		stop_ocpp_heartbeat();
 		stop_ocpp();
+
+		ESP_LOGE(TAG, "Teardown complete");
+		should_restart = false;
 	}
+
+	task_ocpp_handle = NULL;
+	vTaskDelete(NULL);
 }
 
 int ocpp_get_stack_watermark(){
@@ -2178,7 +2200,27 @@ int ocpp_get_stack_watermark(){
 	}
 }
 
+bool ocpp_is_running(){
+	return should_run;
+}
+
+bool ocpp_task_exists(){
+	return (task_ocpp_handle != NULL);
+}
+
+void ocpp_end(){
+	should_run = false;
+}
+
+void ocpp_restart(){
+	should_restart = true;
+}
+
 void ocpp_init(){
-	task_ocpp_handle = xTaskCreateStatic(ocpp_task, "ocpp_task", TASK_OCPP_STACK_SIZE, NULL, 2, task_ocpp_stack, &task_ocpp_buffer);
-	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+	if(task_ocpp_handle == NULL){ // TODO: Make thread safe. NOTE: eTaskGetState returns eReady for deleted task
+		should_run = true;
+		task_ocpp_handle = xTaskCreateStatic(ocpp_task, "ocpp_task", TASK_OCPP_STACK_SIZE, NULL, 2, task_ocpp_stack, &task_ocpp_buffer);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}
 }

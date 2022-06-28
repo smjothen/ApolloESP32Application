@@ -465,15 +465,15 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
+int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
 	default_heartbeat_interval = ocpp_heartbeat_interval;
 
 	transaction_message_attempts = ocpp_transaction_message_attempts;
 	transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
 
-	char uri[64];
-	int written_length = snprintf(uri, sizeof(uri), "ws://%s/%s", "10.4.210.114:9000", charger_id);
+	char uri[256];
+	int written_length = snprintf(uri, sizeof(uri), "%s/%s", url, charger_id);
 
 	if(written_length < 0 || written_length >= sizeof(uri)){
 		ESP_LOGE(TAG, "Unable to write uri to buffer");
@@ -482,7 +482,7 @@ int start_ocpp(const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_
 
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
-		.subprotocol = "ocpp2.0",
+		.subprotocol = "ocpp1.6",
 		.task_stack = 4096,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 	};
@@ -543,6 +543,7 @@ error:
 }
 
 void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
+	ESP_LOGI(TAG, "Recieved boot notification result");
 	time_t charge_point_time = time(NULL);
 
 	if(cJSON_HasObjectItem(payload, "currentTime")){
@@ -609,6 +610,7 @@ void boot_error_cb(const char * unique_id, const char * error_code, const char *
 	registration_status = eOCPP_REGISTRATION_REJECTED;
 }
 
+
 int complete_boot_notification_process(char * serial_nr){
 	//TODO: update notification request parameters to real values
 	cJSON * boot_notification = ocpp_create_boot_notification_request(NULL, "Go", serial_nr, "Zaptec", NULL, NULL, NULL, NULL, NULL);
@@ -617,6 +619,9 @@ int complete_boot_notification_process(char * serial_nr){
 		ESP_LOGE(TAG, "Unable to create boot notification");
 		return -1;
 	}
+
+	registration_status = eOCPP_REGISTRATION_PENDING;
+	heartbeat_interval = -1;
 
 	if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
 		ESP_LOGE(TAG, "Unable to equeue BootNotification");
@@ -679,8 +684,10 @@ void stop_ocpp(void){
 	/* 	//Only awailable in newer versions of esp-idf */
 	/* 	esp_websocket_client_close(client, pdMS_TO_TICKS(5000)); */
 	/* } */
-	esp_websocket_client_destroy(client); // Calls esp_websocket_client_stop internaly
-	client = NULL;
+	if(client != NULL){
+		esp_websocket_client_destroy(client); // Calls esp_websocket_client_stop internaly
+		client = NULL;
+	}
 
 	if(ocpp_call_queue != NULL){
 		vQueueDelete(ocpp_call_queue);
@@ -692,17 +699,20 @@ void stop_ocpp(void){
 		ocpp_blocking_call_queue = NULL;
 	}
 
-	if(ocpp_transaction_call_queue){
-		vQueueDelete(ocpp_call_queue);
+	if(ocpp_transaction_call_queue != NULL){
+		vQueueDelete(ocpp_transaction_call_queue);
 		ocpp_blocking_call_queue = NULL;
 	}
 
-	if(ocpp_active_call_lock_1){
+	if(ocpp_active_call_lock_1 != NULL){
 		vSemaphoreDelete(ocpp_active_call_lock_1);
 		ocpp_active_call_lock_1 = NULL;
 	}
 
+	clean_listener();
+
 	clear_active_call();
+
 	ESP_LOGW(TAG, "Web socket closed and state cleared");
 	return;
 }
