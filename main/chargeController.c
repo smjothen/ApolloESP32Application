@@ -44,7 +44,7 @@ struct TimeSchedule
 
 static struct TimeSchedule timeSchedules[14] = {0};
 static bool isScheduleActive = false;
-
+static float previousStandaloneCurrent = 0.0;
 void chargeController_Init()
 {
 	ESP_LOGE(TAG, "SETTING TIMER");
@@ -52,6 +52,8 @@ void chargeController_Init()
 	TickType_t startChargeTimer = pdMS_TO_TICKS(2000); //1 second
 	TimerHandle_t startTimerHandle = xTimerCreate( "StartChargeTimer", startChargeTimer, pdTRUE, NULL, RunStartChargeTimer);
 	xTimerReset( startTimerHandle, portMAX_DELAY);
+
+	previousStandaloneCurrent = storage_Get_StandaloneCurrent();
 
 	chargeController_Activation();
 }
@@ -263,7 +265,8 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bo
 	if(testWithNowTime == true)
 	{
 		timeinfo.tm_wday = nowTime.tm_wday;
-		timeinfo.tm_mday = timeinfo.tm_mday + (nowTime.tm_wday-2);
+		timeinfo.tm_mday = 1;//timeinfo.tm_mday + (nowTime.tm_wday-2);
+		timeinfo.tm_mon = 6;
 		timeinfo.tm_hour = nowTime.tm_hour;
 		timeinfo.tm_min = nowTime.tm_min;
 		timeinfo.tm_sec = 00;
@@ -642,9 +645,24 @@ void RunStartChargeTimer()
 		sendScheduleDiagnostics = false;
 	}
 
-	if((storage_Get_Standalone() == 1) && (opMode == CHARGE_OPERATION_STATE_REQUESTING))
+	if(storage_Get_Standalone() == 1)
 	{
-		chargeController_SendStartCommandToMCU();
+		if(opMode == CHARGE_OPERATION_STATE_REQUESTING)
+			chargeController_SendStartCommandToMCU();
+		float standaloneCurrent = storage_Get_StandaloneCurrent();
+		if (standaloneCurrent != previousStandaloneCurrent)
+		{
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standaloneCurrent);
+			if(ret == MsgWriteAck)
+			{
+				ESP_LOGW(TAG, "Updating Standalone current %2.2f -> %2.2fA", previousStandaloneCurrent, standaloneCurrent);
+				previousStandaloneCurrent = standaloneCurrent;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Failed STAC");
+			}
+		}
 	}
 
 	prevOpMode = opMode;

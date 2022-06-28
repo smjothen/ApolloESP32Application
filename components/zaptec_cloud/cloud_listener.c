@@ -2294,6 +2294,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 					//chargeController_SetTimes();
 					chargeController_Activation();
+					storage_SaveConfiguration();
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 					//chargeController_SetStartTimer();
 					responseStatus = 200;
