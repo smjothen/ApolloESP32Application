@@ -671,7 +671,13 @@ static char * convert_to_ocpp_phase(uint8_t phase_rotation){
 }
 
 // Returns 0 if it can not be determined
-static uint8_t convert_from_ocpp_phase(const char * phase_rotation, bool is_it){
+static uint8_t convert_from_ocpp_phase(char L1, char L2, char L3, bool is_it){
+	char phase_rotation[4];
+	phase_rotation[0] = L1;
+	phase_rotation[1] = L2;
+	phase_rotation[2] = L3;
+	phase_rotation[3] = '\0';
+
 	if(!is_it){
 		if(strcmp(phase_rotation, "RST") == 0){
 			return 4;
@@ -733,7 +739,9 @@ static int get_ocpp_configuration(const char * key, struct ocpp_key_value * conf
  		configuration_out->readonly = false;
 
 		char phase_rotation_str[16];
-		sprintf(phase_rotation_str, "1.%s", convert_to_ocpp_phase(storage_Get_PhaseRotation()));
+		sprintf(phase_rotation_str, "0.%s,1.%s",
+			convert_to_ocpp_phase(storage_Get_PhaseRotation()),
+			convert_to_ocpp_phase(storage_Get_PhaseRotation()));
 
 		return allocate_and_write_configuration_str(phase_rotation_str, &configuration_out->value);
 
@@ -1585,25 +1593,116 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_u32(storage_Set_ocpp_connection_timeout, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
-		char * endptr;
-		long connector_id = strtol(value, &endptr, 0);
+		/*
+		 * The go represent connector phase rotation via wire index.
+		 * OCPP uses three letters representing L1, L2, L3 optionally
+		 * prefixed by the connector. As the Go only has one connecrot,
+		 * it has been decided that it will reject a request to set
+		 * connector 0 to a different value than connector 1, and
+		 * setting either will be reported as both values updated.
+		 */
 
-		// if connector id is not present on cp or iondicate all connectors, or not followed by '.' and a valid phase_rotation
-		if((connector_id <= storage_Get_ocpp_number_of_connectors() && connector_id != 0) || strlen(endptr) != 4){
-			change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
-			return;
+		bool is_valid = true;
+		size_t max_value_count = storage_Get_ocpp_connector_phase_rotation_max_length();
+		size_t value_count = 1;
+		uint current_connector_id = 0;
+
+		char L1 = '\0';
+		char L2 = '\0';
+		char L3 = '\0';
+
+		size_t current_item_phase_count = 0;
+
+		size_t data_length = strlen(value);
+		for(size_t i = 0; i < data_length; i++){
+			if(isspace(value[i])){
+				// skip space;
+			}else if(isdigit(value[i])){ // connector id
+				if(current_item_phase_count == 0){ // if not expecting phase value
+					current_connector_id = value[i] - '0';
+					if(current_connector_id > storage_Get_ocpp_number_of_connectors()){
+						is_valid = false;
+						break;
+					}
+				}else{
+					is_valid = false;
+					break;
+				}
+			}else if(isupper(value[i])){ // phase value
+				if(value[i] == 'R' || value[i] == 'S' || value[i] == 'T'){
+					switch(++current_item_phase_count){
+					case 1:
+						if(L1 == '\0'){
+							L1 = value[i];
+						}else{
+							is_valid = (L1 == value[i]);
+						}
+						break;
+					case 2:
+						if(L2 == '\0'){
+							L2 = value[i];
+						}else{
+							is_valid = (L2 == value[i]);
+						}
+						break;
+					case 3:
+						if(L3 == '\0'){
+							L3 = value[i];
+						}else{
+							is_valid = (L3 == value[i]);
+						}
+						break;
+					default: // not expecting more phase values
+						is_valid = false;
+					}
+
+					if(is_valid == false)
+						break;
+				}else{ // invalid phase value
+					is_valid = false;
+					break;
+				}
+			}else if(ispunct(value[i])){
+				switch(value[i]){
+				case '.':
+					if(current_item_phase_count != 0)
+						is_valid = false;
+					break;
+				case ',':
+					if(current_item_phase_count == 3){ // Phase rotation item complete
+						current_item_phase_count = 0;
+						if(++value_count > max_value_count){
+							is_valid = false;
+						}
+					}else{
+						is_valid = false;
+					}
+					break;
+				default:
+					is_valid = false;
+				}
+
+				if(is_valid == false){
+					break;
+				}
+			}else if(value[i] == '\0'){
+				break;
+			}else{
+				is_valid = false;
+				break;
+			}
 		}
 
 		//TODO: find better way to check if it should be TN or IT connector wiring
-		uint8_t wire_index = convert_from_ocpp_phase(value, storage_Get_PhaseRotation() > 9);
-		if(wire_index == 0){
-			change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
-			return;
+		uint8_t wire_index = convert_from_ocpp_phase(L1, L2, L3, storage_Get_PhaseRotation() > 9);
+
+		if(!is_valid || current_item_phase_count != 3 || wire_index == 0){
+			err = -1;
+		}else{
+
+			storage_Set_PhaseRotation(wire_index);
+			err = 0;
 		}
-
-		storage_Set_PhaseRotation(wire_index);
-		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
-
 	}else if(strcmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, NULL);
 		if(err == 0)
@@ -1702,17 +1801,21 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value);
 
 	}else if(is_configuration_key(key)){
+		ESP_LOGW(TAG, "Change configuration request rejected due to rejected key: '%s'", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
 		return;
 	}else{
+		ESP_LOGW(TAG, "Change configuration for key: '%s' is not supported", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_NOT_SUPPORTED);
 		return;
 	}
 
 	if(err == 0){
+		ESP_LOGI(TAG, "Successfully configured %s", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
 		storage_SaveConfiguration();
 	}else{
+		ESP_LOGW(TAG, "Unsuccessfull in configuring %s", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
 	}
 

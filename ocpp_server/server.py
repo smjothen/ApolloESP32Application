@@ -56,6 +56,21 @@ config_keys=['AllowOfflineTxForUnknownId',
 async def call_runner(cp):
     await asyncio.sleep(2)
 
+    print('Changing phase rotation (valid)')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='ConnectorPhaseRotation',
+            value='0.RST, 1.RST')
+    )
+    print(result)
+
+    print('calling get configuration for phase rotation')
+    result = await cp.call(
+        call.GetConfigurationPayload(
+            key=['ConnectorPhaseRotation'])
+    )
+    print(result)
+
     print('Changing clock aligned interval (valid uint32)')
     result = await cp.call(
         call.ChangeConfigurationPayload(

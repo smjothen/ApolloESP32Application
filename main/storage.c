@@ -85,7 +85,7 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_authorize_remote_tx_requests = true;
 	configurationStruct.ocpp_clock_aligned_data_interval = 0;
 	configurationStruct.ocpp_connection_timeout = 0;
-	configurationStruct.ocpp_connector_phase_rotation_max_length = 1;
+	configurationStruct.ocpp_connector_phase_rotation_max_length = 2;
 	configurationStruct.ocpp_get_configuration_max_keys = 34;
 	configurationStruct.ocpp_heartbeat_interval = 86400;
 	configurationStruct.ocpp_local_authorize_offline = true;
