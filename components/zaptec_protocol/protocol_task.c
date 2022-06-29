@@ -923,7 +923,7 @@ uint8_t MCU_GetChargeOperatingMode()
 	///Used to avoid sending requesting while in paused schedule state
 	if((chargeOperationMode == CHARGE_OPERATION_STATE_REQUESTING) && (chargecontroller_IsPauseBySchedule() == true))
 	{
-		ESP_LOGE(TAG, "# Replaced REQUESTING with PAUSED #");
+		//ESP_LOGW(TAG, "# Replaced REQUESTING with PAUSED #");
 		return CHARGE_OPERATION_STATE_PAUSED;
 	}
 

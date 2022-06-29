@@ -44,7 +44,7 @@ uint16_t maxAp = 15;
 wifi_ap_record_t ap_records[15];
 
 
-//#define USE_PIN
+#define USE_PIN
 ///////////////////
 
 const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128] 		= {0x07, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -1166,7 +1166,6 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		{
 			readTimeScheduleMessageNo 	= 0;
 			timeScheduleLength 		= 0;
-			//memset(timeScheduleString, 0, SCHEDULE_SIZE);
 			timeScheduleString 		= NULL;
 			nrOfTimeSchedules 		= 0;
 		}
@@ -1216,7 +1215,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 #ifdef USE_PIN
 	//Check authentication before allowing writes
-	if((AUTH_SERV_CHAR_val[0] == 0) && (attrIndex != CHARGER_AUTH_UUID)	&& (attrIndex != CHARGER_PAIR_NFC_TAG_UUID) && (attrIndex != CHARGER_AUTH_UUID_UUID))
+	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_AUTH_UUID)	&& (attrIndex != CHARGER_PAIR_NFC_TAG_UUID) && (attrIndex != CHARGER_AUTH_UUID_UUID))
 	{
 		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
 		return;
@@ -1697,25 +1696,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     case CHARGER_TIMESCHEDULE_UUID:
     	//Write UUID
 
-		/*if(timeScheduleMessageNo == 0)
-		{
-			if(param->write.len >= 13)
-			{
-				memset(charBuf, 0, SCHEDULE_SIZE);
-				memcpy(charBuf, param->write.value, param->write.len);
-				ESP_LOGI(TAG, "Set first timeSchedule #%i -> %s", timeScheduleMessageNo, charBuf);
-
-				if(param->write.len == 13)
-				{
-					/// First and only schedule
-					storage_Set_TimeSchedule(charBuf);
-					ESP_LOGI(TAG, "Saving only timeSchedule #%i: %s", timeScheduleMessageNo,
-);
-					storage_SaveConfiguration();
-					timeScheduleMessageNo = 0;
-				}
-			}
-		}*/
 		if(writeTimeScheduleMessageNo >= 0)
 		{
 
@@ -1757,8 +1737,6 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			///Last message
 			else if(param->write.len == 13)
 			{
-				//timeScheduleMessageNo++;
-
 				///Append schedule to combined string and save
 				memcpy(&charBuf[writeTimeScheduleMessageNo * 14], param->write.value, param->write.len);
 				storage_Set_TimeSchedule(charBuf);

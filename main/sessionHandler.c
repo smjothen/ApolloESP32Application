@@ -399,7 +399,7 @@ static void sessionHandler_task()
 
     /// For developement testing only
     //SessionHandler_SetOCMFHighInterval();
-    chargeController_SetRandomStartDelay();
+
     chargeController_Init();
 
     offlineSession_Init();
@@ -668,7 +668,7 @@ static void sessionHandler_task()
 				}
 				else
 				{
-					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
+					ESP_LOGI(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
 				}
 			}
 			else
@@ -682,7 +682,6 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
-			//chargeController_SetRandomStartDelay();
 			chargeSession_Start();
 		}
 

@@ -15,7 +15,7 @@
 static const char *TAG = "CHARGECONTROL  ";
 
 
-const uint32_t maxStartDelay = 15;//600;
+const uint32_t maxStartDelay = 60;//15;//600;
 
 static uint32_t startDelayCounter = 0;
 static uint32_t randomStartDelay = 0;
@@ -48,12 +48,12 @@ void chargeController_Init()
 {
 	ESP_LOGE(TAG, "SETTING TIMER");
 	//Create timer to control chargetime countdown
-	TickType_t startChargeTimer = pdMS_TO_TICKS(2000); //1 second
+	TickType_t startChargeTimer = pdMS_TO_TICKS(1000); //1 second
 	TimerHandle_t startTimerHandle = xTimerCreate( "StartChargeTimer", startChargeTimer, pdTRUE, NULL, RunStartChargeTimer);
 	xTimerReset( startTimerHandle, portMAX_DELAY);
 
+	chargeController_SetRandomStartDelay();
 	previousStandaloneCurrent = storage_Get_StandaloneCurrent();
-
 	chargeController_Activation();
 }
 
@@ -66,7 +66,7 @@ void chargeController_Activation()
 
 	if((strncmp(storage_Get_Location(), "GBR", 3) == 0) && (strlen(storage_Get_TimeSchedule()) >= 13))
 	{
-		ESP_LOGE(TAG, "****** ENFORCING SCHEDULE AND DELAY *********");
+		ESP_LOGI(TAG, "ENFORCING SCHEDULE AND DELAY");
 		enforceScheduleAndDelay = true;
 		chargeController_SetStandaloneState(storage_Get_Standalone());
 		/// Don't need to call storage_SaveConfiguration() here because only MCU will potentially be changed
@@ -265,8 +265,8 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bo
 	if(testWithNowTime == true)
 	{
 		timeinfo.tm_wday = nowTime.tm_wday;
-		timeinfo.tm_mday = 1;//timeinfo.tm_mday + (nowTime.tm_wday-2);
-		timeinfo.tm_mon = 6;
+		timeinfo.tm_mday = 29;//timeinfo.tm_mday + (nowTime.tm_wday-2);
+		timeinfo.tm_mon = 5;
 		timeinfo.tm_hour = nowTime.tm_hour;
 		timeinfo.tm_min = nowTime.tm_min;
 		timeinfo.tm_sec = 00;
@@ -379,8 +379,6 @@ void chargeController_SetSendScheduleDiagnosticsFlag()
 */
 static uint16_t isPausedByAnySchedule = 0x0000;
 
-
-
 bool chargecontroller_IsPauseBySchedule()
 {
 	if((isScheduleActive == true) && (isPausedByAnySchedule > 0))
@@ -393,7 +391,7 @@ bool chargecontroller_IsPauseBySchedule()
 
 
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
-static char scheduleString[150] = {0};
+static char scheduleString[160] = {0};
 enum ChargerOperatingMode prevOpMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 static bool applyDelayAtBoot = true;
 static bool sentClearStartTimeAtBoot = false;
@@ -450,7 +448,7 @@ void RunStartChargeTimer()
 		{
 			if(timeSchedules[scheduleNr].isPaused == true)
 			{
-				ESP_LOGE(TAG, "******* SETTING TO FALSE *********");
+				ESP_LOGE(TAG, "SETTING TO FALSE");
 				timeSchedules[scheduleNr].isPaused = false;
 			}
 		}
@@ -465,7 +463,7 @@ void RunStartChargeTimer()
 		/// Check if now-time is within pause interval
 
 		struct tm updatedTimeStruct = {0};
-		zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * 2);
+		zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * chargeController_GetLocalTimeOffset());
 
 		/// For testing - overrides time by command
 		if(testWithNowTime)
@@ -575,7 +573,7 @@ void RunStartChargeTimer()
 		{
 			/// ACTIVE
 
-			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
 			if((opMode == CHARGE_OPERATION_STATE_DISCONNECTED) || (overrideTimer == 1))
 			{
@@ -607,7 +605,7 @@ void RunStartChargeTimer()
 
 			startDelayCounter = randomStartDelay;
 
-			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) Ov: %i", isPausedByAnySchedule, overrideTimer);
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
 			/// When schedule is paused, but MCU is active (e.g. ESP restart), then pause the MCU
 			if((opMode == CHARGE_OPERATION_STATE_CHARGING) || ((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == false)))
@@ -635,7 +633,7 @@ void RunStartChargeTimer()
 			sentClearStartTimeAtBoot = true;
 		}
 
-		ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+		//ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 		ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 	}
 
@@ -673,18 +671,10 @@ void RunStartChargeTimer()
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	if(strlen(scheduleString) >= 13)
-	{
-		randomStartDelay = (esp_random() % (maxStartDelay- 1 + 1) + 1);
-		startDelayCounter = randomStartDelay;
-	}
-	else
-	{
-		randomStartDelay = 0;
-		startDelayCounter = 0;
-	}
+	randomStartDelay = (esp_random() % (maxStartDelay - 30 + 1) + 30);
+	startDelayCounter = randomStartDelay;
 
-	ESP_LOGE(TAG, "********* StartDelayCounter set to %i **************", startDelayCounter);
+	ESP_LOGW(TAG, "StartDelayCounter set to %i", startDelayCounter);
 }
 
 
@@ -729,8 +719,6 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 		{
 			ESP_LOGW(TAG, "Sent start Command to MCU FAILED");
 		}
-
-
 
 	}
 	else if(((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) || (chOpMode == CHARGE_OPERATION_STATE_CHARGING)) && (storage_Get_Standalone() == 0) && (isPausedByAnySchedule == 0) && (startDelayCounter == 0))
