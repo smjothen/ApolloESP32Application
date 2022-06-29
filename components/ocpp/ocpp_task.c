@@ -117,13 +117,27 @@ int add_call(struct ocpp_call_with_cb * message, enum call_type type){
 			return -1;
 		}
 		break;
+	default:
+		ESP_LOGE(TAG, "Unable to add call: Invalid call_type");
+		return -1;
 	}
 	return 0;
+}
+
+static uint8_t enqueue_blocking_mask = 0;
+
+void block_enqueue_call(uint8_t call_type_mask){
+	enqueue_blocking_mask = call_type_mask;
 }
 
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
+		return -1;
+	}
+
+	if(enqueue_blocking_mask & type){
+		ESP_LOGW(TAG, "Enqueue is blocked by mask");
 		return -1;
 	}
 
@@ -146,6 +160,27 @@ int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callba
 	}
 
 	return err;
+}
+
+static uint8_t call_blocking_mask = 0;
+
+void block_sending_call(uint8_t call_type_mask){
+	call_blocking_mask = call_type_mask;
+}
+
+size_t enqueued_call_count(){
+	size_t count = 0;
+
+	if(!(call_blocking_mask & eOCPP_CALL_GENERIC))
+		count += uxQueueMessagesWaiting(ocpp_call_queue);
+
+	if(!(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED))
+		count += uxQueueMessagesWaiting(ocpp_transaction_call_queue);
+
+	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING))
+		count += uxQueueMessagesWaiting(ocpp_blocking_call_queue);
+
+	return count;
 }
 
 static void reset_heartbeat_timer(void){
@@ -299,7 +334,8 @@ int send_next_call(){
 		}
 	}
 	// Attempt to get call from prioritized queue
-	if(xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+	if((call_blocking_mask & eOCPP_CALL_BLOCKING)
+		|| xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
 
 		// We check for failed transactions as they SHOULD be delivered chronologically
 		if(failed_transaction != NULL){
@@ -310,15 +346,21 @@ int send_next_call(){
 				last_transaction_timestamp = time(NULL);
 			}else{
 				// if the failed transaction was attempted recently, then we send other calls while waiting.
-				if(xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+				if((call_blocking_mask & eOCPP_CALL_GENERIC)
+					|| xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+
 					xSemaphoreGive(ocpp_active_call_lock_1);
 					return -1;
 				}
 			}
 		}
 		else{
-			if(xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
-				if(xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+			if((call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED)
+				|| xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+
+				if((call_blocking_mask & eOCPP_CALL_GENERIC)
+					|| xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+
 					xSemaphoreGive(ocpp_active_call_lock_1);
 					return -1;
 				}
@@ -712,6 +754,8 @@ void stop_ocpp(void){
 	clean_listener();
 
 	clear_active_call();
+	block_enqueue_call(0);
+	block_sending_call(0);
 
 	ESP_LOGW(TAG, "Web socket closed and state cleared");
 	return;

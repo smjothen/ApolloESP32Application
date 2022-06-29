@@ -311,6 +311,21 @@ bool sessionHandler_OcppTransactionIsActive(uint connector_id){
 	}
 }
 
+void sessionHandler_OcppStopTransaction(const char * reason){
+	ESP_LOGI(TAG, "Stopping charging");
+
+	MessageType ret = MCU_SendCommandId(CommandStopCharging);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU stop charging command OK");
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU stop charging final command FAILED");
+	}
+	chargeSession_SetStoppedReason(reason);
+}
+
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
 		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
@@ -459,7 +474,6 @@ static void stop_sample_interval(){
 }
 
 void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
-
 	if(transaction_id == -1){
 		ESP_LOGE(TAG, "Transaction id not set, unable to stop transaction");
 		return;

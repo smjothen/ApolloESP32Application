@@ -14,9 +14,9 @@
  * Determins queueing of outgoing calls and error handling in case of transactions.
  */
 enum call_type{
-	eOCPP_CALL_GENERIC = 0,
-	eOCPP_CALL_TRANSACTION_RELATED,
-	eOCPP_CALL_BLOCKING
+	eOCPP_CALL_GENERIC = 1<<0,
+	eOCPP_CALL_TRANSACTION_RELATED = 1<<1,
+	eOCPP_CALL_BLOCKING = 1<<2,
 };
 
 /**
@@ -28,6 +28,8 @@ int send_call_reply(cJSON * call);
  * Used to send new action calls originating from the charge point once all prior calls have finished
  */
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type);
+void block_enqueue_call(uint8_t call_type_mask);
+size_t enqueued_call_count();
 
 int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
 void stop_ocpp(void);
@@ -45,6 +47,7 @@ void clear_active_call(void);
 const char * get_active_call_id(void);
 
 int handle_ocpp_call(void);
+void block_sending_call(uint8_t call_type_mask);
 
 int complete_boot_notification_process(char * serial_nr);
 
