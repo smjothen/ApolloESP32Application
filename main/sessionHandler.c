@@ -45,6 +45,7 @@
 #include "types/ocpp_charge_point_error_code.h"
 #include "types/ocpp_ci_string_type.h"
 #include "ocpp_listener.h"
+#include "ocpp_task.h"
 
 static const char *TAG = "SESSION        ";
 
@@ -858,8 +859,9 @@ static int change_availability(uint8_t is_operative){
 // See transition table in section on Status notification in ocpp 1.6 specification
 static enum ocpp_cp_status_id get_ocpp_state(){
 
-	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first
-	if(storage_Get_IsEnabled() == 0){
+	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first.
+	// We also require the the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
+	if(storage_Get_IsEnabled() == 0 || get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 	}
 
