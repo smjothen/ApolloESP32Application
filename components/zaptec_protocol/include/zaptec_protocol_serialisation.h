@@ -140,7 +140,7 @@
         TimeZone = 761,
         TimeSchedule = 762,
         NextScheduleEvent = 763,
-		RandomStartDelay = 764,
+		MaxStartDelay = 764,
 
         InstallationId = 800, // String / Guid
         RoutingId = 801, // Int

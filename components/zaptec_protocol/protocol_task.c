@@ -16,6 +16,7 @@
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
 #include "../../main/chargeController.h"
+#include "../../main/chargeSession.h"
 
 const char *TAG = "MCU            ";
 
@@ -924,7 +925,10 @@ uint8_t MCU_GetChargeOperatingMode()
 	if((chargeOperationMode == CHARGE_OPERATION_STATE_REQUESTING) && (chargecontroller_IsPauseBySchedule() == true))
 	{
 		//ESP_LOGW(TAG, "# Replaced REQUESTING with PAUSED #");
-		return CHARGE_OPERATION_STATE_PAUSED;
+		if(chargeSession_HasNewSessionId() == true)
+			return CHARGE_OPERATION_STATE_PAUSED;
+		else
+			return CHARGE_OPERATION_STATE_REQUESTING;
 	}
 
 	return chargeOperationMode;

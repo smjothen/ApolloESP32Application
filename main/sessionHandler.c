@@ -534,6 +534,15 @@ static void sessionHandler_task()
 
 		if(chargeSession_HasNewSessionId() == true)
 		{
+			if(chargecontroller_IsPauseBySchedule() == true)
+			{
+				///In order to avoid receiving a start command when connecting during schedule paused state,
+				/// then when a new sessionId is received, the charger must send the paused state before
+				/// replying the new SessionID back to Cloud. The delay does not guarantee order of deliver(!)
+				publish_uint32_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_PAUSED);
+				vTaskDelay(1000 / portTICK_PERIOD_MS);
+			}
+
 			int ret = publish_string_observation(SessionIdentifier, chargeSession_GetSessionId());
 			if(ret == 0)
 				chargeSession_ClearHasNewSession();

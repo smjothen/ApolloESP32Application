@@ -448,7 +448,7 @@ void RunStartChargeTimer()
 		{
 			if(timeSchedules[scheduleNr].isPaused == true)
 			{
-				ESP_LOGE(TAG, "SETTING TO FALSE");
+				//ESP_LOGE(TAG, "SETTING TO FALSE");
 				timeSchedules[scheduleNr].isPaused = false;
 			}
 		}
@@ -579,7 +579,7 @@ void RunStartChargeTimer()
 			{
 				startDelayCounter = 0;
 
-				ESP_LOGW(TAG, "DISCONNECTED OUTSIDE SCHDULE -> REMOVE DELAY");
+				//ESP_LOGW(TAG, "DISCONNECTED OUTSIDE SCHDULE -> REMOVE DELAY");
 
 				if(overrideTimer == 1)
 				{
