@@ -343,7 +343,8 @@ static void i2cDevice_task(void *pvParameters)
 			{
 				prodtest_on_nfc_read();
 			}
-			else if((nfcCardDetected > 0) && (MCU_GetChargeMode() == 12) && (isNfcTagPairing == false))
+			else if((nfcCardDetected > 0) && (MCU_GetChargeMode() == 12) && (isNfcTagPairing == false)
+				&& storage_Get_session_type_ocpp() == false)
 			{
 				audio_play_single_biip();
 				ESP_LOGW(TAG, "Card working, clearing...");

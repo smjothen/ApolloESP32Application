@@ -56,6 +56,14 @@ config_keys=['AllowOfflineTxForUnknownId',
 async def call_runner(cp):
     await asyncio.sleep(2)
 
+    print('Changing connection timeout')
+    result = await cp.call(
+        call.ChangeConfigurationPayload(
+            key='ConnectionTimeOut',
+            value='30')
+    )
+    print(result)
+
     print('Changing phase rotation (valid)')
     result = await cp.call(
         call.ChangeConfigurationPayload(

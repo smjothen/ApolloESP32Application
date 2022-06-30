@@ -870,13 +870,22 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 
 	case CHARGE_OPERATION_STATE_DISCONNECTED:
-		//TODO:
-		// "When a Charge Point is configured with StopTransactionOnEVSideDisconnect set to false, a transaction is running and
-		// the EV becomes disconnected on EV side, then a StatusNotification.req with the state: SuspendedEV
-		// SHOULD be send to the Central System, with the 'errorCode' field set to: 'NoError'.
-		// The Charge Point SHOULD add additional information in the 'info' field, Notifying the Central System with the reason of suspension:
-		// 'EV side disconnected'. The current transaction is not stopped."
-		return eOCPP_CP_STATUS_AVAILABLE;
+		/*
+		 * TODO: The specification states:
+		 * "When a Charge Point is configured with StopTransactionOnEVSideDisconnect set to false,
+		 * a transaction is running and the EV becomes disconnected on EV side,
+		 * then a StatusNotification.req with the state: SuspendedEV SHOULD be send to the Central System,
+		 * with the 'errorCode' field set to: 'NoError'. The Charge Point SHOULD add additional information
+		 * in the 'info' field, Notifying the Central System with the reason of suspension:
+		 * 'EV side disconnected'. The current transaction is not stopped."
+		 */
+
+		if(isAuthorized || pending_ocpp_authorize){
+			return eOCPP_CP_STATUS_PREPARING;
+
+		}else{
+			return eOCPP_CP_STATUS_AVAILABLE;
+		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING: // TODO: Add support for transition B6
 		if(ocpp_finishing_session // not transitioning away from FINISHED
@@ -1328,6 +1337,15 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	ocpp_old_state = new_state;
 }
 
+static bool has_new_id_token(){
+	return (NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false);
+}
+
+static void handle_available(){
+	if(has_new_id_token()) // This will always be false as NFCClearTag() is called by i2cDevices.c if car is disconnected
+		authorize(NFCGetTagInfo());
+}
+
 static void handle_preparing(){
 	/**
 	 * From ocpp protocol 1.6 section 3.6:
@@ -1349,30 +1367,54 @@ static void handle_preparing(){
 
 			//This must be set to stop replying the same SessionIds to cloud
 			chargeSession_SetReceivedStartChargingCommand();
+
+			//Clear authorization for next request
+			SetAuthorized(false);
 		}
-	}else if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+	}else if(has_new_id_token()){
 		authorize(NFCGetTagInfo());
+
+	}else if(isAuthorized && MCU_GetChargeMode() == eCAR_DISCONNECTED){
+		if(preparing_started + storage_Get_ocpp_connection_timeout() < time(NULL)){
+			ESP_LOGW(TAG, "Cable was not connected within connection timeout, removind authorization");
+
+			audio_play_nfc_card_denied();
+			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU authorization denied command OK");
+			}
+			else
+			{
+				ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+			}
+			SetAuthorized(false);
+			chargeSession_ClearAuthenticationCode();
+		}
+		else{
+			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %ld/%d", time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
+		}
 	}
 }
 
 static void handle_charging(){
-	if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+	if(has_new_id_token()){
 		authorize_stop(NFCGetTagInfo().idAsString);
 		NFCTagInfoClearValid();
 	}
 }
 
 static void handle_finishing(){
-	if((NFCGetTagInfo().tagIsValid == true) && (chargeSession_Get().StoppedByRFID == false) && (pending_ocpp_authorize == false)){
+	if(has_new_id_token()){
 		authorize(NFCGetTagInfo());
 		ocpp_finishing_session = false;
 	}
-
 }
 
 static void handle_state(enum ocpp_cp_status_id state){
 	switch(state){
 	case eOCPP_CP_STATUS_AVAILABLE:
+		handle_available();
 		break;
 	case eOCPP_CP_STATUS_PREPARING:
 		handle_preparing();
