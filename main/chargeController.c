@@ -83,7 +83,9 @@ void chargeController_Activation()
 	ESP_LOGW(TAG, "Schedule: %s, %s, %s, SCHEDULE %s", storage_Get_Location(), storage_Get_Timezone(), storage_Get_TimeSchedule(), isScheduleActive ? "ON" : "OFF");
 }
 
-
+/*
+ * @TODO Stephen: Please make the timeZoneOffset depend on whether summer/wintertime is used in the given timezone
+ */
 int chargeController_GetLocalTimeOffset()
 {
 	char * timezone = storage_Get_Timezone();
@@ -223,28 +225,15 @@ void chargeController_SetNowTime(char * timeString)
 
 }
 
-/*char * GetDayAsString(int dayNr)
-{
-	if(dayNr == 0)
-		return "Sunday";
-	else if(dayNr == 1)
-		return "Monday";
-	else if(dayNr == 2)
-		return "Tuesday";
-	else if(dayNr == 3)
-		return "Wednesday";
-	else if(dayNr == 4)
-		return "Thursday";
-	else if(dayNr == 5)
-		return "Friday";
-	else if(dayNr == 6)
-		return "Saturday";
-	else
-		return "";
-}*/
 
 static char startTimeString[32] = {0};
 static bool hasNewStartTime = false;
+
+
+/*
+ * @TODO Stephen: When calculating the next start time in UTC, we have to know if there is a DST change between now and when the next start occur, so that the next start time
+ * is calculated correctly from the schedule time that is given in local time.
+ */
 static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bool isNextDayPauseDay)
 {
 	int stopSchedule = currentSchedule;
@@ -265,7 +254,9 @@ static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bo
 	if(testWithNowTime == true)
 	{
 		timeinfo.tm_wday = nowTime.tm_wday;
-		timeinfo.tm_mday = 29;//timeinfo.tm_mday + (nowTime.tm_wday-2);
+
+		/// For development, set the date to test with
+		timeinfo.tm_mday = 29;
 		timeinfo.tm_mon = 5;
 		timeinfo.tm_hour = nowTime.tm_hour;
 		timeinfo.tm_min = nowTime.tm_min;
@@ -390,15 +381,27 @@ bool chargecontroller_IsPauseBySchedule()
 }
 
 
+
+
+
+
 static uint16_t previousIsPausedByAnySchedule = 0x0000;
 static char scheduleString[160] = {0};
 enum ChargerOperatingMode prevOpMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 static bool applyDelayAtBoot = true;
 static bool sentClearStartTimeAtBoot = false;
 
+static bool pausedByCloudCommand = false;
+void chargeController_SetPauseByCloudCommand(bool pausedState)
+{
+	if(isPausedByAnySchedule == 0)
+		pausedByCloudCommand = pausedState;
+}
+
 void RunStartChargeTimer()
 {
-	/*printf("Total library db size: %d B\n", sizeof(zone_rules) + sizeof(zone_abrevs) + sizeof(zone_defns) + sizeof(zone_names));
+	/* TESTING LIBRARIES - TO BE REMOVED
+	 printf("Total library db size: %d B\n", sizeof(zone_rules) + sizeof(zone_abrevs) + sizeof(zone_defns) + sizeof(zone_names));
 
 	udatetime_t dt = {0};
 	dt.date.year = 17;
@@ -437,6 +440,7 @@ void RunStartChargeTimer()
 	{
 		startDelayCounter = randomStartDelay;
 		applyDelayAtBoot = false;
+
 	}
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
@@ -455,6 +459,8 @@ void RunStartChargeTimer()
 
 		hasBeenDisconnected = false;
 		chargeController_ClearNextStartTime();
+
+		pausedByCloudCommand = false;
 	}
 
 
@@ -575,7 +581,13 @@ void RunStartChargeTimer()
 
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
-			if((opMode == CHARGE_OPERATION_STATE_DISCONNECTED) || (overrideTimer == 1))
+			if(opMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+			{
+				ESP_LOGW(TAG, "Clearing overrideTimer");
+				overrideTimer = 0;
+			}
+
+			if(overrideTimer == 1)
 			{
 				startDelayCounter = 0;
 
@@ -588,15 +600,19 @@ void RunStartChargeTimer()
 				}
 			}
 
+
 			if((startDelayCounter > 0) && (opMode == CHARGE_OPERATION_STATE_PAUSED))// || (overrideTimer == 1))
 			{
 				startDelayCounter--;
 			}
 
-			if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0) && (GetFinalStopActiveStatus() == true))
+			if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0))
 			{
-				ESP_LOGW(TAG, "***** Schedule ended -> sending resume command to MCU ******");
-				chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+				if(pausedByCloudCommand == false)
+				{
+					ESP_LOGW(TAG, "***** Schedule ended -> sending resume command to MCU ******");
+					chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+				}
 			}
 		}
 		else
@@ -635,6 +651,15 @@ void RunStartChargeTimer()
 
 		//ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 		ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
+	}
+	else
+	{
+		isPausedByAnySchedule = 0x0000;
+		if(startDelayCounter > 0)
+		{
+			startDelayCounter--;
+			ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
+		}
 	}
 
 	if(sendScheduleDiagnostics == true)
@@ -681,6 +706,7 @@ void chargeController_SetRandomStartDelay()
 void chargeController_ClearRandomStartDelay()
 {
 	randomStartDelay = 0;
+	startDelayCounter = 0;
 }
 
 

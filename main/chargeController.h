@@ -25,7 +25,8 @@ enum ChargeSource
 	eCHARGE_SOURCE_CLOUD 	  	= 2,
 	eCHARGE_SOURCE_START_OFFLINE= 3,
 	eCHARGE_SOURCE_GONE_OFFLINE = 4,
-	eCHARGE_SOURCE_SCHEDULE	= 5
+	eCHARGE_SOURCE_SCHEDULE	= 5,
+	eCHARGE_SOURCE_NO_SCHEDULE	= 6
 };
 
 void RunStartChargeTimer();
@@ -37,6 +38,7 @@ bool chargeController_SendStartCommandToMCU();
 void chargeController_Init();
 void chargeController_Activation();
 bool chargecontroller_IsPauseBySchedule();
+void chargeController_SetPauseByCloudCommand(bool pauseState);
 
 void chargeController_ClearNextStartTime();
 bool chargeController_CheckForNewScheduleEvent();

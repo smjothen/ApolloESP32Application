@@ -1385,6 +1385,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
 			SetFinalStopActiveStatus(1);
 			chargeController_CancelOverride();
+			chargeController_SetPauseByCloudCommand(true);
 		}
 		else
 		{
@@ -1405,6 +1406,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			SetFinalStopActiveStatus(0);
 			sessionHandler_ClearCarInterfaceResetConditions();
 			chargeController_Override();
+			chargeController_SetPauseByCloudCommand(false);
 		}
 		else
 		{
@@ -2286,15 +2288,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					int end = strlen(commandString);
 					commandString[end-2] = '\0';
 					if(end >= 19)
+					{
 						chargeController_WriteNewTimeSchedule(&commandString[4]);
+						chargeController_Activation();
+						storage_SaveConfiguration();
+						chargeController_SetRandomStartDelay();
+					}
 					else
 					{
 						char* p = "";
 						chargeController_WriteNewTimeSchedule(p);
+						chargeController_Activation();
+						storage_SaveConfiguration();
+						chargeController_ClearRandomStartDelay();
+						chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
 					}
 					//chargeController_SetTimes();
-					chargeController_Activation();
-					storage_SaveConfiguration();
+
+
+
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 					//chargeController_SetStartTimer();
 					responseStatus = 200;
