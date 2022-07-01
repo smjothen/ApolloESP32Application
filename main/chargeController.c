@@ -581,12 +581,6 @@ void RunStartChargeTimer()
 
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
-			if(opMode == CHARGE_OPERATION_STATE_DISCONNECTED)
-			{
-				ESP_LOGW(TAG, "Clearing overrideTimer");
-				overrideTimer = 0;
-			}
-
 			if(overrideTimer == 1)
 			{
 				startDelayCounter = 0;
@@ -601,7 +595,7 @@ void RunStartChargeTimer()
 			}
 
 
-			if((startDelayCounter > 0) && (opMode == CHARGE_OPERATION_STATE_PAUSED))// || (overrideTimer == 1))
+			if((startDelayCounter > 0) && ((opMode == CHARGE_OPERATION_STATE_PAUSED) || (opMode == CHARGE_OPERATION_STATE_REQUESTING)))// || (overrideTimer == 1))
 			{
 				startDelayCounter--;
 			}
@@ -686,6 +680,13 @@ void RunStartChargeTimer()
 				ESP_LOGE(TAG, "Failed STAC");
 			}
 		}
+	}
+
+	if(opMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+	{
+		//ESP_LOGW(TAG, "Clearing overrideTimer");
+		overrideTimer = 0;
+		startDelayCounter = 0;
 	}
 
 	prevOpMode = opMode;
