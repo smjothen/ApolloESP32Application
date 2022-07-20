@@ -11,6 +11,8 @@
 #include "../components/ntp/zntp.h"
 #include "storage.h"
 #include "zaptec_cloud_observations.h"
+#include "utz.h"
+#include "zones.h"
 
 static const char *TAG = "CHARGECONTROL  ";
 
@@ -44,6 +46,9 @@ struct TimeSchedule
 static struct TimeSchedule timeSchedules[14] = {0};
 static bool isScheduleActive = false;
 static float previousStandaloneCurrent = 0.0;
+
+static utz_t ctx = {0};
+
 void chargeController_Init()
 {
 	ESP_LOGE(TAG, "SETTING TIMER");
@@ -83,26 +88,92 @@ void chargeController_Activation()
 	ESP_LOGW(TAG, "Schedule: %s, %s, %s, SCHEDULE %s", storage_Get_Location(), storage_Get_Timezone(), storage_Get_TimeSchedule(), isScheduleActive ? "ON" : "OFF");
 }
 
-/*
- * @TODO Stephen: Please make the timeZoneOffset depend on whether summer/wintertime is used in the given timezone
- */
-int chargeController_GetLocalTimeOffset()
+static udatetime_t nowTime = {0};
+static ulocaltime_t nowTimeLocal = {0};
+static bool testWithNowTime = false;
+
+int chargeController_GetZone(uzone_t *zone) {
+	char *zoneId = storage_Get_Timezone();
+
+	if (utz_zone_by_id(&ctx, zoneId, zone)) {
+		ESP_LOGW(TAG, "UTZ           : Unknown zone %s, defaulting to Etc/UTC", zoneId);
+		if (utz_zone_by_id(&ctx, "Etc/UTC", zone)) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+void chargeController_SetNowTime(char * timeString)
 {
-	char * timezone = storage_Get_Timezone();
-	int timeZoneOffset = 0;
+	char buf[64];
 
-	if(strcmp("Europe/Oslo", timezone) == 0)
+	if(utz_datetime_parse_iso(timeString, &nowTime) == 0)
 	{
-		timeZoneOffset = 2;
+		testWithNowTime = true;
+
+		uzone_t zone;
+		chargeController_GetZone(&zone);
+
+		nowTimeLocal.datetime = nowTime;
+		utz_local_resolve(&ctx, &nowTimeLocal, &zone);
+
+		utz_datetime_format_iso(buf, sizeof (buf), &nowTimeLocal.datetime);
+		ESP_LOGI(TAG, "UTZ    NOWTIME: Set %s", buf);
+		utz_datetime_format_iso(buf, sizeof (buf), &nowTimeLocal.utctime);
+		ESP_LOGI(TAG, "UTZ    NOWTIME: Set %s UTC", buf);
+	}
+	else
+	{
+		testWithNowTime = false;
+		ESP_LOGI(TAG, "UTZ    NOWTIME: Cleared");
+	}
+}
+
+int chargeController_GetWeekDay(ulocaltime_t *localTime) {
+	if (testWithNowTime) {
+		return utz_datetime_day_of_week(&nowTimeLocal.datetime);
 	}
 
-	if(strcmp("Europe/London", timezone) == 0)
-	{
-		timeZoneOffset = 1;
+	return utz_datetime_day_of_week(&localTime->datetime);
+}
+
+/*
+ * Calculates the local time for an IANA zone at a given UTC time.
+ * Returns the local offset (in seconds) from UTC.
+ */
+int chargeController_GetLocalTime(udatetime_t *utcTime, ulocaltime_t *localTime)
+{
+	if (testWithNowTime) {
+		*localTime = nowTimeLocal;
+		return nowTimeLocal.offset;
 	}
 
-	///Default to UTC + 0
-	return timeZoneOffset;
+	uzone_t zone;
+	chargeController_GetZone(&zone);
+
+	utz_utc_to_local(&ctx, utcTime, localTime, &zone);
+	return localTime->offset;
+}
+
+/*
+ * Calculates the current local time for an IANA zone.
+ * Returns the local offset (in seconds) from UTC.
+ */
+int chargeController_GetLocalTimeNow(ulocaltime_t *localTime) {
+	udatetime_t utcNow;
+	utz_datetime_init_utc(&utcNow);
+	return chargeController_GetLocalTime(&utcNow, localTime);
+}
+
+/*
+ * Returns the local offset (in seconds) from UTC.
+ */
+int chargeController_GetLocalTimeOffset(udatetime_t *utcTime)
+{
+	ulocaltime_t localTime;
+	return chargeController_GetLocalTime(utcTime, &localTime);
 }
 
 void chargeController_WriteNewTimeSchedule(char * timeSchedule)
@@ -165,6 +236,7 @@ void chargeController_SetTimes()
 				timeSchedules[i].StopHour = 24;
 
 			timeSchedules[i].StopTotalMinutes = timeSchedules[i].StopHour * 60 + timeSchedules[i].StopMin;
+			timeSchedules[i].SpanToNextDay = false;
 
 			if(i > 0)
 			{
@@ -200,122 +272,54 @@ void chargeController_CancelOverride()
 		overrideTimer = 0;
 }
 
-static struct tm nowTime = {0};
-static bool testWithNowTime = false;
-void chargeController_SetNowTime(char * timeString)
-{
-	if(strlen(timeString) == 5)
-	{
-		int intStr = atoi(timeString);
-		nowTime.tm_wday = intStr/10000;
-
-		nowTime.tm_min = atoi(&timeString[3]);
-		timeString[3] = '\0';
-
-		nowTime.tm_hour = atoi(&timeString[1]);
-
-		testWithNowTime = true;
-		ESP_LOGW(TAG, "Test nowTime: %id %02i:%02i",nowTime.tm_wday, nowTime.tm_hour, nowTime.tm_min);
-	}
-	else
-	{
-		testWithNowTime = false;
-		ESP_LOGW(TAG, "Cleared nowTime or invalid arg!");
-	}
-
-}
-
-
 static char startTimeString[32] = {0};
 static bool hasNewStartTime = false;
 
-
 /*
- * @TODO Stephen: When calculating the next start time in UTC, we have to know if there is a DST change between now and when the next start occur, so that the next start time
- * is calculated correctly from the schedule time that is given in local time.
+ * Calculates the next charge start time in UTC from the stop time of the schedule in local time.
  */
-static void chargeController_SetNextStartTime(int dayNr, int currentSchedule, bool isNextDayPauseDay)
+static void chargeController_SetNextStartTime(ulocaltime_t *localTimeNow, int currentSchedule, bool isNextDayPauseDay)
 {
-	int stopSchedule = currentSchedule;
-
-	if((timeSchedules[currentSchedule].SpanToNextDay == true) && (isNextDayPauseDay == true))
-		stopSchedule = currentSchedule + 1;
-
-	int offsetFromUTC = chargeController_GetLocalTimeOffset();
-
-	/// Make UTC time string for the same day
-	time_t nowSecUTC = 0;
-	struct tm timeinfo = { 0 };
-
-	/// NowTime for comparison
-	time(&nowSecUTC);
-	localtime_r(&nowSecUTC, &timeinfo);
-
-	if(testWithNowTime == true)
-	{
-		timeinfo.tm_wday = nowTime.tm_wday;
-
-		/// For development, set the date to test with
-		timeinfo.tm_mday = 29;
-		timeinfo.tm_mon = 5;
-		timeinfo.tm_hour = nowTime.tm_hour;
-		timeinfo.tm_min = nowTime.tm_min;
-		timeinfo.tm_sec = 00;
-		nowSecUTC = mktime(&timeinfo);
-	}
-
-	/// Midnight for comparison
-	timeinfo.tm_hour = 23;
-	timeinfo.tm_min = 59;
-	timeinfo.tm_sec = 59;
-	time_t secAtMidnightUTC = mktime(&timeinfo) + 1;
-
-	/// Stoptime for comparision
-	timeinfo.tm_hour = timeSchedules[stopSchedule].StopHour;
-	timeinfo.tm_min = timeSchedules[stopSchedule].StopMin;
-	timeinfo.tm_sec = 0;
-	time_t secAtStopLocal = mktime(&timeinfo);
-
-	time_t secAtStopUTC = secAtStopLocal - (3600 * offsetFromUTC);
-
-
-	/// Use NowTime, Midnight time and StopTime to determine end of pause interval in UTC
-
-	//To low sec - must be next day
-	if(secAtStopUTC < nowSecUTC)
-	{
-		secAtStopUTC += 86400;
-		ESP_LOGW(TAG, "***** 1. Tomorrow *****");
-	}
-	//Within the remaining day
-	else if((secAtStopUTC >= nowSecUTC) && (secAtStopUTC < secAtMidnightUTC))
-	{
-		ESP_LOGW(TAG, "***** 2. Today *****");
-	}
-	//Tomorrow
-	else if (secAtStopUTC >= secAtMidnightUTC)
-	{
-		secAtStopUTC += 86400;
-		ESP_LOGW(TAG, "***** 3. Tomorrow *****");
-	}
-	else
-	{
-		ESP_LOGW(TAG, "***** 4. UNDEFINED *****");
-	}
-
-
-	///Add the random delay to the stop time before converting to tm-struct time
-	secAtStopUTC += randomStartDelay;
-
-	localtime_r(&secAtStopUTC, &timeinfo);
-
 	char strftime_buf[64] = {0};
 
-	strftime(strftime_buf, sizeof(strftime_buf), "%Y-%02m-%02dT%02H:%02M:%02SZ", &timeinfo);
+	uzone_t zone;
+	chargeController_GetZone(&zone);
 
+	int stopSchedule = currentSchedule;
+
+	if(timeSchedules[currentSchedule].SpanToNextDay && isNextDayPauseDay)
+		stopSchedule = currentSchedule + 1;
+
+	// Copy so we don't overwrite original value
+	udatetime_t stopLocal = localTimeNow->datetime;
+	// Local date with schedule stop time
+	utz_set_hms(&stopLocal, timeSchedules[stopSchedule].StopHour, timeSchedules[stopSchedule].StopMin, 0);
+
+	if (utz_datetime_compare(&localTimeNow->datetime, &stopLocal) >= 0) {
+		ESP_LOGI(TAG, "***** 1. Tomorrow *****");
+		utz_datetime_add(&stopLocal, &stopLocal, 86400 + randomStartDelay);
+	} else {
+		ESP_LOGI(TAG, "***** 2. Today *****");
+		utz_datetime_add(&stopLocal, &stopLocal, randomStartDelay);
+	}
+
+	// Now convert local to UTC to take into account DST/TZ changes
+	udatetime_t stopUTC;
+	int offset = utz_local_to_utc(&ctx, &stopLocal, &stopUTC, &zone);
+
+	int offHours = offset / 3600;
+	int offMins = (abs(offset) % 3600) / 60;
+
+	ESP_LOGI(TAG, "UTZ       ZONE: %s", zone.name);
+	utz_datetime_format_iso(strftime_buf, sizeof (strftime_buf), &stopLocal);
+	ESP_LOGI(TAG, "UTZ STOP LOCAL: %s (UTC%+d:%02d)", strftime_buf, offHours, offMins);
+	utz_datetime_format_iso_utc(strftime_buf, sizeof (strftime_buf), &stopUTC);
+	ESP_LOGI(TAG, "UTZ   STOP UTC: %s", strftime_buf);
+
+	utz_datetime_format_iso_utc(strftime_buf, sizeof (strftime_buf), &stopUTC);
 	strcpy(startTimeString, strftime_buf);
 
-	ESP_LOGW(TAG, "************** START TIME UTC: %s ****************", startTimeString);
+	ESP_LOGI(TAG, "************** START TIME UTC: %s ****************", startTimeString);
 
 	hasNewStartTime = true;
 }
@@ -363,11 +367,6 @@ void chargeController_SetSendScheduleDiagnosticsFlag()
 	sendScheduleDiagnostics = true;
 }
 
-//#include "zones.h"
-//#include "../components/micro_tz_db/zones.h"
-/*#include "../components/utz/utz.h"
-#include "../components/utz/zones.h"
-*/
 static uint16_t isPausedByAnySchedule = 0x0000;
 
 bool chargecontroller_IsPauseBySchedule()
@@ -400,39 +399,6 @@ void chargeController_SetPauseByCloudCommand(bool pausedState)
 
 void RunStartChargeTimer()
 {
-	/* TESTING LIBRARIES - TO BE REMOVED
-	 printf("Total library db size: %d B\n", sizeof(zone_rules) + sizeof(zone_abrevs) + sizeof(zone_defns) + sizeof(zone_names));
-
-	udatetime_t dt = {0};
-	dt.date.year = 17;
-	dt.date.month = 9;
-	dt.date.dayofmonth = 26;
-	dt.time.hour = 1;
-	dt.time.minute = 0;
-	dt.time.second = 0;
-
-	uzone_t active_zone;
-	get_zone_by_name("Europe/Oslo", active_zone);
-	uoffset_t offset;
-	char c = get_current_offset(&active_zone, &dt, &offset);
-	printf("%s, current offset: %d.%d\n", active_zone.name, offset.hours, offset.minutes / 60);
-	printf(active_zone.abrev_formatter, c);
-	printf("\n");*/
-
-	/*time_t now;
-	time(&now);
-	struct tm timeinfo;
-	char strftime_buf[64];
-	const char * posix_str = micro_tz_db_get_posix_str("Europe/Oslo");
-	ESP_LOGE(TAG, "********************** TIME LIB STRING %s ************************", posix_str);
-*/
-    /*setenv("TZ", posix_str, 1);
-    tzset();
-
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    printf("The current date/time is: %s\n", strftime_buf);
-*/
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
 
 	/// When booting with car connected, the random delay should always be applied
@@ -468,44 +434,35 @@ void RunStartChargeTimer()
 	{
 		/// Check if now-time is within pause interval
 
-		struct tm updatedTimeStruct = {0};
-		zntp_GetLocalTimeZoneStruct(&updatedTimeStruct, 3600 * chargeController_GetLocalTimeOffset());
+		ulocaltime_t localTimeNow;
+		chargeController_GetLocalTimeNow(&localTimeNow);
 
-		/// For testing - overrides time by command
-		if(testWithNowTime)
-		{
-			updatedTimeStruct.tm_wday = nowTime.tm_wday;
-			updatedTimeStruct.tm_hour = nowTime.tm_hour;
-			updatedTimeStruct.tm_min = nowTime.tm_min;
-			updatedTimeStruct.tm_sec = 00;
-		}
+		udatetime_t *localDtNow = &localTimeNow.datetime;
 
-		int minutesNow = updatedTimeStruct.tm_hour * 60 + updatedTimeStruct.tm_min;
+		// 1 = Monday, ..., 7 = Sunday
+		int weekDay = chargeController_GetWeekDay(&localTimeNow);
+		int weekDayTom = weekDay == 7 ? 1 : weekDay + 1;
 
-		int tomorrow = updatedTimeStruct.tm_wday + 1;
-		if (tomorrow == 7)
-			tomorrow = 0;
+		int dayMask = 1 << (weekDay - 1);
+		int dayMaskTom = 1 << (weekDayTom - 1);
 
-		/// On the same day
-		uint8_t shiftPositions = 0;
-		if(updatedTimeStruct.tm_wday == 0)
-			shiftPositions = 6;
-		else
-			shiftPositions = updatedTimeStruct.tm_wday;
+		int localHour = utz_hour(localDtNow);
+		int localMin = utz_minute(localDtNow);
+
+		int minutesNow = localHour * 60 + localMin;
 
 		strcpy(scheduleString, "");
 
 		int scheduleNr;
 		for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
 		{
-
 			///When ending override, clear all paused schedules to be able to re-pause and reset nextStopTime
 			if((overrideTimer == 0) && (previousOverrideTimer > 0))
 			{
 				timeSchedules[scheduleNr].isPaused = false;
 			}
 
-			volatile bool isPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << (shiftPositions - 1)));
+			volatile bool isPauseDay = timeSchedules[scheduleNr].Days & dayMask;
 
 			/// Check if schedule is applicable
 			if((isPauseDay))
@@ -513,14 +470,11 @@ void RunStartChargeTimer()
 				/// ARE WE INSIDE PAUSE INTERVAL?
 				if((minutesNow >= timeSchedules[scheduleNr].StartTotalMinutes) && (minutesNow < timeSchedules[scheduleNr].StopTotalMinutes))
 				{
-					volatile bool isNextDayPauseDay = (timeSchedules[scheduleNr].Days & (0x01 << shiftPositions));
+					volatile bool isNextDayPauseDay = timeSchedules[scheduleNr].Days & dayMaskTom;
 
-					if((timeSchedules[scheduleNr].isPaused == false))// || ((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)))
+					if(timeSchedules[scheduleNr].isPaused == false)// || ((opMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (prevOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)))
 					{
-						if(updatedTimeStruct.tm_wday == 6)
-							chargeController_SetNextStartTime(0, scheduleNr, isNextDayPauseDay);
-						else
-							chargeController_SetNextStartTime(updatedTimeStruct.tm_wday, scheduleNr, isNextDayPauseDay);
+						chargeController_SetNextStartTime(&localTimeNow, scheduleNr, isNextDayPauseDay);
 
 						/// Make sure the randomStartDelay is reset for each schedule start
 						startDelayCounter = randomStartDelay;
@@ -528,11 +482,14 @@ void RunStartChargeTimer()
 
 					timeSchedules[scheduleNr].isPaused= true;
 
-					int localTimeOffset = chargeController_GetLocalTimeOffset();
+					int localTimeOffset = localTimeNow.offset;
+					int localTimeOffsetHours = localTimeOffset / 3600;
+					int localTimeOffsetMins = (abs(localTimeOffset) % 3600) / 60;
+
 					if((timeSchedules[scheduleNr].SpanToNextDay == false) || (isNextDayPauseDay == false))
-						snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffset);
+						snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
 					else if(timeSchedules[scheduleNr].SpanToNextDay == true)
-						snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC+%i) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, updatedTimeStruct.tm_wday, updatedTimeStruct.tm_hour, updatedTimeStruct.tm_min, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffset);
+						snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
 					else
 						snprintf(scheduleString, sizeof(scheduleString), "Undefined");
 				}
@@ -547,7 +504,7 @@ void RunStartChargeTimer()
 			{
 				if(timeSchedules[scheduleNr].isPaused == true)
 				{
-					ESP_LOGW(TAG, "No schedule for today - %i - Allowing charging", updatedTimeStruct.tm_wday);
+					ESP_LOGW(TAG, "No schedule for today - %i - Allowing charging", weekDay);
 					timeSchedules[scheduleNr].isPaused = false;
 				}
 			}
