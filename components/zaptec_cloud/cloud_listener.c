@@ -31,6 +31,7 @@
 #include "../../main/offlineHandler.h"
 #include "../../main/offlineSession.h"
 #include "../../main/chargeController.h"
+#include "../../main/production_test.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -2210,6 +2211,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					start_segmented_ota();
 					responseStatus = 200;
 				}
+				//Run factory test function - dev - disable socket connection
+				else if(strstr(commandString,"factest") != NULL)
+				{
+					run_component_tests();
+					responseStatus = 200;
+				}
+
 
 				///OfflineSessions
 

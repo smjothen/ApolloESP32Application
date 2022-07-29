@@ -210,6 +210,7 @@
         LteImei = 963,
 
         FactoryTestStage = 970,
+		FactoryHWTrigResult = 971,
 
     } ParamNo;
 
@@ -261,6 +262,7 @@
 
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
+		CommandTestHWTrig = 705,
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,

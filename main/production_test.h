@@ -13,6 +13,7 @@ int prodtest_getNewId(bool validate_only);
 bool prodtest_active();
 int prodtest_on_nfc_read();
 int test_servo();
+int run_component_tests();
 
 #ifdef __cplusplus
 }

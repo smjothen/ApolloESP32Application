@@ -623,6 +623,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	if(crcRead != crcCalc)
 	{
 		fclose(sessionFile);
+		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
 		return NULL;
 	}
