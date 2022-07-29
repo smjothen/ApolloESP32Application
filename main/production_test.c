@@ -294,6 +294,11 @@ int prodtest_sock_send(char *payload)
 int prodtest_send(enum test_state state, enum test_item item, char *message){
 	char payload [100];
 	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
+
+	/// Debug for testing subset of factory tests without socket connection
+	//ESP_LOGW(TAG, "%s", payload);
+	//return 0;
+
 	if(prodtest_sock_send(payload)<0){
 		ESP_LOGE(TAG, "PRODTEST COMMS ERROR...");
 		vTaskDelay(pdMS_TO_TICKS(10*1000));
@@ -445,7 +450,7 @@ char *host_from_rfid(){
 	return "BAD RFID TAG";
 }
 
-int run_component_tests();
+
 int charge_cycle_test();
 int check_dspic_warnings();
 void socket_connect(void);
@@ -865,6 +870,81 @@ int test_servo(){
 	return -1;
 }
 
+/// Check for valid HW id measurement on Speed board
+int test_speed_hwid(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Speed HW ID");
+	int hw_id = MCU_GetHwIdMCUSpeed();
+
+	char id_string[100];
+	snprintf(id_string, 100, "Speed HW ID: %i\r\n", hw_id);
+
+    if((2 >= hw_id) && (hw_id >= 1)){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, id_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, id_string);
+	}
+
+	return -1;
+}
+
+/// Check for valid HW id measurement on Power board
+int test_power_hwid(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Power HW ID");
+	int hw_id = MCU_GetHwIdMCUPower();
+
+	char id_string[100];
+	snprintf(id_string, 100, "Power HW ID: %i\r\n", hw_id);
+
+    if((1 >= hw_id) && (hw_id >= 1)){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, id_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, id_string);
+	}
+
+	return -1;
+}
+
+int test_speed_hw_trig(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "HW Trig");
+	MCU_SendCommandId(CommandTestHWTrig);
+
+	int trigResult = 0;
+	int timeout = 7;
+	while((trigResult != 3) && (timeout > 0))
+	{
+		vTaskDelay(pdMS_TO_TICKS(1000));
+
+		ZapMessage rxMsgm = MCU_ReadParameter(FactoryHWTrigResult);
+		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
+		{
+			trigResult = rxMsgm.data[0];
+			break;
+		}
+		else
+		{
+			timeout--;
+		}
+	}
+
+	char trig_string[100];
+	snprintf(trig_string, 100, "HW Trig: 0x%x\r\n", trigResult);
+
+    if(trigResult == 3){
+		//the switch must be in pos 0 when it leaves the factory
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, trig_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, trig_string);
+	}
+
+	return -1;
+}
+
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
 	
@@ -892,13 +972,17 @@ int run_component_tests(){
 		goto err;
 	}
 
-	/*if(test_speed_hwid()<0){
+	if(test_speed_hwid()<0){
 		goto err;
 	}
 
-	if(test_speed_hwid()<0){
+	if(test_power_hwid()<0){
 		goto err;
-	}*/
+	}
+
+	if(test_speed_hw_trig()<0){
+		goto err;
+	}
 
 	return 0;
 

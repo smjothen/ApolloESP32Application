@@ -474,7 +474,7 @@ static void sessionHandler_task()
 			/// Send diagnostics if there has been any offline sessions
 			char sessionString[32] = {0};
 			int maxCount = offlineSession_GetMaxSessionCount();
-			if(maxCount >= 0)
+			if(maxCount > 0)
 			{
 				snprintf(sessionString, sizeof(sessionString),"MaxOfflineSessions: %i", maxCount);
 				ESP_LOGI(TAG, "%s", sessionString);

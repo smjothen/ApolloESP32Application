@@ -473,6 +473,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 	if(crcRead != crcCalc)
 	{
+		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
 		return ESP_ERR_INVALID_CRC;
 	}
@@ -622,6 +623,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	if(crcRead != crcCalc)
 	{
 		fclose(sessionFile);
+		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
 		return NULL;
 	}
