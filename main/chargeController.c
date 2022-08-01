@@ -11,6 +11,7 @@
 #include "../components/ntp/zntp.h"
 #include "storage.h"
 #include "zaptec_cloud_observations.h"
+#include "zaptec_cloud_listener.h"
 #include "utz.h"
 #include "zones.h"
 
@@ -405,9 +406,8 @@ void RunStartChargeTimer()
 	if((applyDelayAtBoot == true) && (opMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 	{
 		startDelayCounter = randomStartDelay;
-		applyDelayAtBoot = false;
-
 	}
+	applyDelayAtBoot = false;
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
@@ -555,6 +555,11 @@ void RunStartChargeTimer()
 			if((startDelayCounter > 0) && ((opMode == CHARGE_OPERATION_STATE_PAUSED) || (opMode == CHARGE_OPERATION_STATE_REQUESTING)))// || (overrideTimer == 1))
 			{
 				startDelayCounter--;
+				if((startDelayCounter == 0) && (storage_Get_Standalone() == 0) && isMqttConnected())
+				{
+					ESP_LOGW(TAG, "Sending requesting (sched)");
+					publish_debug_telemetry_observation_ChargingStateParameters();
+				}
 			}
 
 			if((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == true) && (startDelayCounter == 0))
@@ -605,11 +610,17 @@ void RunStartChargeTimer()
 	}
 	else
 	{
+		//Here schedule is not active, but start delay applies. Send requesting state to Cloud when done.
+
 		isPausedByAnySchedule = 0x0000;
 		if(startDelayCounter > 0)
 		{
 			startDelayCounter--;
-			ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
+			if((startDelayCounter == 0) && (storage_Get_Standalone() == 0) && isMqttConnected())
+			{
+				ESP_LOGW(TAG, "Sending requesting (no sched)");
+				publish_debug_telemetry_observation_ChargingStateParameters();
+			}
 		}
 	}
 
@@ -622,7 +633,12 @@ void RunStartChargeTimer()
 	if(storage_Get_Standalone() == 1)
 	{
 		if(opMode == CHARGE_OPERATION_STATE_REQUESTING)
-			chargeController_SendStartCommandToMCU();
+		{
+			if(startDelayCounter == 0)
+			{
+				chargeController_SendStartCommandToMCU();
+			}
+		}
 		float standaloneCurrent = storage_Get_StandaloneCurrent();
 		if (standaloneCurrent != previousStandaloneCurrent)
 		{
@@ -655,7 +671,7 @@ void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
 	randomStartDelay = (esp_random() % (maxStartDelay - 30 + 1) + 30);
-	startDelayCounter = randomStartDelay;
+	//startDelayCounter = randomStartDelay;
 
 	ESP_LOGW(TAG, "StartDelayCounter set to %i", startDelayCounter);
 }

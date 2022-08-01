@@ -612,7 +612,10 @@ static void sessionHandler_task()
 			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
 			if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
 			{
-				resendRequestTimer++;
+				//When controlled by schedule or startDelayCounter, do not resend requests
+				if(chargecontroller_IsPauseBySchedule() == false)
+					resendRequestTimer++;
+
 				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
