@@ -398,6 +398,8 @@ void chargeController_SetPauseByCloudCommand(bool pausedState)
 		pausedByCloudCommand = pausedState;
 }
 
+static uint8_t printCtrl = 3;
+
 void RunStartChargeTimer()
 {
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
@@ -605,7 +607,12 @@ void RunStartChargeTimer()
 			sentClearStartTimeAtBoot = true;
 		}
 
-		//ESP_LOGW(TAG, "IsPaused: %i, RandomDelayCounter %i/%i, Override: %i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+		printCtrl--;
+		if(printCtrl == 0)
+		{
+			//ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
+			printCtrl = 3;
+		}
 		ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 	}
 	else
@@ -636,7 +643,8 @@ void RunStartChargeTimer()
 		{
 			if(startDelayCounter == 0)
 			{
-				chargeController_SendStartCommandToMCU();
+				chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_STANDALONE);
+				vTaskDelay(pdMS_TO_TICKS(1000));
 			}
 		}
 		float standaloneCurrent = storage_Get_StandaloneCurrent();
