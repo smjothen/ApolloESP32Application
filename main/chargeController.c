@@ -18,7 +18,7 @@
 static const char *TAG = "CHARGECONTROL  ";
 
 
-const uint32_t maxStartDelay = 60;//15;//600;
+//const uint32_t maxStartDelay = 60;//15;//600;
 
 static uint32_t startDelayCounter = 0;
 static uint32_t randomStartDelay = 0;
@@ -678,7 +678,7 @@ void RunStartChargeTimer()
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	randomStartDelay = (esp_random() % (maxStartDelay - 30 + 1) + 30);
+	randomStartDelay = (esp_random() % (DEFAULT_MAX_CHARGE_DELAY - 30 + 1) + 30);
 	//startDelayCounter = randomStartDelay;
 
 	ESP_LOGW(TAG, "StartDelayCounter set to %i", startDelayCounter);

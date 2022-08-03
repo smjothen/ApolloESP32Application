@@ -104,6 +104,7 @@ void storage_Initialize_ScheduleParameteres()
 	strcpy(configurationStruct.location, "---");
 	strcpy(configurationStruct.timezone, "Etc/UTC");
 	strcpy(configurationStruct.timeSchedule, "");
+	configurationStruct.maxStartDelay = 600;
 }
 
 void storage_Initialize_UK_TestScheduleParameteres()
@@ -111,6 +112,7 @@ void storage_Initialize_UK_TestScheduleParameteres()
 	strcpy(configurationStruct.location, "GBR");
 	strcpy(configurationStruct.timezone, "Europe/London");
 	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+	configurationStruct.maxStartDelay = 600;
 }
 
 void storage_Initialize_NO_TestScheduleParameteres()
@@ -118,6 +120,7 @@ void storage_Initialize_NO_TestScheduleParameteres()
 	strcpy(configurationStruct.location, "GBR");
 	strcpy(configurationStruct.timezone, "Europe/Oslo");
 	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+	configurationStruct.maxStartDelay = 600;
 }
 
 struct Configuration storage_GetConfigurationParameers()
@@ -302,6 +305,8 @@ void storage_Set_Timezone(char * newString)
 	}
 }
 
+
+
 /*void storage_Set_DstUsage(uint8_t newValue)
 {
 	configurationStruct.dstUsage = newValue;
@@ -323,6 +328,11 @@ void storage_Set_TimeSchedule(char * newString)
 	}
 }
 
+
+void storage_Set_MaxStartDelay(uint32_t newValue)
+{
+	configurationStruct.maxStartDelay = newValue;
+}
 
 //****************************************************
 
@@ -576,6 +586,11 @@ char * storage_Get_TimeSchedule()
 	return configurationStruct.timeSchedule;
 }
 
+uint32_t storage_Get_MaxStartDelay()
+{
+	return configurationStruct.maxStartDelay;
+}
+
 //************************************************
 
 esp_err_t storage_SaveConfiguration()
@@ -620,7 +635,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "Location", configurationStruct.location);
 	err += nvs_set_str(configuration_handle, "Timezone", configurationStruct.timezone);
 	err += nvs_set_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule);
-
+	err += nvs_set_u32(configuration_handle, "MaxStartDelay", configurationStruct.maxStartDelay);
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
 
@@ -683,6 +698,12 @@ esp_err_t storage_ReadConfiguration()
 
 	nvs_get_str(configuration_handle, "TimeSchedule", NULL, &readSize);
 	nvs_get_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule, &readSize);
+
+	int check = nvs_get_u32(configuration_handle, "MaxStartDelay", &configurationStruct.maxStartDelay);
+
+	///When updating chargers, set it to default value if not previously in NVS
+	if(check != ESP_OK)
+		configurationStruct.maxStartDelay = DEFAULT_MAX_CHARGE_DELAY;
 
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 

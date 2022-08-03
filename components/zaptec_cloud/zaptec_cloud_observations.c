@@ -649,6 +649,7 @@ static uint32_t previousNumberOfTagsCount = 0;
 static uint8_t previousOverrideGridType = 0xff;
 static uint8_t previousIT3OptimizationEnabled = 0xff;
 static bool previousPingReplyState = 1;
+static uint32_t previousMaxStartDelay = 0;
 
 
 int publish_telemetry_observation_on_change(){
@@ -1053,6 +1054,18 @@ int publish_telemetry_observation_on_change(){
 		add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
 		isChange = true;
 	}
+
+	if(strncmp(storage_Get_Location(), "GBR", 3) == 0)
+	{
+		uint32_t maxStartDelay = storage_Get_MaxStartDelay();
+		if(previousMaxStartDelay != maxStartDelay)
+		{
+			add_observation_to_collection(observations, create_uint32_t_observation(MaxStartDelay, maxStartDelay));
+			previousMaxStartDelay = maxStartDelay;
+			isChange = true;
+		}
+	}
+
 
 	//Check ret and retry?
     int ret = 0;

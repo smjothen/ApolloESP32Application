@@ -50,6 +50,7 @@ void storage_Clear_And_Save_DiagnosticsLog();
 void storage_Set_Location(char * newString);
 void storage_Set_Timezone(char * newString);
 void storage_Set_TimeSchedule(char * newString);
+void storage_Set_MaxStartDelay(uint32_t newValue);
 
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
@@ -65,7 +66,7 @@ char * storage_Get_ChargerName();
 uint32_t storage_Get_DiagnosticsMode();
 uint32_t storage_Get_TransmitInterval();
 float storage_Get_TransmitChangeLevel();
-
+uint32_t storage_Get_MaxStartDelay();
 
 //Get Local settings
 uint8_t storage_Get_CommunicationMode();
