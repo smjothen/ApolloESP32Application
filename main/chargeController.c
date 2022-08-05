@@ -538,6 +538,9 @@ void RunStartChargeTimer()
 		{
 			/// ACTIVE
 
+			if(previousIsPausedByAnySchedule > 0)
+				chargeController_ClearNextStartTime();
+
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
 			if(overrideTimer == 1)
@@ -610,10 +613,9 @@ void RunStartChargeTimer()
 		printCtrl--;
 		if(printCtrl == 0)
 		{
-			//ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
+			ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 			printCtrl = 3;
 		}
-		ESP_LOGW(TAG, "%i: %s", strlen(scheduleString), scheduleString);
 	}
 	else
 	{
@@ -678,10 +680,24 @@ void RunStartChargeTimer()
 void chargeController_SetRandomStartDelay()
 {
 	/// Formula: int randomStartDelay = (esp_random() % (high - low + 1)) + low;
-	randomStartDelay = (esp_random() % (DEFAULT_MAX_CHARGE_DELAY - 30 + 1) + 30);
-	//startDelayCounter = randomStartDelay;
+	uint32_t high = storage_Get_MaxStartDelay();
 
-	ESP_LOGW(TAG, "StartDelayCounter set to %i", startDelayCounter);
+	if(high > 0)
+	{
+		uint32_t tmp = (esp_random() % (high - 1 + 1) + 1);
+
+		//Sanity check to avoid rollover to high values if high < low during testing
+		if(tmp > 3600)
+			randomStartDelay = 600;
+		else
+			randomStartDelay = tmp;
+	}
+	else
+	{
+		chargeController_ClearRandomStartDelay();
+	}
+
+	ESP_LOGW(TAG, "randomStartDelay set to %i", randomStartDelay);
 }
 
 

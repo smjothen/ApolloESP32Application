@@ -65,7 +65,7 @@ static uint32_t carDisconnectedCounter = 0;
 static const uint32_t restartTimeLimit = 3600*3;
 static void OneSecondTimer()
 {
-	//ESP_LOGW(TAG_MAIN,"OneSec?");
+	//ESP_LOGW(TAG,"OneSec?");
 	sessionHandler_Pulse();
 
 	if(mqttInitialized == true)
@@ -122,7 +122,7 @@ static void connectivity_task()
 	/// Read from Flash. If no interface is configured, use none and wait for setting
 	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 	///For dev only!
-	//staticNewInterface = eCONNECTION_WIFI;
+	///staticNewInterface = eCONNECTION_WIFI;
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished){

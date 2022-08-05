@@ -2405,7 +2405,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					int newMaxValue = 0;
 					sscanf(&commandString[19], "%d", &newMaxValue);
 					if((newMaxValue >= 0) && (newMaxValue <= 3600))
+					{
 						storage_Set_MaxStartDelay(newMaxValue);
+						storage_SaveConfiguration();
+						chargeController_SetRandomStartDelay();
+					}
 
 					responseStatus = 200;
 				}

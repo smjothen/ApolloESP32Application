@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.141";
+char softwareVersion[] = "1.1.0.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -459,6 +459,14 @@ void app_main(void)
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
+			//If available memory is critically low, to a controlled restart to avoid undefined insufficient memory states
+			if((min_dma < 2000) || (free_dma < 2000))
+			{
+				ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
+				storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
+				esp_restart();
+			}
+
 			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 

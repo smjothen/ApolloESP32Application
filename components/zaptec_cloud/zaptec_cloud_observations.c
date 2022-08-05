@@ -269,6 +269,9 @@ int publish_debug_telemetry_observation_power(){
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
 
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, chargeSession_Get().Energy));
+
     return publish_json(observations);
 }
 
@@ -551,8 +554,8 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 {
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
-    //return publish_json(observations);
-    return publish_json_blocked(observations, 10000);
+    return publish_json(observations);
+    //return publish_json_blocked(observations, 10000);
 }
 
 static uint32_t txCnt = 0;
@@ -563,9 +566,13 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
 
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+
     //Only send temperatures periodically when charging is active
     if(MCU_GetChargeMode() == eCAR_CHARGING)
     {
+
+
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
@@ -650,7 +657,9 @@ static uint8_t previousOverrideGridType = 0xff;
 static uint8_t previousIT3OptimizationEnabled = 0xff;
 static bool previousPingReplyState = 1;
 static uint32_t previousMaxStartDelay = 0;
-
+static int8_t sendUpdateInSeconds = 0;
+static bool sendPower = false;
+static float powerLimit = 0.0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -827,9 +836,40 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	//Send on change larger than 500 W, or if power changes from down to 0W.
-	if((power > previousPower + 500) || (power < (previousPower - 500)) || ((power == 0) && (previousPower > 0)))
+
+	/// In Watts
+	if (power > 7000.0)
+		powerLimit = 500.0;
+	else
+		powerLimit = 200.0;
+
+	/// Evaluate conditions for sending power, to avoid frequent transmission, but give good accuracy
+
+	if(((power > previousPower + powerLimit) || (power < (previousPower - powerLimit))) && (sendUpdateInSeconds == 0))
 	{
+		sendUpdateInSeconds = 5;
+	}
+
+	if((power == 0.0) && (previousPower > 0.0))
+	{
+		sendPower = true;
+	}
+
+	if(sendUpdateInSeconds > 0)
+	{
+		sendUpdateInSeconds--;
+		ESP_LOGW(TAG, "Blocking power: %i", sendUpdateInSeconds);
+		if(sendUpdateInSeconds == 0)
+		{
+			sendPower = true;
+		}
+	}
+
+	if(sendPower == true)
+	{
+		sendPower = false;
+		sendUpdateInSeconds = 0;
+
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 
 		float currents[3] = {0};
@@ -869,6 +909,8 @@ int publish_telemetry_observation_on_change(){
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
 		}
+
+		ESP_LOGW(TAG, "Sending power: %i - %4.2f W (%4.2f)", sendUpdateInSeconds, power, previousPower);
 
 		previousPower = power;
 		isChange = true;

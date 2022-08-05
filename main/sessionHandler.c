@@ -1516,13 +1516,17 @@ int sessionHandler_GetStackWatermark()
 		return -1;
 }
 
-
+static bool previousPulseOnline = false;
+static bool pulseOnline = false;
+static bool sendPulseOnChange = false;
 void sessionHandler_Pulse()
 {
 	pulseCounter++;
 
 	if(connectivity_GetMQTTInitialized())
 	{
+		pulseOnline = isMqttConnected();
+
 		if(storage_Get_Standalone() == true)
 		{
 			pulseInterval = PULSE_STANDALONE;
@@ -1550,9 +1554,9 @@ void sessionHandler_Pulse()
 
 		/// Send new pulse interval to Cloud when it changes with ChargeOperatingMode in System mode.
 		/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
-		if(pulseInterval != recordedPulseInterval)
+		if(((pulseInterval != recordedPulseInterval) && pulseOnline) || ((pulseOnline == true) && previousPulseOnline == false))
 		{
-			ESP_LOGI(TAG,"Sending pulse interval %d (blocking)", pulseInterval);
+			ESP_LOGI(TAG,"Sending pulse interval %d", pulseInterval);
 			int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);
 
 			if(ret == ESP_OK)
@@ -1560,6 +1564,7 @@ void sessionHandler_Pulse()
 				recordedPulseInterval = pulseInterval;
 				ESP_LOGI(TAG,"Registered pulse interval");
 				pulseSendFailedCounter = 0;
+				sendPulseOnChange = true;
 			}
 			else
 			{
@@ -1567,32 +1572,33 @@ void sessionHandler_Pulse()
 
 				//If sending fails, don't continue sending forever -> timeout and set anyway
 				pulseSendFailedCounter++;
-				if(pulseSendFailedCounter == 90)
+				if(pulseSendFailedCounter == 10)
 				{
 					recordedPulseInterval = pulseInterval;
 					pulseSendFailedCounter = 0;
+					sendPulseOnChange = true;
 				}
 			}
 		}
 
 
-
 		/// If going from offline to online - ensure new pulse is sent instantly
 		/// Cloud sets charger as online within one minute after new pulse is received.
-		if((isOnline == true) && (previousIsOnline == false))
-			pulseCounter = PULSE_INIT_TIME;
+		//if((pulseOnline == true) && (previousPulseOnline == false))
+			//pulseCounter = PULSE_INIT_TIME;
 
-		if(pulseCounter >= pulseInterval)
+		///Send pulse at interval or when there has been a change in interval
+		if(((pulseCounter >= pulseInterval) && (pulseOnline == true)) || ((sendPulseOnChange == true) && (pulseOnline == true)))
 		{
-			//if(isOnline == true)
-			//{
-				ESP_LOGI(TAG, "PULSE %i/%i", pulseCounter, pulseInterval);
-				publish_cloud_pulse();
-			//}
+			ESP_LOGI(TAG, "PULSE %i/%i Change: %i", pulseCounter, pulseInterval, sendPulseOnChange);
+			publish_cloud_pulse();
 
 			pulseCounter = 0;
+			sendPulseOnChange = false;
 		}
 	}
+
+	previousPulseOnline = pulseOnline;
 }
 
 
