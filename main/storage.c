@@ -428,6 +428,8 @@ float storage_Get_TransmitChangeLevel()
 
 uint8_t storage_Get_CommunicationMode()
 {
+	///For dev only!
+	///return eCONNECTION_WIFI;
 	return configurationStruct.communicationMode;
 }
 

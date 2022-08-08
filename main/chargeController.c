@@ -538,7 +538,10 @@ void RunStartChargeTimer()
 		{
 			/// ACTIVE
 
-			if(previousIsPausedByAnySchedule > 0)
+			/// Clear next event in two cases:
+			/// 1) Schedule ended with no car connected,
+			/// 2) Schedule ended with car connected and starDelayCounter deactivated.
+			if((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0))
 				chargeController_ClearNextStartTime();
 
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
