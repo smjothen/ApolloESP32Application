@@ -1588,12 +1588,20 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				// Factory reset
 				else if(strstr(commandString,"Factory reset") != NULL)
 				{
-					storage_clearWifiParameters();
-					storage_Init_Configuration();
-					storage_SaveConfiguration();
 
-					ESP_LOGI(TAG, "Factory reset");
-					responseStatus = 200;
+					MessageType ret = MCU_SendUint8Parameter(CommandFactoryReset, 0);
+					if(ret == MsgWriteAck) {
+						ESP_LOGI(TAG, "MCU Factory Reset OK");
+						storage_clearWifiParameters();
+						storage_Init_Configuration();
+						storage_SaveConfiguration();
+						responseStatus = 200;
+						ESP_LOGI(TAG, "Factory reset complete");
+					}
+					else {
+						ESP_LOGE(TAG, "MCU Factory Reset FAILED");						
+						responseStatus=400;
+					}
 				}else if(strstr(commandString, "segmentota") != NULL){
 
 					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
