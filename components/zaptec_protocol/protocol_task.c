@@ -721,7 +721,7 @@ void MCU_StartLedOverride()
 void MCU_StopLedOverride()
 {
 	ESP_LOGI(TAG, "Clear overriding LED on MCU");
-	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);//Color defined here is no longer used actively in MCU
 	if(ret == MsgWriteAck)
 	{
 		ESP_LOGI(TAG, "MCU Cleared ledoverride OK");
