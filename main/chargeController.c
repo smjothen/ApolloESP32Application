@@ -184,6 +184,8 @@ void chargeController_WriteNewTimeSchedule(char * timeSchedule)
 	ESP_LOGW(TAG, "Set timeSchedule from Cloud: %s", storage_Get_TimeSchedule());
 }
 
+static uint16_t isPausedByAnySchedule = 0x0000;
+
 void chargeController_SetTimes()
 {
 	char * schedule = storage_Get_TimeSchedule();
@@ -199,6 +201,9 @@ void chargeController_SetTimes()
 	strcpy(fullTimeScheduleString, schedule);
 
 	nrOfSchedules = (scheduleLen + 1) / 14;
+
+	memset(timeSchedules, 0, sizeof(timeSchedules));
+	isPausedByAnySchedule = 0;
 
 	int i = 0;
 	for (i = 0; i < nrOfSchedules; i++)
@@ -368,7 +373,6 @@ void chargeController_SetSendScheduleDiagnosticsFlag()
 	sendScheduleDiagnostics = true;
 }
 
-static uint16_t isPausedByAnySchedule = 0x0000;
 
 bool chargecontroller_IsPauseBySchedule()
 {
@@ -379,8 +383,6 @@ bool chargecontroller_IsPauseBySchedule()
 	else
 		return false;
 }
-
-
 
 
 
