@@ -448,6 +448,7 @@ void app_main(void)
 
     bool hasBeenOnline = false;
     int otaDelayCounter = 0;
+    int lowMemCounter = 0;
 
 	while (true)
     {
@@ -462,9 +463,13 @@ void app_main(void)
 			//If available memory is critically low, to a controlled restart to avoid undefined insufficient memory states
 			if((min_dma < 2000) || (free_dma < 2000))
 			{
-				ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
-				storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
-				esp_restart();
+				lowMemCounter++;
+				if(lowMemCounter >= 6)
+				{
+					ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
+					storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
+					esp_restart();
+				}
 			}
 
 			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);

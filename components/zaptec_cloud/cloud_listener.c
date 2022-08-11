@@ -2309,6 +2309,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						chargeController_Activation();
 						storage_SaveConfiguration();
 						chargeController_ClearRandomStartDelay();
+						chargeController_ClearNextStartTime();
 						chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
 					}
 					//chargeController_SetTimes();

@@ -155,6 +155,9 @@ int chargeController_GetLocalTime(udatetime_t *utcTime, ulocaltime_t *localTime)
 	chargeController_GetZone(&zone);
 
 	utz_utc_to_local(&ctx, utcTime, localTime, &zone);
+
+	//ESP_LOGW(TAG, "TZ: %s, offset: %d", zone.name, localTime->offset);
+
 	return localTime->offset;
 }
 
