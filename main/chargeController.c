@@ -647,7 +647,7 @@ void RunStartChargeTimer()
 		sendScheduleDiagnostics = false;
 	}
 
-	if(storage_Get_Standalone() == 1)
+	if((storage_Get_Standalone() == 1) && (isScheduleActive == true))
 	{
 		if(opMode == CHARGE_OPERATION_STATE_REQUESTING)
 		{
@@ -660,10 +660,14 @@ void RunStartChargeTimer()
 		float standaloneCurrent = storage_Get_StandaloneCurrent();
 		if (standaloneCurrent != previousStandaloneCurrent)
 		{
-			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standaloneCurrent);
+			float currentToSend = standaloneCurrent;
+			if(MCU_GetGridType() == NETWORK_3P3W)
+				currentToSend = standaloneCurrent/1.732;
+
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentToSend);
 			if(ret == MsgWriteAck)
 			{
-				ESP_LOGW(TAG, "Updating Standalone current %2.2f -> %2.2fA", previousStandaloneCurrent, standaloneCurrent);
+				ESP_LOGW(TAG, "Updating Standalone current %2.2f -> %2.2fA(IT3: %2.2fA)", previousStandaloneCurrent, standaloneCurrent, currentToSend);
 				previousStandaloneCurrent = standaloneCurrent;
 			}
 			else
@@ -724,13 +728,18 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 	sessionHandler_ClearCarInterfaceResetConditions();
 
 	enum ChargerOperatingMode chOpMode = MCU_GetChargeOperatingMode();
-	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1))
+	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1) && (isScheduleActive == true))
 	{
 		//Use Standalone current as if from cloud command
 		float standAloneCurrent = storage_Get_StandaloneCurrent();
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standAloneCurrent);
 
-		ESP_LOGW(TAG, "********* 1 Starting from state \"Standalone\" : CHARGE_OPERATION_STATE_REQUESTING ST-AC: %2.2fA **************", standAloneCurrent);
+		float currentToSend = standAloneCurrent;
+		if(MCU_GetGridType() == NETWORK_3P3W)
+			currentToSend = standAloneCurrent/1.732;
+
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentToSend);
+
+		ESP_LOGW(TAG, "********* 1 Starting from state \"Standalone\" : CHARGE_OPERATION_STATE_REQUESTING ST-AC: %2.2fA(IT3: %2.2fA) **************", standAloneCurrent, currentToSend);
 
 		if(ret == MsgWriteAck)
 		{

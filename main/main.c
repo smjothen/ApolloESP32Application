@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "1.1.0.1";
+char softwareVersion[] = "1.1.0.3";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -464,7 +464,7 @@ void app_main(void)
 			if((min_dma < 2000) || (free_dma < 2000))
 			{
 				lowMemCounter++;
-				if(lowMemCounter >= 6)
+				if(lowMemCounter >= 30)
 				{
 					ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
 					storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
