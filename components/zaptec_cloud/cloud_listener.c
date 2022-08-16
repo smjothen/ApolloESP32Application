@@ -2213,6 +2213,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					offlineSession_DeleteAllFiles();
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"DeleteOcppOfflineSessions") != NULL)
+				{
+					if(offlineSession_DeleteAllFiles_ocpp() == 0){
+						responseStatus = 200;
+					}else{
+						return 500;
+					}
+				}
+
 				//Test Offline Sessions
 				else if(strstr(commandString,"tos ") != NULL)
 				{

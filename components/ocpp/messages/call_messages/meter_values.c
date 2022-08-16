@@ -1,8 +1,9 @@
+#include <stdbool.h>
 #include "messages/call_messages/ocpp_call_request.h"
 #include "types/ocpp_create_meter_value.h"
 
-cJSON * ocpp_create_meter_values_request(unsigned int connector_id, const int * transaction_id, size_t values_count, struct ocpp_meter_value * meter_values){
-	if(values_count < 1 || meter_values == NULL)
+cJSON * ocpp_create_meter_values_request(unsigned int connector_id, const int * transaction_id, struct ocpp_meter_value_list * meter_values){
+	if(meter_values == NULL)
 		return NULL;
 
 	cJSON * payload = cJSON_CreateObject();
@@ -27,15 +28,23 @@ cJSON * ocpp_create_meter_values_request(unsigned int connector_id, const int * 
 	if(meter_values_json == NULL)
 		goto error;
 
-	for(size_t i = 0; i < values_count; i++){
-		cJSON * value_json = create_meter_value_json(meter_values[i]);
-		if(value_json == NULL){
-			cJSON_Delete(meter_values_json);
-			goto error;
-		}
-		else{
+	bool contains_meter_value = false;
+	while(meter_values != NULL){
+		if(meter_values->value != NULL){
+			cJSON * value_json = create_meter_value_json(*meter_values->value);
+			if(value_json == NULL){
+				cJSON_Delete(meter_values_json);
+				goto error;
+			}
+			contains_meter_value = true;
 			cJSON_AddItemToArray(meter_values_json, value_json);
 		}
+		meter_values = meter_values->next;
+	}
+
+	if(!contains_meter_value){
+		cJSON_Delete(meter_values_json);
+		goto error;
 	}
 	cJSON_AddItemToObject(payload, "meterValue", meter_values_json);
 

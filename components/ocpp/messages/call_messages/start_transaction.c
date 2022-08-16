@@ -36,11 +36,11 @@ cJSON * ocpp_create_start_transaction_request(unsigned int connector_id, const c
 		if(reservation_id_json == NULL){
 			goto error;
 		}
-		cJSON_AddItemToObject(payload, "reservationId", meter_start_json);
+		cJSON_AddItemToObject(payload, "reservationId", reservation_id_json);
 	}
 
 	char timestamp_buffer[30];
-	size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
+	size_t written_length = ocpp_print_date_time(timestamp, timestamp_buffer, sizeof(timestamp_buffer));
 	if(written_length == 0)
 		goto error;
 

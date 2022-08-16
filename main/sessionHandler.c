@@ -298,7 +298,23 @@ void SessionHandler_SetLogCurrents()
 }
 
 enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
-int transaction_id = -1;
+
+/*
+ * transaction_id is given by the CS as a result of StartTransaction.req in ocpp 1.6.
+ * in ocpp 2.1 it is given by the CP.
+ *
+ * If a transaction is started offline, ocpp 1.6 does not give it an id before the CP has come online and recieved
+ * the result from the StartTransaction.req. If CP fails to recieve the id, it will be unable to create a valid StopTransaction.req
+ * as it requires an id. Transaction related MeterValues will still be sendt but can not be associated with a transaction.
+ *
+ * The current implementation of the ocpp component expects messages to be enqueued and only allows valid messages to be created.
+ * to allow the construction of MeterValue.req and StopTransaction.req when StartTransaction.conf has not been recieved, a random id
+ * will be created before sending the StartTransaction.req. This id will then be replaced by the valid id when the confirmation is
+ * recieved. This will cause issues if a confirmation is never recieved. What should happen if id is not recieved is not specified
+ * by ocpp 1.6.
+ */
+int * transaction_id = NULL;
+time_t transaction_start = 0;
 bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
 uint8_t pending_change_availability_state;
@@ -306,10 +322,22 @@ time_t preparing_started = 0;
 
 bool sessionHandler_OcppTransactionIsActive(uint connector_id){
 	if(connector_id == 1){
-		return (transaction_id != -1);
+		return (transaction_start != 0);
 	}else{
 		return false;
 	}
+}
+
+int * sessionHandler_OcppGetTransactionId(uint connector_id){
+	if(sessionHandler_OcppTransactionIsActive(connector_id)){
+		return transaction_id;
+	}else{
+		return NULL;
+	}
+}
+
+time_t sessionHandler_OcppTransactionStartTime(){
+	return transaction_start;
 }
 
 void sessionHandler_OcppStopTransaction(const char * reason){
@@ -327,7 +355,52 @@ void sessionHandler_OcppStopTransaction(const char * reason){
 	chargeSession_SetStoppedReason(reason);
 }
 
+
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+
+	bool is_current_transaction = false;
+	if(cJSON_HasObjectItem(payload, "transactionId")){
+		/*
+		 * Cloud sets session id whilest in requesting state, ocpp sets transaction id during charge state
+		 * if cloud sets the id first, we should not update it as it would confuse the cloud.
+		 */
+		int tmp_id = *(int*)cb_data;
+		int received_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
+
+		if(transaction_id != NULL && *transaction_id == tmp_id){
+			*transaction_id = received_id;
+			is_current_transaction = true;
+			ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
+		}
+
+		esp_err_t err = offlineSession_UpdateTransactionId_ocpp(tmp_id, received_id);
+		if(err == ESP_OK){
+			ESP_LOGI(TAG, "Sat valid transaction_id for stored transaction");
+
+		}else if(err == ESP_ERR_NOT_FOUND){
+			ESP_LOGI(TAG, "No stored transaction for transaction_id");
+
+		}else{
+			ESP_LOGE(TAG, "Failed to set valid id for stored transaction");
+		}
+
+		if(ocpp_update_enqueued_transaction_id(tmp_id, received_id) != 0){
+			ESP_LOGE(TAG, "Unable to update enqueued transaction id");
+		}
+
+		// Only set the transaction id if cloud did not yet and response is related to active transaction
+		if(strstr(chargeSession_GetSessionId(), "-") == NULL && is_current_transaction){
+			//If session id is persisted from a previous session, then this might still be valid as ocpp will use the transaction id instead, but this should be changed.
+			char transaction_id_str[37]; // when not using ocpp directly, session id is UUID
+
+			snprintf(transaction_id_str, sizeof(transaction_id_str), "%d", *transaction_id);
+
+			chargeSession_SetSessionIdFromCloud(transaction_id_str);
+		}
+	}else{
+		ESP_LOGE(TAG, "Recieved start transaction response lacking 'transactionId'");
+	}
+
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
 		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
 
@@ -337,18 +410,22 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 
 			if(storage_Get_ocpp_stop_transaction_on_invalid_id() && strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
 				ESP_LOGW(TAG, "Transaction not Autorized");
-				MessageType ret = MCU_SendCommandId(CommandStopCharging);
-				if(ret == MsgCommandAck)
-				{
-					ESP_LOGI(TAG, "MCU stop charging command OK");
+				if(is_current_transaction){
+					MessageType ret = MCU_SendCommandId(CommandStopCharging);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU stop charging command OK");
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU stop charging final command FAILED");
+						//TODO: Handle error. If this occurs there might be charging without valid token or payment
+					}
+					chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
+					SetAuthorized(false);
+				}else{
+					ESP_LOGE(TAG, "An inactive transaction was deauthorized");
 				}
-				else
-				{
-					ESP_LOGE(TAG, "MCU stop charging final command FAILED");
-					//TODO: Handle error. If this occurs there might be charging without valid token or payment
-				}
-				chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
-				SetAuthorized(false);
 			}
 
 			if(cJSON_HasObjectItem(id_tag_info, "parentIdTag")){
@@ -363,26 +440,6 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 		}
 	}else{
 		ESP_LOGE(TAG, "Recieved start transaction response lacking 'idTagInfo'");
-	}
-
-
-	if(cJSON_HasObjectItem(payload, "transactionId")){
-		/*
-		 * Cloud sets session id whilest in requesting state, ocpp sets transaction id during charge state
-		 * if cloud sets the id first, we should not update it as it would confuse the cloud.
-		 */
-		transaction_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
-
-		if(strstr(chargeSession_GetSessionId(), "-") == NULL){ // Only set the transaction id if cloud did not yet
-			//If session id is persisted from a previous session, then this might still be valid as ocpp will use the transaction id instead, but this should be changed.
-			char transaction_id_str[37]; // when not using ocpp directly, session id is UUID
-
-			snprintf(transaction_id_str, sizeof(transaction_id_str), "%d", transaction_id);
-
-			chargeSession_SetSessionIdFromCloud(transaction_id_str);
-		}
-	}else{
-		ESP_LOGE(TAG, "Recieved start transaction response lacking 'transactionId'");
 	}
 }
 
@@ -409,28 +466,99 @@ static void error_cb(const char * unique_id, const char * error_code, const char
 	}
 }
 
-static struct ocpp_sampled_value_list current_meter_values = {0};
+static void start_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+        int * failed_transaction_id = (int *) cb_data;
 
-void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_sampled_value_list * values){
+	ESP_LOGE(TAG, "Start transaction request failed for temporary id %d", *failed_transaction_id);
+
+	if(error_code != NULL){
+		if(error_description != NULL){
+			if(error_details != NULL){
+				char * details = cJSON_Print(error_details);
+				if(details != NULL){
+					ESP_LOGE(TAG, "[%s]: (%s) '%s' \nDetails:\n %s", unique_id, error_code, error_description, details);
+					free(details);
+				}
+			}else{
+				ESP_LOGE(TAG, "[%s]: (%s) '%s'", unique_id, error_code, error_description);
+			}
+		}else{
+			ESP_LOGE(TAG, "[%s]: (%s)", unique_id, error_code);
+		}
+	}
+}
+
+#define MAX_STOP_TXN_METER_VALUES 512
+static struct ocpp_meter_value_list * current_meter_values = NULL;
+static size_t current_meter_values_length = 0;
+bool current_meter_values_failed = true;
+
+/**
+ * This function is used to save transaction related meter values that are meant to be used in StopTransaction.req.
+ * Ocpp does not specify a limit to how many meter values may be in a StopTransaction.req. Too prevent crashes due to no
+ * more memory, we limit it by MAX_STOP_TXN_METER_VALUES.
+ *
+ * If the limit is reached we indicate that current meter values failed, delete the meter values and prevent saving new meter
+ * values until the next transaction starts. A status notification is sendt to inform CS of the issue.
+ */
+void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length){
 	if(connector_id != 1 || sessionHandler_OcppTransactionIsActive(connector_id) == false){
 		ESP_LOGE(TAG, "sessionHandler got notified of meter values without ongoing transaction, value recieved too late and transactionData might be wrong");
-		ocpp_sampled_list_delete(*values);
+		ocpp_meter_list_delete(values);
 		return;
 	}
 
-	struct ocpp_sampled_value_list * last_ptr = ocpp_sampled_list_get_last(&current_meter_values);
-	if(last_ptr->value != NULL){
-		last_ptr->next = calloc(sizeof(struct ocpp_sampled_value_list), 1);
-		if(last_ptr->next == NULL){
-			ESP_LOGE(TAG, "Unable to allocate space for StopTxnData");
-			return;
-		}
+	if(current_meter_values == NULL){
+		if(current_meter_values_failed == false){
+			if(length > MAX_STOP_TXN_METER_VALUES){
+				ESP_LOGE(TAG, "First meter values list already too large for stop transaction");
+				goto error;
+			}
 
-		last_ptr = last_ptr->next;
+			current_meter_values = ocpp_create_meter_list();
+			if(current_meter_values == NULL){
+				ESP_LOGE(TAG, "Unable to create meter value list to store transaction data");
+				goto error;
+			}
+
+			current_meter_values_length = 0;
+		}else{
+			ESP_LOGW(TAG, "New meter values for stop transaction after failed");
+			goto error;
+		}
 	}
 
-	last_ptr->value = values->value;
-	last_ptr->next = values->next;
+	if(current_meter_values_length + length < MAX_STOP_TXN_METER_VALUES){
+		struct ocpp_meter_value_list * last_ptr = ocpp_meter_list_get_last(current_meter_values);
+		if(last_ptr->value != NULL){
+			last_ptr->next = ocpp_create_meter_list();
+			if(last_ptr->next == NULL){
+				ESP_LOGE(TAG, "Unable to allocate space for StopTxnData");
+				goto error;
+			}
+
+			last_ptr = last_ptr->next;
+		}
+
+		last_ptr->value = values->value;
+		last_ptr->next = values->next;
+
+		current_meter_values_length += length;
+	}else{
+		ESP_LOGE(TAG, "Too many meter values for stop transaction");
+		current_meter_values_failed = true;
+
+		ocpp_meter_list_delete(current_meter_values);
+		current_meter_values = NULL;
+
+		//TODO: Inform CS of failure
+		goto error;
+	}
+
+	ESP_LOGW(TAG, "Current meter values length: %d (MAX: %d)", current_meter_values_length, MAX_STOP_TXN_METER_VALUES);
+	return;
+error:
+	ocpp_meter_list_delete(values);
 }
 
 TimerHandle_t sample_handle = NULL;
@@ -439,12 +567,14 @@ static void sample_meter_values(){
 	ESP_LOGI(TAG, "Starting periodic meter values");
 
 	uint connector = 1;
-	handle_meter_value(OCPP_READING_CONTEXT_SAMPLE_PERIODIC, storage_Get_ocpp_meter_values_sampled_data(),
-			NULL, &connector, 1);
+	handle_meter_value(eOCPP_CONTEXT_SAMPLE_PERIODIC,
+			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
+			transaction_id, &connector, 1);
 }
 
 static void start_sample_interval(){
 	ESP_LOGI(TAG, "Starting sample interval");
+	current_meter_values_failed = false;
 
 	sample_handle = xTimerCreate("Ocpp sample",
 				pdMS_TO_TICKS(storage_Get_ocpp_meter_value_sample_interval() * 1000),
@@ -459,66 +589,95 @@ static void start_sample_interval(){
 			ESP_LOGI(TAG, "Started sample interval");
 		}
 	}
-	save_interval_measurands(OCPP_READING_CONTEXT_TRANSACTION_BEGIN);
+	save_interval_measurands(eOCPP_CONTEXT_TRANSACTION_BEGIN);
 	ESP_LOGW(TAG, "EXIT");
 }
 
 static void stop_sample_interval(){
-	ESP_LOGI(TAG, "Stopping sample interval");
-
-	if(sample_handle != NULL){
-		xTimerDelete(sample_handle, pdMS_TO_TICKS(200));
-		sample_handle = NULL;
-	}
-	ocpp_sampled_list_delete(current_meter_values);
-	save_interval_measurands(OCPP_READING_CONTEXT_TRANSACTION_END);
-}
-
-void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
-	if(transaction_id == -1){
-		ESP_LOGE(TAG, "Transaction id not set, unable to stop transaction");
+	if(sample_handle == NULL){
 		return;
 	}
 
-	struct ocpp_meter_value meter_value = {0};
-	meter_value.sampled_value = current_meter_values;
+	ESP_LOGI(TAG, "Stopping sample interval");
 
-	struct ocpp_meter_value * meter_value_ptr = &meter_value;
-	if(ocpp_sampled_list_get_length(&meter_value_ptr->sampled_value) == 0){
-		meter_value_ptr = NULL;
-	}
+	xTimerDelete(sample_handle, pdMS_TO_TICKS(200));
+	sample_handle = NULL;
 
-	cJSON * response;
-	if(chargeSession_Get().StoppedByRFID){
-		response  = ocpp_create_stop_transaction_request(chargeSession_Get().StoppedById, floor(MCU_GetEnergy()),
-								time(NULL), transaction_id, chargeSession_Get().StoppedReason, (meter_value_ptr != NULL) ? 1 : 0, &meter_value);
-	}else{
-		response  = ocpp_create_stop_transaction_request(NULL, floor(MCU_GetEnergy()),
-								time(NULL), transaction_id, chargeSession_Get().StoppedReason, (meter_value_ptr != NULL) ? 1 : 0, &meter_value);
-	}
+	uint connector = 1;
+	handle_meter_value(eOCPP_CONTEXT_TRANSACTION_END,
+			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
+			transaction_id, &connector, 1);
+}
+
+void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
+	stop_sample_interval();
+
+	int meter_stop = floor(MCU_GetEnergy());
+	time_t timestamp = time(NULL);
+	char * stop_token = (chargeSession_Get().StoppedByRFID) ? chargeSession_Get().StoppedById : NULL;
+
+	cJSON * response  = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
+								chargeSession_Get().StoppedReason, current_meter_values);
 
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create stop transaction request");
 	}else{
 		int err = enqueue_call(response, NULL, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
-			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
+			ESP_LOGE(TAG, "Unable to enqueue stop transaction request, storing stop transaction on file");
+			esp_err_t err = offlineSession_SaveStopTransaction_ocpp(*transaction_id, transaction_start, stop_token, meter_stop,
+										timestamp, chargeSession_Get().StoppedReason);
+
+			if(err != ESP_OK){
+				ESP_LOGE(TAG, "Failed to save stop transaction to file");
+			}
+
+			if(current_meter_values != NULL){
+				size_t meter_buffer_length;
+				unsigned char * meter_buffer = ocpp_meter_list_to_contiguous_buffer(current_meter_values, true, &meter_buffer_length);
+				if(meter_buffer == NULL){
+					ESP_LOGE(TAG, "Could not create meter value as string for storing stop transaction data");
+				}else{
+					ESP_LOGI(TAG, "Storing stop transaction data as short string");
+					if(offlineSession_SaveNewMeterValue_ocpp(*transaction_id, transaction_start, meter_buffer, meter_buffer_length) != ESP_OK){
+						ESP_LOGE(TAG, "Unable to save stop transaction data");
+					}
+					free(meter_buffer);
+				}
+			}
 		}
 	}
 
-	stop_sample_interval();
-	transaction_id = -1; // Clear the transaction id
+	ocpp_meter_list_delete(current_meter_values);
+	current_meter_values = NULL;
+
+	free(transaction_id);
+	transaction_start = 0;
+	transaction_id = NULL;
 }
 
 void start_transaction(){
-	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, floor(MCU_GetEnergy()), -1, time(NULL));
+	transaction_start = time(NULL);
+	int meter_start = floor(MCU_GetEnergy());
+	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, -1, transaction_start);
+
+	transaction_id = malloc(sizeof(int));
+	if(transaction_id == NULL){
+		ESP_LOGE(TAG, "Unable to create buffer for transaction id");
+		return;
+	}
+
+	*transaction_id = esp_random();
 
 	if(start_transaction == NULL){
 		ESP_LOGE(TAG, "Unable to create start transaction request");
 	}else{
-		int err = enqueue_call(start_transaction, start_transaction_response_cb, error_cb, "start", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(start_transaction, start_transaction_response_cb, start_transaction_error_cb,
+				transaction_id, eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
-			ESP_LOGE(TAG, "Unable to enqueue start transaction request");
+			ESP_LOGE(TAG, "Unable to enqueue start transaction request, storing on file");
+			offlineSession_SaveStartTransaction_ocpp(*transaction_id, transaction_start, 1,
+								chargeSession_Get().AuthenticationCode, meter_start, NULL);
 		}
 	}
 
@@ -1040,10 +1199,11 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		return;
 	}
 
-	//TODO: change from using transaction_id == -1 to meant no transaction as the id from central system is not limited by ocpp
 	cJSON * response;
-	if(transaction_id == transaction_id_json->valueint){
+	bool stop_charging = false;
+	if(transaction_id != NULL && *transaction_id == transaction_id_json->valueint){
 		ESP_LOGI(TAG, "Stop request id matches ongoing transaction id");
+		stop_charging = true;
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
 	}
 	else{
@@ -1059,7 +1219,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		cJSON_Delete(response);
 	}
 
-	if(transaction_id == transaction_id_json->valueint){
+	if(stop_charging){
 		MessageType ret = MCU_SendCommandId(CommandStopCharging);
 		if(ret == MsgCommandAck)
 		{
@@ -1071,6 +1231,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 			ESP_LOGE(TAG, "MCU stop charging Failed");
 		}
 	}
+
 	SetAuthorized(false);
 	chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
 	//TODO: "[...]and, if applicable, unlock the connector"
@@ -1228,6 +1389,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
+			ESP_LOGI(TAG, "Ocpp transactions on file: %d", offlineSession_FindNrOfFiles_ocpp());
 			break;
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
@@ -1568,6 +1730,10 @@ static void sessionHandler_task()
     //SessionHandler_SetOCMFHighInterval();
 
     offlineSession_Init();
+    ocpp_set_offline_functions(offlineSession_PeekNextMessageTimestamp_ocpp, offlineSession_ReadNextMessage_ocpp,
+			    start_transaction_response_cb, error_cb, "start",
+			    NULL, error_cb, "stop",
+			    NULL, error_cb, "meter");
 
 	while (1)
 	{

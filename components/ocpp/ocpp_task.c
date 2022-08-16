@@ -58,6 +58,7 @@ TimerHandle_t heartbeat_handle = NULL;
 #define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
 #define WEBSOCKET_WRITE_TIMEOUT 5000
 
+#define MAX_TRANSACTION_QUEUE_SIZE 20
 
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
@@ -68,6 +69,40 @@ unsigned int failed_transaction_count = 0;
 time_t last_transaction_timestamp = {0};
 
 long int central_system_time_offset = 0;
+
+time_t (*non_enqueued_timestamp)();
+cJSON * (*non_enqueued_message)(void ** cb_data);
+
+bool offline_enabled = false;
+ocpp_result_callback start_result_cb;
+ocpp_error_callback start_error_cb;
+
+ocpp_result_callback stop_result_cb;
+ocpp_error_callback stop_error_cb;
+
+ocpp_result_callback meter_result_cb;
+ocpp_error_callback meter_error_cb;
+
+void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON * (*oldest_non_enqueued_message)(void ** cb_data),
+			ocpp_result_callback start_transaction_result_cb, ocpp_error_callback start_transaction_error_cb, void * start_transaction_cb_data,
+			ocpp_result_callback stop_transaction_result_cb, ocpp_error_callback stop_transaction_errror_cb, void * stop_transaction_cb_data,
+			ocpp_result_callback meter_transaction_result_cb, ocpp_error_callback meter_transaction_error_cb, void * meter_transaction_cb_data){
+
+	non_enqueued_timestamp = oldest_non_enqueued_timestamp;
+	non_enqueued_message = oldest_non_enqueued_message;
+
+	start_result_cb = start_transaction_result_cb;
+	start_error_cb = start_transaction_error_cb;
+
+	stop_result_cb = stop_transaction_result_cb;
+	stop_error_cb = stop_transaction_errror_cb;
+
+	meter_result_cb = meter_transaction_result_cb;
+	meter_error_cb = meter_transaction_error_cb;
+
+	offline_enabled = true;
+}
+
 
 enum ocpp_registration_status get_registration_status(){
 	return registration_status;
@@ -97,6 +132,104 @@ void update_central_system_time_offset(time_t charge_point_time, time_t central_
 	//TODO: Check if settimeofday() or adjtime() should be used
 }
 
+// The related functions do not verify if get/set overwrites front with back or back with front
+struct timestamp_queue{
+	time_t timestamps[MAX_TRANSACTION_QUEUE_SIZE];
+	int front;
+	int back;
+};
+
+static struct timestamp_queue txn_enqueue_timestamps = {
+	.front = -1,
+	.back = -1,
+};
+
+static void set_txn_enqueue_timestamp(time_t timestamp){
+	txn_enqueue_timestamps.back++;
+	if(txn_enqueue_timestamps.back == MAX_TRANSACTION_QUEUE_SIZE)
+		txn_enqueue_timestamps.back = 0;
+
+	txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.back] = timestamp;
+}
+
+static time_t get_txn_enqueue_timestamp(){
+	txn_enqueue_timestamps.front++;
+	if(txn_enqueue_timestamps.front == MAX_TRANSACTION_QUEUE_SIZE)
+		txn_enqueue_timestamps.front = 0;
+
+	return txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.front];
+}
+
+static time_t peek_txn_enqueue_timestamp(){
+	if(txn_enqueue_timestamps.front == txn_enqueue_timestamps.back) // No data to peek or get/set missused
+		return LONG_MAX;
+
+	int position = txn_enqueue_timestamps.front +1;
+	if(position == MAX_TRANSACTION_QUEUE_SIZE)
+		position = 0;
+
+	return txn_enqueue_timestamps.timestamps[position];
+}
+
+/*
+ * Stores ttl, CP generated id and CS generated id
+ * ttl is given as the number of conversions attempted before id
+ * becomes irrelevant.
+ */
+int transaction_id_conversion_table[MAX_TRANSACTION_QUEUE_SIZE * 3] = {0};
+int last_index_in_use = 0;
+
+int ocpp_update_enqueued_transaction_id(int old_id, int new_id){
+	int ttl = uxQueueMessagesWaiting(ocpp_transaction_call_queue);
+	if(ttl < 1)
+		return 0;
+
+	for(size_t i = 0; i < sizeof(transaction_id_conversion_table); i += 3){
+		if(transaction_id_conversion_table[i] < 1){
+			transaction_id_conversion_table[i] = ttl;
+			transaction_id_conversion_table[i+1] = old_id;
+			transaction_id_conversion_table[i+2] = new_id;
+
+			if(i > last_index_in_use)
+				last_index_in_use = i;
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+static bool convert_tmp_id(int tmp_id, int * result_id_out){
+	bool found_conversion = false;
+	size_t i;
+
+	for(i = 0; i < last_index_in_use; i += 3){ // look for tmp id while lovering ttl
+		if(transaction_id_conversion_table[i] > 0){
+			if(transaction_id_conversion_table[i+1] == tmp_id){
+				*result_id_out = transaction_id_conversion_table[i+2];
+				found_conversion = true;
+			}
+
+			transaction_id_conversion_table[i]--;
+		}
+	}
+
+	for(; i < last_index_in_use; i += 3){ // continue lovering ttl for all indexes in use
+		if(transaction_id_conversion_table[i] > 0)
+			transaction_id_conversion_table[i]--;
+	}
+
+	for(i = last_index_in_use; i > 0; i -= 3){ // update last index in use
+		last_index_in_use = i;
+
+		if(transaction_id_conversion_table[i] > 0){
+			break;
+		}
+	}
+
+	return found_conversion;
+}
+
 int add_call(struct ocpp_call_with_cb * message, enum call_type type){
 	if(ocpp_call_queue == NULL)
 		return -1;
@@ -110,6 +243,8 @@ int add_call(struct ocpp_call_with_cb * message, enum call_type type){
 	case eOCPP_CALL_TRANSACTION_RELATED:
 		if(xQueueSendToBack(ocpp_transaction_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
 			return -1;
+		}else{
+			set_txn_enqueue_timestamp(time(NULL));
 		}
 		break;
 	case eOCPP_CALL_BLOCKING:
@@ -130,6 +265,11 @@ void block_enqueue_call(uint8_t call_type_mask){
 	enqueue_blocking_mask = call_type_mask;
 }
 
+uint8_t get_blocked_enqueue_mask(){
+	return enqueue_blocking_mask;
+}
+
+//TODO: ensure all calls to enqueue_call delete cJSON * on error
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
@@ -201,7 +341,7 @@ int send_call_reply(cJSON * call){
 		return -1;
 	}
 
-	int err = esp_websocket_client_send(client, message, strlen(message), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
+	int err = esp_websocket_client_send_text(client, message, strlen(message), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message);
 
 	if(err == -1){
@@ -333,42 +473,105 @@ int send_next_call(){
 			return -1;
 		}
 	}
-	// Attempt to get call from prioritized queue
-	if((call_blocking_mask & eOCPP_CALL_BLOCKING)
-		|| xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+	BaseType_t call_aquired = pdFALSE;
 
-		// We check for failed transactions as they SHOULD be delivered chronologically
+	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING)){ // Attempt to get call from prioritized queue
+		call_aquired = xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1));
+	}
+
+	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED)){
+		// Attempt to get transaction call
+
 		if(failed_transaction != NULL){
-
 			if(time(NULL) > last_transaction_timestamp + transaction_message_retry_interval * failed_transaction_count){
 				call = failed_transaction;
 				failed_transaction = NULL;
 				last_transaction_timestamp = time(NULL);
-			}else{
-				// if the failed transaction was attempted recently, then we send other calls while waiting.
-				if((call_blocking_mask & eOCPP_CALL_GENERIC)
-					|| xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
 
-					xSemaphoreGive(ocpp_active_call_lock_1);
-					return -1;
-				}
+				call_aquired = pdTRUE;
 			}
 		}
-		else{
-			if((call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED)
-				|| xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
 
-				if((call_blocking_mask & eOCPP_CALL_GENERIC)
-					|| xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1)) != pdTRUE){
+		if(call_aquired != pdTRUE && offline_enabled && non_enqueued_timestamp() < peek_txn_enqueue_timestamp()){
 
+			char action[32] = "\0";
+			void * cb_data = NULL;
+			cJSON * message = non_enqueued_message(&cb_data);
+			if(message == NULL || !cJSON_IsArray(message) || cJSON_GetArraySize(message) != 4){
+				ESP_LOGE(TAG, "Expected non enqueued messsage but no message was %s", (message == NULL) ? "NULL" : "malformed");
+			}
+			else{
+				strcpy(action, cJSON_GetArrayItem(message, 2)->valuestring);
+
+				call = malloc(sizeof(struct ocpp_call_with_cb));
+				if(call == NULL){
+					ESP_LOGE(TAG, "Unable to allocate call for non enqueued transaction");
 					xSemaphoreGive(ocpp_active_call_lock_1);
 					return -1;
 				}
+
+				call->cb_data = cb_data;
+				if(strcmp(action, OCPPJ_ACTION_START_TRANSACTION) == 0){
+					call->call_message = message;
+					call->result_cb = start_result_cb;
+					call->error_cb = start_error_cb;
+
+				}else if(strcmp(action, OCPPJ_ACTION_STOP_TRANSACTION) == 0){
+					call->call_message = message;
+					call->result_cb = stop_result_cb;
+					call->error_cb = stop_error_cb;
+
+				}else if(strcmp(action, OCPPJ_ACTION_METER_VALUES) == 0){
+					call->call_message = message;
+					call->result_cb = meter_result_cb;
+					call->error_cb = meter_error_cb;
+
+				}else{
+					ESP_LOGE(TAG, "Non enqueued transaction message is not a know transaction related message. No callback will be used");
+					call->call_message = message;
+					call->result_cb = NULL;
+					call->error_cb = NULL;
+					call->cb_data = NULL;
+				}
+				call_aquired = pdTRUE;
+				last_transaction_timestamp = time(NULL);
 			}
-			else{
+
+		}
+
+		if(call_aquired != pdTRUE){
+			call_aquired = xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1));
+
+			if(call_aquired == pdTRUE){
+				get_txn_enqueue_timestamp();
 				last_transaction_timestamp = time(NULL);
 			}
 		}
+
+		if(call_aquired == pdTRUE){
+			ESP_LOGI(TAG, "Sending next transaction related message");
+			if(call->call_message != NULL && cJSON_IsArray(call->call_message) && cJSON_GetArraySize(call->call_message) >= 4){
+				cJSON * payload = cJSON_GetArrayItem(call->call_message, 3);
+
+				if(cJSON_HasObjectItem(payload, "transactionId")){
+					cJSON * transaction_id_json = cJSON_GetObjectItem(payload, "transactionId");
+					int new_id;
+					if(convert_tmp_id(transaction_id_json->valueint, &new_id)){
+						ESP_LOGW(TAG, "Replacing tmp id '%d' with '%d'", transaction_id_json->valueint, new_id);
+						cJSON_SetNumberValue(transaction_id_json, new_id);
+					}
+				}
+			}
+		}
+	}
+
+	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_GENERIC)){ // Attempt to get generic call
+		call_aquired = xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1));
+	}
+
+	if(call_aquired != pdTRUE){
+		xSemaphoreGive(ocpp_active_call_lock_1);
+		return -1;
 	}
 
 	active_call_id = cJSON_GetArrayItem(call->call_message, 1)->valuestring;
@@ -389,7 +592,7 @@ int send_next_call(){
 		goto error;
 	}
 
-	err = esp_websocket_client_send(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
+	err = esp_websocket_client_send_text(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message_string);
 
 	if(err == -1){
@@ -521,7 +724,7 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 		ESP_LOGE(TAG, "Unable to write uri to buffer");
 		return -1;
 	}
-
+	ESP_LOGI(TAG, "Websocket url used is: %s", uri);
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp1.6",
@@ -552,7 +755,7 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 		if(websocket_connected){
 			ocpp_call_queue = xQueueCreate(5, sizeof(struct ocpp_call_with_cb *));
 			ocpp_blocking_call_queue = xQueueCreate(1, sizeof(struct ocpp_call_with_cb *));
-			ocpp_transaction_call_queue = xQueueCreate(20, sizeof(struct ocpp_call_with_cb *));
+			ocpp_transaction_call_queue = xQueueCreate(MAX_TRANSACTION_QUEUE_SIZE, sizeof(struct ocpp_call_with_cb *));
 
 			if(ocpp_call_queue == NULL || ocpp_transaction_call_queue == NULL || ocpp_blocking_call_queue == NULL){
 				ESP_LOGE(TAG, "Unable to create call queues");

@@ -63,9 +63,11 @@ int sessionHandler_GetStackWatermark();
 void sessionHandler_CheckAndSendOfflineSessions();
 void sessionHandler_SetOfflineSessionFlag();
 bool sessionHandler_OcppTransactionIsActive(uint connector_id);
+int * sessionHandler_OcppGetTransactionId(uint connector_id);
+time_t sessionHandler_OcppTransactionStartTime();
 void sessionHandler_OcppStopTransaction(const char * reason);
 // Transfers the ownership of the meter values to sessionHandler
-void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_sampled_value_list * values);
+void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length);
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();

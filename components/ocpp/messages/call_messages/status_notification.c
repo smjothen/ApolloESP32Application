@@ -3,6 +3,7 @@
 #include "types/ocpp_charge_point_status.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_ci_string_type.h"
+#include "types/ocpp_date_time.h"
 
 cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const char * error_code, const char * info, const char * status, time_t timestamp, const char * vendor_id, const char * vendor_error_code){
 
@@ -83,7 +84,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
 
 	if(timestamp != 0){
 		char timestamp_buffer[30];
-		size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
+		size_t written_length = ocpp_print_date_time(timestamp, timestamp_buffer, sizeof(timestamp_buffer));
 		if(written_length == 0)
 			goto error;
 

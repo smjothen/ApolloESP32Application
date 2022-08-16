@@ -3,8 +3,9 @@
 #include "types/ocpp_enum.h"
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_reason.h"
+#include "types/ocpp_date_time.h"
 
-cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int transaction_id, const char * reason, size_t meter_values_count, struct ocpp_meter_value * transaction_data){
+cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int * transaction_id, const char * reason, struct ocpp_meter_value_list * transaction_data){
 
 	if(id_tag != NULL && !is_ci_string_type(id_tag, 20))
 		return NULL;
@@ -24,7 +25,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 		return NULL;
 	}
 
-	if(meter_values_count > 0 && transaction_data == NULL)
+	if(transaction_id == NULL)
 		return NULL;
 
 	cJSON * payload = cJSON_CreateObject();
@@ -49,7 +50,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 	cJSON_AddItemToObject(payload, "meterStop", meter_stop_json);
 
 	char timestamp_buffer[30];
-	size_t written_length = strftime(timestamp_buffer, sizeof(timestamp_buffer), "%FT%T%Z", localtime(&timestamp));
+	size_t written_length = ocpp_print_date_time(timestamp, timestamp_buffer, sizeof(timestamp_buffer));
 	if(written_length == 0)
 		goto error;
 
@@ -59,7 +60,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 	}
 	cJSON_AddItemToObject(payload, "timestamp", timestamp_json);
 
-	cJSON * transaction_id_json = cJSON_CreateNumber(transaction_id);
+	cJSON * transaction_id_json = cJSON_CreateNumber(*transaction_id);
 	if(transaction_id_json == NULL){
 		cJSON_Delete(payload);
 		NULL;
@@ -79,15 +80,18 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 	if(transaction_data_json == NULL)
 		goto error;
 
-	for(size_t i = 0; i < meter_values_count; i++){
-		cJSON * meter_value_json = create_meter_value_json(transaction_data[i]);
-		if(meter_value_json == NULL){
-			cJSON_Delete(transaction_data_json);
-			goto error;
+	while(transaction_data != NULL){
+		if(transaction_data->value != NULL){
+			cJSON * value_json = create_meter_value_json(*transaction_data->value);
+			if(value_json == NULL){
+				cJSON_Delete(transaction_data_json);
+				goto error;
+			}
+			else{
+				cJSON_AddItemToArray(transaction_data_json, value_json);
+			}
 		}
-		else{
-			cJSON_AddItemToArray(transaction_data_json, meter_value_json);
-		}
+		transaction_data = transaction_data->next;
 	}
 	cJSON_AddItemToObject(payload, "transactionData", transaction_data_json);
 

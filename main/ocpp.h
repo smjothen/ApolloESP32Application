@@ -8,8 +8,9 @@ extern "C" {
 #include "types/ocpp_meter_value.h"
 
 int ocpp_get_stack_watermark();
-void save_interval_measurands(const char * context);
-void handle_meter_value(const char * context, const char * csl, int * transaction_id, uint * connectors, size_t connector_count);
+void save_interval_measurands(enum ocpp_reading_context_id context);
+void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, const char * stoptxn_csl,
+			int * transaction_id, uint * connectors, size_t connector_count);
 void ocpp_init();
 // When graceful is enabled, it will attempt to stop ongoing transactions and send any queued transaction related messages.
 void ocpp_end(bool graceful);

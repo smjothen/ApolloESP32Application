@@ -2,6 +2,8 @@
 
 #define TAG "OFFLINE_SESSION"
 
+#include <limits.h>
+
 #include "esp_log.h"
 #include "errno.h"
 #include "esp_vfs.h"
@@ -15,6 +17,10 @@
 #include "chargeSession.h"
 #include "../components/ntp/zntp.h"
 
+#include "../components/ocpp/include/messages/call_messages/ocpp_call_request.h"
+#include "../components/ocpp/include/types/ocpp_reason.h"
+#include "../components/ocpp/include/types/ocpp_meter_value.h"
+
 static const char *tmp_path = "/offs";
 
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
@@ -22,11 +28,21 @@ static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 static const int max_offline_session_files = 100;
 static const int max_offline_signed_values = 100;
 
+static const int max_offline_ocpp_txn_files = 100;
+
 #define FILE_VERSION_ADDR_0  		0L
 #define FILE_SESSION_ADDR_2  		2L
 #define FILE_SESSION_CRC_ADDR_996	996L
 #define FILE_NR_OF_OCMF_ADDR_1000  	1000L
 #define FILE_OCMF_START_ADDR_1004 	1004L
+
+#define FILE_TXN_ADDR_ID 1L
+#define FILE_TXN_ADDR_START 5L
+#define FILE_TXN_ADDR_STOP 66L
+#define FILE_TXN_ADDR_METER 139L
+
+#define OCPP_MIN_TIMESTAMP 1650000000
+#define OCPP_MAX_FILE_SIZE 2000
 
 struct LogHeader {
     int start;
@@ -51,6 +67,8 @@ static bool mounted = false;
 
 static int activeFileNumber = -1;
 static char activePathString[22] = {0};
+static char readingPath_ocpp[19] = {0};
+static long readingOffset_ocpp = LONG_MAX;
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
 
@@ -73,7 +91,7 @@ bool offlineSession_mount_folder()
 
     ESP_LOGI(TAG, "Mounting /offs");
     const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = max_offline_session_files,
+            .max_files = max_offline_session_files + max_offline_ocpp_txn_files,
             .format_if_mount_failed = true,
             .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
     };
@@ -204,10 +222,43 @@ int offlineSession_FindOldestFile()
 	return -1; //No files found
 }
 
+long offlineSession_FindOldestFile_ocpp()
+{
+	if(mounted == false)
+		return LONG_MAX;
 
-/*
- * Find the oldest file to read, send, delete
- */
+	ESP_LOGI(TAG, "Attempting to find oldest file (ocpp)");
+
+	DIR * dir = opendir("/offs/");
+	if(dir == NULL){
+		ESP_LOGE(TAG, "Unable to open directory");
+		return -1;
+	}
+
+	long oldest = LONG_MAX;
+	struct dirent * dp = readdir(dir);
+	while(dp != NULL){
+		if(dp->d_type == DT_REG){
+			long timestamp = strtol(dp->d_name, NULL, 16);
+
+			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
+				if(timestamp < oldest)
+					oldest = timestamp;
+			}
+		}
+		dp = readdir(dir);
+	}
+	closedir(dir);
+
+	if(oldest != LONG_MAX){
+		ESP_LOGI(TAG, "Oldest ocpp offline session is dated %ld", oldest);
+	}else{
+		ESP_LOGI(TAG, "No ocpp offline session found");
+	}
+
+	return oldest;
+}
+
 int offlineSession_FindNrOfFiles()
 {
 	if(mounted == false)
@@ -238,6 +289,39 @@ int offlineSession_FindNrOfFiles()
 
 	return fileCount;
 }
+
+int offlineSession_FindNrOfFiles_ocpp()
+{
+	if(mounted == false)
+		return -1;
+
+	ESP_LOGI(TAG, "Attemting to find nr of files (ocpp)");
+	int fileCount = 0;
+
+	DIR * dir = opendir("/offs");
+	if(dir == NULL){
+		return 0;
+	}
+
+	struct dirent * dp = readdir(dir);
+	while(dp != NULL){
+		if(dp->d_type == DT_REG){
+			long timestamp = strtol(dp->d_name, NULL, 16);
+
+			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
+				ESP_LOGI(TAG, "OfflineSession found file: %s", dp->d_name);
+				fileCount++;
+			}
+		}
+		dp = readdir(dir);
+	}
+
+	ESP_LOGI(TAG, "Nr of OfflineSession files: %d (ocpp)", fileCount);
+
+	closedir(dir);
+	return fileCount;
+}
+
 
 int offlineSession_GetMaxSessionCount()
 {
@@ -426,6 +510,177 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	xSemaphoreGive(offs_lock);
 }
 
+static esp_err_t writeSessionData_ocpp(FILE * fp, const unsigned char * sessionData, size_t data_length){
+	int sessionDataLen = data_length;
+	size_t outlen = 0;
+	char * base64SessionData = base64_encode(sessionData, sessionDataLen, &outlen);
+
+	time_t write_time = time(NULL);
+	if(fwrite(&write_time, sizeof(time_t), 1, fp) != 1)
+		goto error;
+
+	if(fwrite(&outlen, sizeof(size_t), 1, fp) != 1)
+		goto error;
+
+	if(fwrite(base64SessionData, sizeof(char), outlen, fp) != outlen)
+		goto error;
+
+
+	///Write CRC at the end of the block
+	uint32_t crcCalc = crc32_normal(0, base64SessionData, outlen);
+	if(fwrite(&crcCalc, sizeof(uint32_t), 1, fp) != 1)
+		goto error;
+
+	free(base64SessionData);
+	base64SessionData = NULL;
+
+	return ESP_OK;
+error:
+	ESP_LOGE(TAG, "Unable to write session data");
+	free(base64SessionData);
+	return ESP_FAIL;
+}
+
+bool peek_tainted = true;
+time_t peeked_timestamp = LONG_MAX;
+
+/*
+ * The ocpp file structure for version 1:
+ *
+ * <version> at: FILE_VERSION_ADDR_0
+ * <transaction_id> at: FILE_TXN_ADDR_ID
+ * <StartTransaction.req> at: FILE_TXN_ADDR_START
+ * <StopTransaction.req> at: FILE_TXN_ADDR_STOP
+ * <MeterValue.req><...><stop_txn_data> FILE_TXN_ADDR_METER
+ *
+ * <version>: uint8_t
+ * <transaction_id>: int
+ * <StartTransaction.req>: <sessionData>
+ * <StopTransaction.req>: <sessionData>
+ * <MeterValue.req>: <sessionData>
+ * <stop_txn_data>: <sessionData>
+ *
+ * <sessionData>: <timestamp><data_length><data><crc>
+ * <timestamp>: <time_t>
+ * <data_length>: <size_t>
+ * <data>: <unsigned char><...>
+ * <crc>: <uint32_t>
+ *
+ * NOTE: All sections of type <sessionData> may not be written to file depending on when the ocpp went offline/online.
+ * startTransaction might have already been sendt or enqueued, transaction_id might be a temporary value if it has
+ * not been recievedfrom CS. If stop_txn_data exists then StopTransaction.req should also exist.
+ *
+ * new lines in the format above does not indicate '\n' and '' in the file and is only there to make
+ * documentation easier to read and show offset.
+ *
+ * Meter values are not stored with connector id. All connector ids written (also for start transaction)
+ * should be 1, as all values should relate to a transaction on the only connector present on the charger.
+ *
+ * File names are 8.3 filenames, containing a directory prefix followed by an (up to) 8 character name followed by '.' and
+ * 3 character long extention. The file name is given by the timestamp of the start transaction. Tue to the filename limit
+ * of 8 characters, we write it as 8 width hexadecimal. It will overflow on Sun Feb 07 2106 06:28:15
+ */
+static esp_err_t offlineSession_UpdateSessionOnFile_Ocpp(const unsigned char * sessionData, size_t data_length, int transaction_id, time_t start_transaction_timestamp, long offset, int whence, bool append)
+{
+	if(mounted == false || start_transaction_timestamp < OCPP_MIN_TIMESTAMP)
+		return ESP_FAIL;
+
+	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "Failed to obtain offs lock during ocpp update");
+		return ESP_ERR_TIMEOUT; // EAGAIN / EWOULDBLOCK / EDEADLK ?
+	}
+
+	FILE * fp = NULL;
+	bool is_init = false;
+
+	errno = 0;
+	char file_path[19];
+	int written_length = snprintf(file_path, sizeof(file_path), "/offs/%.8lx.bin", start_transaction_timestamp);
+	if(written_length < 0 || written_length >= sizeof(file_path)){
+		ESP_LOGE(TAG, "Unable to write active path");
+		goto error;
+	}
+
+	if(access(file_path, F_OK) != 0){
+		if(offlineSession_FindNrOfFiles_ocpp() < max_offline_ocpp_txn_files){
+			ESP_LOGI(TAG, "Creating session file: %s  timestamp: %ld (ocpp)", file_path, start_transaction_timestamp);
+			fp = fopen(file_path, "wb+");
+			is_init = true;
+		}else{
+			ESP_LOGE(TAG, "All session files used");
+			goto error;
+		}
+
+	}else{
+		ESP_LOGI(TAG, "Opening session file for update: %s (ocpp)", file_path);
+		fp = fopen(file_path, "rb+");
+	}
+
+	if(fp == NULL)
+	{
+		ESP_LOGE(TAG, "Could not create or open session file '%s': %s", file_path, strerror(errno));
+		goto error;
+	}
+
+	peek_tainted = true; // Indicate that a new peek is necessary to check for transaction timestamps
+
+	if(is_init){
+		uint8_t version = 1;
+		if(fwrite(&version, sizeof(uint8_t), 1, fp) != 1){
+			ESP_LOGE(TAG, "Unable to write transaction id");
+			goto error;
+		}
+
+		if(fwrite(&transaction_id, sizeof(int), 1, fp) != 1){
+			ESP_LOGE(TAG, "Unable to write transaction id");
+			goto error;
+		}
+	}
+
+	if(append){
+		if(fseek(fp, 0, SEEK_END) != 0){
+			ESP_LOGE(TAG, "Unable to seek to end of file");
+			goto error;
+		}
+
+		long offset_end = ftell(fp);
+		if(offset_end == -1){
+			ESP_LOGE(TAG, "Unable to determing current file offset");
+		}
+
+		if(offset_end < FILE_TXN_ADDR_METER){
+			if(fseek(fp, FILE_TXN_ADDR_METER - offset_end, SEEK_CUR) != 0){
+				ESP_LOGE(TAG, "Unable to seek past end of file");
+				goto error;
+			}
+		}
+	}else{
+		if(fseek(fp, offset, whence) != 0){
+			ESP_LOGE(TAG, "Unable to seek to location");
+			goto error;
+		}
+	}
+
+	esp_err_t err;
+	if(offset + data_length < OCPP_MAX_FILE_SIZE){
+		err = writeSessionData_ocpp(fp, sessionData, data_length);
+	}else{
+		err = ESP_ERR_INVALID_SIZE;
+	}
+
+	ESP_LOGI(TAG, "Written ocpp section: %s | Written %ld - %ld (%ld size)", esp_err_to_name(err), offset, ftell(fp),
+		ftell(fp) - offset);
+	fclose(fp);
+	xSemaphoreGive(offs_lock);
+
+	return err;
+error:
+	if(fp != NULL)
+		fclose(fp);
+	xSemaphoreGive(offs_lock);
+	return ESP_FAIL;
+}
 
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 {
@@ -444,6 +699,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 	if(sessionFile == NULL)
 	{
+		xSemaphoreGive(offs_lock);
 		ESP_LOGE(TAG, "Print: sessionFile == NULL");
 		return ESP_FAIL;
 	}
@@ -644,6 +900,491 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	return jsonSession;
 }
 
+time_t offlineSession_PeekNextMessageTimestamp_ocpp(){
+	if(mounted == false)
+		return LONG_MAX;
+
+	if(!peek_tainted)
+		return peeked_timestamp;
+
+	if(xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain offs lock for peeking timestamp");
+		return LONG_MAX;
+	}
+	peek_tainted = false;
+
+	char tmp_reading_path[32];
+	strcpy(tmp_reading_path, readingPath_ocpp);
+	long tmp_offset = readingOffset_ocpp;
+
+	if(tmp_reading_path[0] == '\0'){ // If we are currently not reading any file
+		// Find the oldest file
+		time_t timestamp_oldest = offlineSession_FindOldestFile_ocpp();
+		if(timestamp_oldest == LONG_MAX){
+			peeked_timestamp = LONG_MAX;
+
+			xSemaphoreGive(offs_lock);
+			return peeked_timestamp;
+		}
+
+		snprintf(tmp_reading_path, sizeof(tmp_reading_path), "/offs/%.8lx.bin", timestamp_oldest);
+		tmp_offset = FILE_TXN_ADDR_START;
+	}
+
+	FILE * fp = fopen(tmp_reading_path, "rb");
+	if(fp == NULL){
+		ESP_LOGE(TAG, "Unable to open reading path '%s' to peek timestamp", tmp_reading_path);
+		goto error;
+	}
+
+	if(fseek(fp, tmp_offset, SEEK_SET) == -1){
+		ESP_LOGE(TAG, "Unable to seek to position for peek");
+		goto error;
+	}
+
+	if(fread(&peeked_timestamp, sizeof(time_t), 1, fp) != 1){
+		ESP_LOGE(TAG, "Unable to read timestamp for peek");
+		goto error;
+	}
+
+	if(tmp_offset == FILE_TXN_ADDR_START && peeked_timestamp == 0){ // Start transaction was never written, look for Meter value instead
+		if(fseek(fp, FILE_TXN_ADDR_METER, SEEK_SET) == -1){
+			ESP_LOGE(TAG, "Unable to seek to meter position for peek");
+			goto error;
+		}
+
+		if(fread(&peeked_timestamp, sizeof(time_t), 1, fp) != 1){
+			ESP_LOGE(TAG, "Unable to read timestamp at meter address for peek");
+			if(ferror(fp) != 0)
+				goto error;
+		}
+	}
+
+	if(tmp_offset >= FILE_TXN_ADDR_METER && peeked_timestamp == 0){ // Meter value never written, look for Stop transaction
+
+		if(fseek(fp, FILE_TXN_ADDR_STOP, SEEK_SET) == -1){
+			ESP_LOGE(TAG, "Unable to seek to stop transaction position for peek");
+			goto error;
+		}
+
+		if(fread(&peeked_timestamp, sizeof(time_t), 1, fp) != 1){
+			ESP_LOGE(TAG, "Unable to read timestamp at stop transaction for peek");
+			goto error;
+		}
+	}
+
+	fclose(fp);
+	xSemaphoreGive(offs_lock);
+	return peeked_timestamp;
+
+error:
+	ESP_LOGE(TAG, "EOF: %s, Error: %s", feof(fp) ? "Yes" : "No", ferror(fp) ? strerror(errno) : "Non");
+	fclose(fp);
+
+	remove(tmp_reading_path);
+	peek_tainted = true;
+
+	xSemaphoreGive(offs_lock);
+	peeked_timestamp = LONG_MAX;
+	return LONG_MAX;
+}
+
+esp_err_t readSessionData_ocpp(FILE * fp, time_t * timestamp_out, unsigned char ** session_data_out, size_t * session_data_length_out){
+	if(fread(timestamp_out, sizeof(time_t), 1, fp) != 1)
+		goto error;
+
+	size_t base64_length;
+	if(fread(&base64_length, sizeof(size_t), 1, fp) != 1)
+		goto error;
+
+	if(base64_length == 0)
+		return ESP_ERR_NOT_FOUND;
+
+	// TODO: Set max malloc size
+	char * base64_buffer = malloc(sizeof(unsigned char) * base64_length);
+	if(base64_buffer == NULL)
+		goto error;
+
+	if(fread(base64_buffer, sizeof(unsigned char), base64_length, fp) != base64_length){
+		free(base64_buffer);
+		goto error;
+	}
+
+	*session_data_out = base64_decode(base64_buffer, base64_length, session_data_length_out);
+	free(base64_buffer);
+	if(*session_data_out == NULL)
+		goto error;
+
+	uint32_t crc;
+	if(fread(&crc, sizeof(uint32_t), 1, fp) != 1)
+		goto error;
+
+	uint32_t crc_calc = crc32_normal(0, base64_buffer, base64_length);
+
+	if(crc != crc_calc)
+		return ESP_ERR_INVALID_CRC;
+
+	return ESP_OK;
+	//return (crc32_normal(0, *session_data_out, *session_data_length_out) == crc)? ESP_OK : ESP_ERR_INVALID_CRC;
+
+error:
+	return (feof(fp) != 0)? ESP_ERR_NOT_FOUND : ESP_FAIL;
+}
+
+struct start_transaction_session_data{
+	int connector_id;
+	int meter_start;
+	int reservation_id;
+	char id_tag[21];
+};
+
+esp_err_t sessionDataToStartTransaction_ocpp(FILE * fp, int * connector_id, char * id_tag,
+					int * meter_start, int * reservation_id){
+
+	time_t timestamp;
+	size_t data_length;
+	struct start_transaction_session_data * data = NULL;
+
+	esp_err_t err = readSessionData_ocpp(fp, &timestamp, (unsigned char **)&data, &data_length);
+
+	if(err != ESP_OK){
+		ESP_LOGE(TAG, "Unable to read start transaction data: %s", esp_err_to_name(err));
+		return err;
+	}
+
+	*connector_id = data->connector_id;
+	*meter_start = data->meter_start;
+	*reservation_id = data->reservation_id;
+	strcpy(id_tag, data->id_tag);
+
+	free(data);
+	return ESP_OK;
+}
+
+esp_err_t sessionDataToMeterValue_ocpp(FILE * fp, unsigned char ** meter_data, size_t * meter_data_length){
+	time_t timestamp;
+
+	esp_err_t err = readSessionData_ocpp(fp, &timestamp, meter_data, meter_data_length);
+
+	if(err != ESP_OK){
+		ESP_LOGE(TAG, "Unable to read meter value data: %s", esp_err_to_name(err));
+	}
+
+	return err;
+}
+
+struct stop_transaction_session_data{
+	int meter_stop;
+	time_t timestamp;
+	char reason[15];
+	char id_tag[21];
+};
+
+int sessionDataToStopTransaction_ocpp(FILE * fp, char * id_tag, int * meter_stop, time_t * timestamp, char * reason){
+
+	time_t timestamp_save;
+	size_t data_length;
+
+	struct stop_transaction_session_data * data = NULL;
+	esp_err_t err = readSessionData_ocpp(fp, &timestamp_save, (unsigned char **)&data, &data_length);
+
+	if(err != ESP_OK){
+		ESP_LOGE(TAG, "Unable to read stop transaction data: %s", esp_err_to_name(err));
+		return err;
+	}
+
+	strcpy(id_tag, data->id_tag);
+	*meter_stop = data->meter_stop;
+	*timestamp = data->timestamp;
+	strcpy(reason, data->reason);
+
+	free(data);
+	return ESP_OK;
+}
+
+cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
+	FILE * fp = NULL;
+	bool should_delete = false;
+
+	if(mounted == false)
+		return NULL;
+
+	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain offs lock for reading ocpp message");
+		return NULL;
+	}
+
+	peek_tainted = true; // Indicate that a new peek is necessary to check for transaction timestamps
+
+	if(readingPath_ocpp[0] == '\0'){ // If we are currently not reading any file
+		// Find the oldest file
+		time_t timestamp_oldest = offlineSession_FindOldestFile_ocpp();
+		if(timestamp_oldest == LONG_MAX){
+			ESP_LOGE(TAG, "Request to read next message failed due to no ocpp file");
+			goto error;
+		}
+
+		snprintf(readingPath_ocpp, sizeof(readingPath_ocpp), "/offs/%.8lx.bin", timestamp_oldest);
+	}
+
+	errno = 0;
+
+	fp = fopen(readingPath_ocpp, "rb+");
+	if(fp == NULL){
+		ESP_LOGE(TAG, "Unable to open reading path to read next ocpp message");
+		readingPath_ocpp[0] = '\0';
+		goto error;
+	}
+
+	uint8_t version;
+	int transaction_id;
+
+	if(fread(&version, sizeof(uint8_t), 1, fp) != 1){
+		ESP_LOGE(TAG, "Unable to read version");
+		goto error;
+	}
+
+	if(fread(&transaction_id, sizeof(int), 1, fp) != 1){
+		ESP_LOGW(TAG, "Unable to read transaction id");
+		goto error;
+	}
+
+	if(readingOffset_ocpp == LONG_MAX){
+		ESP_LOGI(TAG, "Starting first read from current file");
+
+		readingOffset_ocpp = FILE_TXN_ADDR_START;
+	}
+
+	cJSON * message = NULL;
+
+	if(readingOffset_ocpp == FILE_TXN_ADDR_START){ // Attempt to read StartTransaction.req
+		ESP_LOGI(TAG, "Attempting to read start transaction section");
+
+		if(fseek(fp, readingOffset_ocpp, SEEK_SET) == -1){
+			ESP_LOGE(TAG, "Unable to seek to ocpp message");
+			goto error;
+		}
+
+		int connector_id;
+		char id_tag[21];
+		int meter_start;
+		int reservation_id;
+
+		esp_err_t status = sessionDataToStartTransaction_ocpp(fp, &connector_id, id_tag, &meter_start, &reservation_id);
+
+		if(status == ESP_FAIL){
+			ESP_LOGE(TAG, "Unable to read session data for ocpp");
+			goto error;
+
+		}else if(status == ESP_ERR_NOT_FOUND){
+			ESP_LOGI(TAG, "No StartTransactionRequest on file, will look for meter values");
+		}
+		else{
+			time_t start_transaction_timestamp = LONG_MAX;
+			sscanf(readingPath_ocpp, "/offs/%lx.bin", &start_transaction_timestamp);
+			message = ocpp_create_start_transaction_request(connector_id, id_tag, meter_start, reservation_id, start_transaction_timestamp);
+			int * transaction_id_buffer = malloc(sizeof(int));
+			if(transaction_id_buffer == NULL){
+				ESP_LOGE(TAG, "Unable to allocate cb data for StartTransaction");
+			}else{
+				*transaction_id_buffer = transaction_id;
+				*cb_data = transaction_id_buffer;
+			}
+		}
+
+		readingOffset_ocpp = FILE_TXN_ADDR_METER;
+	}
+
+	struct ocpp_meter_value_list * value_list = NULL;
+
+	if(message == NULL && readingOffset_ocpp >= FILE_TXN_ADDR_METER){ // Attempt to read meter value
+		if(fseek(fp, 0, SEEK_END) == -1){
+			ESP_LOGE(TAG, "Unable to seek to end of file");
+			goto error;
+		}
+
+		long offset_end = ftell(fp);
+		if(offset_end == -1){
+			ESP_LOGE(TAG, "Unable to set end offset");
+			goto error;
+		}
+
+		if(readingOffset_ocpp < offset_end){
+			ESP_LOGI(TAG, "Attempting to read meter value section");
+
+			if(fseek(fp, readingOffset_ocpp, SEEK_SET) == -1){
+				ESP_LOGE(TAG, "Unable to seek to current MeterValue.req");
+				goto error;
+			}
+
+			unsigned char * meter_data = NULL;
+			size_t meter_data_length;
+			esp_err_t state = sessionDataToMeterValue_ocpp(fp, &meter_data, &meter_data_length);
+
+			if(state == ESP_OK && meter_data != NULL){
+				bool is_stop_txn_data;
+				value_list = ocpp_meter_list_from_contiguous_buffer(meter_data, meter_data_length, &is_stop_txn_data);
+				free(meter_data);
+
+				if(value_list == NULL){
+					ESP_LOGE(TAG, "Unable to create value list from meter data");
+					goto error;
+				}
+
+				if(is_stop_txn_data){
+					ESP_LOGI(TAG, "Read meter value is stop transaction data, checking for stop transaction request");
+					readingOffset_ocpp = FILE_TXN_ADDR_STOP;
+				}else{
+					ESP_LOGI(TAG, "Read meter value");
+					message = ocpp_create_meter_values_request(1, &transaction_id, value_list);
+					*cb_data = "Meter value";
+
+					if(message == NULL){
+						ESP_LOGE(TAG, "unable to create meter value request");
+					}
+
+					readingOffset_ocpp = ftell(fp);
+				}
+
+			}else if(state == ESP_ERR_NOT_FOUND){
+				ESP_LOGI(TAG, "No meter values stored, checking for stop transaction message");
+
+			}else{
+				ESP_LOGE(TAG, "Unable to get meter data from session data");
+				goto error;
+			}
+		}
+	}
+
+	if(message == NULL){ // Attempt to read stop transaction
+		should_delete = true; // stop transaction is the last message attempted to be read, therefore file should be deleted
+		ESP_LOGI(TAG, "Attempting to read stop transaction section");
+
+		if(fseek(fp, FILE_TXN_ADDR_STOP, SEEK_SET) == -1){
+			ESP_LOGE(TAG, "Unable to seek to stop transaction");
+			ocpp_meter_list_delete(value_list);
+			goto error;
+		}
+
+		char id_tag[21];
+		int meter_stop;
+		time_t timestamp;
+		char reason[16];
+
+		esp_err_t state = sessionDataToStopTransaction_ocpp(fp, id_tag, &meter_stop, &timestamp, reason);
+		if(state == ESP_OK){
+			ESP_LOGI(TAG, "Read stop transaction, creating message");
+			message = ocpp_create_stop_transaction_request(id_tag, meter_stop, timestamp, &transaction_id, reason, value_list);
+			*cb_data = "stop";
+
+		}else if(state == ESP_ERR_NOT_FOUND){
+			if(value_list != NULL){
+				ESP_LOGI(TAG, "No stop transaction written, creating meter value message");
+				message = ocpp_create_meter_values_request(1, &transaction_id, value_list);
+				*cb_data = "Meter value";
+			}else{
+				ESP_LOGI(TAG, "All transaction messages read for %d", transaction_id);
+			}
+		}else{
+			ESP_LOGE(TAG, "Unable to get stop transaction from session data");
+			ocpp_meter_list_delete(value_list);
+			goto error;
+		}
+	}
+
+	ocpp_meter_list_delete(value_list);
+
+	if(!should_delete){ // Check if there are more messages in transaction
+		ESP_LOGI(TAG, "Checking for more messages in current offline transaction file");
+		time_t next_timestamp = 0;
+		if(fseek(fp, readingOffset_ocpp, SEEK_SET) != 0){
+			ESP_LOGE(TAG, "Unable to seek to next transaction message, deleting file");
+			should_delete = true;
+		}
+		else if(fread(&next_timestamp, sizeof(time_t), 1, fp) != 1 || next_timestamp < OCPP_MIN_TIMESTAMP){
+			if(readingOffset_ocpp >= FILE_TXN_ADDR_METER){
+				ESP_LOGI(TAG, "No more meter values found");
+
+				readingOffset_ocpp = FILE_TXN_ADDR_STOP;
+				if(fseek(fp, readingOffset_ocpp, SEEK_SET) != 0){
+					ESP_LOGE(TAG, "Unable to seek to stop transaction");
+					should_delete = true;
+				}else{
+					if(fread(&next_timestamp, sizeof(time_t), 1, fp) != 1 || next_timestamp < OCPP_MIN_TIMESTAMP){
+						ESP_LOGI(TAG, "No stop transaction found");
+						should_delete = true;
+					}
+				}
+			}
+		}
+	}
+
+	fclose(fp);
+	if(should_delete){
+		ESP_LOGI(TAG, "Deleting transaction file");
+
+		remove(readingPath_ocpp);
+		readingPath_ocpp[0] = '\0';
+		readingOffset_ocpp = LONG_MAX;
+	}
+
+	xSemaphoreGive(offs_lock);
+
+	return message;
+error:
+	if(fp != NULL){
+		if(feof(fp) != 0){
+			if(ftell(fp) >= FILE_TXN_ADDR_METER){
+				ESP_LOGE(TAG, "File stream reports EOF. Moving to stop transaction");
+				readingOffset_ocpp = FILE_TXN_ADDR_STOP;
+
+			}else{
+				ESP_LOGE(TAG, "File stream reports EOF and not part of meter value section, marking for deletion");
+				should_delete = true;
+			}
+
+		}else{
+
+			if(ferror(fp) != 0){
+				ESP_LOGE(TAG, "File stream reports error. Errno set to %s", strerror(errno));
+			}
+			else{
+				ESP_LOGE(TAG, "File stream reports no error.");
+			}
+
+			if(readingOffset_ocpp == FILE_TXN_ADDR_START){
+				ESP_LOGW(TAG, "Error was during reading of start transaction, moving to meter values");
+				readingOffset_ocpp = FILE_TXN_ADDR_METER;
+
+			}else if(readingOffset_ocpp >= FILE_TXN_ADDR_METER){
+				ESP_LOGE(TAG, "Error was during reading of meter value, moving to stop transaction");
+				readingOffset_ocpp = FILE_TXN_ADDR_STOP;
+
+			}else if(readingOffset_ocpp == LONG_MAX){
+				ESP_LOGE(TAG, "Error while readingOffset was not set");
+				should_delete = true;
+
+			}else{
+				ESP_LOGE(TAG, "Error was during stop transaction, marking file for deletion");
+				should_delete = true;
+			}
+		}
+
+		fclose(fp);
+	}
+
+	if(should_delete){
+		ESP_LOGE(TAG, "File was marked for deletion; Deleting file");
+		remove(readingPath_ocpp);
+		readingPath_ocpp[0] = '\0';
+		readingOffset_ocpp = LONG_MAX;
+	}
+
+	xSemaphoreGive(offs_lock);
+	return NULL;
+}
 
 static double startEnergy = 0.0;
 static double stopEnergy = 0.0;
@@ -815,6 +1556,151 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 	offlineSession_UpdateSessionOnFile(sessionData, true);
 
 	return ret;
+}
+
+esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, int connector_id,
+						const char * id_tag, int meter_start, int * reservation_id)
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
+		return ESP_FAIL; //NOTE: The Save*_ocppx functions return ESP_FAIL when unable to mount SaveSession returns 0 (ESP_OK)
+	}
+
+	struct start_transaction_session_data data = {
+		.connector_id = connector_id,
+		.meter_start = meter_start,
+	};
+
+	if(id_tag == NULL){
+		ESP_LOGE(TAG, "Missing id tag for start transaction");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	strncpy(data.id_tag, id_tag, sizeof(data.id_tag));
+
+	if(reservation_id != NULL){
+		data.reservation_id = *reservation_id;
+	}else{
+		data.reservation_id = -1; // TODO: update as -1 may be a valid reservation id.
+	}
+
+	ESP_LOGW(TAG, "Writing start transaction");
+	return offlineSession_UpdateSessionOnFile_Ocpp((unsigned char *)&data, sizeof(struct start_transaction_session_data), transaction_id,
+						transaction_start_timestamp, FILE_TXN_ADDR_START, SEEK_SET, false);
+}
+
+esp_err_t offlineSession_SaveStopTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, const char * id_tag,
+						int meter_stop, time_t timestamp, const char * reason)
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
+		return ESP_FAIL;
+	}
+
+	struct stop_transaction_session_data data = {
+		.meter_stop = meter_stop,
+		.timestamp = timestamp
+	};
+
+	if(id_tag != NULL){
+		strncpy(data.id_tag, id_tag, sizeof(data.id_tag));
+	}else{
+		data.id_tag[0] = '\0';
+	}
+
+	if(reason != NULL){
+		strncpy(data.reason, reason, sizeof(data.reason));
+	}else{
+		data.reason[0] = '\0';
+	}
+
+	ESP_LOGW(TAG, "Writing stop transaction");
+	return offlineSession_UpdateSessionOnFile_Ocpp((unsigned char *)&data, sizeof(struct stop_transaction_session_data), transaction_id,
+						transaction_start_timestamp, FILE_TXN_ADDR_STOP, SEEK_SET, false);
+}
+
+esp_err_t offlineSession_SaveNewMeterValue_ocpp(int transaction_id, time_t transaction_start_timestamp, const unsigned char * meter_data, size_t buffer_length)
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
+		return ESP_FAIL;
+	}
+
+	return offlineSession_UpdateSessionOnFile_Ocpp(meter_data, buffer_length, transaction_id,
+						transaction_start_timestamp, FILE_TXN_ADDR_METER, SEEK_SET, true);
+}
+
+esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int new_transaction_id){
+	if(mounted == false)
+		return ESP_FAIL;
+
+	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
+	{
+		ESP_LOGE(TAG, "failed to obtain offs lock for updating transaction id");
+		return ESP_FAIL;
+	}
+
+	DIR * dir = opendir("/offs/");
+	if(dir == NULL){
+		ESP_LOGE(TAG, "Unable to open directory");
+		xSemaphoreGive(offs_lock);
+		return -1;
+	}
+
+        struct dirent * dp = readdir(dir);
+	char file_path[19];
+	bool found_transaction = false;
+
+	while(dp != NULL){
+		if(dp->d_type == DT_REG){
+			long timestamp = strtol(dp->d_name, NULL, 16); // filename for ocpp transactions are based on unix time IN hexadecimal
+			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
+				int written_length = snprintf(file_path, sizeof(file_path), "/offs/%s", dp->d_name);
+
+				if(written_length > 0 && written_length < sizeof(file_path)){
+					FILE * fp = fopen(file_path, "rb+");
+
+					if(fp != NULL && fseek(fp, FILE_TXN_ADDR_ID, SEEK_SET) == 0){
+						int transaction_id;
+
+						if(fread(&transaction_id, sizeof(int), 1, fp) == 1){
+							if(transaction_id == old_transaction_id){
+								found_transaction = true;
+								//TODO: Check if long offset in fseek is equal to size_t size in fread
+								if(fseek(fp, -sizeof(int), SEEK_CUR) == 0){
+									if(fwrite(&new_transaction_id, sizeof(int), 1, fp) != 1){
+										ESP_LOGE(TAG, "Unable to write new transaction id");
+									}
+								}else{
+									ESP_LOGE(TAG, "Unable to seek back to transaction id");
+								}
+							}
+						}else{
+							ESP_LOGE(TAG, "Unable to read transaction id for update");
+						}
+					}else{
+						ESP_LOGE(TAG, "Unable to %s for id update", (fp == NULL) ? "open file" : "seek");
+					}
+
+					if(fp != NULL)
+						fclose(fp);
+
+				}else{
+					ESP_LOGE(TAG, "Unable to create filepath from d_name");
+				}
+			}
+		}
+
+		if(found_transaction)
+			break;
+
+		dp = readdir(dir);
+	}
+
+	closedir(dir);
+
+	xSemaphoreGive(offs_lock);
+	return (found_transaction) ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
 
@@ -1030,6 +1916,45 @@ void offlineSession_DeleteAllFiles()
 	{
 		offlineSession_delete_session(fileNo);
 	}
+}
+
+// Returns number of files not deleted
+int offlineSession_DeleteAllFiles_ocpp()
+{
+	ESP_LOGW(TAG, "Deleting all files (ocpp)");
+
+	char full_path[19];
+	int nr_of_unsuccessfull_removals = 0;
+	DIR * dir = opendir("/offs/");
+
+	struct dirent * dp = readdir(dir);
+
+	while(dp != NULL){
+		if(dp->d_type == DT_REG){
+			long timestamp = strtol(dp->d_name, NULL, 16);
+			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
+				if(strnlen(dp->d_name, 13) == 12){
+					snprintf(full_path, sizeof(full_path), "/offs/%.12s", dp->d_name);
+				}else{
+					ESP_LOGE(TAG, "Unexpected file length, '%s' not a 8.3 filename", dp->d_name);
+					dp = readdir(dir);
+					continue;
+				}
+
+				ESP_LOGW(TAG, "Deleting ocpp file: %s", full_path);
+				if(remove(full_path) != 0){
+					ESP_LOGE(TAG, "Unable to delete %s: %s", full_path, strerror(errno));
+					nr_of_unsuccessfull_removals++;
+				}
+			}
+		}
+
+		dp = readdir(dir);
+	}
+
+	closedir(dir);
+
+	return nr_of_unsuccessfull_removals;
 }
 
 int offlineSession_delete_session(int fileNo)
