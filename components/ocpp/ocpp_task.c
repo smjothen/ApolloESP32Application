@@ -41,9 +41,9 @@ bool is_trigger_message = false; // Will always be false until TriggerMessage is
 
 time_t last_call_timestamp = {0};
 
-QueueHandle_t ocpp_call_queue; // For normal messages
-QueueHandle_t ocpp_blocking_call_queue; // For messages that prevent significant ocpp behaviour (BootNotification)
-QueueHandle_t ocpp_transaction_call_queue; // transactions SHOULD be delivered as soon as possible, in chronological order, MUST queue when offline
+QueueHandle_t ocpp_call_queue = NULL; // For normal messages
+QueueHandle_t ocpp_blocking_call_queue = NULL; // For messages that prevent significant ocpp behaviour (BootNotification)
+QueueHandle_t ocpp_transaction_call_queue = NULL; // transactions SHOULD be delivered as soon as possible, in chronological order, MUST queue when offline
 
 bool websocket_connected = false;
 enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
@@ -311,13 +311,13 @@ void block_sending_call(uint8_t call_type_mask){
 size_t enqueued_call_count(){
 	size_t count = 0;
 
-	if(!(call_blocking_mask & eOCPP_CALL_GENERIC))
+	if(!(call_blocking_mask & eOCPP_CALL_GENERIC) && ocpp_call_queue != NULL)
 		count += uxQueueMessagesWaiting(ocpp_call_queue);
 
-	if(!(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED))
+	if(!(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED) && ocpp_transaction_call_queue != NULL)
 		count += uxQueueMessagesWaiting(ocpp_transaction_call_queue);
 
-	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING))
+	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING) && ocpp_blocking_call_queue != NULL)
 		count += uxQueueMessagesWaiting(ocpp_blocking_call_queue);
 
 	return count;
@@ -703,7 +703,8 @@ int start_ocpp_heartbeat(void){
 }
 
 void stop_ocpp_heartbeat(void){
-	if(xTimerDelete(heartbeat_handle, pdMS_TO_TICKS(500)) != pdTRUE){
+
+	if(heartbeat_handle != NULL && xTimerDelete(heartbeat_handle, pdMS_TO_TICKS(500)) != pdTRUE){
 		ESP_LOGE(TAG, "Unable to stop heartbeat timer");
 	}
 	heartbeat_handle = NULL;
