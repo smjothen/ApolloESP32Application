@@ -63,6 +63,7 @@ TimerHandle_t heartbeat_handle = NULL;
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
 
+char last_transaction_id[37] = {0};
 struct ocpp_call_with_cb * failed_transaction = NULL;
 unsigned int failed_transaction_count = 0;
 
@@ -389,12 +390,8 @@ struct ocpp_call_with_cb * get_active_call(){
 	return active_call;
 }
 
-bool is_transaction_related_message(const char * action){
-	return ocpp_validate_enum(action, 3,
-				OCPPJ_ACTION_START_TRANSACTION,
-				OCPPJ_ACTION_STOP_TRANSACTION,
-				OCPPJ_ACTION_METER_VALUES) == 0 ? true : false;
-
+static bool is_transaction_related_message(const char * unique_id){
+	return strncmp(unique_id, last_transaction_id, 36) == 0;
 }
 
 const char * get_active_call_id(){
@@ -407,9 +404,9 @@ void clear_active_call(void){
 		// If active call is a transaction retry, then also clear retry data
 		if(failed_transaction_count > 0){
 			if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
-				const char * action = cJSON_GetArrayItem(active_call->call_message, 2)->valuestring;
+				const char * unique_id = cJSON_GetArrayItem(active_call->call_message, 1)->valuestring;
 
-				if(is_transaction_related_message(action)){
+				if(is_transaction_related_message(unique_id)){
 					failed_transaction_count = 0;
 				}
 			}
@@ -429,9 +426,9 @@ void clear_active_call(void){
 void fail_active_call(const char * fail_description){
 	if(active_call != NULL){
 		if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
-			const char * action = cJSON_GetArrayItem(active_call->call_message, 2)->valuestring;
+			const char * unique_id = cJSON_GetArrayItem(active_call->call_message, 1)->valuestring;
 
-			if(is_transaction_related_message(action)){
+			if(is_transaction_related_message(unique_id)){
 				if(failed_transaction_count < transaction_message_attempts){
 					ESP_LOGW(TAG, "Preparing failed transaction for retry");
 					failed_transaction = active_call;
@@ -551,6 +548,7 @@ int send_next_call(){
 		if(call_aquired == pdTRUE){
 			ESP_LOGI(TAG, "Sending next transaction related message");
 			if(call->call_message != NULL && cJSON_IsArray(call->call_message) && cJSON_GetArraySize(call->call_message) >= 4){
+				strncpy(last_transaction_id, cJSON_GetArrayItem(call->call_message, 1)->valuestring, 36);
 				cJSON * payload = cJSON_GetArrayItem(call->call_message, 3);
 
 				if(cJSON_HasObjectItem(payload, "transactionId")){
