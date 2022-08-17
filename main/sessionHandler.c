@@ -446,7 +446,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 bool pending_ocpp_authorize = false;
 
 static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-	const char * action = (const char *) cb_data;
+	const char * action = (cb_data != NULL) ? (const char *) cb_data : "No cb";
 
 	if(strcmp(action, "authorize"))
 		pending_ocpp_authorize = false;
