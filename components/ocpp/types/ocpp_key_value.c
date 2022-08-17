@@ -3,7 +3,7 @@
 #include "types/ocpp_enum.h"
 
 bool is_configuration_key(const char * key){
-	return ocpp_validate_enum(key, 28,
+	return ocpp_validate_enum(key, 31,
 				OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS,
 				OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL,
 				OCPP_CONFIG_KEY_CONNECTION_TIMEOUT,
@@ -31,7 +31,10 @@ bool is_configuration_key(const char * key){
 				OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH,
 				OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS,
 				OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL,
-				OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0;
+				OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT,
+				OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED,
+				OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH,
+				OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0;
 }
 cJSON * create_key_value_json(struct ocpp_key_value key_value){
 	if(!is_ci_string_type(key_value.key, 50))

@@ -1100,7 +1100,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 		goto error;
 	index++;
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u32(
 		storage_Get_ocpp_clock_aligned_data_interval(), &configuration_out[index].value);
@@ -1109,7 +1109,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u32(
 		storage_Get_ocpp_connection_timeout(), &configuration_out[index].value);
@@ -1118,7 +1118,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	char phase_rotation_str[16];
 	sprintf(phase_rotation_str, "1.%s", convert_to_ocpp_phase(storage_Get_PhaseRotation()));
@@ -1129,7 +1129,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_connector_phase_rotation_max_length(), &configuration_out[index].value);
@@ -1138,7 +1138,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_get_configuration_max_keys(), &configuration_out[index].value);
@@ -1147,7 +1147,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u32(
 		storage_Get_ocpp_heartbeat_interval(), &configuration_out[index].value);
@@ -1156,7 +1156,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LIGHT_INTENSITY);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u8(
 		floor(storage_Get_HmiBrightness() * 100), &configuration_out[index].value);
@@ -1165,7 +1165,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_local_authorize_offline(), &configuration_out[index].value);
@@ -1174,7 +1174,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_local_pre_authorize(), &configuration_out[index].value);
@@ -1183,7 +1183,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_str(
 			storage_Get_ocpp_meter_values_aligned_data(), &configuration_out[index].value);
@@ -1192,7 +1192,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_meter_values_aligned_data_max_length(), &configuration_out[index].value);
@@ -1201,7 +1201,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_str(
 		storage_Get_ocpp_meter_values_sampled_data(), &configuration_out[index].value);
@@ -1210,7 +1210,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_meter_values_sampled_data_max_length(), &configuration_out[index].value);
@@ -1219,7 +1219,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u32(
 		storage_Get_ocpp_meter_value_sample_interval(), &configuration_out[index].value);
@@ -1228,7 +1228,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_number_of_connectors(), &configuration_out[index].value);
@@ -1237,7 +1237,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_RESET_RETRIES);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_reset_retries(), &configuration_out[index].value);
@@ -1246,7 +1246,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &configuration_out[index].value);
@@ -1255,7 +1255,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_stop_transaction_on_invalid_id(), &configuration_out[index].value);
@@ -1264,7 +1264,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_str(
 		storage_Get_ocpp_stop_txn_aligned_data(), &configuration_out[index].value);
@@ -1273,7 +1273,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_stop_txn_aligned_data_max_length(), &configuration_out[index].value);
@@ -1282,7 +1282,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_str(
 		storage_Get_ocpp_stop_txn_sampled_data(), &configuration_out[index].value);
@@ -1291,7 +1291,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_stop_txn_sampled_data_max_length(), &configuration_out[index].value);
@@ -1300,7 +1300,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_str(
 		storage_Get_ocpp_supported_feature_profiles(), &configuration_out[index].value);
@@ -1309,7 +1309,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_supported_feature_profiles_max_length(), &configuration_out[index].value);
@@ -1318,7 +1318,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_transaction_message_attempts(), &configuration_out[index].value);
@@ -1328,7 +1328,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_transaction_message_retry_interval(), &configuration_out[index].value);
@@ -1337,7 +1337,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out[index].value);
@@ -1346,7 +1346,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED);
-	configuration_out->readonly = false;
+	configuration_out[index].readonly = false;
 
 	err = allocate_and_write_configuration_bool(
 		storage_Get_ocpp_local_auth_list_enabled(), &configuration_out[index].value);
@@ -1355,7 +1355,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u16(
 		storage_Get_ocpp_local_auth_list_max_length(), &configuration_out[index].value);
@@ -1364,7 +1364,7 @@ static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out
 	index++;
 
 	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH);
-	configuration_out->readonly = true;
+	configuration_out[index].readonly = true;
 
 	err = allocate_and_write_configuration_u8(
 		storage_Get_ocpp_send_local_list_max_length(), &configuration_out[index].value);
@@ -1381,23 +1381,21 @@ error:
 
 //TODO: check if this should be scheduled for different thread to free up the websocket thread
 static void get_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+
+	int key_length = 0;
+
 	if(cJSON_HasObjectItem(payload, "key")){
 		cJSON * key = cJSON_GetObjectItem(payload, "key");
 
-		if(!cJSON_IsArray(key)){
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "'key' field expected to be array type", NULL);
-			if(ocpp_error == NULL){
-				ESP_LOGE(TAG, "Unable to create call error for type constraint violation of 'key' field");
-				return;
-			}
-			else{
-				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
-				return;
-			}
+		if(cJSON_IsArray(key)){
+			key_length = cJSON_GetArraySize(key);
+		}else{
+			key_length = -1;
 		}
+	}
 
-		int key_length = cJSON_GetArraySize(key);
+	if(key_length > 0){
+
 		if(key_length > storage_Get_ocpp_get_configuration_max_keys()){
 			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Too many keys requested", NULL);
 			if(ocpp_error == NULL){
@@ -1409,6 +1407,8 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 				return;
 			}
 		}
+
+		cJSON * key = cJSON_GetObjectItem(payload, "key");
 
 		size_t configuration_key_index = 0; // for keys that are recognized/implemented
 		size_t unknown_key_index = 0;
@@ -1501,7 +1501,7 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 
 			return;
 		}
-	}else{ // No keys in request, send all
+	}else if(key_length == 0){ // No keys in request, send all
 		struct ocpp_key_value * key_values = malloc(sizeof(struct ocpp_key_value) * OCPP_CONFIG_KEY_COUNT);
 		if(key_values == NULL){
 			goto error;
@@ -1526,6 +1526,18 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 
 			return;
 		}
+	}else{
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "'key' field expected to be array type", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for type constraint violation of 'key' field");
+			return;
+		}
+		else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+			return;
+		}
+
 	}
 
 error: ;
