@@ -2414,7 +2414,7 @@ static void ocpp_task(){
 		while(should_run && should_restart == false){
 			uint32_t data = ulTaskNotifyTake(pdTRUE,0);
 
-			if(data != eOCPP_WEBSOCKET_NO_EVENT){
+			if(data != eOCPP_WEBSOCKET_NO_EVENT && data != eOCPP_WEBSOCKET_RECEIVED_MATCHING){
 				ESP_LOGW(TAG, "Handling websocket event");
 				switch(data){
 				case eOCPP_WEBSOCKET_CONNECTED:
@@ -2458,7 +2458,11 @@ static void ocpp_task(){
 
 			switch(connection_status){
 			case eCS_CONNECTION_ONLINE:
-				handle_ocpp_call(); //TODO: retest with large messages as delay was removed to improve Reset.req
+				if(handle_ocpp_call((int)data) == eOCPP_WEBSOCKET_DISCONNECT){
+					ESP_LOGW(TAG, "Send ocpp indicate disconnected");
+					ESP_LOGW(TAG, "Blocking generic and transaction messages. Storing current mask: %d", previous_enqueue_mask);
+					block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED);
+				}
 				break;
 			case eCS_CONNECTION_OFFLINE:
 				if(is_connected()){
@@ -2508,7 +2512,7 @@ clean:
 				ESP_LOGW(TAG, "Remaining messages to send: %d. timeout: (%d/%d sec)",
 					message_count, exit_duration, OCPP_EXIT_TIMEOUT);
 
-				err = handle_ocpp_call();
+				err = handle_ocpp_call(eOCPP_WEBSOCKET_NO_EVENT);
 				if(err){
 					ESP_LOGE(TAG, "Error sending message during graceful exit. Exiting non gracefully");
 					break;

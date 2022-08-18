@@ -197,16 +197,26 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		return;
 	}
 
+	char * active_id = NULL;
+	struct ocpp_call_with_cb * call;
 
 	switch(message_type_id){
 	case eOCPPJ_MESSAGE_ID_CALL:
 		ESP_LOGD(TAG, "Recieved ocpp call message");
 		call_handler(client, unique_id, action, payload);
 		break;
+
 	case eOCPPJ_MESSAGE_ID_RESULT:
-		ESP_LOGD(TAG, "Recieved ocpp result message: %s", get_active_call_id());
-		if(strcmp(get_active_call_id(), unique_id) == 0){
-			struct ocpp_call_with_cb * call = get_active_call();
+		if(take_active_call(&call, &active_id, 500) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to take active call for result. Possibly recent timeout");
+			break;
+		}
+		ESP_LOGD(TAG, "Recieved ocpp result message: %s", unique_id);
+
+		if(active_id != NULL && strcmp(active_id, unique_id) == 0){
+			if(task_to_notify != NULL)
+				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING, eSetValueWithOverwrite);
+
 			if(call == NULL){
 				ESP_LOGE(TAG, "Active call id matched response, but original call was NULL");
 			}
@@ -215,16 +225,28 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 			}else{
 				ESP_LOGD(TAG, "Finished call %s", unique_id);
 			}
+
 			clear_active_call();
 		}else{
 			ESP_LOGE(TAG, "Got result to unexpected message id, ignoring");
-			ESP_LOGE(TAG, "Expected %s got %s", get_active_call_id(), unique_id);
+			ESP_LOGE(TAG, "Expected %s got %s", active_id != NULL ? active_id : "NULL", unique_id);
+
+			give_active_call();
 		}
+
 		break;
+
 	case eOCPPJ_MESSAGE_ID_ERROR:
 		ESP_LOGE(TAG, "Recieved ocpp error message");
-		if(strcmp(get_active_call_id(), unique_id) == 0){
-			struct ocpp_call_with_cb * call = get_active_call();
+		if(take_active_call(&call, &active_id, 500) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to take active call for error. Possibly recent timeout");
+			break;
+		}
+
+		if(active_id != NULL && strcmp(active_id, unique_id) == 0){
+			if(task_to_notify != NULL)
+				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING, eSetValueWithOverwrite);
+
 			if(call == NULL){
 				ESP_LOGE(TAG, "Active call id matched error, but original call was NULL");
 			}
@@ -233,11 +255,16 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 			}else{
 				ESP_LOGW(TAG, "No error callback for ocpp call %s", unique_id);
 			}
+
 			clear_active_call();
+
 		}else{
 			ESP_LOGE(TAG, "Got error to unexpected message id, ignoring");
-			ESP_LOGE(TAG, "Expected %s got %s", get_active_call_id(), unique_id);
+			ESP_LOGE(TAG, "Expected %s got %s", active_id != NULL ? active_id : "NULL", unique_id);
+
+			give_active_call();
 		}
+
 		break;
 	}
 

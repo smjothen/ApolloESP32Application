@@ -443,6 +443,10 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 	}
 }
 
+static void stop_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Stop transaction response success");
+}
+
 bool pending_ocpp_authorize = false;
 
 static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
@@ -622,7 +626,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create stop transaction request");
 	}else{
-		int err = enqueue_call(response, NULL, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(response, stop_transaction_response_cb, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue stop transaction request, storing stop transaction on file");
 			esp_err_t err = offlineSession_SaveStopTransaction_ocpp(*transaction_id, transaction_start, stop_token, meter_stop,

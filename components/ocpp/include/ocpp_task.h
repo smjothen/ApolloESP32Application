@@ -61,17 +61,22 @@ void stop_ocpp(void);
 
 /**
  * Get the stucture with the message that was last transmitted to the central system and expecting a reply.
+ * it takes a semaphore, which is given back by calling clear_active_call or give_active_call.
  */
-struct ocpp_call_with_cb * get_active_call();
+BaseType_t take_active_call(struct ocpp_call_with_cb ** call_data, char  ** call_id, uint timeout_ms);
+
+/**
+ * Give back active call without clearing it.
+ */
+BaseType_t give_active_call();
 
 /**
  * Indicate that a reply has been recieved and handled or failed and clear stucture for next ocpp call.
  * This function is called by ocpp_listener.
  */
 void clear_active_call(void);
-const char * get_active_call_id(void);
 
-int handle_ocpp_call(void);
+int handle_ocpp_call(int last_listener_state);
 void block_sending_call(uint8_t call_type_mask);
 
 int complete_boot_notification_process(char * serial_nr);

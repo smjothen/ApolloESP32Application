@@ -386,16 +386,26 @@ int check_send_legality(const char * action){
 	return 0;
 }
 
-struct ocpp_call_with_cb * get_active_call(){
-	return active_call;
+BaseType_t take_active_call(struct ocpp_call_with_cb ** call_data, char  ** call_id, uint timeout_ms){
+	if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(timeout_ms)) == pdTRUE){
+		*call_data = active_call;
+		*call_id = active_call_id;
+
+		return pdTRUE;
+	}else{
+		*call_data = NULL;
+		call_id = NULL;
+
+		return pdFALSE;
+	}
+}
+
+BaseType_t give_active_call(){
+	return xSemaphoreGive(ocpp_active_call_lock_1);
 }
 
 static bool is_transaction_related_message(const char * unique_id){
 	return strncmp(unique_id, last_transaction_id, 36) == 0;
-}
-
-const char * get_active_call_id(){
-	return active_call_id;
 }
 
 void clear_active_call(void){
@@ -431,9 +441,13 @@ void fail_active_call(const char * fail_description){
 			if(is_transaction_related_message(unique_id)){
 				if(failed_transaction_count < transaction_message_attempts){
 					ESP_LOGW(TAG, "Preparing failed transaction for retry");
+					active_call_id = NULL;
+
 					failed_transaction = active_call;
-					failed_transaction_count++;
 					active_call = NULL;
+
+					failed_transaction_count++;
+
 					xSemaphoreGive(ocpp_active_call_lock_1);
 				}
 				else{
@@ -454,22 +468,99 @@ void fail_active_call(const char * fail_description){
 	}
 }
 
-int send_next_call(){
+int send_next_call(int last_listener_state){
+
 	struct ocpp_call_with_cb * call;
 	if(ocpp_active_call_lock_1 == NULL){
 		ESP_LOGE(TAG, "The lock is not initialized");
 		return -1;
 	}
 
-	if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(OCPP_CALL_TIMEOUT)) !=pdTRUE){
-		ESP_LOGE(TAG, "Call timed out, clearing for next call");
-		fail_active_call("timeout");
-
-		if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(500)) != pdTRUE){
-			ESP_LOGE(TAG, "Unable to aquire lock after clear");
-			return -1;
+	struct ocpp_call_with_cb * last_call;
+	char * last_call_id;
+	BaseType_t aquired_lock = pdFALSE;
+	/*
+	 * If we are not able to take the active call immediately, that means that ocpp_listener has recieved a result.
+	 * We give it 5 seconds to finish to finish handeling the result.
+	 */
+	int new_listener_state = eOCPP_WEBSOCKET_NO_EVENT;
+	if((aquired_lock = take_active_call(&last_call, &last_call_id, 5000)) == pdTRUE){
+		//We check if ocpp_listener has informed us of a result and there is an active call
+		if(last_call != NULL && last_listener_state != eOCPP_WEBSOCKET_RECEIVED_MATCHING){
+			//The wait is 0 as ocpp_listener should only send this message while it has aquired the active call lock.
+			new_listener_state = ulTaskNotifyTake(pdTRUE, 0);
+		}else{
+			// If there is no active call, then no response matches with no call
+			new_listener_state = eOCPP_WEBSOCKET_RECEIVED_MATCHING;
 		}
+
+		if(new_listener_state == eOCPP_WEBSOCKET_RECEIVED_MATCHING){  // check if listener has received response
+			if(last_call != NULL){
+
+				ESP_LOGE(TAG, "ocpp_listener handled result but did not clear it!");
+
+				clear_active_call(); // We clear the call that listener should have
+				 // And reaquire the active_call_lock for next call
+				aquired_lock = take_active_call(&last_call, &last_call_id, 500);
+			}
+			// The active call is now cleared and lock is ready for next call
+		}else{
+			/*
+			 * else the ocpp_listener has not recieved a response. We give back the active call lock.
+			 * and wait for a message timeout. We save the listener state if it indicate connection change
+			 * so that we can return the newest connection state.
+			 */
+			give_active_call();
+
+			time_t wait_begin = time(NULL);
+			do{
+				if(new_listener_state == eOCPP_WEBSOCKET_DISCONNECT
+					|| new_listener_state == eOCPP_WEBSOCKET_CONNECTED){
+
+					last_listener_state = new_listener_state;
+				}
+
+				time_t sec_to_timeout = OCPP_CALL_TIMEOUT - (time(NULL) - wait_begin);
+				if(sec_to_timeout > 0){
+					new_listener_state = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(sec_to_timeout));
+				}else{
+					new_listener_state = eOCPP_WEBSOCKET_NO_EVENT;
+				}
+
+			}while(new_listener_state != eOCPP_WEBSOCKET_RECEIVED_MATCHING
+				&& new_listener_state != eOCPP_WEBSOCKET_NO_EVENT);
+
+			//Ìf ocpp_listener indicate response is matching, we give it 5 seconds to handle it and release the lock
+			if(new_listener_state == eOCPP_WEBSOCKET_RECEIVED_MATCHING){
+				if((aquired_lock = take_active_call(&last_call, &last_call_id, 5000)) != pdTRUE)
+					ESP_LOGE(TAG, "ocpp_listener recieved result, but did not finish within 5 seconds");
+
+			}else{
+				ESP_LOGE(TAG, "Call timed out, clearing for next call");
+				if(take_active_call(&last_call, &last_call_id, 500) == pdTRUE){
+					fail_active_call("timeout");
+				}else{
+					ESP_LOGE(TAG, "Unable to aquire lock for clearing");
+					return -1;
+				}
+				aquired_lock = take_active_call(&last_call, &last_call_id, 500);
+			}
+
+		}
+	}else{
+		/*
+		 * If it is not able to handle the result in 5 seconds, we log it as an error because it might indicate a deadlock.
+		 * We exit and try again next time send_next_call is called. If the listener is done by then there should be no problem.
+		 */
+		ESP_LOGE(TAG, "Unable to take active call. ocpp_listener might be causing a deadlock preventing new ocpp messages.");
+		return -1;
 	}
+
+	if(aquired_lock != pdTRUE){
+		ESP_LOGE(TAG, "Unable to aquire lock for sending new call");
+		return -1;
+	}
+
 	BaseType_t call_aquired = pdFALSE;
 
 	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING)){ // Attempt to get call from prioritized queue
@@ -583,12 +674,14 @@ int send_next_call(){
 		ESP_LOGE(TAG, "Could not send '%s' now, specification prohibits it", action);
 		goto error;
 	}
-	ESP_LOGI(TAG, "Sending next call (%s)", action);
 
 	char * message_string = cJSON_Print(call->call_message);
 	if(message_string == NULL){
+		ESP_LOGE(TAG, "Unable to create message string from call");
 		goto error;
 	}
+
+	ESP_LOGI(TAG, "Sending next call (%s) [%s]", action, active_call_id);
 
 	err = esp_websocket_client_send_text(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message_string);
@@ -600,8 +693,9 @@ int send_next_call(){
 	last_call_timestamp = time(NULL);
 	reset_heartbeat_timer();
 
-	return 0;
+	give_active_call();
 
+	return last_listener_state;
 error:
 	fail_active_call("Not sendt");
 	return -1;
@@ -874,7 +968,7 @@ int complete_boot_notification_process(char * serial_nr){
 	}
 
 	ESP_LOGI(TAG, "Sending boot notification message");
-	if(send_next_call() != 0){
+	if(send_next_call(eOCPP_WEBSOCKET_NO_EVENT) != 0){
 		ESP_LOGE(TAG, "Unable to send message");
 		return -1;
 	}
@@ -907,7 +1001,7 @@ int complete_boot_notification_process(char * serial_nr){
 				heartbeat_interval = -1;
 
 				ESP_LOGI(TAG, "Sending new boot notification message");
-				if(send_next_call() != 0){
+				if(send_next_call(eOCPP_WEBSOCKET_NO_EVENT) != 0){
 					ESP_LOGE(TAG, "Unable to send new boot notification message");
 					return -1;
 				}
@@ -963,6 +1057,6 @@ void stop_ocpp(void){
 	return;
 }
 
-int handle_ocpp_call(void){
-	return send_next_call();
+int handle_ocpp_call(int last_listener_state){
+	return send_next_call(last_listener_state);
 }
