@@ -1004,6 +1004,20 @@ void status_notification(enum ocpp_cp_status_id new_state){
 		}
 	}
 }
+
+enum ocpp_cp_status_id saved_state = eOCPP_CP_STATUS_UNAVAILABLE;
+void sessionHandler_OcppSaveState(){
+	saved_state = ocpp_old_state;
+}
+
+bool sessionHandler_OcppStateHasChanged(){
+	return saved_state != ocpp_old_state;
+}
+
+void sessionHandler_OcppSendState(){
+	status_notification(ocpp_old_state);
+}
+
 static int change_availability(uint8_t is_operative){
 	MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, is_operative);
 	if(ret == MsgWriteAck)

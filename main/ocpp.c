@@ -2322,6 +2322,32 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 }
 
 uint8_t previous_enqueue_mask = 0;
+
+time_t last_online_timestamp = 0;
+
+static void transition_online(){
+	ESP_LOGW(TAG, "Restoring previous mask: %d", previous_enqueue_mask);
+	block_enqueue_call(previous_enqueue_mask);
+
+	if(sessionHandler_OcppStateHasChanged()){
+		sessionHandler_OcppSendState();
+	}
+
+	connection_status = eCS_CONNECTION_ONLINE;
+}
+
+static void transition_offline(){
+	last_online_timestamp = time(NULL);
+
+	previous_enqueue_mask = get_blocked_enqueue_mask();
+	ESP_LOGW(TAG, "Blocking generic and transaction messages. Storing current mask: %d", previous_enqueue_mask);
+	block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED);
+
+	sessionHandler_OcppSaveState();
+
+	connection_status = eCS_CONNECTION_OFFLINE;
+}
+
 static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
@@ -2410,7 +2436,6 @@ static void ocpp_task(){
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
-		time_t last_online_timestamp = time(NULL);
 		while(should_run && should_restart == false){
 			uint32_t data = ulTaskNotifyTake(pdTRUE,0);
 
@@ -2421,24 +2446,17 @@ static void ocpp_task(){
 					ESP_LOGI(TAG, "Continuing ocpp call handling");
 
 					if(connection_status == eCS_CONNECTION_OFFLINE){
-						ESP_LOGW(TAG, "Restoring previous mask: %d", previous_enqueue_mask);
-						block_enqueue_call(previous_enqueue_mask);
+						transition_online();
 					}
 
-					connection_status = eCS_CONNECTION_ONLINE;
 					break;
 				case eOCPP_WEBSOCKET_DISCONNECT:
 					ESP_LOGW(TAG, "Websocket disconnected");
 
 					if(connection_status == eCS_CONNECTION_ONLINE){
-						last_online_timestamp = time(NULL);
-
-						previous_enqueue_mask = get_blocked_enqueue_mask();
-						ESP_LOGW(TAG, "Blocking generic and transaction messages. Storing current mask: %d", previous_enqueue_mask);
-						block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED);
+						transition_offline();
 					}
 
-					connection_status = eCS_CONNECTION_OFFLINE;
 					break;
 				case eOCPP_WEBSOCKET_FAILURE: // TODO: Get additional websocket errors
 					ESP_LOGW(TAG, "Websocket FAILURE %d", ++problem_count);
@@ -2460,17 +2478,13 @@ static void ocpp_task(){
 			case eCS_CONNECTION_ONLINE:
 				if(handle_ocpp_call((int)data) == eOCPP_WEBSOCKET_DISCONNECT){
 					ESP_LOGW(TAG, "Send ocpp indicate disconnected");
-					ESP_LOGW(TAG, "Blocking generic and transaction messages. Storing current mask: %d", previous_enqueue_mask);
-					block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED);
+					transition_offline();
 				}
 				break;
 			case eCS_CONNECTION_OFFLINE:
 				if(is_connected()){
 					ESP_LOGW(TAG, "OCPP component reports online but ocpp thread has not recieved event yet");
-					ESP_LOGW(TAG, "Restoring previous mask: %d", previous_enqueue_mask);
-					block_enqueue_call(previous_enqueue_mask);
-
-				        connection_status = eCS_CONNECTION_ONLINE;
+					transition_online();
 				}
 				else if(last_online_timestamp + OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT < time(NULL)){
 					ESP_LOGE(TAG, "%d seconds since OCPP was last online, attempting reboot", OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT);

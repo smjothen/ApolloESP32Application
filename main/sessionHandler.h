@@ -68,6 +68,9 @@ time_t sessionHandler_OcppTransactionStartTime();
 void sessionHandler_OcppStopTransaction(const char * reason);
 // Transfers the ownership of the meter values to sessionHandler
 void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length);
+void sessionHandler_OcppSaveState();
+bool sessionHandler_OcppStateHasChanged();
+void sessionHandler_OcppSendState();
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();
