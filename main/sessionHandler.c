@@ -804,7 +804,7 @@ void authorize_and_stop_transaction(const char * id_tag){
 }
 
 void authorize_stop_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Recieved authorization response for stop transaction");
+	ESP_LOGI(TAG, "Received authorization response for stop transaction");
 	pending_ocpp_authorize = false;
 
 	if(chargeSession_Get().parent_id[0] == 0){
@@ -906,7 +906,7 @@ void authorize_stop(const char * presented_id_tag)
 				goto denied;
 			}
 			strncpy(id_tag_buffer, presented_id_tag, 20);
-			id_tag_buffer[21] = '\0';
+			id_tag_buffer[20] = '\0';
 
 			int err = enqueue_call(authorization, authorize_stop_response_cb, authorize_stop_error_cb, id_tag_buffer, eOCPP_CALL_GENERIC);
 			if(err == 0){
@@ -920,6 +920,8 @@ void authorize_stop(const char * presented_id_tag)
 				return;
 			}else{
 				ESP_LOGE(TAG, "Unable to enqueue authorization request");
+				free(authorization);
+				free(id_tag_buffer);
 			}
 		}else{
 			ESP_LOGE(TAG, "Unable to create authorize request");
