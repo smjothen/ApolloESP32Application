@@ -94,7 +94,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 		char * reset_type = cJSON_GetObjectItem(payload, "type")->valuestring;
 
 		if(strcmp(reset_type, OCPP_RESET_TYPE_SOFT) == 0){
-			// TODO: add support for soft restart
 			cJSON * conf = ocpp_create_reset_confirmation(unique_id, OCPP_RESET_STATUS_ACCEPTED);
 			if(conf == NULL){
 				ESP_LOGE(TAG, "Unable to send reset confirmation");
@@ -109,8 +108,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			return;
 		}
 		else if(strcmp(reset_type, OCPP_RESET_TYPE_HARD) == 0){
-			// TODO: "If possible the Charge Point sends a StopTransaction.req for previously ongoing
-			// transactions after having restarted and having been accepted by the Central System "
 			cJSON * conf = ocpp_create_reset_confirmation(unique_id, OCPP_RESET_STATUS_ACCEPTED);
 			if(conf == NULL){
 				ESP_LOGE(TAG, "Unable to create reset confirmation");
@@ -148,18 +145,23 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 				}
 			}
 
+			bool delay = false;
 			if(ongoing_transaction){
 				TimerHandle_t reset_timer = xTimerCreate("reset", pdMS_TO_TICKS(2000), false, NULL, reset);
 				if(reset_timer != NULL){
 					if(xTimerStart(reset_timer, 0) != pdPASS){
 						ESP_LOGE(TAG, "Unable to start reset timer, Resetting imediatly");
 						reset();
+					}else{
+						delay = true;
 					}
 				}else{
 					ESP_LOGE(TAG, "Unable to create reset timer, Resetting imediatly");
-					reset();
 				}
-			}else{
+			}
+
+			if(!delay){
+				vTaskDelay(pdMS_TO_TICKS(400)); // Allow time for websocket to send call reply
 				reset();
 			}
 		}
