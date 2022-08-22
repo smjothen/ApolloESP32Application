@@ -1,15 +1,34 @@
 #include "esp_system.h"
 #include "messages/call_messages/ocpp_call_request.h"
 
-static char uuid[37];
+static char uuid_str[37];
 
-//consider making rfc4122 compliant
-const char * create_unique_id(){
+struct uuid{
+	uint32_t time_low;
+	uint16_t time_mid;
+	uint16_t time_high_version;
+	uint8_t clock_seq_high_reserved;
+	uint8_t clock_seq_low;
+	uint8_t node[6];
+};
 
-	snprintf(uuid, sizeof(uuid), "%8x-%4x-%4x-%4x-%12x",
-		esp_random(), esp_random(), esp_random(),esp_random(), esp_random());
+static const char * create_unique_id(){
+	struct uuid id;
 
-	return uuid;
+	esp_fill_random(&id, sizeof(struct uuid));
+
+	id.clock_seq_high_reserved |= 0b10000000;
+	id.clock_seq_high_reserved &= 0b10111111;
+
+	id.time_high_version |= 0b0100000000000000;
+	id.time_high_version &= 0b0100111111111111;
+
+	snprintf(uuid_str, sizeof(uuid_str), "%2.8x-%4.4x-%4.4x-%2.2x%2.2x-%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x",
+		id.time_low, id.time_mid, id.time_high_version, id.clock_seq_high_reserved, id.clock_seq_low,
+		id.node[0], id.node[1], id.node[2], id.node[3], id.node[4], id.node[5]
+		);
+
+	return uuid_str;
 }
 
 /**
