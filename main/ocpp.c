@@ -1573,6 +1573,10 @@ static bool is_valid_alignment_interval(uint32_t sec){
 	return (86400 % sec) == 0 ? true : false;
 }
 
+static bool is_true(bool value){
+	return value;
+}
+
 static long validate_u(const char * value, uint32_t upper_bounds){
 	char * endptr;
 	long value_long = strtol(value, &endptr, 0);
@@ -1623,14 +1627,21 @@ static int set_config_u32(void (*config_function)(uint32_t), const char * value,
 	return 0;
 }
 
-static int set_config_bool(void (*config_function)(bool), const char * value){
+static int set_config_bool(void (*config_function)(bool), const char * value, bool (*additional_validation)(bool)){
+	bool boolean_value;
+
 	if(strcasecmp(value, "true") == 0){
-		config_function(true);
+		boolean_value = true;
 	}else if(strcasecmp(value, "false") == 0){
-		config_function(false);
+		boolean_value = false;
 	}else{
 		return -1;
 	}
+
+	if(additional_validation != NULL && additional_validation(boolean_value) == false)
+		return -1;
+
+	config_function(boolean_value);
 	return 0;
 }
 
@@ -1768,7 +1779,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
 	int err = -1;
 	if(strcmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
-		err = set_config_bool(storage_Set_ocpp_authorize_remote_tx_requests, value);
+		err = set_config_bool(storage_Set_ocpp_authorize_remote_tx_requests, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_clock_aligned_data_interval, value, is_valid_alignment_interval);
@@ -1908,10 +1919,10 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		return;
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
-		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value);
+		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
-		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value);
+		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
@@ -1941,10 +1952,15 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_u8(storage_Set_ocpp_reset_retries, value);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
-		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_ev_side_disconnect, value);
+		/*
+		 * NOTE: Current behaviour of mcu in regards to querying chargesession value makes it so that
+		 * StopTransactionOnEvSideDisconnect 'false' becomes complicated to implement. For now true is required.
+		 * It is still read/write as required by ocpp 1.6.
+		 */
+		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_ev_side_disconnect, value, is_true);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
-		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_invalid_id, value);
+		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_invalid_id, value, NULL);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
@@ -1981,10 +1997,16 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
-		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value);
+		/*
+		 * NOTE: Current behaviour of mcu in regards to connector makes it impossible to connect/disconnect
+		 * connector from esp. 'true' is therefore the only value we accept. An alternative would be to
+		 * permanently lock the connector.
+		 * It is still read/write as required by ocpp 1.6.
+		 */
+		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value, is_true);
 
 	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
-		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value);
+		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
 
 	}else if(is_configuration_key(key)){
 		ESP_LOGW(TAG, "Change configuration request rejected due to rejected key: '%s'", key);
