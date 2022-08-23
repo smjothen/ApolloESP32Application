@@ -354,6 +354,56 @@ int send_call_reply(cJSON * call){
 	}
 }
 
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info){
+	ESP_LOGD(TAG, "Sending status notification");
+
+	char state[15];
+
+	switch(new_state){
+	case eOCPP_CP_STATUS_AVAILABLE:
+		strcpy(state, OCPP_CP_STATUS_AVAILABLE);
+		break;
+	case eOCPP_CP_STATUS_PREPARING:
+		strcpy(state, OCPP_CP_STATUS_PREPARING);
+		break;
+	case eOCPP_CP_STATUS_CHARGING:
+		strcpy(state, OCPP_CP_STATUS_CHARGING);
+		break;
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV);
+		break;
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EVSE);
+		break;
+	case eOCPP_CP_STATUS_FINISHING:
+		strcpy(state, OCPP_CP_STATUS_FINISHING);
+		break;
+	case eOCPP_CP_STATUS_RESERVED:
+		strcpy(state, OCPP_CP_STATUS_RESERVED);
+		break;
+	case eOCPP_CP_STATUS_UNAVAILABLE:
+		strcpy(state, OCPP_CP_STATUS_UNAVAILABLE);
+		break;
+	case eOCPP_CP_STATUS_FAULTED:
+		strcpy(state, OCPP_CP_STATUS_FAULTED);
+		break;
+	default:
+		ESP_LOGE(TAG, "Unknown status id: %d", new_state);
+		return;
+	}
+
+	cJSON * status_notification  = ocpp_create_status_notification_request(1, error_code, info, state, time(NULL), NULL, NULL);
+	if(status_notification == NULL){
+		ESP_LOGE(TAG, "Unable to create status notification request");
+	}else{
+		int err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue status notification");
+		}
+	}
+}
+
+
 int check_send_legality(const char * action){
 
 	switch(registration_status){

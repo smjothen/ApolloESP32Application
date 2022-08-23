@@ -7,6 +7,7 @@
 
 #include "ocpp_call_with_cb.h"
 #include "types/ocpp_registration_status.h"
+#include "types/ocpp_charge_point_status.h"
 
 #define OCPP_CALL_TIMEOUT 10000
 
@@ -23,6 +24,8 @@ enum call_type{
  * Reply to central service originated action call.
  */
 int send_call_reply(cJSON * call);
+
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info);
 
 /**
  * Used to send new action calls originating from the charge point once all prior calls have finished

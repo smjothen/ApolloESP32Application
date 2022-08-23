@@ -613,12 +613,26 @@ static void stop_sample_interval(){
 			transaction_id, &connector, 1);
 }
 
-void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect and check for transaction stop reason
+void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect
 	stop_sample_interval();
 
 	int meter_stop = floor(MCU_GetEnergy());
 	time_t timestamp = time(NULL);
 	char * stop_token = (chargeSession_Get().StoppedByRFID) ? chargeSession_Get().StoppedById : NULL;
+
+	if(strcmp(chargeSession_Get().StoppedReason, OCPP_REASON_EV_DISCONNECT) == 0 &&
+		storage_Get_ocpp_stop_transaction_on_ev_side_disconnect()){
+
+		/*
+		 * Ocpp 1.6 specify that a status notification with state finishing, no error, and info about ev disconnect.
+		 * SHOULD be sendt to the CS.
+		 * The motivation for this is unclear as the same information is given in the stop transaction and the
+		 * specification also allows transition from charging/suspended to available (not just finishing).
+		 * Finishing seems to be intended for situation where user action is required before new transaction or new user, yet
+		 * we must inform CS of finishing before entering available.
+		 */
+		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected");
+	}
 
 	cJSON * response  = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
 								chargeSession_Get().StoppedReason, current_meter_values);
@@ -956,55 +970,6 @@ bool want_status_notification[9][9] = {
 	{false, false, true,  false, false, false, false, false, false},
 };
 
-void status_notification(enum ocpp_cp_status_id new_state){
-	ESP_LOGD(TAG, "Sending status notification");
-
-	char state[15];
-
-	switch(new_state){
-	case eOCPP_CP_STATUS_AVAILABLE:
-		strcpy(state, OCPP_CP_STATUS_AVAILABLE);
-		break;
-	case eOCPP_CP_STATUS_PREPARING:
-		strcpy(state, OCPP_CP_STATUS_PREPARING);
-		break;
-	case eOCPP_CP_STATUS_CHARGING:
-		strcpy(state, OCPP_CP_STATUS_CHARGING);
-		break;
-	case eOCPP_CP_STATUS_SUSPENDED_EV:
-		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV);
-		break;
-	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
-		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EVSE);
-		break;
-	case eOCPP_CP_STATUS_FINISHING:
-		strcpy(state, OCPP_CP_STATUS_FINISHING);
-		break;
-	case eOCPP_CP_STATUS_RESERVED:
-		strcpy(state, OCPP_CP_STATUS_RESERVED);
-		break;
-	case eOCPP_CP_STATUS_UNAVAILABLE:
-		strcpy(state, OCPP_CP_STATUS_UNAVAILABLE);
-		break;
-	case eOCPP_CP_STATUS_FAULTED:
-		strcpy(state, OCPP_CP_STATUS_FAULTED);
-		break;
-	default:
-		ESP_LOGE(TAG, "Unknown status id: %d", new_state);
-		return;
-	}
-
-	cJSON * status_notification  = ocpp_create_status_notification_request(1, OCPP_CP_ERROR_NO_ERROR, NULL, state, time(NULL), NULL, NULL);
-	if(status_notification == NULL){
-		ESP_LOGE(TAG, "Unable to create status notification request");
-	}else{
-		int err = enqueue_call(status_notification, NULL, error_cb, "status notification", eOCPP_CALL_GENERIC);
-		if(err != 0){
-			ESP_LOGE(TAG, "Unable to enqueue status notification");
-		}
-	}
-}
-
 enum ocpp_cp_status_id saved_state = eOCPP_CP_STATUS_UNAVAILABLE;
 void sessionHandler_OcppSaveState(){
 	saved_state = ocpp_old_state;
@@ -1015,7 +980,7 @@ bool sessionHandler_OcppStateHasChanged(){
 }
 
 void sessionHandler_OcppSendState(){
-	status_notification(ocpp_old_state);
+	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL);
 }
 
 static int change_availability(uint8_t is_operative){
@@ -1515,7 +1480,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	}
 
 	if(want_status_notification[old_state-1][new_state-1]){
-		status_notification(new_state);
+		ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL);
 	}
 
 	ocpp_old_state = new_state;
