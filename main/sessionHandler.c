@@ -315,6 +315,7 @@ enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
  */
 int * transaction_id = NULL;
 time_t transaction_start = 0;
+int meter_start = 0;
 bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
 uint8_t pending_change_availability_state;
@@ -616,7 +617,15 @@ static void stop_sample_interval(){
 void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect
 	stop_sample_interval();
 
-	int meter_stop = floor(MCU_GetEnergy());
+	int meter_stop = meter_start + (chargeSession_Get().Energy * 1000);
+
+	if(chargeSession_Get().SessionId[0] == '\0'){ // if session has been cleared the meter value should already be in storage
+		meter_stop = floor(storage_update_accumulated_energy(0.0) * 1000);
+		ESP_LOGW(TAG, "Meter stop read from file: %d", meter_stop);
+	}else{
+		ESP_LOGW(TAG, "Meter stop read from charge session");
+	}
+
 	time_t timestamp = time(NULL);
 	char * stop_token = (chargeSession_Get().StoppedByRFID) ? chargeSession_Get().StoppedById : NULL;
 
@@ -676,7 +685,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 
 void start_transaction(){
 	transaction_start = time(NULL);
-	int meter_start = floor(MCU_GetEnergy());
+	meter_start = floor(storage_update_accumulated_energy(0.0) * 1000);
 	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, -1, transaction_start);
 
 	transaction_id = malloc(sizeof(int));
@@ -1502,8 +1511,15 @@ static void handle_preparing(){
 	 * for instance, EV is connected to Charge Point and user has been authorized."
 	 */
 	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
-		ESP_LOGI(TAG, "Preparing complete; Attempting to start charging");
-		MessageType ret = MCU_SendCommandId(CommandStartCharging);
+		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, MCU_StandAloneCurrent());
+		if(ret == MsgWriteAck){
+			ESP_LOGI(TAG, "Max Current set");
+		}else{
+			ESP_LOGE(TAG, "Unable to set max current");
+		}
+
+		ret = MCU_SendCommandId(CommandStartCharging);
 		if(ret != MsgCommandAck)
 		{
 			ESP_LOGE(TAG, "Unable to send charging command");

@@ -251,16 +251,26 @@ static int populate_sample_energy_active_import_interval(enum ocpp_reading_conte
 		.context = context,
 		.format = eOCPP_FORMAT_RAW,
 		.measurand = eOCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
-		.unit = eOCPP_UNIT_WH
+		.unit = eOCPP_UNIT_KWH
 	};
+
+	float energy = MCU_GetEnergy();
+
+	if(energy < 0.0001){
+		energy = chargeSession_Get().Energy;
+		if(energy < 0.0001){
+			ESP_LOGE(TAG, "Energy cleared before active import interval");
+			return 0;
+		}
+	}
 
 	switch(context){
 	case eOCPP_CONTEXT_SAMPLE_CLOCK:
-		sprintf(new_value.value, "%f", MCU_GetEnergy() - last_aligned_energy_active_import_interval);
+		sprintf(new_value.value, "%f", energy - last_aligned_energy_active_import_interval);
 		break;
 	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
 	case eOCPP_CONTEXT_TRANSACTION_END:
-		sprintf(new_value.value, "%f", MCU_GetEnergy() - last_sampled_energy_active_import_interval);
+		sprintf(new_value.value, "%f", energy - last_sampled_energy_active_import_interval);
 		break;
 	default:
 		return 0;
