@@ -14,6 +14,7 @@
 #include "zaptec_cloud_listener.h"
 #include "utz.h"
 #include "zones.h"
+#include "chargeSession.h"
 
 static const char *TAG = "CHARGECONTROL  ";
 
@@ -265,7 +266,7 @@ void chargeController_SetTimes()
 
 
 	}
-	startDelayCounter = 0;
+
 }
 
 
@@ -408,13 +409,18 @@ static uint8_t printCtrl = 3;
 void RunStartChargeTimer()
 {
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
+	enum CarChargeMode chargeMode = MCU_GetChargeMode();
 
 	/// When booting with car connected, the random delay should always be applied
-	if((applyDelayAtBoot == true) && (opMode > CHARGE_OPERATION_STATE_DISCONNECTED))
+	if((applyDelayAtBoot == true) && (chargeMode != eCAR_UNINITIALIZED))
 	{
-		startDelayCounter = randomStartDelay;
+		if(chargeMode < eCAR_DISCONNECTED)
+		{
+			startDelayCounter = randomStartDelay;
+		}
+
+		applyDelayAtBoot = false;
 	}
-	applyDelayAtBoot = false;
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
@@ -546,7 +552,7 @@ void RunStartChargeTimer()
 			/// Clear next event in two cases:
 			/// 1) Schedule ended with no car connected,
 			/// 2) Schedule ended with car connected and starDelayCounter deactivated.
-			if((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0))
+			if(((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0)) || (overrideTimer == 1))
 				chargeController_ClearNextStartTime();
 
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
@@ -615,8 +621,8 @@ void RunStartChargeTimer()
 		if((sentClearStartTimeAtBoot == false) && (isPausedByAnySchedule == 0))
 		{
 			hasNewStartTime = true;
-			sentClearStartTimeAtBoot = true;
 		}
+		sentClearStartTimeAtBoot = true;
 
 		printCtrl--;
 		if(printCtrl == 0)
@@ -677,7 +683,7 @@ void RunStartChargeTimer()
 		}
 	}
 
-	if(opMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+	if(chargeMode == eCAR_DISCONNECTED)
 	{
 		//ESP_LOGW(TAG, "Clearing overrideTimer");
 		overrideTimer = 0;
@@ -730,6 +736,10 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 	enum ChargerOperatingMode chOpMode = MCU_GetChargeOperatingMode();
 	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1) && (isScheduleActive == true))
 	{
+		//Do not Continue if not authenticated
+		if((storage_Get_AuthenticationRequired() == true) && (chargeSession_IsAuthenticated() == false))
+			return retval;
+
 		//Use Standalone current as if from cloud command
 		float standAloneCurrent = storage_Get_StandaloneCurrent();
 

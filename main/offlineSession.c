@@ -14,6 +14,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "chargeSession.h"
 #include "../components/ntp/zntp.h"
+#include "../components/i2c/include/i2cDevices.h"
 
 static const char *tmp_path = "/offs";
 
@@ -81,7 +82,22 @@ bool offlineSession_mount_folder()
 	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
+
+		//If failing to mount, try using partition for chargers numbers below ~ZAP000150
+		if((err == ESP_ERR_NOT_FOUND) && (i2cCheckSerialForDiskPartition() == true))
+		{
+			err = esp_vfs_fat_spiflash_mount(tmp_path, "disk", &mount_config, &s_wl_handle);
+			if (err != ESP_OK) {
+				ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
+
+				return mounted;
+			}
+
+		}
+		else
+		{
+			return mounted;
+		}
 	}
 
 	mounted = true;

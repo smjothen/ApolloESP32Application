@@ -60,6 +60,25 @@ struct DeviceInfo i2cGetLoadedDeviceInfo()
 	return deviceInfo;
 }
 
+
+/*
+ * Chargers below serial number ~ZAP000149 had a different partition table without the "files" partition.
+ * This function can be used to identify chargers that MAY have the partition.
+ */
+bool i2cCheckSerialForDiskPartition()
+{
+	if(strstr(deviceInfo.serialNumber,"ZAP") != NULL)
+	{
+		int serial = atoi(&deviceInfo.serialNumber[3]);
+		if(serial < 149)
+			return true;
+		else
+			return false;
+	}
+
+	return false;
+}
+
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo)
 {
 	deviceInfo = debugDevInfo;
