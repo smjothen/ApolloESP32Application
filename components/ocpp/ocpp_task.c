@@ -17,6 +17,7 @@
 #include "ocpp_task.h"
 #include "ocpp_listener.h"
 #include "messages/call_messages/ocpp_call_request.h"
+#include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
 
@@ -999,9 +1000,48 @@ void boot_error_cb(const char * unique_id, const char * error_code, const char *
 }
 
 
-int complete_boot_notification_process(char * serial_nr){
-	//TODO: update notification request parameters to real values
-	cJSON * boot_notification = ocpp_create_boot_notification_request(NULL, "Go", serial_nr, "Zaptec", NULL, NULL, NULL, NULL, NULL);
+int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
+				const char * charge_point_serial_number, const char * charge_point_vendor,
+				const char * firmware_version, const char * iccid, const char * imsi,
+				const char * meter_serial_number, const char * meter_type){
+
+	bool add_chargebox_nr = chargebox_serial_number != NULL && chargebox_serial_number[0] != '\0'
+		&& is_ci_string_type(chargebox_serial_number, 25);
+
+	bool add_cp_nr = charge_point_serial_number != NULL && charge_point_serial_number[0] != '\0'
+		&& is_ci_string_type(charge_point_serial_number, 25);
+
+	bool add_firm_ver = firmware_version != NULL && firmware_version[0] != '\0'
+		&& is_ci_string_type(firmware_version, 50);
+
+	bool add_iccid = iccid != NULL && iccid[0] != '\0'
+		&& is_ci_string_type(iccid, 20);
+
+	bool add_imsi = imsi != NULL && imsi[0] != '\0'
+		&& is_ci_string_type(imsi, 20);
+
+	bool add_meter_nr = meter_serial_number != NULL && meter_serial_number[0] != '\0'
+		&& is_ci_string_type(meter_serial_number, 25);
+
+	bool add_meter_type = meter_type != NULL && meter_type[0] != '\0'
+		&& is_ci_string_type(meter_type, 25);
+
+	ESP_LOGI(TAG,"Creating boot notification with parameters:\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n",
+		"Chargebox serial nr", (add_chargebox_nr) ? chargebox_serial_number : "(Omitted)",
+		"Charge point model", charge_point_model,
+		"Charge point serial nr", (add_cp_nr) ? charge_point_serial_number : "(Omitted)",
+		"Charge point vendor", charge_point_vendor,
+		"Firmware version", (add_firm_ver) ? firmware_version : "(Omitted)",
+		"ICCID", (add_iccid) ? iccid : "(Omitted)",
+		"IMSI", (add_imsi) ? imsi : "(Omitted)",
+		"eMeter serial nr", (add_meter_nr) ? meter_serial_number : "(Omitted)",
+		"eMeter type", (add_meter_type) ? meter_type : "(Omitted)");
+
+	cJSON * boot_notification = ocpp_create_boot_notification_request((add_chargebox_nr) ? chargebox_serial_number : NULL, charge_point_model,
+									(add_cp_nr) ? charge_point_serial_number : NULL, charge_point_vendor,
+									(add_firm_ver) ? firmware_version : NULL, (add_iccid) ? iccid : NULL,
+									(add_imsi) ? imsi : NULL, (add_meter_nr) ? meter_serial_number : NULL,
+									(add_meter_type) ? meter_type : NULL);
 
 	if(boot_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create boot notification");
@@ -1035,7 +1075,12 @@ int complete_boot_notification_process(char * serial_nr){
 				vTaskDelay(pdMS_TO_TICKS(heartbeat_interval * 1000));
 				is_retry = true;
 
-				boot_notification = ocpp_create_boot_notification_request(NULL, "Go", serial_nr, "Zaptec", NULL, NULL, NULL, NULL, NULL);
+				boot_notification = ocpp_create_boot_notification_request((add_chargebox_nr) ? chargebox_serial_number : NULL, charge_point_model,
+									(add_cp_nr) ? charge_point_serial_number : NULL, charge_point_vendor,
+									(add_firm_ver) ? firmware_version : NULL, (add_iccid) ? iccid : NULL,
+									(add_imsi) ? imsi : NULL, (add_meter_nr) ? meter_serial_number : NULL,
+									(add_meter_type) ? meter_type : NULL);
+
 				if(boot_notification == NULL){
 					ESP_LOGE(TAG, "Unable to recreate boot notification for retry");
 					return -1;

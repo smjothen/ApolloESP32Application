@@ -82,7 +82,10 @@ void clear_active_call(void);
 int handle_ocpp_call(int last_listener_state);
 void block_sending_call(uint8_t call_type_mask);
 
-int complete_boot_notification_process(char * serial_nr);
+int complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
+				const char * charge_point_serial_number, const char * charge_point_vendor,
+				const char * firmware_version, const char * iccid, const char * imsi,
+				const char * meter_serial_number, const char * meter_type);
 
 int start_ocpp_heartbeat(void);
 void stop_ocpp_heartbeat(void);

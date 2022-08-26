@@ -7,6 +7,7 @@
 
 #include "ocpp.h"
 #include "connectivity.h"
+#include "ppp_task.h"
 #include "i2cDevices.h"
 #include "storage.h"
 #include "sessionHandler.h"
@@ -2449,7 +2450,9 @@ static void ocpp_task(){
 			if(should_run == false || should_restart)
 				goto clean;
 
-			err = complete_boot_notification_process(i2cGetLoadedDeviceInfo().serialNumber);
+			err = complete_boot_notification_process(NULL, "Go", i2cGetLoadedDeviceInfo().serialNumber,
+								"zaptec", GetSoftwareVersion(),
+								LTEGetIccid(), LTEGetImsi(), NULL, NULL);
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to get accepted boot, retrying in %d sec", retry_delay);
