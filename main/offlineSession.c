@@ -1036,11 +1036,12 @@ struct start_transaction_session_data{
 	int connector_id;
 	int meter_start;
 	int reservation_id;
+	bool valid_reservation;
 	char id_tag[21];
 };
 
 esp_err_t sessionDataToStartTransaction_ocpp(FILE * fp, int * connector_id, char * id_tag,
-					int * meter_start, int * reservation_id){
+					int * meter_start, int * reservation_id, bool * valid_reservation){
 
 	time_t timestamp;
 	size_t data_length;
@@ -1056,6 +1057,7 @@ esp_err_t sessionDataToStartTransaction_ocpp(FILE * fp, int * connector_id, char
 	*connector_id = data->connector_id;
 	*meter_start = data->meter_start;
 	*reservation_id = data->reservation_id;
+	*valid_reservation = data->valid_reservation;
 	strcpy(id_tag, data->id_tag);
 
 	free(data);
@@ -1171,8 +1173,10 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 		char id_tag[21];
 		int meter_start;
 		int reservation_id;
+		bool valid_reservation;
 
-		esp_err_t status = sessionDataToStartTransaction_ocpp(fp, &connector_id, id_tag, &meter_start, &reservation_id);
+		esp_err_t status = sessionDataToStartTransaction_ocpp(fp, &connector_id, id_tag, &meter_start, &reservation_id,
+								&valid_reservation);
 
 		if(status == ESP_FAIL){
 			ESP_LOGE(TAG, "Unable to read session data for ocpp");
@@ -1184,7 +1188,10 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 		else{
 			time_t start_transaction_timestamp = LONG_MAX;
 			sscanf(readingPath_ocpp, "/offs/%lx.bin", &start_transaction_timestamp);
-			message = ocpp_create_start_transaction_request(connector_id, id_tag, meter_start, reservation_id, start_transaction_timestamp);
+			message = ocpp_create_start_transaction_request(connector_id, id_tag, meter_start,
+									(valid_reservation) ? &reservation_id : NULL,
+									start_transaction_timestamp);
+
 			int * transaction_id_buffer = malloc(sizeof(int));
 			if(transaction_id_buffer == NULL){
 				ESP_LOGE(TAG, "Unable to allocate cb data for StartTransaction");
@@ -1575,13 +1582,15 @@ esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t tr
 		ESP_LOGE(TAG, "Missing id tag for start transaction");
 		return ESP_ERR_INVALID_ARG;
 	}
-
 	strncpy(data.id_tag, id_tag, sizeof(data.id_tag));
 
+
 	if(reservation_id != NULL){
-		data.reservation_id = *reservation_id;
+		data.reservation_id = reservation_id;
+		data.valid_reservation = true;
 	}else{
-		data.reservation_id = -1; // TODO: update as -1 may be a valid reservation id.
+		data.reservation_id = -1;
+		data.valid_reservation = false;
 	}
 
 	ESP_LOGW(TAG, "Writing start transaction");

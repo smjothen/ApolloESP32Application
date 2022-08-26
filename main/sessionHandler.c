@@ -686,7 +686,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 void start_transaction(){
 	transaction_start = time(NULL);
 	meter_start = floor(storage_update_accumulated_energy(0.0) * 1000);
-	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, -1, transaction_start);
+	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, NULL, transaction_start);
 
 	transaction_id = malloc(sizeof(int));
 	if(transaction_id == NULL){
