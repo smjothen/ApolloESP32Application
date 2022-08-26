@@ -830,7 +830,7 @@ bool chargeController_SetStandaloneState(uint8_t isStandalone)
 	if(ret == MsgWriteAck)
 	{
 		storage_Set_Standalone((uint8_t)isStandalone);
-		ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", isStandalone);
+		ESP_LOGI(TAG, "Set Standalone: MCU=%d ESP=%d\n", (enforceScheduleAndDelay ? 0 : isStandalone), isStandalone);
 		return true;
 	}
 	else

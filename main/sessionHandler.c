@@ -400,6 +400,14 @@ static void sessionHandler_task()
     /// For developement testing only
     //SessionHandler_SetOCMFHighInterval();
 
+    ///Ensure MCU is up and running before continuing to ensure settings can be written
+    int MCUtimeout = 15;
+    while ((!MCU_IsReady() && MCUtimeout > 0))
+	{
+    	MCUtimeout--;
+		ESP_LOGW(TAG, "Waiting for MCU: %i", MCUtimeout);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}
     chargeController_Init();
 
     offlineSession_Init();
