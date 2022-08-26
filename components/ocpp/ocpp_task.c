@@ -271,7 +271,6 @@ uint8_t get_blocked_enqueue_mask(){
 	return enqueue_blocking_mask;
 }
 
-//TODO: ensure all calls to enqueue_call delete cJSON * on error
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
@@ -400,6 +399,7 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
 		int err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue status notification");
+			cJSON_Delete(status_notification);
 		}
 	}
 }

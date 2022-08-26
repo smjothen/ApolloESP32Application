@@ -651,6 +651,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 	}else{
 		int err = enqueue_call(response, stop_transaction_response_cb, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
+			cJSON_Delete(response);
 			ESP_LOGE(TAG, "Unable to enqueue stop transaction request, storing stop transaction on file");
 			esp_err_t err = offlineSession_SaveStopTransaction_ocpp(*transaction_id, transaction_start, stop_token, meter_stop,
 										timestamp, chargeSession_Get().StoppedReason);
@@ -702,6 +703,7 @@ void start_transaction(){
 		int err = enqueue_call(start_transaction, start_transaction_response_cb, start_transaction_error_cb,
 				transaction_id, eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
+			cJSON_Delete(start_transaction);
 			ESP_LOGE(TAG, "Unable to enqueue start transaction request, storing on file");
 			offlineSession_SaveStartTransaction_ocpp(*transaction_id, transaction_start, 1,
 								chargeSession_Get().AuthenticationCode, meter_start, NULL);
@@ -782,6 +784,7 @@ void authorize(struct TagInfo tag){
 	}else{
 		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_GENERIC);
 		if(err != 0){
+			cJSON_Delete(authorization);
 			ESP_LOGE(TAG, "Unable to enqueue authorization request");
 		}else{
 			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
@@ -943,7 +946,7 @@ void authorize_stop(const char * presented_id_tag)
 				return;
 			}else{
 				ESP_LOGE(TAG, "Unable to enqueue authorization request");
-				free(authorization);
+				cJSON_Delete(authorization);
 				free(id_tag_buffer);
 			}
 		}else{
