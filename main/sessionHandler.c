@@ -761,7 +761,8 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 }
 
 void authorize(struct TagInfo tag){
-	//TODO: handle error to deny authorization or retry if timed out.
+	pending_ocpp_authorize = false;
+
 	if(storage_Get_ocpp_local_pre_authorize()){
 		ESP_LOGI(TAG, "Attempting local pre authorization");
 
@@ -778,6 +779,7 @@ void authorize(struct TagInfo tag){
 	}
 
 	ESP_LOGI(TAG, "Authenticating with central system");
+
 	cJSON * authorization = ocpp_create_authorize_request(tag.idAsString);
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
@@ -799,6 +801,19 @@ void authorize(struct TagInfo tag){
 	}
 
 	NFCTagInfoClearValid();
+
+	if(!pending_ocpp_authorize){
+		audio_play_nfc_card_denied();
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU authorization denied command OK");
+		}
+		else
+		{
+			ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+		}
+	}
 }
 
 static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
