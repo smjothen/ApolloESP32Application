@@ -192,7 +192,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 }
 
 
-static int populate_sample_current_import(enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
+static int populate_sample_current_import(char * phase, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	//Because the go only has 1 connector, we can get the current in the same way regardless of connector id
 
 	struct ocpp_sampled_value new_value = {
@@ -204,24 +204,33 @@ static int populate_sample_current_import(enum ocpp_reading_context_id context, 
 		.unit = eOCPP_UNIT_A
 	};
 
-	//Phase 1
-	sprintf(new_value.value, "%f", MCU_GetCurrents(0));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 0;
+	size_t new_values_count = 0;
 
-	//Phase 2
-	new_value.phase = eOCPP_PHASE_L2;
-	sprintf(new_value.value, "%f", MCU_GetCurrents(1));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 1;
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
+		//Phase 1
+		sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
 
-	//Phase 3
-	new_value.phase = eOCPP_PHASE_L3;
-	sprintf(new_value.value, "%f", MCU_GetCurrents(2));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 2;
 
-	return 3;
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
+		//Phase 2
+		new_value.phase = eOCPP_PHASE_L2;
+		sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
+
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
+		//Phase 3
+		new_value.phase = eOCPP_PHASE_L3;
+		sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
+
+	return new_values_count;
 }
 
 //TODO: consider changing from using standalone current and if value should be changed as offered changes and prsence of car
@@ -299,7 +308,7 @@ static float populate_sample_power_active_import(enum ocpp_reading_context_id co
 	return 1;
 }
 
-static int populate_sample_temperature(uint connector_id, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
+static int populate_sample_temperature(char * phase, uint connector_id, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	struct ocpp_sampled_value new_value = {
 		.context = context,
 		.format = eOCPP_FORMAT_RAW,
@@ -324,32 +333,40 @@ static int populate_sample_temperature(uint connector_id, enum ocpp_reading_cont
 	}else if(connector_id == 1){
 		new_value.location = eOCPP_LOCATION_OUTLET;
 
-		//phase 1
-		new_value.phase = eOCPP_PHASE_L1;
-		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(0));
-		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-			return 0;
+		size_t new_values_count = 0;
 
-		//phase 2
-		new_value.phase = eOCPP_PHASE_L2;
-		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(1));
-		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-			return 1;
+		if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
+			//phase 1
+			new_value.phase = eOCPP_PHASE_L1;
+			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(0));
+			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+				new_values_count++;
+		}
 
-		//phase 3
-		new_value.phase = eOCPP_PHASE_L3;
-		sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(2));
-		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-			return 2;
+		if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
+			//phase 2
+			new_value.phase = eOCPP_PHASE_L2;
+			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(1));
+			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+				new_values_count++;
+		}
 
-		return 3;
+		if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
+			//phase 3
+			new_value.phase = eOCPP_PHASE_L3;
+			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(2));
+			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+				new_values_count++;
+		}
+
+		return new_values_count;
 	}else{
 		ESP_LOGE(TAG, "Unexpected connector id");
 		return 0;
 	}
 }
 
-static int populate_sample_voltage(enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
+static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	struct ocpp_sampled_value new_value = {
 		.context = context,
 		.format = eOCPP_FORMAT_RAW,
@@ -359,22 +376,29 @@ static int populate_sample_voltage(enum ocpp_reading_context_id context, struct 
 		.unit = eOCPP_UNIT_A
 	};
 
-	//Phase 1
-	sprintf(new_value.value, "%f", MCU_GetCurrents(0));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 0;
+	size_t new_values_count = 0;
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
+		//Phase 1
+		sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
 
-	//Phase 2
-	new_value.phase = eOCPP_PHASE_L2;
-	sprintf(new_value.value, "%f", MCU_GetCurrents(1));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 1;
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
+		//Phase 2
+		new_value.phase = eOCPP_PHASE_L2;
+		sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
 
-	//Phase 3
-	new_value.phase = eOCPP_PHASE_L3;
-	sprintf(new_value.value, "%f", MCU_GetCurrents(2));
-	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
-		return 2;
+	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
+		//Phase 3
+		new_value.phase = eOCPP_PHASE_L3;
+		sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
+			new_values_count++;
+	}
 
 	return 3;
 }
@@ -401,10 +425,11 @@ void save_interval_measurands(enum ocpp_reading_context_id context){
 }
 
 // TODO: consider adding OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER
-int populate_sample(enum ocpp_measurand_id measurand, uint connector_id, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
+int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connector_id, enum ocpp_reading_context_id context,
+		struct ocpp_sampled_value_list * value_list_out){
 	switch(measurand){
 	case eOCPP_MEASURAND_CURRENT_IMPORT:
-		return populate_sample_current_import(context, value_list_out);
+		return populate_sample_current_import(phase, context, value_list_out);
 	case eOCPP_MEASURAND_CURRENT_OFFERED:
 		return populate_sample_current_offered(context, value_list_out);
 	case eOCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL:
@@ -412,13 +437,29 @@ int populate_sample(enum ocpp_measurand_id measurand, uint connector_id, enum oc
 	case eOCPP_MEASURAND_POWER_ACTIVE_IMPORT:
 		return populate_sample_power_active_import(context, value_list_out);
 	case eOCPP_MEASURAND_TEMPERATURE:
-		return populate_sample_temperature(connector_id, context, value_list_out);
+		return populate_sample_temperature(phase, connector_id, context, value_list_out);
 	case eOCPP_MEASURAND_VOLTAGE:
-		return populate_sample_voltage(context, value_list_out);
+		return populate_sample_voltage(phase, context, value_list_out);
 	default:
 		ESP_LOGE(TAG, "Invalid measurand '%s'!!", ocpp_measurand_from_id(measurand));
 		return 0;
 	};
+}
+
+char * csl_token_get_phase_index(const char * csl_token){
+
+	char * phase_index = rindex(csl_token, '.');
+	if(phase_index == NULL){
+		return NULL;
+
+	}else if((strcmp(phase_index + 1, OCPP_PHASE_L1) == 0)
+		|| (strcmp(phase_index + 1, OCPP_PHASE_L2) == 0)
+		|| (strcmp(phase_index + 1, OCPP_PHASE_L3) == 0)){
+
+		return phase_index;
+	}else{
+		return NULL;
+	}
 }
 
 //TODO: "All "per-period" data [...] should be [...] transmitted [...] at the end of each interval, bearing the interval start time timestamp"
@@ -466,7 +507,14 @@ int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id c
 			return -1;
 		}
 		ESP_LOGI(TAG, "Creating %s value", item);
-		int new_item_count = populate_sample(ocpp_measurand_to_id(item), connector_id, context, meter_value->sampled_value);
+
+		char * phase_index = csl_token_get_phase_index(item);
+		if(phase_index != NULL){
+			*phase_index = '\0'; // Terminate the item at end of measurand
+			phase_index++;
+		}
+
+		int new_item_count = populate_sample(ocpp_measurand_to_id(item), phase_index, connector_id, context, meter_value->sampled_value);
 
 		if(new_item_count < 1){
 			if(new_item_count < 0)
@@ -492,6 +540,7 @@ int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id c
 	return ocpp_meter_list_get_length(meter_value_out);
 }
 
+// TODO: move similarity with ocpp_populate_meter_values to new function
 int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
 					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
 
@@ -552,7 +601,14 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 				return -1;
 			}
 
-			int new_item_count = populate_sample(ocpp_measurand_to_id(item), connector_id, context, meter_value->sampled_value);
+			char * phase_index = csl_token_get_phase_index(item);
+
+			if(phase_index != NULL){
+				*phase_index = '\0'; // Terminate the item at end of measurand
+				phase_index++;
+			}
+
+			int new_item_count = populate_sample(ocpp_measurand_to_id(item), phase_index, connector_id, context, meter_value->sampled_value);
 
 			if(new_item_count < 1){
 				if(new_item_count < 0)
@@ -1590,10 +1646,11 @@ static bool is_true(bool value){
 
 static long validate_u(const char * value, uint32_t upper_bounds){
 	char * endptr;
-	long value_long = strtol(value, &endptr, 0);
 
-	if(endptr[0] != '\0'){
-		ESP_LOGE(TAG, "Negative value");
+	errno = 0;
+	long value_long = strtol(value, &endptr, 0);
+	if(errno != 0 || endptr[0] != '\0'){
+		ESP_LOGE(TAG, "Not a valid unsigned integer: %s", strerror(errno));
 		return -1;
 	}
 
@@ -1654,6 +1711,18 @@ static int set_config_bool(void (*config_function)(bool), const char * value, bo
 
 	config_function(boolean_value);
 	return 0;
+}
+
+bool csl_expect_phase(const char * option){
+	if(strcmp(option, OCPP_MEASURAND_CURRENT_IMPORT) == 0
+		|| strcmp(option, OCPP_MEASURAND_TEMPERATURE) == 0
+		|| strcmp(option, OCPP_MEASURAND_VOLTAGE) == 0
+		){
+
+		return true;
+	}else{
+		return false;
+	}
 }
 
 static int set_config_csl(void (*config_function)(const char *), const char * value, uint8_t max_items, size_t option_count, ...){
@@ -1722,20 +1791,41 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 	while(token != NULL){
 		va_list argument_ptr;
 		bool is_valid = false;
+		const char * enum_value;
 
 		va_start(argument_ptr, option_count);
 		for(int i = 0; i < option_count; i++){
-			const char * enum_value = va_arg(argument_ptr, const char *);
-			if(strcmp(token, enum_value) == 0){
+			 enum_value = va_arg(argument_ptr, const char *);
+			if(strncmp(token, enum_value, strlen(enum_value)) == 0){
 				is_valid = true;
 				break;
 			}
 		}
+
 		va_end(argument_ptr);
+
 		if(!is_valid){
 			ESP_LOGW(TAG, "CSL contained invalid item: '%s'", token);
 			goto error;
 		}
+
+		char phase_buffer[6] = {0};
+
+		if(csl_expect_phase(enum_value)){
+			const char * phase_index = csl_token_get_phase_index(token);
+			if((phase_index != NULL && phase_index[3] != '\0')
+				|| (phase_index == NULL && token[strlen(enum_value)] != '\0')){
+
+				ESP_LOGW(TAG, "CSL item did not end after %s", (phase_buffer[0] == 0) ? "token" : "phase");
+				goto error;
+			}
+		}else{
+			if(token[strlen(enum_value)] != '\0'){
+				ESP_LOGW(TAG, "Initial part of CSL contained valid item, but contains unsupported continuation");
+				goto error;
+			}
+		}
+
 		token = strtok(NULL, ",");
 	}
 	free(value_prepared);
