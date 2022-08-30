@@ -933,7 +933,7 @@ void authorize_stop(const char * presented_id_tag)
 {
 	struct ChargeSession charge_session = chargeSession_Get();
 
-	if(strcmp(charge_session.AuthenticationCode, presented_id_tag) == 0){
+	if(strcasecmp(charge_session.AuthenticationCode, presented_id_tag) == 0){
 		ESP_LOGI(TAG, "Transaction id tag is same as presented id tag");
 		authorize_and_stop_transaction(presented_id_tag);
 		return;
@@ -1280,7 +1280,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 	cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
 	cJSON * type_json = cJSON_GetObjectItem(payload, "type");
 
-	if(!cJSON_IsNumber(connector_id_json) || !cJSON_IsString(type_json) || !ocpp_validate_enum(type_json->valuestring, 2,
+	if(!cJSON_IsNumber(connector_id_json) || !cJSON_IsString(type_json) || !ocpp_validate_enum(type_json->valuestring, true, 2,
 													OCPP_AVAILABILITY_TYPE_INOPERATIVE,
 													OCPP_AVAILABILITY_TYPE_OPERATIVE) == 0){
 

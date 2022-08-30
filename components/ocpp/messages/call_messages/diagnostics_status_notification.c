@@ -3,7 +3,7 @@
 #include "types/ocpp_enum.h"
 
 cJSON * ocpp_create_diagnostics_status_notification_request(const char * status){
-	if(ocpp_validate_enum(status, 4,
+	if(ocpp_validate_enum(status, true, 4,
 				OCPP_DIAGNOSTICS_STATUS_IDLE,
 				OCPP_DIAGNOSTICS_STATUS_UPLOADED,
 				OCPP_DIAGNOSTICS_STATUS_UPLOAD_FAILED,

@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_data_transfer_confirmation(const char * unique_id, const char * status, const char * data){
 
-	if(status == NULL || ocpp_validate_enum(status, 4,
+	if(status == NULL || ocpp_validate_enum(status, true, 4,
 							OCPP_DATA_TRANSFER_STATUS_ACCEPTED,
 							OCPP_DATA_TRANSFER_STATUS_REJECTED,
 							OCPP_DATA_TRANSFER_STATUS_UNKNOWN_MESSAGE_ID,

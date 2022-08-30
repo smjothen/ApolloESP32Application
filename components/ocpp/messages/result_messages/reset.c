@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_reset_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 2,
+	if(status == NULL || ocpp_validate_enum(status, true, 2,
 							OCPP_RESET_STATUS_ACCEPTED,
 							OCPP_RESET_STATUS_REJECTED) != 0)
 	{

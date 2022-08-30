@@ -452,9 +452,9 @@ char * csl_token_get_phase_index(const char * csl_token){
 	if(phase_index == NULL){
 		return NULL;
 
-	}else if((strcmp(phase_index + 1, OCPP_PHASE_L1) == 0)
-		|| (strcmp(phase_index + 1, OCPP_PHASE_L2) == 0)
-		|| (strcmp(phase_index + 1, OCPP_PHASE_L3) == 0)){
+	}else if((strcasecmp(phase_index + 1, OCPP_PHASE_L1) == 0)
+		|| (strcasecmp(phase_index + 1, OCPP_PHASE_L2) == 0)
+		|| (strcasecmp(phase_index + 1, OCPP_PHASE_L3) == 0)){
 
 		return phase_index;
 	}else{
@@ -955,25 +955,25 @@ static uint8_t convert_from_ocpp_phase(char L1, char L2, char L3, bool is_it){
 static int get_ocpp_configuration(const char * key, struct ocpp_key_value * configuration_out){
 	strcpy(configuration_out->key, key);
 
-	if(strcmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
+	if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_authorize_remote_tx_requests(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u32(
 			storage_Get_ocpp_clock_aligned_data_interval(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u32(
 			storage_Get_ocpp_connection_timeout(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
  		configuration_out->readonly = false;
 
 		char phase_rotation_str[16];
@@ -983,164 +983,164 @@ static int get_ocpp_configuration(const char * key, struct ocpp_key_value * conf
 
 		return allocate_and_write_configuration_str(phase_rotation_str, &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_connector_phase_rotation_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_get_configuration_max_keys(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u32(
 			storage_Get_ocpp_heartbeat_interval(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u8(
 			floor(storage_Get_HmiBrightness() * 100), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_local_authorize_offline(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_local_pre_authorize(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_str(
 			storage_Get_ocpp_meter_values_aligned_data(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_meter_values_aligned_data_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_str(
 			storage_Get_ocpp_meter_values_sampled_data(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_meter_values_sampled_data_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u32(
 			storage_Get_ocpp_meter_value_sample_interval(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_number_of_connectors(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_reset_retries(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_stop_transaction_on_invalid_id(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_str(
 			storage_Get_ocpp_stop_txn_aligned_data(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_stop_txn_aligned_data_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_str(
 			storage_Get_ocpp_stop_txn_sampled_data(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_stop_txn_sampled_data_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_str(
 			storage_Get_ocpp_supported_feature_profiles(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_supported_feature_profiles_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u8(
 			storage_Get_ocpp_transaction_message_attempts(), &configuration_out->value);
 
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_u16(
 			storage_Get_ocpp_transaction_message_retry_interval(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		configuration_out->readonly = false;
 
 		return allocate_and_write_configuration_bool(
 			storage_Get_ocpp_local_auth_list_enabled(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u16(
 			storage_Get_ocpp_local_auth_list_max_length(), &configuration_out->value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0){
 		configuration_out->readonly = true;
 
 		return allocate_and_write_configuration_u8(
@@ -1786,6 +1786,8 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 		goto error;
 	}
 
+	char * config_position = config_str; // used to change case insensensitive input to case sensitive.
+
 	// Check if each item is among options
 	char * token = strtok(value_prepared, ",");
 	while(token != NULL){
@@ -1796,8 +1798,12 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 		va_start(argument_ptr, option_count);
 		for(int i = 0; i < option_count; i++){
 			 enum_value = va_arg(argument_ptr, const char *);
-			if(strncmp(token, enum_value, strlen(enum_value)) == 0){
+			if(strncasecmp(token, enum_value, strlen(enum_value)) == 0){
 				is_valid = true;
+
+				strncpy(config_position, enum_value, strlen(enum_value)); // Use case sensitive version
+				config_position += strlen(enum_value);
+
 				break;
 			}
 		}
@@ -1818,6 +1824,8 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 
 				ESP_LOGW(TAG, "CSL item did not end after %s", (phase_buffer[0] == 0) ? "token" : "phase");
 				goto error;
+			}else if(phase_index != NULL){
+				config_position[1] = 'L'; // Make sure the 'L' in .L1, .L2 or .L3 is uppercase
 			}
 		}else{
 			if(token[strlen(enum_value)] != '\0'){
@@ -1827,6 +1835,9 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 		}
 
 		token = strtok(NULL, ",");
+		config_position = index(config_position, ',');
+		if(config_position != NULL)
+			config_position++;
 	}
 	free(value_prepared);
 
@@ -1879,18 +1890,18 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
 	int err = -1;
-	if(strcmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
+	if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
 		err = set_config_bool(storage_Set_ocpp_authorize_remote_tx_requests, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_clock_aligned_data_interval, value, is_valid_alignment_interval);
 		if(err == 0)
 			restart_clock_aligned_meter_values();
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
 		err = set_config_u32(storage_Set_ocpp_connection_timeout, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
 		/*
 		 * The go represent connector phase rotation via wire index.
 		 * OCPP uses three letters representing L1, L2, L3 optionally
@@ -2001,12 +2012,12 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			storage_Set_PhaseRotation(wire_index);
 			err = 0;
 		}
-	}else if(strcmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, NULL);
 		if(err == 0)
 			update_heartbeat_timer(storage_Get_ocpp_heartbeat_interval());
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
 		char * endptr;
 		long value_long = strtol(value, &endptr, 0);
 
@@ -2019,13 +2030,13 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
 		return;
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
@@ -2036,7 +2047,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				);
 
 		// TODO: "where applicable, the Measurand is combined with the optional phase; for instance: Voltage.L1"
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
@@ -2046,13 +2057,13 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				OCPP_MEASURAND_VOLTAGE
 				);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
 		err = set_config_u8(storage_Set_ocpp_reset_retries, value);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
 		/*
 		 * NOTE: Current behaviour of mcu in regards to querying chargesession value makes it so that
 		 * StopTransactionOnEvSideDisconnect 'false' becomes complicated to implement. For now true is required.
@@ -2060,10 +2071,10 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		 */
 		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_ev_side_disconnect, value, is_true);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
 		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_invalid_id, value, NULL);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
@@ -2073,7 +2084,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				OCPP_MEASURAND_VOLTAGE
 				);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
@@ -2083,21 +2094,21 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				OCPP_MEASURAND_VOLTAGE
 				);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
 		err = set_config_u8(storage_Set_ocpp_transaction_message_attempts, value);
 		if(err == 0)
 			update_transaction_message_related_config(
 				storage_Get_ocpp_transaction_message_attempts(),
 				storage_Get_ocpp_transaction_message_retry_interval());
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
 		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value);
 		if(err == 0)
 			update_transaction_message_related_config(
 				storage_Get_ocpp_transaction_message_attempts(),
 				storage_Get_ocpp_transaction_message_retry_interval());
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
 		/*
 		 * NOTE: Current behaviour of mcu in regards to connector makes it impossible to connect/disconnect
 		 * connector from esp. 'true' is therefore the only value we accept. An alternative would be to
@@ -2106,7 +2117,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		 */
 		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value, is_true);
 
-	}else if(strcmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
 
 	}else if(is_configuration_key(key)){
@@ -2191,7 +2202,7 @@ static int validate_and_convert_auth_data(cJSON * auth_data, bool is_update_type
 		}
 
 		cJSON * status_json = cJSON_GetObjectItem(id_tag_info_json, "status");
-		if(!cJSON_IsString(status_json) || ocpp_validate_enum(status_json->valuestring, 4,
+		if(!cJSON_IsString(status_json) || ocpp_validate_enum(status_json->valuestring, true, 4,
 									OCPP_AUTHORIZATION_STATUS_ACCEPTED,
 									OCPP_AUTHORIZATION_STATUS_BLOCKED,
 									OCPP_AUTHORIZATION_STATUS_EXPIRED,
@@ -2246,7 +2257,7 @@ static int validate_and_convert_auth_list(cJSON * auth_list, bool is_update_type
 		}
 
 		for(size_t j = 0; j < i; j++){
-			if(strcmp(item_out->id_tag, data_out[j]->id_tag) == 0){
+			if(strcasecmp(item_out->id_tag, data_out[j]->id_tag) == 0){
 				strcpy(error_type_out, OCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION);
 				snprintf(error_reason_out, SEND_LOCAL_LIST_MAX_REASON_SIZE, "Duplicate idTag not allowed: %s", item_out->id_tag);
 

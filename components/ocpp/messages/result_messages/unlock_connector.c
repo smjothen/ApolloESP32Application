@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_unlock_connector_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 7,
+	if(status == NULL || ocpp_validate_enum(status, true, 7,
 							OCPP_FIRMWARE_STATUS_DOWNLOADED,
 							OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED,
 							OCPP_FIRMWARE_STATUS_DOWNLOADING,

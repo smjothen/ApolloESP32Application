@@ -3,7 +3,7 @@
 #include "types/ocpp_enum.h"
 
 cJSON * ocpp_create_firmware_status_notification_request(const char * status){
-	if(ocpp_validate_enum(status, 7,
+	if(ocpp_validate_enum(status, true, 7,
 				OCPP_FIRMWARE_STATUS_DOWNLOADED,
 				OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED,
 				OCPP_FIRMWARE_STATUS_DOWNLOADING,

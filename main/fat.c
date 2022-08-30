@@ -280,7 +280,7 @@ int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data *
 	while(fread(&auth_data_read, sizeof(struct ocpp_authorization_data), 1, f_r) == 1){
 		bool is_match = false;
 		for(size_t i = 0; i < list_length; i++){
-			if(strcmp(auth_data_read.id_tag, auth_list[i]->id_tag) == 0){
+			if(strcasecmp(auth_data_read.id_tag, auth_list[i]->id_tag) == 0){
 				is_match = true;
 
 				if(strcmp(auth_list[i]->id_tag_info.status, "DELETE") != 0)
@@ -350,7 +350,7 @@ bool fat_ReadAuthData(const char * id_tag, struct ocpp_authorization_data * auth
 	bool found = false;
 
 	while(fread(auth_data_out, sizeof(struct ocpp_authorization_data), 1, f) == 1){
-		if(strcmp(auth_data_out->id_tag, id_tag) == 0){
+		if(strcasecmp(auth_data_out->id_tag, id_tag) == 0){
 			found = true;
 			break;
 		}

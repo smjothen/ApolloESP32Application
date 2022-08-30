@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_change_availability_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 3,
+	if(status == NULL || ocpp_validate_enum(status, true, 3,
 							OCPP_AVAILABILITY_STATUS_ACCEPTED,
 							OCPP_AVAILABILITY_STATUS_REJECTED,
 							OCPP_AVAILABILITY_STATUS_SCHEDULED) != 0)

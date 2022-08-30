@@ -10,7 +10,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 	if(id_tag != NULL && !is_ci_string_type(id_tag, 20))
 		return NULL;
 
-	if(reason != NULL && ocpp_validate_enum(reason, 11,
+	if(reason != NULL && ocpp_validate_enum(reason, true, 11,
 							OCPP_REASON_DE_AUTHORIZED,
 							OCPP_REASON_EMERGENCY_STOP,
 							OCPP_REASON_EV_DISCONNECT,

@@ -3,7 +3,7 @@
 #include "types/ocpp_enum.h"
 
 bool is_configuration_key(const char * key){
-	return ocpp_validate_enum(key, 31,
+	return ocpp_validate_enum(key, false, 31,
 				OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS,
 				OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL,
 				OCPP_CONFIG_KEY_CONNECTION_TIMEOUT,

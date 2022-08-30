@@ -4,7 +4,7 @@
 
 cJSON * remote_start_stop_transaction_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 2,
+	if(status == NULL || ocpp_validate_enum(status, true, 2,
 							OCPP_REMOTE_START_STOP_STATUS_ACCEPTED,
 							OCPP_REMOTE_START_STOP_STATUS_REJECTED) != 0)
 	{

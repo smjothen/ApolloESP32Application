@@ -10,7 +10,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
 	if(connector_id < 1)
 		return NULL;
 
-	if(ocpp_validate_enum(error_code, 16,
+	if(ocpp_validate_enum(error_code, true, 16,
 				OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE,
 				OCPP_CP_ERROR_EV_COMMUNICATION_ERROR,
 				OCPP_CP_ERROR_GROUND_FAILURE,
@@ -33,7 +33,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
 	if(info != NULL && !is_ci_string_type(info, 50))
 		return NULL;
 
-	if(ocpp_validate_enum(status, 9,
+	if(ocpp_validate_enum(status, true, 9,
 				OCPP_CP_STATUS_AVAILABLE,
 				OCPP_CP_STATUS_PREPARING,
 				OCPP_CP_STATUS_CHARGING,

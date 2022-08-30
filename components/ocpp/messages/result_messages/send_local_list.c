@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_send_local_list_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 4,
+	if(status == NULL || ocpp_validate_enum(status, true, 4,
 							OCPP_UPDATE_STATUS_ACCEPTED,
 							OCPP_UPDATE_STATUS_FAILED,
 							OCPP_UPDATE_STATUS_NOTSUPPORTED,

@@ -69,7 +69,7 @@ bool authentication_check_parent(const char * id_tag, const char * parent_id)
 			return false;
 		}
 
-		if(strcmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0
+		if(strcasecmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0
 			&& strcmp(auth_data.id_tag_info.parent_id_tag, parent_id) == 0){
 
 			return true;

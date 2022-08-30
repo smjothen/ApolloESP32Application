@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_clear_cache_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 2,
+	if(status == NULL || ocpp_validate_enum(status, true, 2,
 							OCPP_CLEAR_CACHE_STATUS_ACCEPTED,
 							OCPP_CLEAR_CACHE_STATUS_REJECTED) != 0)
 	{

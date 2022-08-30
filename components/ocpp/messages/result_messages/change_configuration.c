@@ -4,7 +4,7 @@
 
 cJSON * ocpp_create_change_configuration_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, 4,
+	if(status == NULL || ocpp_validate_enum(status, true, 4,
 							OCPP_CONFIGURATION_STATUS_ACCEPTED,
 							OCPP_CONFIGURATION_STATUS_REJECTED,
 							OCPP_CONFIGURATION_STATUS_REBOOT_REQUIRED,
