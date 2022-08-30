@@ -449,6 +449,7 @@ static void stop_transaction_response_cb(const char * unique_id, cJSON * payload
 }
 
 bool pending_ocpp_authorize = false;
+char pending_ocpp_id_tag[21] = {0};
 
 static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
 	const char * action = (cb_data != NULL) ? (const char *) cb_data : "No cb";
@@ -687,6 +688,17 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 void start_transaction(){
 	transaction_start = time(NULL);
 	meter_start = floor(storage_update_accumulated_energy(0.0) * 1000);
+
+	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
+		if(pending_ocpp_id_tag[0] != 0){
+			ESP_LOGW(TAG, "charge session authentication code not set during start_transaction, using pending id");
+			chargeSession_SetAuthenticationCode(pending_ocpp_id_tag);
+		}else{
+			ESP_LOGE(TAG, "No id tag for charge session");
+		}
+	}
+	pending_ocpp_id_tag[0] = '\0';
+
 	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, NULL, transaction_start);
 
 	transaction_id = malloc(sizeof(int));
@@ -762,6 +774,7 @@ static void authorize_response_cb(const char * unique_id, cJSON * payload, void 
 
 void authorize(struct TagInfo tag){
 	pending_ocpp_authorize = false;
+	strcpy(pending_ocpp_id_tag, tag.idAsString);
 
 	if(storage_Get_ocpp_local_pre_authorize()){
 		ESP_LOGI(TAG, "Attempting local pre authorization");
@@ -802,7 +815,7 @@ void authorize(struct TagInfo tag){
 
 	NFCTagInfoClearValid();
 
-	if(!pending_ocpp_authorize){
+	if(!pending_ocpp_authorize && !isAuthorized){
 		audio_play_nfc_card_denied();
 		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
 		if(ret == MsgCommandAck)
@@ -1518,7 +1531,7 @@ static bool has_new_id_token(){
 }
 
 static void handle_available(){
-	if(has_new_id_token()) // This will always be false as NFCClearTag() is called by i2cDevices.c if car is disconnected
+	if(has_new_id_token())
 		authorize(NFCGetTagInfo());
 }
 
