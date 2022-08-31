@@ -999,61 +999,113 @@ void boot_error_cb(const char * unique_id, const char * error_code, const char *
 	registration_status = eOCPP_REGISTRATION_REJECTED;
 }
 
+char boot_parameter_chargebox_nr[26] = {0};
+char boot_parameter_charge_point_model[21] = {0};
+char boot_parameter_cp_nr[26] = {0};
+char boot_parameter_cp_vendor[21] = {0};
+char boot_parameter_firm_ver[51] = {0};
+char boot_parameter_iccid[21] = {0};
+char boot_parameter_imsi[21] = {0};
+char boot_parameter_meter_nr[26] = {0};
+char boot_parameter_meter_type[26] = {0};
 
-int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
-				const char * charge_point_serial_number, const char * charge_point_vendor,
-				const char * firmware_version, const char * iccid, const char * imsi,
-				const char * meter_serial_number, const char * meter_type){
-
-	bool add_chargebox_nr = chargebox_serial_number != NULL && chargebox_serial_number[0] != '\0'
-		&& is_ci_string_type(chargebox_serial_number, 25);
-
-	bool add_cp_nr = charge_point_serial_number != NULL && charge_point_serial_number[0] != '\0'
-		&& is_ci_string_type(charge_point_serial_number, 25);
-
-	bool add_firm_ver = firmware_version != NULL && firmware_version[0] != '\0'
-		&& is_ci_string_type(firmware_version, 50);
-
-	bool add_iccid = iccid != NULL && iccid[0] != '\0'
-		&& is_ci_string_type(iccid, 20);
-
-	bool add_imsi = imsi != NULL && imsi[0] != '\0'
-		&& is_ci_string_type(imsi, 20);
-
-	bool add_meter_nr = meter_serial_number != NULL && meter_serial_number[0] != '\0'
-		&& is_ci_string_type(meter_serial_number, 25);
-
-	bool add_meter_type = meter_type != NULL && meter_type[0] != '\0'
-		&& is_ci_string_type(meter_type, 25);
+int enqueue_boot_notification(){
+	if(boot_parameter_charge_point_model[0] == '\0' || boot_parameter_cp_vendor[0] == '\0'){
+		ESP_LOGE(TAG, "Boot notification can not be created due to missing model and/or vendor parameter");
+		return -1;
+	}
 
 	ESP_LOGI(TAG,"Creating boot notification with parameters:\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n%-23s: %s\n",
-		"Chargebox serial nr", (add_chargebox_nr) ? chargebox_serial_number : "(Omitted)",
-		"Charge point model", charge_point_model,
-		"Charge point serial nr", (add_cp_nr) ? charge_point_serial_number : "(Omitted)",
-		"Charge point vendor", charge_point_vendor,
-		"Firmware version", (add_firm_ver) ? firmware_version : "(Omitted)",
-		"ICCID", (add_iccid) ? iccid : "(Omitted)",
-		"IMSI", (add_imsi) ? imsi : "(Omitted)",
-		"eMeter serial nr", (add_meter_nr) ? meter_serial_number : "(Omitted)",
-		"eMeter type", (add_meter_type) ? meter_type : "(Omitted)");
+		"Chargebox serial nr", (boot_parameter_chargebox_nr[0] != '\0') ? boot_parameter_chargebox_nr : "(Omitted)",
+		"Charge point model", boot_parameter_charge_point_model,
+		"Charge point serial nr", (boot_parameter_cp_nr[0] != '\0') ? boot_parameter_cp_nr : "(Omitted)",
+		"Charge point vendor", boot_parameter_cp_vendor,
+		"Firmware version", (boot_parameter_firm_ver[0] != '\0') ? boot_parameter_firm_ver : "(Omitted)",
+		"ICCID", (boot_parameter_iccid[0] != '\0') ? boot_parameter_iccid : "(Omitted)",
+		"IMSI", (boot_parameter_imsi[0] != '\0') ? boot_parameter_imsi : "(Omitted)",
+		"eMeter serial nr", (boot_parameter_meter_nr[0] != '\0') ? boot_parameter_meter_nr : "(Omitted)",
+		"eMeter type", (boot_parameter_meter_type[0] != '\0') ? boot_parameter_meter_type : "(Omitted)");
 
-	cJSON * boot_notification = ocpp_create_boot_notification_request((add_chargebox_nr) ? chargebox_serial_number : NULL, charge_point_model,
-									(add_cp_nr) ? charge_point_serial_number : NULL, charge_point_vendor,
-									(add_firm_ver) ? firmware_version : NULL, (add_iccid) ? iccid : NULL,
-									(add_imsi) ? imsi : NULL, (add_meter_nr) ? meter_serial_number : NULL,
-									(add_meter_type) ? meter_type : NULL);
+	cJSON * boot_notification = ocpp_create_boot_notification_request((boot_parameter_chargebox_nr[0] != '\0') ? boot_parameter_chargebox_nr : NULL,
+									boot_parameter_charge_point_model,
+									(boot_parameter_cp_nr[0] != '\0') ? boot_parameter_cp_nr : NULL,
+									boot_parameter_cp_vendor,
+									(boot_parameter_firm_ver[0] != '\0') ? boot_parameter_firm_ver : NULL,
+									(boot_parameter_iccid[0] != '\0') ? boot_parameter_iccid : NULL,
+									(boot_parameter_imsi[0] != '\0') ? boot_parameter_imsi : NULL,
+									(boot_parameter_meter_nr[0] != '\0') ? boot_parameter_meter_nr : NULL,
+									(boot_parameter_meter_type[0] != '\0') ? boot_parameter_meter_type : NULL);
 
 	if(boot_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create boot notification");
 		return -1;
 	}
 
-	registration_status = eOCPP_REGISTRATION_PENDING;
-	heartbeat_interval = -1;
-
 	if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
 		ESP_LOGE(TAG, "Unable to equeue BootNotification");
 		cJSON_Delete(boot_notification);
+		return -1;
+	}
+
+	return 0;
+}
+
+int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
+				const char * charge_point_serial_number, const char * charge_point_vendor,
+				const char * firmware_version, const char * iccid, const char * imsi,
+				const char * meter_serial_number, const char * meter_type){
+
+	if(chargebox_serial_number != NULL && chargebox_serial_number[0] != '\0'
+		&& is_ci_string_type(chargebox_serial_number, 25)){
+
+		strcpy(boot_parameter_chargebox_nr, chargebox_serial_number);
+	}
+
+	strcpy(boot_parameter_charge_point_model, charge_point_model);
+
+	if(charge_point_serial_number != NULL && charge_point_serial_number[0] != '\0'
+		&& is_ci_string_type(charge_point_serial_number, 25)){
+
+		strcpy(boot_parameter_cp_nr, charge_point_serial_number);
+	}
+
+	strcpy(boot_parameter_cp_vendor, charge_point_vendor);
+
+	if(firmware_version != NULL && firmware_version[0] != '\0'
+		&& is_ci_string_type(firmware_version, 50)){
+
+		strcpy(boot_parameter_firm_ver, firmware_version);
+	}
+
+	if(iccid != NULL && iccid[0] != '\0'
+		&& is_ci_string_type(iccid, 20)){
+
+		strcpy(boot_parameter_iccid, iccid);
+	}
+
+        if(imsi != NULL && imsi[0] != '\0'
+		&& is_ci_string_type(imsi, 20)){
+
+		strcpy(boot_parameter_imsi, imsi);
+	}
+
+	if(meter_serial_number != NULL && meter_serial_number[0] != '\0'
+		&& is_ci_string_type(meter_serial_number, 25)){
+
+		strcpy(boot_parameter_meter_nr, meter_serial_number);
+	}
+
+	if(meter_type != NULL && meter_type[0] != '\0'
+		&& is_ci_string_type(meter_type, 25)){
+
+		strcpy(boot_parameter_meter_type, meter_type);
+	}
+
+	registration_status = eOCPP_REGISTRATION_PENDING;
+	heartbeat_interval = -1;
+
+	if(enqueue_boot_notification() != 0){
+		ESP_LOGE(TAG, "Failed boot notification");
 		return -1;
 	}
 
@@ -1075,21 +1127,10 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 				vTaskDelay(pdMS_TO_TICKS(heartbeat_interval * 1000));
 				is_retry = true;
 
-				boot_notification = ocpp_create_boot_notification_request((add_chargebox_nr) ? chargebox_serial_number : NULL, charge_point_model,
-									(add_cp_nr) ? charge_point_serial_number : NULL, charge_point_vendor,
-									(add_firm_ver) ? firmware_version : NULL, (add_iccid) ? iccid : NULL,
-									(add_imsi) ? imsi : NULL, (add_meter_nr) ? meter_serial_number : NULL,
-									(add_meter_type) ? meter_type : NULL);
-
-				if(boot_notification == NULL){
-					ESP_LOGE(TAG, "Unable to recreate boot notification for retry");
+				if(enqueue_boot_notification() != 0){
+					ESP_LOGE(TAG, "Failed new boot notification");
 					return -1;
-				}
 
-				if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
-					ESP_LOGE(TAG, "Unable to equeue new BootNotification");
-					cJSON_Delete(boot_notification);
-					return -1;
 				}
 
 				registration_status = eOCPP_REGISTRATION_PENDING;

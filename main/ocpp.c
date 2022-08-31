@@ -34,7 +34,9 @@
 #include "types/ocpp_enum.h"
 #include "types/ocpp_data_transfer_status.h"
 #include "types/ocpp_reason.h"
-
+#include "types/ocpp_message_trigger.h"
+#include "types/ocpp_trigger_message_status.h"
+#include "types/ocpp_charge_point_error_code.h"
 #include "protocol_task.h"
 
 #define TASK_OCPP_STACK_SIZE 3200
@@ -2457,6 +2459,151 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 	return;
 }
 
+void ocpp_send_connector_zero_status(const char * error_code, char * info){
+
+	const char * state = (storage_Get_IsEnabled() && get_registration_status() == eOCPP_REGISTRATION_ACCEPTED) ? OCPP_CP_STATUS_AVAILABLE : OCPP_CP_STATUS_UNAVAILABLE;
+
+	cJSON * status_notification  = ocpp_create_status_notification_request(0, error_code, info, state, time(NULL), NULL, NULL);
+	if(status_notification == NULL){
+		ESP_LOGE(TAG, "Unable to create status notification request");
+	}else{
+		int err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
+		if(err != 0){
+			ESP_LOGE(TAG, "Unable to enqueue status notification");
+			cJSON_Delete(status_notification);
+		}
+	}
+
+}
+
+static void trigger_message_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Recieved trigger message request");
+
+	if(!cJSON_HasObjectItem(payload, "requestedMessage")){
+		ESP_LOGW(TAG, "Trigger message lacks 'requestedMessage'");
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'requestedMessage' field", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	cJSON * trigger_message_json = cJSON_GetObjectItem(payload, "requestedMessage");
+	if(!cJSON_IsString(trigger_message_json) || ocpp_validate_enum(trigger_message_json->valuestring, true, 6,
+									OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION,
+									OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION,
+									OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION,
+									OCPP_MESSAGE_TRIGGER_HEARTBEAT,
+									OCPP_MESSAGE_TRIGGER_METER_VALUES,
+									OCPP_MESSAGE_TRIGGER_STATUS_NOTIFICATION) != 0){
+		ESP_LOGW(TAG, "Requested message is a MessageTrigger type");
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION,
+							"Expected 'requestedMessage' to be 'MessageTrigger' type", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
+
+	uint * connector_id = NULL;
+	if(cJSON_HasObjectItem(payload, "connectorId")){
+		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
+		if(cJSON_IsNumber(connector_id_json) && connector_id_json->valueint > 0 && connector_id_json->valueint <= storage_Get_ocpp_number_of_connectors()){
+			connector_id = (uint *)&connector_id_json->valueint;
+		}else{
+			ESP_LOGE(TAG, "Trigger request contains invalid connectorId. connectorId will be ignored");
+		}
+	}
+
+	char trigger_status[15] = OCPP_TRIGGER_MESSAGE_STATUS_REJECTED;
+
+	const char * requested_message = trigger_message_json->valuestring;
+	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0
+		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_HEARTBEAT) == 0
+		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_METER_VALUES) == 0
+		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_STATUS_NOTIFICATION) == 0){
+
+		strcpy(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED);
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION ) == 0
+		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
+
+		strcpy(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_NOT_IMPLEMENTED);
+	}
+
+	cJSON * conf =  ocpp_create_trigger_message_confirmation(unique_id, trigger_status);
+	if(conf == NULL){
+		ESP_LOGE(TAG, "Unable to create confirmation for trigger message");
+	}else{
+		send_call_reply(conf);
+		cJSON_Delete(conf);
+	}
+
+	if(strcmp(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED) != 0){
+		return;
+	}
+
+	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0){
+		enqueue_boot_notification();
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_HEARTBEAT) == 0){
+		ocpp_heartbeat();
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_METER_VALUES) == 0){
+		bool allocated = false;
+		size_t connector_count = 1;
+
+		if(connector_id == NULL){
+			connector_count = storage_Get_ocpp_number_of_connectors() + 1;
+			connector_id = malloc(sizeof(uint) * connector_count);
+
+			if(connector_id == NULL){
+				ESP_LOGE(TAG, "Unable to allocate memory for all connectors triggered with meter values");
+				return;
+			}
+			allocated = true;
+
+			for(size_t i = 0; i <= storage_Get_ocpp_number_of_connectors(); i++){
+				connector_id[i] = i;
+			}
+		}
+
+		handle_meter_value(eOCPP_CONTEXT_TRIGGER, storage_Get_ocpp_meter_values_sampled_data(),
+				NULL, NULL, connector_id, connector_count);
+
+		if(allocated)
+			free(connector_id);
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_STATUS_NOTIFICATION) == 0){
+		if(connector_id == NULL){
+			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
+			sessionHandler_OcppSendState();
+
+		}else if(*connector_id == 0){
+			/*
+			 * The specification states: "a request for a statusNotification for connectorId 0 is
+			 * a request for the status of the Charge Point." But it also states that connectorId
+			 * is an integer greater than 0. This if clause should therefore never be executed and
+			 * the request can never be granted.
+			 */
+			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
+
+		}else if(*connector_id == 1){
+			sessionHandler_OcppSendState();
+
+		}else{
+			ESP_LOGE(TAG, "Unhandled connector id for status notification");
+		}
+	}
+
+}
+
 uint8_t previous_enqueue_mask = 0;
 
 time_t last_online_timestamp = 0;
@@ -2511,6 +2658,7 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_TRIGGER_MESSAGE_ID, trigger_message_cb, NULL);
 
 		ESP_LOGI(TAG, "Starting connection with Central System");
 

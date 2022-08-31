@@ -82,12 +82,21 @@ void clear_active_call(void);
 int handle_ocpp_call(int last_listener_state);
 void block_sending_call(uint8_t call_type_mask);
 
+/**
+ * Used for initial boot.
+ */
 int complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
 				const char * firmware_version, const char * iccid, const char * imsi,
 				const char * meter_serial_number, const char * meter_type);
 
+/**
+ * Used by complete_boot_notification_process and when requested with trigger message.
+ */
+int enqueue_boot_notification();
+
 int start_ocpp_heartbeat(void);
+void ocpp_heartbeat();
 void stop_ocpp_heartbeat(void);
 void update_heartbeat_timer(uint sec);
 

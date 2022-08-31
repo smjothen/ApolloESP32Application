@@ -7,7 +7,7 @@
 
 cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const char * error_code, const char * info, const char * status, time_t timestamp, const char * vendor_id, const char * vendor_error_code){
 
-	if(connector_id < 1)
+	if(connector_id > 1)
 		return NULL;
 
 	if(ocpp_validate_enum(error_code, true, 16,

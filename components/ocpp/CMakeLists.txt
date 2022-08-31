@@ -28,6 +28,7 @@ idf_component_register(SRCS
   "messages/result_messages/remote_start_stop_transaction.c"
   "messages/result_messages/reset.c"
   "messages/result_messages/send_local_list.c"
+  "messages/result_messages/trigger_message.c"
   "messages/result_messages/unlock_connector.c"
   "messages/result_messages/update_firmware.c"
   "messages/result_messages/ocpp_create_result.c"
