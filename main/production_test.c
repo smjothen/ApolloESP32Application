@@ -254,6 +254,7 @@ enum test_item{
 	TEST_ITEM_COMPONENT_SERVO,
 	TEST_ITEM_COMPONENT_SPEED_HWID,
 	TEST_ITEM_COMPONENT_POWER_HWID,
+	TEST_ITEM_COMPONENT_HW_TRIG,
 	TEST_ITEM_DEV_TEMP,
 	TEST_ITEM_CHARGE_CYCLE,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS,
@@ -873,17 +874,17 @@ int test_servo(){
 /// Check for valid HW id measurement on Speed board
 int test_speed_hwid(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Speed HW ID");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SPEED_HWID, "Speed HW ID");
 	int hw_id = MCU_GetHwIdMCUSpeed();
 
 	char id_string[100];
 	snprintf(id_string, 100, "Speed HW ID: %i\r\n", hw_id);
 
     if((2 >= hw_id) && (hw_id >= 1)){
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, id_string);
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, id_string);
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 	}
 
 	return -1;
@@ -892,25 +893,25 @@ int test_speed_hwid(){
 /// Check for valid HW id measurement on Power board
 int test_power_hwid(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Power HW ID");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_POWER_HWID, "Power HW ID");
 	int hw_id = MCU_GetHwIdMCUPower();
 
 	char id_string[100];
 	snprintf(id_string, 100, "Power HW ID: %i\r\n", hw_id);
 
-    if((1 >= hw_id) && (hw_id >= 1)){
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, id_string);
+    if((2 >= hw_id) && (hw_id >= 1)){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
 		return 0;
 	}else{
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, id_string);
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
 	}
 
 	return -1;
 }
 
-int test_speed_hw_trig(){
+int test_hw_trig(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "HW Trig");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_HW_TRIG, "HW Trig");
 	MCU_SendCommandId(CommandTestHWTrig);
 
 	int trigResult = 0;
@@ -936,10 +937,10 @@ int test_speed_hw_trig(){
 
     if(trigResult == 3){
 		//the switch must be in pos 0 when it leaves the factory
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, trig_string);
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
 		return 0;
 	}else{
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, trig_string);
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
 	}
 
 	return -1;
@@ -980,7 +981,7 @@ int run_component_tests(){
 		goto err;
 	}
 
-	if(test_speed_hw_trig()<0){
+	if(test_hw_trig()<0){
 		goto err;
 	}
 
