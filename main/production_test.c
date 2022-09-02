@@ -875,12 +875,12 @@ int test_servo(){
 int test_speed_hwid(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SPEED_HWID, "Speed HW ID");
-	int hw_id = MCU_GetHwIdMCUSpeed();
+	int speed_hw_id = MCU_GetHwIdMCUSpeed();
 
 	char id_string[100];
-	snprintf(id_string, 100, "Speed HW ID: %i\r\n", hw_id);
+	snprintf(id_string, 100, "Speed HW ID: %i\r\n", speed_hw_id);
 
-    if((2 >= hw_id) && (hw_id >= 1)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
@@ -894,12 +894,12 @@ int test_speed_hwid(){
 int test_power_hwid(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_POWER_HWID, "Power HW ID");
-	int hw_id = MCU_GetHwIdMCUPower();
+	int power_hw_id = MCU_GetHwIdMCUPower();
 
 	char id_string[100];
-	snprintf(id_string, 100, "Power HW ID: %i\r\n", hw_id);
+	snprintf(id_string, 100, "Power HW ID: %i\r\n", power_hw_id);
 
-    if((2 >= hw_id) && (hw_id >= 1)){
+    if((power_hw_id == 1) || (power_hw_id == 2)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
 		return 0;
 	}else{
