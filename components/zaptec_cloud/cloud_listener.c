@@ -609,10 +609,11 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				if(standalone != (int)storage_Get_Standalone())
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+					const enum session_controller controller = (standalone == 1) ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD;
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
 					if(ret == MsgWriteAck)
 					{
-						storage_Set_Standalone((uint8_t)standalone);
+						storage_Set_session_controller(controller);
 						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
 
 						cloud_listener_SetMQTTKeepAliveTime(standalone);
@@ -810,10 +811,11 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((standalone == 0) || (standalone == 1))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
+					const enum session_controller controller = (standalone == 1) ? eSESSION_ZAPTEC_CLOUD : eSESSION_STANDALONE;
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
 					if(ret == MsgWriteAck)
 					{
-						storage_Set_Standalone(standalone);
+						storage_Set_session_controller(controller);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
 
@@ -2304,38 +2306,74 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
-				// Select session type ocpp
-				else if(strstr(commandString, "set session type ocpp") != NULL)
+				// Select session type [ocpp | zaptec_cloud | standalone]
+				else if(strstr(commandString, "set session type") != NULL)
 				{
-					ESP_LOGI(TAG, "Requested to change session type to ocpp");
-					if(strlen(storage_Get_url_ocpp()) > 0){
-						storage_Set_session_type_ocpp(true);
-						storage_SaveConfiguration();
-						responseStatus = 200;
+					ESP_LOGI(TAG, "Received request to change session type");
+					responseStatus = 200;
 
-						if(!ocpp_is_running()){
-							ocpp_init();
-						}else{
-							ESP_LOGW(TAG, "Ocpp is already running");
-							if(ocpp_task_exists()){
-								ESP_LOGE(TAG, "Ocpp task is scheduled to be deleted");
-								responseStatus = 409;
-							}
-						}
-					}else{
-						ESP_LOGW(TAG, "Can not start ocpp as url has not been set");
+					char * cmd_begin = strstr(commandString, "set session type");
+
+					enum session_controller controller = ~eSESSION_STANDALONE;
+					if(strstr(cmd_begin, "ocpp") != NULL){
+						ESP_LOGI(TAG, "Requested type: ocpp");
+
+						controller = eSESSION_OCPP;
+
+					}else if(strstr(cmd_begin, "zaptec_cloud") != NULL){
+						ESP_LOGI(TAG, "Requested type: zaptec_cloud");
+
+						controller = eSESSION_ZAPTEC_CLOUD;
+
+					}else if(strstr(cmd_begin, "standalone") != NULL){
+						ESP_LOGI(TAG, "Requested type: standalone");
+
+						controller = eSESSION_STANDALONE;
+					}
+
+					if(controller == ~eSESSION_STANDALONE){
+						ESP_LOGE(TAG, "Invalid session");
 						responseStatus = 400;
 					}
-				}
-				// Select session type zaptec_cloud
-				else if(strstr(commandString, "set session type zaptec_cloud") != NULL)
-				{
-					ESP_LOGI(TAG, "Requested to change session type to zaptec_cloud");
-					storage_Set_session_type_ocpp(false);
-					storage_SaveConfiguration();
 
-					if(ocpp_is_running()){
-						ocpp_end(true);
+					if(responseStatus == 200 && !(controller & eCONTROLLER_OCPP_STANDALONE) && !(strlen(storage_Get_url_ocpp()) > 0)){
+						ESP_LOGE(TAG, "Requested ocpp controller, but ocpp url is not set");
+						responseStatus = 400;
+					}
+
+					if(responseStatus == 200){
+						MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
+						if(ret == MsgWriteAck)
+						{
+							ESP_LOGW(TAG, "mcu Standalone set to %s\n", (eSESSION_OCPP & eCONTROLLER_MCU_STANDALONE) ? "on" : "off");
+							storage_Set_session_controller(controller);
+							storage_SaveConfiguration();
+
+							cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
+
+							responseStatus = 200;
+						}
+						else
+						{
+							ESP_LOGE(TAG, "MCU standalone parameter error");
+							responseStatus = 500;
+						}
+					}
+
+
+					if(responseStatus == 200){
+
+						if(storage_Get_session_controller() & eCONTROLLER_OCPP_STANDALONE){
+							ocpp_end(true);
+
+						}else{
+
+							if(!ocpp_is_running()){
+								ocpp_init();
+							}else{
+								ESP_LOGW(TAG, "Ocpp is already running");
+							}
+						}
 					}
 				}
 			}
@@ -2359,7 +2397,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	}
 
 	return responseStatus;
-}
+	}
 
 
 static void BuildLocalSettingsResponse(char * responseBuffer)

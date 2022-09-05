@@ -1543,7 +1543,7 @@ static void handle_preparing(){
 	 */
 	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
 		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, MCU_StandAloneCurrent());
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, storage_Get_StandaloneCurrent());
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Max Current set");
 		}else{
@@ -1918,8 +1918,8 @@ static void sessionHandler_task()
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) && (previousChargeOperatingMode != CHARGE_OPERATION_STATE_REQUESTING) && (chargeSession_Get().StartDateTime[0] == '\0'))
 			InitiateHoldRequestTimeStamp();
 
-		// Handle ocpp state if session type is ocpp and not standalone
-		if(storage_Get_session_type_ocpp() && storage_Get_Standalone() == 0){
+		// Handle ocpp state if session type is ocpp
+		if(storage_Get_session_controller() == eSESSION_OCPP){
 			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state(chargeOperatingMode, currentCarChargeMode);
 
 			if(ocpp_new_state != ocpp_old_state){
@@ -1936,10 +1936,10 @@ static void sessionHandler_task()
 		else
 			SetCarConnectedState(true);
 
-		//If we are charging when going from offline to online while using zaptec_cloud, send a stop command to change the state to requesting.
+		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline() && (storage_Get_session_type_ocpp() == false))
+		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
 		{
 			if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED))
 			{
@@ -1966,92 +1966,90 @@ static void sessionHandler_task()
 		}
 
 		/// MQTT connected and pingReply not in offline state
-		if(storage_Get_session_type_ocpp() == false){
-			if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
+		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
+		{
+			//Allow disabling send on change in standalone when TransmitInterval is 0
+			if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
+				publish_telemetry_observation_on_change();
+			else
+				ESP_LOGE(TAG, "TransmitInterval = 0 in Standalone");
+
+			// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
+			//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
+			if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
 			{
-				//Allow disabling send on change in standalone when TransmitInterval is 0
-				if(!((storage_Get_TransmitInterval() == 0) && storage_Get_Standalone()))
-					publish_telemetry_observation_on_change();
-				else
-					ESP_LOGE(TAG, "TransmitInterval = 0 in Standalone");
-
-				// If we are in system requesting state, make sure to resend state at increasing interval if it is not changed
-				//if((sentOk != 0) && (storage_Get_Standalone() == false) && (chargeOperatingMode == eCONNECTED_REQUESTING))
-				if((storage_Get_Standalone() == false) && (chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING))
+				resendRequestTimer++;
+				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
-					resendRequestTimer++;
-					ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
-					if(resendRequestTimer >= resendRequestTimerLimit)
+					/// On second request transmission, do the ping-reply to ensure inCharge is responding.
+					/// If Cloud does not reply with PingReply command, then go to offline mode.
+					pingReplyTrigger++;
+					if(pingReplyTrigger == 1)
 					{
-						/// On second request transmission, do the ping-reply to ensure inCharge is responding.
-						/// If Cloud does not reply with PingReply command, then go to offline mode.
-						pingReplyTrigger++;
-						if(pingReplyTrigger == 1)
-						{
-							update_mqtt_event_pattern(true);
-							offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
-						}
-
-						publish_debug_telemetry_observation_ChargingStateParameters();
-
-						if(pingReplyTrigger == 1)
-							update_mqtt_event_pattern(false);
-
-						// Reset timer
-						resendRequestTimer = 0;
-
-						// Increase timer limit as a backoff routine if Cloud does not answer
-						if(resendRequestTimerLimit < 1800)
-						{
-							resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT << nrOfResendRetries; //pow(2.0, nrOfResendRetries) => 150 300 600 1200 2400
-							//ESP_LOGE(TAG, "CHARGE STATE resendRequestTimerLimit: %d nrOfResendRetries %d", resendRequestTimerLimit, nrOfResendRetries);
-							nrOfResendRetries++;
-						}
+						update_mqtt_event_pattern(true);
+						offlineHandler_UpdatePingReplyState(PING_REPLY_AWAITING_CMD);
 					}
-				}
-				else
-				{
 
+					publish_debug_telemetry_observation_ChargingStateParameters();
+
+					if(pingReplyTrigger == 1)
+						update_mqtt_event_pattern(false);
+
+					// Reset timer
 					resendRequestTimer = 0;
-					resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
-					nrOfResendRetries = 0;
-					pingReplyTrigger = 0;
-				}
 
-
-				offlineTime = 0;
-				offlineMode = false;
-			}
-			else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
-			{
-				if(storage_Get_Standalone() == false)
-				{
-					offlineTime++;
-
-					/// Use pulseInterval * 2 reported to Cloud to ensure charging is not started until Cloud has flagged the charger as offline
-					if(offlineTime > (recordedPulseInterval * 2))
+					// Increase timer limit as a backoff routine if Cloud does not answer
+					if(resendRequestTimerLimit < 1800)
 					{
-						if(secondsSinceLastCheck < 10)
-						{
-							secondsSinceLastCheck++;
-						}
-						if(secondsSinceLastCheck >= 10)
-						{
-							offlineHandler_CheckForOffline();
-							secondsSinceLastCheck = 0;
-							offlineMode = true;
-						}
+						resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT << nrOfResendRetries; //pow(2.0, nrOfResendRetries) => 150 300 600 1200 2400
+						//ESP_LOGE(TAG, "CHARGE STATE resendRequestTimerLimit: %d nrOfResendRetries %d", resendRequestTimerLimit, nrOfResendRetries);
+						nrOfResendRetries++;
 					}
-					else
+				}
+			}
+			else
+			{
+
+				resendRequestTimer = 0;
+				resendRequestTimerLimit = RESEND_REQUEST_TIMER_LIMIT;
+				nrOfResendRetries = 0;
+				pingReplyTrigger = 0;
+			}
+
+
+			offlineTime = 0;
+			offlineMode = false;
+		}
+		else	//Mqtt not connected or PingReply == PING_REPLY_OFFLINE
+		{
+			if(storage_Get_Standalone() == false)
+			{
+				offlineTime++;
+
+				/// Use pulseInterval * 2 reported to Cloud to ensure charging is not started until Cloud has flagged the charger as offline
+				if(offlineTime > (recordedPulseInterval * 2))
+				{
+					if(secondsSinceLastCheck < 10)
 					{
-						ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
+						secondsSinceLastCheck++;
+					}
+					if(secondsSinceLastCheck >= 10)
+					{
+						offlineHandler_CheckForOffline();
+						secondsSinceLastCheck = 0;
+						offlineMode = true;
 					}
 				}
 				else
 				{
-					//OfflineMode is only for System use
-					offlineMode = false;
+					ESP_LOGW(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
 				}
+			}
+			else
+			{
+				//OfflineMode is only for System use
+				offlineMode = false;
 			}
 		}
 
@@ -2087,7 +2085,7 @@ static void sessionHandler_task()
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true)  && (storage_Get_session_type_ocpp() == false))
+		if(((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (authorizationRequired == true)) && storage_Get_session_controller() != eSESSION_OCPP)
 		{
 			if(isOnline)
 			{
@@ -2863,7 +2861,7 @@ void sessionHandler_StopAndResetChargeSession()
 */
 void ChargeModeUpdateToCloudNeeded()
 {
-	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_CHARGING && storage_Get_session_type_ocpp() == false)
+	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_CHARGING)
 		publish_debug_telemetry_observation_ChargingStateParameters();
 }
 
@@ -2935,7 +2933,7 @@ void sessionHandler_Pulse()
 
 		/// Send new pulse interval to Cloud when it changes with ChargeOperatingMode in System mode.
 		/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
-		if(pulseInterval != recordedPulseInterval && storage_Get_session_type_ocpp() == false)
+		if(pulseInterval != recordedPulseInterval)
 		{
 			ESP_LOGI(TAG,"Sending pulse interval %d (blocking)", pulseInterval);
 			int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);

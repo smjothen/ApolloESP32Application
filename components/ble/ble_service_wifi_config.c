@@ -1276,10 +1276,11 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	if((standalone == 0) || (standalone == 1))
 		{
-			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+			const enum session_controller controller = (standalone == 1) ? eSESSION_ZAPTEC_CLOUD : eSESSION_STANDALONE;
+			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
 			if(ret == MsgWriteAck)
 			{
-				storage_Set_Standalone((uint8_t)standalone);
+				storage_Set_session_controller(controller);
 				ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", standalone);
 				saveConfiguration = true;
 				SAVE_SERV_CHAR_val[0] = '0';

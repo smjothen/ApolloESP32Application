@@ -79,7 +79,7 @@ void storage_Init_Configuration()
 
 	// ocpp settings
 	strcpy(configurationStruct.url_ocpp, "");
-	configurationStruct.session_type_ocpp = false;
+	configurationStruct.session_controller = eSESSION_ZAPTEC_CLOUD;
 
 	// ocpp core profile settings
 	configurationStruct.ocpp_authorize_remote_tx_requests = true;
@@ -214,9 +214,11 @@ void storage_Set_url_ocpp(const char * newValue)
 	strcpy(configurationStruct.url_ocpp, newValue);
 }
 
-void storage_Set_session_type_ocpp(bool newValue)
+void storage_Set_session_controller(enum session_controller newValue)
 {
-	configurationStruct.session_type_ocpp = newValue;
+	configurationStruct.session_controller = newValue;
+
+	storage_Set_Standalone((newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0);
 }
 
 void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue)
@@ -330,6 +332,12 @@ void storage_Set_PermanentLock(uint8_t newValue)
 void storage_Set_Standalone(uint8_t newValue)
 {
 	configurationStruct.standalone = newValue;
+
+	if(newValue == 1){
+		configurationStruct.session_controller |= eCONTROLLER_ESP_STANDALONE;
+	}else{
+		configurationStruct.session_controller &= ~eCONTROLLER_ESP_STANDALONE;
+	}
 }
 
 void storage_Set_StandalonePhase(uint8_t newValue)
@@ -490,9 +498,9 @@ const char * storage_Get_url_ocpp()
 	return configurationStruct.url_ocpp;
 }
 
-bool storage_Get_session_type_ocpp()
+enum session_controller storage_Get_session_controller()
 {
-	return configurationStruct.session_type_ocpp;
+	return configurationStruct.session_controller;
 }
 
 bool storage_Get_ocpp_authorize_remote_tx_requests()
@@ -814,7 +822,7 @@ esp_err_t storage_SaveConfiguration()
 
 	//OCPP settings
 	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
-	err += nvs_set_u8(configuration_handle, "sessionType", configurationStruct.session_type_ocpp);
+	err += nvs_set_u8(configuration_handle, "sessionCtrl", configurationStruct.session_controller);
 	//err += nvs_set_u8(configuration_handle, "oAllowTxUnknown", configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
 	//err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
 	err += nvs_set_u8(configuration_handle, "oAuthRemoteTx", configurationStruct.ocpp_authorize_remote_tx_requests);
@@ -906,7 +914,7 @@ esp_err_t storage_ReadConfiguration()
 	//OCPP settings
 	readSize = URL_OCPP_MAX_LENGTH;
 	err += nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize);
-	err += nvs_get_u8(configuration_handle, "sessionType", (uint8_t *)&configurationStruct.session_type_ocpp);
+	err += nvs_get_u8(configuration_handle, "sessionCtrl", (uint8_t *)&configurationStruct.session_controller);
 	//err += nvs_get_u8(configuration_handle, "oAllowTxUnknown", &configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
 	//err += nvs_get_u8(configuration_handle, "oAuthCachEnable", &configurationStruct.ocpp_authorization_cache_enabled);
 	err += nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests);

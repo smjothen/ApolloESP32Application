@@ -94,6 +94,18 @@ enum DiagnosticsModes
 	eDISABLE_CERTIFICATE_ALWAYS		= 7,
 };
 
+enum session_controller
+{
+	eCONTROLLER_MCU_STANDALONE = 1<<0,
+	eCONTROLLER_ESP_STANDALONE = 1<<1,
+	eCONTROLLER_ZAP_STANDALONE = 1<<2,
+	eCONTROLLER_OCPP_STANDALONE = 1<<3,
+
+	eSESSION_STANDALONE = eCONTROLLER_MCU_STANDALONE | eCONTROLLER_ESP_STANDALONE | eCONTROLLER_ZAP_STANDALONE | eCONTROLLER_OCPP_STANDALONE,
+	eSESSION_ZAPTEC_CLOUD = eCONTROLLER_OCPP_STANDALONE,
+	eSESSION_OCPP = eCONTROLLER_ZAP_STANDALONE | eCONTROLLER_ESP_STANDALONE,
+};
+
 struct Configuration
 {
 	uint32_t saveCounter;
@@ -115,7 +127,6 @@ struct Configuration
 	//configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
 	//configurationStruct.ocpp_authorization_cache_enabled = false;
 	char url_ocpp[URL_OCPP_MAX_LENGTH];
-	bool session_type_ocpp; // TODO: Consider changing to session_controller_ocpp if future use dictates
 	bool ocpp_authorize_remote_tx_requests;
 	//int configurationStruct.ocpp_blink_repeats;
 	uint32_t ocpp_clock_aligned_data_interval;
@@ -166,6 +177,7 @@ struct Configuration
 
 	// Local settings
 
+	enum session_controller session_controller;
 	uint8_t communicationMode;
 	float hmiBrightness;
 	uint8_t permanentLock;

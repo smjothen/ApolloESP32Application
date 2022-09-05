@@ -31,7 +31,6 @@ void storage_Set_TransmitChangeLevel(float newValue);
 
 //Set OCPP settings
 void storage_Set_url_ocpp(const char * newValue);
-void storage_Set_session_type_ocpp(bool newValue);
 void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue);
 void storage_Set_ocpp_clock_aligned_data_interval(uint32_t newValue);
 void storage_Set_ocpp_connection_timeout(uint32_t newValue);
@@ -52,6 +51,7 @@ void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue);
 void storage_Set_ocpp_local_auth_list_enabled(bool newValue);
 
 //Set Local settings
+void storage_Set_session_controller(enum session_controller type);
 void storage_Set_CommunicationMode(uint8_t newValue);
 void storage_Set_HmiBrightness(float newValue);
 void storage_Set_PermanentLock(uint8_t newValue);
@@ -83,7 +83,6 @@ float storage_Get_TransmitChangeLevel();
 
 //Get OCPP settings
 const char * storage_Get_url_ocpp();
-bool storage_Get_session_type_ocpp();
 bool storage_Get_ocpp_authorize_remote_tx_requests();
 uint32_t storage_Get_ocpp_clock_aligned_data_interval();
 uint32_t storage_Get_ocpp_connection_timeout();
@@ -115,6 +114,7 @@ uint16_t storage_Get_ocpp_local_auth_list_max_length();
 uint8_t storage_Get_ocpp_send_local_list_max_length();
 
 //Get Local settings
+enum session_controller storage_Get_session_controller();
 uint8_t storage_Get_CommunicationMode();
 float storage_Get_HmiBrightness();
 uint8_t storage_Get_PermanentLock();
