@@ -153,7 +153,7 @@ struct Configuration
 	uint8_t ocpp_stop_txn_aligned_data_max_length;
 	char ocpp_stop_txn_sampled_data[DEFAULT_CSL_SIZE];
 	uint8_t ocpp_stop_txn_sampled_data_max_length;
-	char ocpp_supported_feature_profiles[5];
+	char ocpp_supported_feature_profiles[128];
 	uint8_t ocpp_supported_feature_profiles_max_length;
 	uint8_t ocpp_transaction_message_attempts;
 	uint16_t ocpp_transaction_message_retry_interval;

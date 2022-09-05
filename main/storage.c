@@ -103,7 +103,7 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_stop_txn_aligned_data_max_length = DEFAULT_CSL_LENGTH;
 	strcpy(configurationStruct.ocpp_stop_txn_sampled_data, "");
 	configurationStruct.ocpp_stop_txn_sampled_data_max_length = DEFAULT_CSL_LENGTH;
-	strcpy(configurationStruct.ocpp_supported_feature_profiles, "Core");
+	strcpy(configurationStruct.ocpp_supported_feature_profiles, "Core,Local Auth List Management,Remote Trigger");
 	configurationStruct.ocpp_supported_feature_profiles_max_length = 1;
 	configurationStruct.ocpp_transaction_message_attempts = 3;
 	configurationStruct.ocpp_transaction_message_retry_interval = 60;
