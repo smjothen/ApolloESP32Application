@@ -947,7 +947,7 @@ esp_err_t storage_ReadConfiguration()
 	readSize = DEFAULT_CSL_SIZE;
 	err += nvs_get_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data, &readSize);
 	err += nvs_get_u8(configuration_handle, "oStopTxnSamp_ml", &configurationStruct.ocpp_stop_txn_sampled_data_max_length);
-	readSize = 5;
+	readSize = 128;
 	err += nvs_get_str(configuration_handle, "oSuppFeature", configurationStruct.ocpp_supported_feature_profiles, &readSize);
 	err += nvs_get_u8(configuration_handle, "oSuppFeature_ml", &configurationStruct.ocpp_supported_feature_profiles_max_length);
 	err += nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts);
