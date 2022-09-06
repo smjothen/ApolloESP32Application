@@ -61,8 +61,9 @@ bool wifiInitialized = false;
 
 /// This timer-function is called every second to control pulses to Cloud
 static uint32_t mqttUnconnectedCounter = 0;
+static uint32_t carNotChargingCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
-static const uint32_t restartTimeLimit = 3600*3;
+static const uint32_t restartTimeLimit = 3900;
 static void OneSecondTimer()
 {
 	//ESP_LOGW(TAG,"OneSec?");
@@ -76,11 +77,23 @@ static void OneSecondTimer()
 
 			if(mqttUnconnectedCounter % 10 == 0)
 			{
-				ESP_LOGE(TAG, "MQTT_unconnected restart %d/%d (Car:%d)", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter);
+				ESP_LOGE(TAG, "MQTT_unconnected restart (%d/%d && (disc:%d/3900 || noc:%d/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
+			}
+
+			enum ChargerOperatingMode chOpMode = sessionHandler_GetCurrentChargeOperatingMode();
+
+			/// Check how long a car has not been charging
+			if(chOpMode != CHARGE_OPERATION_STATE_CHARGING)
+			{
+				carNotChargingCounter++;
+			}
+			else
+			{
+				carNotChargingCounter = 0;
 			}
 
 			/// Check how long a car has been disconnected
-			if(sessionHandler_GetCurrentChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED)
+			if(chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)
 			{
 				carDisconnectedCounter++;
 			}
@@ -91,13 +104,17 @@ static void OneSecondTimer()
 
 			/// Ensure that the offline situation has been consistent for x seconds
 			/// and a car disconnected for x seconds before saving to log and restarting
-			if((mqttUnconnectedCounter >= restartTimeLimit) && (carDisconnectedCounter >= 600))
+			if(mqttUnconnectedCounter >= restartTimeLimit)
 			{
-				char buf[100]={0};
-				sprintf(buf, "#2 mqttUnconnectedCounter %d times.", mqttUnconnectedCounter);
-				storage_Set_And_Save_DiagnosticsLog(buf);
-				ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
-				esp_restart();
+				/// Restart if car has been disconnected for 65 minutes(session has been saved) OR car has not charged for 65 minutes(more than energy sync interval)
+				if(((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900)) || (carNotChargingCounter >= 3900))
+				{
+					char buf[100]={0};
+					snprintf(buf, sizeof(buf), "#2 mqttUncon:%d disc:%d noc:%d op:%d", mqttUnconnectedCounter, carDisconnectedCounter, carNotChargingCounter, chOpMode);
+					storage_Set_And_Save_DiagnosticsLog(buf);
+					ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
+					esp_restart();
+				}
 			}
 		}
 		else
