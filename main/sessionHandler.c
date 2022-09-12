@@ -634,14 +634,7 @@ static void stop_sample_interval(){
 void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect
 	stop_sample_interval();
 
-	int meter_stop = meter_start + (chargeSession_Get().Energy * 1000);
-
-	if(chargeSession_Get().SessionId[0] == '\0'){ // if session has been cleared the meter value should already be in storage
-		meter_stop = floor(storage_update_accumulated_energy(0.0) * 1000);
-		ESP_LOGW(TAG, "Meter stop read from file: %d", meter_stop);
-	}else{
-		ESP_LOGW(TAG, "Meter stop read from charge session");
-	}
+	int meter_stop = floor(get_accumulated_energy() * 1000);
 
 	time_t timestamp = time(NULL);
 	char * stop_token = (chargeSession_Get().StoppedByRFID) ? chargeSession_Get().StoppedById : NULL;
@@ -660,7 +653,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected");
 	}
 
-	cJSON * response  = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
+	cJSON * response = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
 								chargeSession_Get().StoppedReason, current_meter_values);
 
 	if(response == NULL){
@@ -703,7 +696,8 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 
 void start_transaction(){
 	transaction_start = time(NULL);
-	meter_start = floor(storage_update_accumulated_energy(0.0) * 1000);
+
+	int meter_start = floor(get_accumulated_energy() * 1000);
 
 	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
 		if(pending_ocpp_id_tag[0] != 0){

@@ -17,6 +17,7 @@ int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_o
 int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in);
 //char * OCMF_CreateNewOCMFLog();
 
+double get_accumulated_energy();
 
 /******* CompletedSession *****/
 

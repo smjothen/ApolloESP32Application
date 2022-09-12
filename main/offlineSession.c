@@ -1586,7 +1586,7 @@ esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t tr
 
 
 	if(reservation_id != NULL){
-		data.reservation_id = reservation_id;
+		data.reservation_id = *reservation_id;
 		data.valid_reservation = true;
 	}else{
 		data.reservation_id = -1;
