@@ -26,8 +26,8 @@ cJSON * ocpp_create_send_local_list_confirmation(const char * unique_id, const c
 cJSON * ocpp_create_get_local_list_version_confirmation(const char * unique_id, int listVersion);
 
 //Reservation Profile
-//cJSON * ocpp_create_cancel_reservation_confirmation(int status);
-//cJSON * ocpp_create_reserve_now_confirmation(const char * unique_id, const char * status);
+cJSON * ocpp_create_cancel_reservation_confirmation(const char * unique_id, const char * status);
+cJSON * ocpp_create_reserve_now_confirmation(const char * unique_id, const char * status);
 
 //Smart Charging Profile
 //cJSON * ocpp_create_clear_charging_profile_confirmation(const char * unique_id, const char * status);

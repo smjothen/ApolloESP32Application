@@ -422,7 +422,7 @@ static void i2cDevice_task(void *pvParameters)
 				}
 
 				//Standalone
-				else
+				else if(storage_Get_session_controller() & eCONTROLLER_OCPP_STANDALONE)
 				{
 
 					//Always do local authentication in standalone independently of online/offline

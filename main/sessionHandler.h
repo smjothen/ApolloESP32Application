@@ -74,7 +74,7 @@ void sessionHandler_OcppSendState();
 void ChargeModeUpdateToCloudNeeded();
 void StackDiagnostics(bool state);
 void ClearStartupSent();
-void SetPendingRFIDTag(char * pendingTag);
+void SetPendingRFIDTag(const char * pendingTag);
 void SetAuthorized(bool authFromCloud);
 void sessionHandler_Pulse();
 void sessionHandler_InitiateResetChargeSession();

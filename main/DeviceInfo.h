@@ -165,6 +165,9 @@ struct Configuration
 	uint16_t ocpp_local_auth_max_length;
 	uint8_t ocpp_send_local_list_max_length;
 
+	// ocpp reservation profile settings
+	bool ocpp_reserve_connector_zero_supported;
+
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];

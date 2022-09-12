@@ -114,6 +114,9 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_local_auth_max_length = UINT8_MAX * 4;
 	configurationStruct.ocpp_send_local_list_max_length = UINT8_MAX;
 
+	// ocpp reservation profile settings
+	configurationStruct.ocpp_reserve_connector_zero_supported = true;
+
 	//Local settings
 
 	configurationStruct.communicationMode 			= eCONNECTION_LTE;
@@ -646,6 +649,10 @@ uint16_t storage_Get_ocpp_local_auth_list_max_length()
 uint8_t storage_Get_ocpp_send_local_list_max_length()
 {
 	return configurationStruct.ocpp_send_local_list_max_length;
+}
+
+bool storage_Get_reserve_connector_zero_supported(){
+	return true;
 }
 
 

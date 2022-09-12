@@ -2644,8 +2644,6 @@ static void ocpp_task(){
 		}
 
 		//Indicate features that are not supported
-		attach_call_cb(eOCPP_ACTION_RESERVE_NOW_ID, not_supported_cb, "Does not support reservations");
-		attach_call_cb(eOCPP_ACTION_CANCEL_RESERVATION_ID, not_supported_cb, "Does not support reservations");
 		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
 		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, not_supported_cb, "Does not support authorization cache");
 

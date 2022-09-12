@@ -28,6 +28,7 @@
 #include "offlineSession.h"
 #include "offlineHandler.h"
 #include "../components/audioBuzzer/audioBuzzer.h"
+#include "fat.h"
 
 #include "ocpp_task.h"
 #include "ocpp.h"
@@ -38,12 +39,17 @@
 #include "types/ocpp_enum.h"
 #include "types/ocpp_reason.h"
 #include "types/ocpp_authorization_status.h"
+#include "types/ocpp_authorization_data.h"
+#include "types/ocpp_id_tag_info.h"
 #include "types/ocpp_availability_type.h"
 #include "types/ocpp_availability_status.h"
 #include "types/ocpp_charge_point_status.h"
 #include "types/ocpp_remote_start_stop_status.h"
 #include "types/ocpp_charge_point_error_code.h"
 #include "types/ocpp_ci_string_type.h"
+#include "types/ocpp_date_time.h"
+#include "types/ocpp_reservation_status.h"
+#include "types/ocpp_cancel_reservation_status.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 
@@ -150,14 +156,14 @@ static bool pendingCloudAuthorization = false;
 static char pendingAuthID[PREFIX_GUID]= {0}; //BLE- + GUID
 static bool isAuthorized = false;
 
-void SetPendingRFIDTag(char * pendingTag)
+void SetPendingRFIDTag(const char * pendingTag)
 {
 	strcpy(pendingAuthID, pendingTag);
 }
 
 void SetAuthorized(bool authFromCloud)
 {
-	isAuthorized = authFromCloud;
+ 	isAuthorized = authFromCloud;
 
 	if((isAuthorized == true) && (pendingAuthID[0] !='\0'))
 	{
@@ -320,6 +326,17 @@ bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
 uint8_t pending_change_availability_state;
 time_t preparing_started = 0;
+
+struct ocpp_reservation_info {
+	int connector_id;
+	time_t expiry_date;
+	char id_tag[21];
+	char parent_id_tag[21];
+	int reservation_id;
+	bool is_reservation_state;
+};
+
+struct ocpp_reservation_info * reservation_info = NULL;
 
 bool sessionHandler_OcppTransactionIsActive(uint connector_id){
 	if(connector_id == 1){
@@ -596,7 +613,6 @@ static void start_sample_interval(){
 		}
 	}
 	save_interval_measurands(eOCPP_CONTEXT_TRANSACTION_BEGIN);
-	ESP_LOGW(TAG, "EXIT");
 }
 
 static void stop_sample_interval(){
@@ -699,7 +715,11 @@ void start_transaction(){
 	}
 	pending_ocpp_id_tag[0] = '\0';
 
-	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start, NULL, transaction_start);
+	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start,
+									(reservation_info != NULL) ? &reservation_info->reservation_id : NULL, transaction_start);
+
+	free(reservation_info);
+	reservation_info = NULL;
 
 	transaction_id = malloc(sizeof(int));
 	if(transaction_id == NULL){
@@ -726,67 +746,212 @@ void start_transaction(){
 		start_sample_interval();
 }
 
-static void authorize_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
+enum tag_origin{
+	eTAG_ORIGIN_NON,
+	eTAG_ORIGIN_LOCAL_LIST,
+	eTAG_ORIGIN_CS,
+};
+
+struct authorize_comparison_data{
+	char id_tag[21];
+	char parent_id[21];
+	enum tag_origin origin; // Highest authority where parent_id has been queried (even unsucessfully)
+};
+
+void (*authorize_compare_on_accept)(const char *, const char *);
+void (*authorize_compare_on_deny)(const char *, const char *);
+
+struct authorize_comparison_data comparison_data[2] = {0};
+
+static void authorize_compare_parent();
+
+void authorize_compare_cb(const char * unique_id, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Recieved authorize confirmation for parent comparison");
+
+	pending_ocpp_authorize = false;
+
+	struct authorize_comparison_data * data = cb_data;
+
+	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+		char error_str[64];
+		struct ocpp_id_tag_info id_tag_info;
+
+		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
+			!= eOCPPJ_NO_ERROR){
+
+			ESP_LOGE(TAG, "Invalid idTagInfo: %s", error_str);
+		}else{
+			strcpy(data->parent_id, id_tag_info.parent_id_tag);
+		}
+	}else{
+		ESP_LOGE(TAG, "Authorize confirmation lacks idTagInfo");
+	}
+
+	data->origin = eTAG_ORIGIN_CS;
+
+	authorize_compare_parent();
+}
+
+void authorize_compare_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+
+	error_cb(unique_id, error_code, error_description, error_details, "authorize");
+
+	pending_ocpp_authorize = false;
+
+	struct authorize_comparison_data * data = cb_data;
+	data->origin = eTAG_ORIGIN_CS;
+	authorize_compare_parent();
+}
+
+static void authorize_compare_parent(){
+	ESP_LOGI(TAG, "Authorizing by comparing parent");
+
+	while(comparison_data[0].parent_id[0] == '\0' || comparison_data[1].parent_id[0] == '\0'
+		|| strcasecmp(comparison_data[0].parent_id, comparison_data[1].parent_id) != 0){
+
+		// Active tag is the tag that needs to be updated by a more authoritative origin/source.
+		struct authorize_comparison_data * active_tag = NULL;
+
+		for(size_t i = 0; i < 2; i++){
+			if(comparison_data[i].parent_id[0] == '\0'){
+				active_tag = &comparison_data[i];
+				break;
+			}
+		}
+
+		if(active_tag == NULL){
+			if(comparison_data[0].origin <= comparison_data[1].origin){
+				active_tag = &comparison_data[0];
+			}else{
+				active_tag = &comparison_data[1];
+			}
+		}
+
+
+		if(active_tag->origin == eTAG_ORIGIN_NON){
+			struct ocpp_authorization_data auth_data = {0};
+			if(storage_Get_ocpp_local_auth_list_enabled() &&
+				(storage_Get_ocpp_local_pre_authorize() ||
+					(storage_Get_ocpp_local_authorize_offline() && is_connected() == false))){
+
+				if(fat_ReadAuthData(active_tag->id_tag, &auth_data)){
+					strcpy(active_tag->parent_id, auth_data.id_tag_info.parent_id_tag);
+				}
+			}
+			active_tag->origin = eTAG_ORIGIN_LOCAL_LIST;
+
+		}else if(active_tag->origin == eTAG_ORIGIN_LOCAL_LIST){
+			cJSON * authorization = ocpp_create_authorize_request(active_tag->id_tag);
+
+			if(authorization == NULL){
+				ESP_LOGE(TAG, "Unable to create authorization request");
+			}else{
+				int err = enqueue_call(authorization, authorize_compare_cb, authorize_compare_error_cb,
+						active_tag, eOCPP_CALL_GENERIC);
+				if(err != 0){
+					cJSON_Delete(authorization);
+					ESP_LOGE(TAG, "Unable to enqueue authorization request");
+
+				}else{
+					pending_ocpp_authorize = true;
+					strcpy(pending_ocpp_id_tag, active_tag->id_tag);
+					return;
+				}
+			}
+			active_tag->origin = eTAG_ORIGIN_CS;
+
+		}else if(active_tag->origin == eTAG_ORIGIN_CS){
+			ESP_LOGW(TAG, "Parent comparison: Authorization denied");
+			if(authorize_compare_on_deny != NULL){
+				authorize_compare_on_deny(comparison_data[0].id_tag, comparison_data[1].id_tag);
+				return;
+			}
+		}
+	}
+
+	ESP_LOGI(TAG, "Parent comparison: Authorization accepted");
+	authorize_compare_on_accept(comparison_data[0].id_tag, comparison_data[1].id_tag);
+}
+
+static void authorize_begin_compare_id_token(const char * id_token_1, const char * id_parent_1,
+					const char * id_token_2, const char * id_parent_2,
+					void (*on_accept)(const char *, const char *), void (*on_deny)(const char *, const char *)){
+
+	if(strcasecmp(id_token_1, id_token_2) == 0){
+		on_accept(id_token_1, id_token_2);
+	}else{
+		memset(&comparison_data, 0, sizeof(comparison_data));
+
+		strcpy(comparison_data[0].id_tag, id_token_1);
+		if(id_parent_1 != NULL){
+			strcpy(comparison_data[0].parent_id, id_parent_1);
+		}else{
+			comparison_data[0].parent_id[0] = '\0';
+		}
+		comparison_data[0].origin = eTAG_ORIGIN_NON;
+
+		strcpy(comparison_data[1].id_tag, id_token_2);
+		if(id_parent_2 != NULL){
+			strcpy(comparison_data[1].parent_id, id_parent_2);
+		}else{
+			comparison_data[1].parent_id[0] = '\0';
+		}
+		comparison_data[1].origin = eTAG_ORIGIN_NON;
+
+		authorize_compare_on_accept = on_accept;
+		authorize_compare_on_deny = on_deny;
+
+		authorize_compare_parent(id_parent_1, id_parent_2);
+	}
+}
+
+void(*authorize_on_accept)(const char * tag);
+void(*authorize_on_deny)(const char * tag);
+
+static void authorize_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Got auth response");
 	pending_ocpp_authorize = false;
 
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
+		char error_str[64];
+		struct ocpp_id_tag_info id_tag_info = {0};
+		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
+			!= eOCPPJ_NO_ERROR){
+			ESP_LOGE(TAG, "Received idTagInfo is invalid: %s", error_str);
 
-		if(cJSON_HasObjectItem(id_tag_info, "status")){
-			char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
+		}else if(strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
+			ESP_LOGI(TAG, "Authorization status accepted");
+			authorize_on_accept(pending_ocpp_id_tag);
+			return;
 
-			if(strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
-				ESP_LOGI(TAG, "Authorized to start transaction");
-
-				audio_play_nfc_card_accepted();
-				MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-				if(ret != MsgCommandAck)
-				{
-					ESP_LOGE(TAG, "Unable to grant authorization to MCU");
-				}
-				else{
-					ESP_LOGI(TAG, "Authorization granted ok");
-					SetAuthorized(true);
-				}
-			}else{
-				ESP_LOGW(TAG, "Transaction is not authorized");
-				audio_play_nfc_card_denied();
-				MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-				if(ret == MsgCommandAck)
-				{
-					ESP_LOGI(TAG, "MCU authorization denied command OK");
-				}
-				else
-				{
-					ESP_LOGI(TAG, "MCU authorization denied command FAILED");
-				}
-
-				SetAuthorized(false);
-			}
 		}else{
-			ESP_LOGE(TAG, "Authorization tag info lacks required 'status'");
+			ESP_LOGW(TAG, "Authorization status is %s", id_tag_info.status);
 		}
 	}else{
 		ESP_LOGE(TAG, "Authorize response lacks required 'idTagInfo'");
 	}
+
+	authorize_on_deny(pending_ocpp_id_tag);
 }
 
-void authorize(struct TagInfo tag){
+static void authorize_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+	error_cb(unique_id, error_code, error_description, error_details, "authorize");
+
 	pending_ocpp_authorize = false;
+	authorize_on_deny(pending_ocpp_id_tag);
+}
+
+void authorize(struct TagInfo tag, void (*on_accept)(const char *), void (*on_deny)(const char *)){
 	strcpy(pending_ocpp_id_tag, tag.idAsString);
 
-	if(storage_Get_ocpp_local_pre_authorize()){
-		ESP_LOGI(TAG, "Attempting local pre authorization");
+	if(storage_Get_ocpp_local_auth_list_enabled() &&
+		(storage_Get_ocpp_local_pre_authorize() ||
+			(storage_Get_ocpp_local_authorize_offline() && is_connected() == false))){
+
+		ESP_LOGI(TAG, "Attempting local authorization");
 
 		if(authentication_CheckId(tag) == 1){
-			ESP_LOGI(TAG, "Local authentication accepted");
-			authentication_Execute(tag.idAsString);
-
-			SetPendingRFIDTag(tag.idAsString);
-			SetAuthorized(true);
-
-			NFCTagInfoClearValid();
+			on_accept(tag.idAsString);
 			return;
 		}
 	}
@@ -796,11 +961,16 @@ void authorize(struct TagInfo tag){
 	cJSON * authorization = ocpp_create_authorize_request(tag.idAsString);
 	if(authorization == NULL){
 		ESP_LOGE(TAG, "Unable to create authorization request");
+		on_deny(tag.idAsString);
 	}else{
-		int err = enqueue_call(authorization, authorize_response_cb, error_cb, "authorize", eOCPP_CALL_GENERIC);
+		authorize_on_accept = on_accept;
+		authorize_on_deny = on_deny;
+
+		int err = enqueue_call(authorization, authorize_cb, authorize_error_cb, NULL, eOCPP_CALL_GENERIC);
 		if(err != 0){
 			cJSON_Delete(authorization);
 			ESP_LOGE(TAG, "Unable to enqueue authorization request");
+			on_deny(tag.idAsString);
 		}else{
 			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 			if(ret == MsgWriteAck)
@@ -808,185 +978,38 @@ void authorize(struct TagInfo tag){
 			else
 				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
+			strcpy(pending_ocpp_id_tag, tag.idAsString);
 			pending_ocpp_authorize = true;
-			SetPendingRFIDTag(tag.idAsString);
-		}
-	}
-
-	NFCTagInfoClearValid();
-
-	if(!pending_ocpp_authorize && !isAuthorized){
-		audio_play_nfc_card_denied();
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "MCU authorization denied command OK");
-		}
-		else
-		{
-			ESP_LOGI(TAG, "MCU authorization denied command FAILED");
 		}
 	}
 }
 
 static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
 
-void authorize_and_stop_transaction(const char * id_tag){
-		ESP_LOGI(TAG, "Authorized to stop transaction");
+void start_charging_on_tag_accept(const char * tag){
+	ESP_LOGI(TAG, "Start transaction accepted for %s", tag);
 
-		audio_play_nfc_card_accepted();
-		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "Authorization granted ok");
-		}
-		else{
-			ESP_LOGE(TAG, "Unable to grant authorization to MCU");
-		}
-
-		ret = MCU_SendCommandId(CommandStopCharging);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "MCU stop charging OK");
-			sessionResetMode = eSESSION_RESET_STOP_SENT;
-		}
-		else
-		{
-			ESP_LOGE(TAG, "MCU stop charging Failed");
-		}
-		chargeSession_SetStoppedByRFID(true, id_tag);
-}
-
-void authorize_stop_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Received authorization response for stop transaction");
-	pending_ocpp_authorize = false;
-
-	if(chargeSession_Get().parent_id[0] == 0){
-		ESP_LOGE(TAG, "Chargesession lacks parent id, authorization request was unnecessary or charge session changed");
-		goto denied;
-	}
-
-	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		cJSON * id_tag_info_json = cJSON_GetObjectItem(payload, "idTagInfo");
-
-		if(cJSON_HasObjectItem(id_tag_info_json, "status")){
-
-			cJSON * status_json = cJSON_GetObjectItem(id_tag_info_json, "status");
-			if(!cJSON_IsString(status_json) || strcmp(status_json->valuestring, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
-				ESP_LOGW(TAG, "Status not accepted %s", status_json->valuestring );
-				goto denied;
-			}
-		}else{
-			goto denied;
-		}
-
-		if(cJSON_HasObjectItem(id_tag_info_json, "parentIdTag")){
-
-			cJSON * parent_id_json = cJSON_GetObjectItem(id_tag_info_json, "parentIdTag");
-			if(!cJSON_IsString(parent_id_json) || !is_ci_string_type(parent_id_json->valuestring, 20)
-				|| strcmp(parent_id_json->valuestring, chargeSession_Get().parent_id) != 0){
-
-				ESP_LOGW(TAG, "parent id tag does not match transaction parent");
-			}else{
-				authorize_and_stop_transaction((char *)cb_data);
-				free(cb_data);
-				return;
-			}
-		}
-	}
-
-denied:
-	free(cb_data);
-	ESP_LOGW(TAG, "Stop transaction not authorized");
-	audio_play_nfc_card_denied();
-	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-	if(ret == MsgCommandAck)
+	audio_play_nfc_card_accepted();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+	if(ret != MsgCommandAck)
 	{
-		ESP_LOGI(TAG, "MCU authorization denied command OK");
-	}
-	else
-	{
-		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
-	}
-}
-
-void authorize_stop_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-
-	error_cb(unique_id, error_code, error_description, error_details, "authorize");
-
-	ESP_LOGW(TAG, "Stop transaction not authorized: %s", (char *)cb_data);
-	free(cb_data);
-
-	audio_play_nfc_card_denied();
-	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "MCU authorization denied command OK");
-	}
-	else
-	{
-		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
-	}
-}
-
-void authorize_stop(const char * presented_id_tag)
-{
-	struct ChargeSession charge_session = chargeSession_Get();
-
-	if(strcasecmp(charge_session.AuthenticationCode, presented_id_tag) == 0){
-		ESP_LOGI(TAG, "Transaction id tag is same as presented id tag");
-		authorize_and_stop_transaction(presented_id_tag);
-		return;
-	}
-
-	if(charge_session.parent_id[0] != '\0'){
-
-		if(storage_Get_ocpp_local_pre_authorize()){
-			ESP_LOGI(TAG, "Attemting local stop authorization");
-			if(authentication_check_parent(presented_id_tag, charge_session.parent_id)){
-				ESP_LOGI(TAG, "Transaction id tag is in same group as presented id tag");
-				authorize_and_stop_transaction(presented_id_tag);
-				return;
-			}
-		}
-
-
-		ESP_LOGI(TAG, "Requeting presented id tag from central system");
-		cJSON * authorization = ocpp_create_authorize_request(presented_id_tag);
-		if(authorization != NULL){
-			char * id_tag_buffer = malloc(sizeof(char) * 21);
-			if(id_tag_buffer == NULL){
-				ESP_LOGE(TAG, "Unable to allocate id tag buffer");
-				goto denied;
-			}
-			strncpy(id_tag_buffer, presented_id_tag, 20);
-			id_tag_buffer[20] = '\0';
-
-			int err = enqueue_call(authorization, authorize_stop_response_cb, authorize_stop_error_cb, id_tag_buffer, eOCPP_CALL_GENERIC);
-			if(err == 0){
-				MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
-				if(ret == MsgWriteAck)
-					ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
-				else
-					ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
-
-				pending_ocpp_authorize = true;
-				return;
-			}else{
-				ESP_LOGE(TAG, "Unable to enqueue authorization request");
-				cJSON_Delete(authorization);
-				free(id_tag_buffer);
-			}
-		}else{
-			ESP_LOGE(TAG, "Unable to create authorize request");
-		}
+		ESP_LOGE(TAG, "Unable to grant authorization to MCU");
 	}
 	else{
-		ESP_LOGW(TAG, "Charge session has no parent id to check");
+		ESP_LOGI(TAG, "Authorization granted ok");
+
+		SetPendingRFIDTag(tag);
+		SetAuthorized(true);
 	}
-denied:
+
+}
+
+void start_charging_on_tag_deny(const char * tag){
+	ESP_LOGW(TAG, "Start transaction denied for %s", tag);
+
 	audio_play_nfc_card_denied();
-	if(MCU_SendCommandId(CommandAuthorizationDenied) == MsgCommandAck)
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret == MsgCommandAck)
 	{
 		ESP_LOGI(TAG, "MCU authorization denied command OK");
 	}
@@ -994,6 +1017,69 @@ denied:
 	{
 		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
 	}
+
+	SetAuthorized(false);
+}
+
+void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
+	ESP_LOGI(TAG, "Stop transaction accepted for %s on charge session (id: %d) made by '%s'",
+		tag_1, (transaction_id != NULL) ? *transaction_id : -1, tag_2);
+
+	ESP_LOGI(TAG, "Authorized to stop transaction");
+
+	audio_play_nfc_card_accepted();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "Authorization granted ok");
+	}
+	else{
+		ESP_LOGE(TAG, "Unable to grant authorization to MCU");
+	}
+
+	ret = MCU_SendCommandId(CommandStopCharging);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU stop charging OK");
+		sessionResetMode = eSESSION_RESET_STOP_SENT;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU stop charging Failed");
+	}
+	chargeSession_SetStoppedByRFID(true, tag_1);
+}
+
+void stop_charging_on_tag_deny(const char * tag_1, const char * tag_2){
+
+	ESP_LOGW(TAG, "Stop transaction denied for %s on charge session (id: %d) made by '%s'",
+		tag_1, (transaction_id != NULL) ? *transaction_id : -1, tag_2);
+
+	audio_play_nfc_card_denied();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
+}
+
+void reserved_on_tag_accept(const char * tag_1, const char * tag_2){
+	ESP_LOGI(TAG, "Reservation accepted for '%s' on reservation (id: %d) made by '%s'",
+		tag_1, reservation_info->reservation_id, tag_2);
+
+	reservation_info->is_reservation_state = false;
+	start_charging_on_tag_accept(tag_1);
+}
+
+void reserved_on_tag_deny(const char * tag_1, const char * tag_2){
+	ESP_LOGW(TAG, "Reservation denied for '%s' on reservation (id: %d) made by '%s'",
+		tag_1, reservation_info->reservation_id, tag_2);
+
+	start_charging_on_tag_deny(tag_1);
 }
 
 // Index in is equivalent to integer used to identify column in table in ocpp protocol specification section on status notification -1
@@ -1069,12 +1155,18 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		if(isAuthorized || pending_ocpp_authorize){
 			return eOCPP_CP_STATUS_PREPARING;
 
+		}else if(reservation_info != NULL && reservation_info->is_reservation_state){
+			return eOCPP_CP_STATUS_RESERVED;
+
 		}else{
 			return eOCPP_CP_STATUS_AVAILABLE;
 		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING: // TODO: Add support for transition B6
-		if(ocpp_finishing_session // not transitioning away from FINISHED
+		if(reservation_info != NULL && reservation_info->is_reservation_state){
+			return eOCPP_CP_STATUS_RESERVED;
+
+		}else if(ocpp_finishing_session // not transitioning away from FINISHED
 			|| ocpp_old_state == eOCPP_CP_STATUS_CHARGING // transition C6
 			|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EV // transition D6
 			|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EVSE){ // transition E6
@@ -1110,6 +1202,229 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		return eOCPP_CP_STATUS_FAULTED;
 	}
 
+}
+
+static void reserve_now_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Request to reserve now");
+
+	int connector_id = 0;
+	time_t expiry_date = 0;
+	char * id_tag = NULL;
+	char * id_parent = NULL;
+	int reservation_id = 0;
+
+	bool err = false;
+	cJSON * ocpp_error;
+
+	if(cJSON_HasObjectItem(payload, "connectorId")){
+		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
+		if(cJSON_IsNumber(connector_id_json)){
+			connector_id = connector_id_json->valueint;
+
+			if(connector_id < 0 || connector_id > storage_Get_ocpp_number_of_connectors()){
+				err = true;
+				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'connectorId' does not name a valid connector", NULL);
+			}
+		}else{
+			err = true;
+			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer type", NULL);
+		}
+	}else{
+		err = true;
+		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' field", NULL);
+	}
+
+	if(!err && cJSON_HasObjectItem(payload, "expiryDate")){
+		cJSON * expiry_date_json = cJSON_GetObjectItem(payload, "expiryDate");
+		if(cJSON_IsString(expiry_date_json)){
+			expiry_date = ocpp_parse_date_time(expiry_date_json->valuestring);
+
+			if(expiry_date == 0 || expiry_date == (time_t)-1){
+				err = true;
+				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a valid dateTime type", NULL);
+			}else if(expiry_date < time(NULL)){
+				err = true;
+				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a time in the future", NULL);
+			}
+		}else{
+			err = true;
+			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a valid dateTime type", NULL);
+		}
+	}else{
+		err = true;
+		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'expiryDate' field", NULL);
+	}
+
+	if(!err && cJSON_HasObjectItem(payload, "idTag")){
+		cJSON * id_tag_json = cJSON_GetObjectItem(payload, "idTag");
+		if(cJSON_IsString(id_tag_json)){
+			id_tag = id_tag_json->valuestring;
+
+			if(!is_ci_string_type(id_tag, 20)){
+				err = true;
+				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be idToken type (CiString20Type)", NULL);
+			}
+		}else{
+			err = true;
+			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be idToken type", NULL);
+		}
+	}else{
+		err = true;
+		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'idTag' field", NULL);
+	}
+
+	if(!err && cJSON_HasObjectItem(payload, "parentIdTag")){
+		cJSON * id_parent_json = cJSON_GetObjectItem(payload, "parentIdTag");
+		if(cJSON_IsString(id_parent_json)){
+			id_parent = id_parent_json->valuestring;
+
+			if(!is_ci_string_type(id_parent, 20)){
+				err = true;
+				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'parentIdTag' to be idToken type (CiString20Type)", NULL);
+			}
+		}else{
+			err = true;
+			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'parentIdTag' to be idToken type", NULL);
+		}
+	}
+
+	if(!err && cJSON_HasObjectItem(payload, "reservationId")){
+		cJSON * reservation_id_json = cJSON_GetObjectItem(payload, "reservationId");
+		if(cJSON_IsNumber(reservation_id_json)){
+			reservation_id = reservation_id_json->valueint;
+		}else{
+			err = true;
+			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'reservationId' to be integer type", NULL);
+		}
+	}else{
+		err = true;
+		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'reservationId' field", NULL);
+	}
+
+	if(err){
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Error occured during parsing of ReserveNow.req, but no error was created");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+
+		return;
+	}
+
+	cJSON * reply = NULL;
+
+	if(connector_id == 0 && !storage_Get_reserve_connector_zero_supported()){
+		ESP_LOGW(TAG, "Reservation request was for connector 0 which is not supported by configuration");
+
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
+		send_call_reply(reply);
+		return;
+	}
+
+	enum ocpp_cp_status_id state = get_ocpp_state();
+
+
+	switch(state){
+	case eOCPP_CP_STATUS_AVAILABLE:
+		ESP_LOGI(TAG, "Available, accepting reservation request");
+
+		struct ocpp_reservation_info * tmp_reservation_info = malloc(sizeof(struct ocpp_reservation_info));
+		if(tmp_reservation_info == NULL){
+			ESP_LOGE(TAG, "Unable to allocate space for reservation id");
+			reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to allocate memory for reservation", NULL);
+
+		}else{
+			tmp_reservation_info->connector_id = connector_id;
+			tmp_reservation_info->expiry_date = expiry_date;
+			strcpy(tmp_reservation_info->id_tag, id_tag);
+			if(id_parent != NULL){
+				strcpy(tmp_reservation_info->parent_id_tag, id_parent);
+			}else{
+				tmp_reservation_info->parent_id_tag[0] = '\0';
+			}
+			tmp_reservation_info->reservation_id = reservation_id;
+			tmp_reservation_info->is_reservation_state = true;
+
+			reservation_info = tmp_reservation_info;
+
+			ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %ld seconds", connector_id, id_tag, expiry_date - time(NULL));
+			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
+		}
+		break;
+
+	case eOCPP_CP_STATUS_PREPARING:
+	case eOCPP_CP_STATUS_CHARGING:
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+	case eOCPP_CP_STATUS_FINISHING:
+	case eOCPP_CP_STATUS_RESERVED:
+		ESP_LOGI(TAG, "Occupied, denied reservation request");
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_OCCUPIED);
+		break;
+
+	case eOCPP_CP_STATUS_UNAVAILABLE:
+		ESP_LOGI(TAG, "Unavailable, denied reservation request");
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_UNAVAILABLE);
+		break;
+
+	case eOCPP_CP_STATUS_FAULTED:
+		ESP_LOGI(TAG, "Faulted, denied reservation request");
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_FAULTED);
+		break;
+
+	default:
+		ESP_LOGE(TAG, "Unhandled state during reservation");
+		return;
+	}
+
+	send_call_reply(reply);
+}
+
+static void cancel_reservation_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Recieved request to cancel reservation");
+
+	if(cJSON_HasObjectItem(payload, "reservationId")){
+		cJSON * reservation_id_json = cJSON_GetObjectItem(payload, "reservationId");
+		if(cJSON_IsNumber(reservation_id_json)){
+			cJSON * response;
+
+			if(reservation_info != NULL && reservation_id_json->valueint == reservation_info->reservation_id){
+				ESP_LOGI(TAG, "Reservation with id %d cancelation accepted", reservation_info->reservation_id);
+				free(reservation_info);
+				reservation_info = NULL;
+				response = ocpp_create_cancel_reservation_confirmation(unique_id, OCPP_CANCEL_RESERVATION_STATUS_ACCEPTED);
+			}else{
+				ESP_LOGW(TAG, "Rejected attempt to cancel reservation. Requested id %d", reservation_id_json->valueint);
+				response = ocpp_create_cancel_reservation_confirmation(unique_id, OCPP_CANCEL_RESERVATION_STATUS_REJECTED);
+			}
+
+			if(response == NULL){
+				ESP_LOGE(TAG, "Unable to create reservation response");
+			}else{
+				send_call_reply(response);
+				cJSON_Delete(response);
+			}
+		}else{
+			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer and 'type' to be AvailabilityType", NULL);
+			if(ocpp_error == NULL){
+				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
+			}else{
+				send_call_reply(ocpp_error);
+				cJSON_Delete(ocpp_error);
+			}
+			return;
+		}
+	}else{
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' and 'type' fields", NULL);
+		if(ocpp_error == NULL){
+			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+		}else{
+			send_call_reply(ocpp_error);
+			cJSON_Delete(ocpp_error);
+		}
+		return;
+	}
 }
 
 static void remote_start_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
@@ -1193,10 +1508,22 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 	strcpy(tag.idAsString, id_tag_json->valuestring);
 
 	if(storage_Get_ocpp_authorize_remote_tx_requests()){
-		authorize(tag);
+		authorize(tag, start_charging_on_tag_accept, start_charging_on_tag_deny);
 	}
 }
-
+static void stop_charging(){
+	ESP_LOGI(TAG, "Sending stop charging command");
+	MessageType ret = MCU_SendCommandId(CommandStopCharging);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU stop charging OK");
+		sessionResetMode = eSESSION_RESET_STOP_SENT;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU stop charging Failed");
+	}
+}
 static void remote_stop_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Request to remote stop transaction");
 	if(payload == NULL || !cJSON_HasObjectItem(payload, "transactionId")){
@@ -1225,10 +1552,10 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	}
 
 	cJSON * response;
-	bool stop_charging = false;
+	bool stop_charging_accepted = false;
 	if(transaction_id != NULL && *transaction_id == transaction_id_json->valueint){
 		ESP_LOGI(TAG, "Stop request id matches ongoing transaction id");
-		stop_charging = true;
+		stop_charging_accepted = true;
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
 	}
 	else{
@@ -1244,21 +1571,11 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		cJSON_Delete(response);
 	}
 
-	if(stop_charging){
-		MessageType ret = MCU_SendCommandId(CommandStopCharging);
-		if(ret == MsgCommandAck)
-		{
-			ESP_LOGI(TAG, "MCU stop charging OK");
-			sessionResetMode = eSESSION_RESET_STOP_SENT;
-		}
-		else
-		{
-			ESP_LOGE(TAG, "MCU stop charging Failed");
-		}
+	if(stop_charging_accepted){
+		stop_charging();
+		SetAuthorized(false);
+		chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
 	}
-
-	SetAuthorized(false);
-	chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
 	//TODO: "[...]and, if applicable, unlock the connector"
 }
 
@@ -1414,7 +1731,10 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
-			ESP_LOGI(TAG, "Ocpp transactions on file: %d", offlineSession_FindNrOfFiles_ocpp());
+			//This must be set to stop replying the same SessionIds to cloud
+			chargeSession_SetReceivedStartChargingCommand();
+			//Clear authorization for next transaction
+			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
@@ -1531,8 +1851,10 @@ static bool has_new_id_token(){
 }
 
 static void handle_available(){
-	if(has_new_id_token())
-		authorize(NFCGetTagInfo());
+	if(!pending_ocpp_authorize && has_new_id_token()){
+		authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
+		NFCTagInfoClearValid();
+	}
 }
 
 static void handle_preparing(){
@@ -1560,15 +1882,10 @@ static void handle_preparing(){
 
 			HOLD_SetPhases(1);
 			sessionHandler_HoldParametersFromCloud(32.0f, 1);
-
-			//This must be set to stop replying the same SessionIds to cloud
-			chargeSession_SetReceivedStartChargingCommand();
-
-			//Clear authorization for next request
-			SetAuthorized(false);
 		}
 	}else if(has_new_id_token()){
-		authorize(NFCGetTagInfo());
+		authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
+		NFCTagInfoClearValid();
 
 	}else if(isAuthorized && MCU_GetChargeMode() == eCAR_DISCONNECTED){
 		if(preparing_started + storage_Get_ocpp_connection_timeout() < time(NULL)){
@@ -1586,6 +1903,12 @@ static void handle_preparing(){
 			}
 			SetAuthorized(false);
 			chargeSession_ClearAuthenticationCode();
+
+			if(reservation_info != NULL){
+				ESP_LOGW(TAG, "Connection timeout is transaction related");
+				free(reservation_info);
+				reservation_info = NULL;
+			}
 		}
 		else{
 			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %ld/%d", time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
@@ -1594,16 +1917,40 @@ static void handle_preparing(){
 }
 
 static void handle_charging(){
-	if(has_new_id_token()){
-		authorize_stop(NFCGetTagInfo().idAsString);
+	if(!pending_ocpp_authorize && has_new_id_token()){
+		authorize_begin_compare_id_token(NFCGetTagInfo().idAsString, NULL,
+						chargeSession_Get().AuthenticationCode, chargeSession_Get().parent_id,
+						stop_charging_on_tag_accept, stop_charging_on_tag_deny);
 		NFCTagInfoClearValid();
 	}
 }
 
 static void handle_finishing(){
-	if(has_new_id_token()){
-		authorize(NFCGetTagInfo());
+	if(!pending_ocpp_authorize && has_new_id_token()){
+		authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
+		NFCTagInfoClearValid();
 		ocpp_finishing_session = false;
+	}
+}
+
+static void handle_reserved(){
+	if(!pending_ocpp_authorize && has_new_id_token()){
+
+		MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+		if(ret == MsgWriteAck)
+			ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+		else
+			ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
+		authorize_begin_compare_id_token(NFCGetTagInfo().idAsString, NULL,
+						reservation_info->id_tag, reservation_info->parent_id_tag,
+						reserved_on_tag_accept, reserved_on_tag_deny);
+		NFCTagInfoClearValid();
+
+	}else if(time(NULL) > reservation_info->expiry_date){
+		ESP_LOGW(TAG, "Canceling reservation due to expiration");
+		free(reservation_info);
+		reservation_info = NULL;
 	}
 }
 
@@ -1624,6 +1971,8 @@ static void handle_state(enum ocpp_cp_status_id state){
 		handle_finishing();
 		break;
 	case eOCPP_CP_STATUS_RESERVED:
+		handle_reserved();
+		break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
 	case eOCPP_CP_STATUS_FAULTED:
 		break;
@@ -1747,6 +2096,8 @@ static void sessionHandler_task()
     attach_call_cb(eOCPP_ACTION_CHANGE_AVAILABILITY_ID, change_availability_cb, NULL);
     attach_call_cb(eOCPP_ACTION_REMOTE_START_TRANSACTION_ID, remote_start_transaction_cb, NULL);
     attach_call_cb(eOCPP_ACTION_REMOTE_STOP_TRANSACTION_ID, remote_stop_transaction_cb, NULL);
+    attach_call_cb(eOCPP_ACTION_RESERVE_NOW_ID, reserve_now_cb, NULL);
+    attach_call_cb(eOCPP_ACTION_CANCEL_RESERVATION_ID, cancel_reservation_cb, NULL);
 
     authentication_Init();
     OCMF_Init();
@@ -2828,7 +3179,6 @@ void sessionHandler_StopAndResetChargeSession()
 
 	else if(sessionResetMode == eSESSION_RESET_FINALIZE)
 	{
-		ESP_LOGI(TAG, "Transition state START");
 		SetTransitionOperatingModeState(true);
 		sessionResetMode = eSESSION_RESET_DO_RESET;
 	}
@@ -2842,7 +3192,6 @@ void sessionHandler_StopAndResetChargeSession()
 			ESP_LOGI(TAG, "MCU ResetSession command OK");
 			SetTransitionOperatingModeState(false);
 			sessionResetMode = eSESSION_RESET_NONE;
-			ESP_LOGI(TAG, "Transition state STOP");
 			//return 200;
 		}
 		else

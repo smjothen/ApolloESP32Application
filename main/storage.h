@@ -112,6 +112,7 @@ bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect();
 bool storage_Get_ocpp_local_auth_list_enabled();
 uint16_t storage_Get_ocpp_local_auth_list_max_length();
 uint8_t storage_Get_ocpp_send_local_list_max_length();
+bool storage_Get_reserve_connector_zero_supported();
 
 //Get Local settings
 enum session_controller storage_Get_session_controller();
