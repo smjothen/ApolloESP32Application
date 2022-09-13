@@ -252,11 +252,15 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 	return 1;
 }
 
-static time_t last_aligned_timestamp = 0;
-static float last_aligned_energy_active_import_interval = 0;
+static time_t aligned_timestamp_begin = 0;
+static time_t aligned_timestamp_end = 0;
+static float aligned_energy_active_import_begin = 0;
+static float aligned_energy_active_import_end = 0;
 
-static time_t last_sampled_timestamp = 0;
-static float last_sampled_energy_active_import_interval = 0;
+static time_t sampled_timestamp_begin = 0;
+static time_t sampled_timestamp_end = 0;
+static float sampled_energy_active_import_begin = 0;
+static float sampled_energy_active_import_end = 0;
 
 static int populate_sample_energy_active_import_interval(enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	struct ocpp_sampled_value new_value = {
@@ -266,23 +270,13 @@ static int populate_sample_energy_active_import_interval(enum ocpp_reading_conte
 		.unit = eOCPP_UNIT_KWH
 	};
 
-	float energy = MCU_GetEnergy();
-
-	if(energy < 0.0001){
-		energy = chargeSession_Get().Energy;
-		if(energy < 0.0001){
-			ESP_LOGE(TAG, "Energy cleared before active import interval");
-			return 0;
-		}
-	}
-
 	switch(context){
 	case eOCPP_CONTEXT_SAMPLE_CLOCK:
-		sprintf(new_value.value, "%f", energy - last_aligned_energy_active_import_interval);
+		sprintf(new_value.value, "%f", aligned_energy_active_import_end - aligned_energy_active_import_begin);
 		break;
 	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
 	case eOCPP_CONTEXT_TRANSACTION_END:
-		sprintf(new_value.value, "%f", energy - last_sampled_energy_active_import_interval);
+		sprintf(new_value.value, "%f", sampled_energy_active_import_end - sampled_energy_active_import_begin);
 		break;
 	default:
 		return 0;
@@ -402,23 +396,60 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 			new_values_count++;
 	}
 
-	return 3;
+	return new_values_count;
+}
+
+void init_interval_measurands(enum ocpp_reading_context_id context){
+	switch(context){
+	case eOCPP_CONTEXT_SAMPLE_CLOCK:
+		ESP_LOGI(TAG, "Initiating clock aligned interval measurands");
+
+		aligned_timestamp_begin = time(NULL);
+		aligned_timestamp_end = aligned_timestamp_begin;
+
+		aligned_energy_active_import_begin = MCU_GetEnergy();
+		aligned_energy_active_import_end = aligned_energy_active_import_begin;
+		break;
+
+	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
+	case eOCPP_CONTEXT_TRANSACTION_BEGIN:
+	case eOCPP_CONTEXT_TRANSACTION_END:
+		ESP_LOGI(TAG, "Initiating periodic interval measurands");
+
+		sampled_timestamp_begin = time(NULL);
+		sampled_timestamp_end = sampled_timestamp_begin;
+
+		sampled_energy_active_import_begin = MCU_GetEnergy();
+		sampled_energy_active_import_end = MCU_GetEnergy();
+		break;
+
+	default:
+		ESP_LOGI(TAG, "Not updating interval measurands");
+	};
 }
 
 void save_interval_measurands(enum ocpp_reading_context_id context){
 	switch(context){
 	case eOCPP_CONTEXT_SAMPLE_CLOCK:
 		ESP_LOGI(TAG, "Updating clock aligned interval measurands");
-		last_aligned_timestamp = time(NULL);
-		last_aligned_energy_active_import_interval = MCU_GetEnergy();
+
+		aligned_timestamp_begin = aligned_timestamp_end;
+		aligned_timestamp_end = time(NULL);
+
+		aligned_energy_active_import_begin = aligned_energy_active_import_end;
+		aligned_energy_active_import_end = MCU_GetEnergy();
 		break;
 
 	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
 	case eOCPP_CONTEXT_TRANSACTION_BEGIN:
 	case eOCPP_CONTEXT_TRANSACTION_END:
 		ESP_LOGI(TAG, "Updating periodic interval measurands");
-		last_sampled_timestamp = time(NULL);
-		last_sampled_energy_active_import_interval = MCU_GetEnergy();
+
+		sampled_timestamp_begin = sampled_timestamp_end;
+		sampled_timestamp_end = time(NULL);
+
+		sampled_energy_active_import_begin = sampled_energy_active_import_end;
+		sampled_energy_active_import_end = MCU_GetEnergy();
 		break;
 
 	default:
@@ -753,6 +784,7 @@ static void clock_aligned_meter_values_on_aligned_start(){
 
 	}else{
 		xTimerStart(clock_aligned_handle, pdMS_TO_TICKS(200));
+		init_interval_measurands(eOCPP_CONTEXT_SAMPLE_CLOCK);
 	}
 }
 

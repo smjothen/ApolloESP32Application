@@ -8,6 +8,7 @@ extern "C" {
 #include "types/ocpp_meter_value.h"
 
 int ocpp_get_stack_watermark();
+void init_interval_measurands(enum ocpp_reading_context_id context);
 void save_interval_measurands(enum ocpp_reading_context_id context);
 void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, const char * stoptxn_csl,
 			int * transaction_id, uint * connectors, size_t connector_count);

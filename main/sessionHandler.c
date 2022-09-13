@@ -609,10 +609,10 @@ static void start_sample_interval(){
 		if(xTimerStart(sample_handle, pdMS_TO_TICKS(200)) != pdPASS){
 			ESP_LOGE(TAG, "Unable to start sample interval");
 		}else{
+			init_interval_measurands(eOCPP_CONTEXT_TRANSACTION_BEGIN);
 			ESP_LOGI(TAG, "Started sample interval");
 		}
 	}
-	save_interval_measurands(eOCPP_CONTEXT_TRANSACTION_BEGIN);
 }
 
 static void stop_sample_interval(){
