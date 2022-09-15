@@ -880,7 +880,7 @@ int test_speed_hwid(){
 	char id_string[100];
 	snprintf(id_string, 100, "Speed HW ID: %i\r\n", speed_hw_id);
 
-    if((speed_hw_id == 1) || (speed_hw_id == 2)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 4)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
@@ -899,7 +899,7 @@ int test_power_hwid(){
 	char id_string[100];
 	snprintf(id_string, 100, "Power HW ID: %i\r\n", power_hw_id);
 
-    if((power_hw_id == 1) || (power_hw_id == 2)){
+    if((power_hw_id == 1) || (power_hw_id == 2) || (power_hw_id == 4)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
 		return 0;
 	}else{
