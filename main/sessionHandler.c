@@ -552,6 +552,7 @@ static void sessionHandler_task()
 			}
 
 			int ret = publish_string_observation(SessionIdentifier, chargeSession_GetSessionId());
+			ESP_LOGI(TAG, "Sending sessionId: %s (%i)", chargeSession_GetSessionId(), ret);
 			if(ret == 0)
 				chargeSession_ClearHasNewSession();
 		}

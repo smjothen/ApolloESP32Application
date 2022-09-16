@@ -1211,9 +1211,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					HOLD_SetPhases(phaseFromCloud);
 					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
 
-					//This must be set to stop replying the same SessionIds to cloud
-					chargeSession_SetReceivedStartChargingCommand();
-
 					responseStatus = 200;
 				}
 				else
