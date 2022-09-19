@@ -236,6 +236,7 @@
         CommandUpgradeMcuFirmware = 204,
         CommandHostFwUpdateStart = 205,
 		CommandFpgaFwUpdateStart = 206,
+		CommandHostFwUpdateEnd = 207,
 
         CommandResetCommsErrors = 260,
         CommandResetNotifications = 261,
