@@ -8,7 +8,8 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define DISABLE_LOGGING
+#define ENABLE_LOGGING	  	//default commented out
+//#define DEVELOPEMENT_URL	//default commented out
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 

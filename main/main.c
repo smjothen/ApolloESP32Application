@@ -271,11 +271,16 @@ void app_main(void)
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL
-	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URL USED");
+	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
+#else
+	//PROD url used
 #endif
 
-#ifdef DISABLE_LOGGING
+#ifndef ENABLE_LOGGING
+	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
+#else
+	//Logging enabled
 #endif
 
 	//First check hardware revision in order to configure io accordingly
