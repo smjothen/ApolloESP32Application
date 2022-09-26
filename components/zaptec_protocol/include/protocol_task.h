@@ -5,6 +5,8 @@
 #include "../../main/sessionHandler.h"
 
 float GetFloat(uint8_t * input);
+float GetUint32_t(uint8_t * input);
+uint16_t GetUInt16(uint8_t * input);
 
 void zaptecProtocolStart();
 void dspic_periodic_poll_start();
@@ -20,6 +22,7 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);
+ZapMessage MCU_SendUint8WithReply(uint16_t paramIdentifier, uint8_t data);
 
 void MCU_StartLedOverride();
 void MCU_StopLedOverride();
@@ -51,6 +54,8 @@ int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
 void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState);
 enum ChargerOperatingMode GetTransitionOperatingModeState();
+
+bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret);
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
@@ -91,5 +96,6 @@ void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
 bool MCU_IsReady();
 
+bool MCU_GetMidStoredCalibrationId(uint32_t *id);
 
 #endif /* PROTOCOL_TASK_H */

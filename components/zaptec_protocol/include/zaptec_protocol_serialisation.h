@@ -30,31 +30,42 @@
         ParamTestDataPilotC = 106,
         ParamTestDataPilotF = 107,
 
-		AuthenticationRequired = 120,
+        AuthenticationRequired = 120,
 
-		// Local settings
+        ParamStartCalibrations = 130,
+        ParamRunCalibration = 131,
+        ParamCalibrationSamples = 132,
+        ParamCalibrationAveragePhase1 = 133,
+        ParamCalibrationAveragePhase2 = 134,
+        ParamCalibrationAveragePhase3 = 135,
+        ParamCalibrationSetParameter = 136,
+        ParamMidStoredCalibrationId = 137,
+        ParamContinueCalibration = 138,
+        ParamCalibrationReadParameter = 139,
 
-		TransmitInterval = 145,
-		TransmitChangeLevel = 146,
-		PulseInterval = 147,
-		CommunicationMode  = 150,
-		PermanentCableLock = 151,
-		ProductCode = 152,
-		HmiBrightness = 153,
-		LockCableWhenConnected = 154,
+        // Local settings
+
+        TransmitInterval = 145,
+        TransmitChangeLevel = 146,
+        PulseInterval = 147,
+        CommunicationMode  = 150,
+        PermanentCableLock = 151,
+        ProductCode = 152,
+        HmiBrightness = 153,
+        LockCableWhenConnected = 154,
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,
-		ParamInternalTemperatureEmeter2 = 204,
-		ParamInternalTemperatureEmeter3 = 205,
-		ParamInternalTemperatureT = 206,
-		ParamInternalTemperatureT2 = 207,
+        ParamInternalTemperatureEmeter2 = 204,
+        ParamInternalTemperatureEmeter3 = 205,
+        ParamInternalTemperatureT = 206,
+        ParamInternalTemperatureT2 = 207,
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
 
-		ParamLedOverride = 290,
-		ParamLedOverrideClear = 291,
+        ParamLedOverride = 290,
+        ParamLedOverrideClear = 291,
 
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
@@ -75,28 +86,30 @@
         ParamPowerFactor = 518,
         ParamSetPhases = 519,
         
-		MaxPhases = 520,
-		ChargerOfflinePhase = 522,
-		ChargerOfflineCurrent = 523,
+        MaxPhases = 520,
+        ChargerOfflinePhase = 522,
+        ChargerOfflineCurrent = 523,
         /*ParamRcdCurrentMean = 520,
         ParamRcdCurrentPeak = 521,
         ParamRcdCurrentRms = 522,
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
-		MaxCurrentConfigurationSource = 544,
-		SwitchPosition = 545,
-		ChargeCurrentInstallationMaxLimit = 546,
-		StandAloneCurrent = 547,
-		PhaseRotation = 548,
+        MaxCurrentConfigurationSource = 544,
+        SwitchPosition = 545,
+        ChargeCurrentInstallationMaxLimit = 546,
+        StandAloneCurrent = 547,
+        PhaseRotation = 548,
 
         ParamTotalChargePowerSession = 553,
-		SignedMeterValue = 554,
-		SignedMeterValueInterval = 555,
+        SignedMeterValue = 554,
+        SignedMeterValueInterval = 555,
         ParamSessionEnergyCountActive = 560,
         ParamSessionEnergyCountReactive = 561,
         ParamSessionEnergyCountImportActive = 562,
         ParamSessionEnergyCountImportReactive = 563,
+
+        ParamCumulativeEnergyUsage = 564,
 
         ParamChargeDuration = 701,
         ParamChargeMode = 702,
@@ -113,93 +126,93 @@
         ParamIsStandalone = 712,
         ParamCableType = 714,
         ParamNetworkType = 715,
-		DetectedCar = 716,
-		GridTestResult = 717,
-		FinalStopActive = 718,
-                
-		SessionIdentifier = 721,
+        DetectedCar = 716,
+        GridTestResult = 717,
+        FinalStopActive = 718,
+                    
+        SessionIdentifier = 721,
 
         ChargerCurrentUserUuid = 722,
         CompletedSession = 723,
 
-		ParamAuthState = 726,//This is numbered 723 on Pro(conflicts with CompletedSession here when using same file for Cloud and MCU numbering)
+        ParamAuthState = 726,//This is numbered 723 on Pro(conflicts with CompletedSession here when using same file for Cloud and MCU numbering)
 
-		DebugCounter = 731,
-		ParamWarningValue = 732,
-		ParamGridTypeOverride = 733,
-		ParamIT3OptimizationEnabled = 734,
+        DebugCounter = 731,
+        ParamWarningValue = 732,
+        ParamGridTypeOverride = 733,
+        ParamIT3OptimizationEnabled = 734,
 
-		NrOfChargeCards = 749,
-	    NewChargeCard = 750,
-	    AuthenticationListVersion = 751,
-		EnabledNfcTechnologies = 752,
-		LteRoamingDisabled = 753,
+        NrOfChargeCards = 749,
+        NewChargeCard = 750,
+        AuthenticationListVersion = 751,
+        EnabledNfcTechnologies = 752,
+        LteRoamingDisabled = 753,
 
-		/// TimeSchedule observations
+        /// TimeSchedule observations
         Location = 760,
         TimeZone = 761,
         TimeSchedule = 762,
         NextScheduleEvent = 763,
-		MaxStartDelay = 764,
+        MaxStartDelay = 764,
 
         InstallationId = 800, // String / Guid
         RoutingId = 801, // Int
         ChargePointName = 802, // String
 
         //...
-		Notifications = 803,
+        Notifications = 803,
         ParamWarnings = 804,
-		DiagnosticsMode = 805,
+        DiagnosticsMode = 805,
 
-		InternalDiagnosticsLog = 807,
+        InternalDiagnosticsLog = 807,
         //..
         ParamDiagnosticsString = 808,
-		CommunicationSignalStrength = 809,
-		CloudConnectionStatus = 810,
+        CommunicationSignalStrength = 809,
+        CloudConnectionStatus = 810,
         //..
         MCUResetSource = 811,
         MCURxErrors = 812,
-		McuToESPPacketErrors  = 813,
+        McuToESPPacketErrors  = 813,
         ESPToMcuPacketErrors = 814,
-		ESPResetSource = 815,
-		UptimeVariscite = 820,
-		UptimeMCU = 821,
-		DataUsage = 822,
-		CertificateVersion = 823,
+        ESPResetSource = 815,
+        UptimeVariscite = 820,
+        UptimeMCU = 821,
+        DataUsage = 822,
+        CertificateVersion = 823,
         //..
         CarSessionLog = 850,
         CommunicationModeConfigurationInconsistency = 851,
         RawPilotMonitor = 852,
         IT3PhaseDiagnosticsLog = 853,
         PilotTestResults = 854,
-		//..
+        //..
 
-		ServoCheckStartPosition = 870,
-		ServoCheckStartCurrent  = 871,
-		ServoCheckStopPosition 	= 872,
-		ServoCheckStopCurrent 	= 873,
+        ServoCheckStartPosition = 870,
+        ServoCheckStartCurrent  = 871,
+        ServoCheckStopPosition 	= 872,
+        ServoCheckStopCurrent 	= 873,
 
-		HWCurrentActiveLimit	= 880,
-		HWCurrentMaxLimit    	= 881,
+        HWCurrentActiveLimit	= 880,
+        HWCurrentMaxLimit    	= 881,
 
         ProductionTestResults = 900,
         PostProductionTestResults = 901,
 
-		ParamSmartMainboardAppSwVersion = 908,
-		ParamSmartMainboardBootSwVersion = 909,
-		ParamSmartMainboardHwVersion = 910,
+        ParamSmartMainboardAppSwVersion = 908,
+        ParamSmartMainboardBootSwVersion = 909,
+        ParamSmartMainboardHwVersion = 910,
 
-		ParamSmartComputerAppVersion = 911,
-		ParamSmartComputerFwLoaderVersion = 912,
-		ParamSmartComputerImageVersion = 913,
+        ParamSmartComputerAppVersion = 911,
+        ParamSmartComputerFwLoaderVersion = 912,
+        ParamSmartComputerImageVersion = 913,
 
-		//ParamSmartFpgaVersion = 914,
-		//ParamSmartFpgaVersionAndHash = 915,
+        //ParamSmartFpgaVersion = 914,
+        //ParamSmartFpgaVersionAndHash = 915,
 
-		SourceVersion = 916,
+        SourceVersion = 916,
 
-		HwIdMCUSpeed = 917,
-		HwIdMCUPower = 918,
+        HwIdMCUSpeed = 917,
+        HwIdMCUPower = 918,
 
         MacMain = 950,
         MacWiFi = 952,
@@ -210,8 +223,7 @@
         LteImei = 963,
 
         FactoryTestStage = 970,
-		FactoryHWTrigResult = 971,
-
+        FactoryHWTrigResult = 971,
     } ParamNo;
 
 
@@ -231,11 +243,16 @@
                 
         CommandSerialRedirect = 110,
 
-		CommandUpgradeFirmware = 200,
-		CommandUpgradeFirmwareForced = 201,
+        CommandMidInitDefaultCalibration = 120,
+        CommandMidInitCalibration = 121,
+        CommandMidClearCalibration = 122,
+        CommandMidMarkCalibrationVerified = 123,
+
+        CommandUpgradeFirmware = 200,
+        CommandUpgradeFirmwareForced = 201,
         CommandUpgradeMcuFirmware = 204,
         CommandHostFwUpdateStart = 205,
-		CommandFpgaFwUpdateStart = 206,
+        CommandFpgaFwUpdateStart = 206,
 
         CommandResetCommsErrors = 260,
         CommandResetNotifications = 261,
@@ -243,35 +260,40 @@
         CommandSetVarisciteWarning = 263,
 
         CommandVoltageSnapshot = 300,
-                
+        CommandCurrentSnapshot = 301,
+        CommandActivePowerSnapshot = 302,
+
+        ParamEmeterVoltageSnapshotSlot = 499,
+        ParamEmeterVoltageSnapshot = 500,
+
         CommandStartCharging = 501,
         CommandStopCharging = 502,
-		CommandResetSession = 505,
-		CommandSetFinished = 506,
+        CommandResetSession = 505,
+        CommandSetFinished = 506,
         CommandResumeChargingESP = 507,
-		CommandStopChargingFinal = 508,
-		CommandResumeChargingMCU = 509,
+        CommandStopChargingFinal = 508,
+        CommandResumeChargingMCU = 509,
 
         CommandAuthorizationGranted = 601,
         CommandAuthorizationDenied = 602,
         CommandIndicateAppConnect = 603,
         CommandIndicateDisabled = 604,
         CommandIndicateOffline = 605,
-		CommandIndicateOk = 606,
-		CommandBlinkWhite = 607,
+        CommandIndicateOk = 606,
+        CommandBlinkWhite = 607,
 
-		CommandEnterProductionMode = 701,
-		CommandServoClearCalibration = 702,
-		CommandTestHWTrig = 705,
-		CommandFactoryReset = 710,
-		CommandRunGridTest = 804,
-		CommandITDiagnosticsStart = 806,
-		CommandITDiagnosticsStop = 807,
-		CommandActivateWatchdog = 810,
-		CommandStartServoCheck = 811,
+        CommandEnterProductionMode = 701,
+        CommandServoClearCalibration = 702,
+        CommandTestHWTrig = 705,
+        CommandFactoryReset = 710,
+        CommandRunGridTest = 804,
+        CommandITDiagnosticsStart = 806,
+        CommandITDiagnosticsStop = 807,
+        CommandActivateWatchdog = 810,
+        CommandStartServoCheck = 811,
 
-		CommandDisableCertificateOnce = 820,
-		CommandDisableCertificateAlways = 821
+        CommandDisableCertificateOnce = 820,
+        CommandDisableCertificateAlways = 821
 
     } CommandNo;
 

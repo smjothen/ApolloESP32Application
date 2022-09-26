@@ -37,6 +37,7 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
+#include "calibration.h"
 #ifdef useAdvancedConsole
 	//#include "apollo_console.h"
 #endif
@@ -437,6 +438,8 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "TCP PORT ACTIVATED");
 	}
 	//#endif
+
+	xTaskCreate(&calibration_task, "calibration_task", 4096, NULL, 5, NULL);
 
     #ifndef BG_BRIDGE
     sessionHandler_init();

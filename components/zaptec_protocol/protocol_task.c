@@ -234,6 +234,17 @@ float GetUint32_t(uint8_t * input)
 	return tmp;
 }
 
+uint16_t GetUInt16(uint8_t * input)
+{
+	uint16_t tmp = 0;
+
+	uint8_t swap[2] = {0};
+	swap[0] = input[1];
+	swap[1] = input[0];
+	memcpy(&tmp, &swap[0], sizeof (swap));
+	return tmp;
+}
+
 int MCURxGetStackWatermark()
 {
 	if(uartRecvTaskHandle != NULL)
@@ -636,6 +647,21 @@ MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)
 	freeZapMessageReply();
 
 	return rxMsg.type;
+}
+
+ZapMessage MCU_SendUint8WithReply(uint16_t paramIdentifier, uint8_t data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneByte(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg;
 }
 
 
@@ -1125,8 +1151,21 @@ float MCU_StandAloneCurrent()
 }
 
 
+bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret) {
+	ZapMessage rxMsgm = MCU_ReadParameter(param);
+	if((rxMsgm.length == (1+3*4)) && (rxMsgm.identifier == param)) {
+      uint8_t *data = rxMsgm.data;
+      *source = *data++;
+      ret[0] = GetFloat(data);
+      data += 4;
+      ret[1] = GetFloat(data);
+      data += 4;
+      ret[2] = GetFloat(data);
+      return true;
+  }
 
-
+  return false;
+}
 
 uint16_t MCU_GetServoCheckParameter(int parameterDefinition)
 {
@@ -1203,7 +1242,15 @@ float MCU_GetHWCurrentMaxLimit()
 }
 
 
+bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
+    ZapMessage msg = MCU_ReadParameter(ParamMidStoredCalibrationId);
+    if (msg.length != 4 || msg.identifier != ParamMidStoredCalibrationId) {
+        return false;
+    }
 
+    *id = GetUint32_t(msg.data);
+    return true;
+}
 
 
 void SetEspNotification(uint16_t notification)
