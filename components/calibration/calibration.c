@@ -1,11 +1,3 @@
-/* UDP MultiCast Send/Receive Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <string.h>
 #include <sys/param.h>
 #include <stdbool.h>
@@ -29,242 +21,39 @@
 #include "protocol_task.h"
 #include "sessionHandler.h"
 #include "zaptec_protocol_serialisation.h"
-#include "emeter.h"
+
+#include "calibration_emeter.h"
 
 #include <calibration-message.pb.h>
 #include <calibration.h>
+#include <calibration_util.h>
+
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#define UDP_PORT 3333
-#define MULTICAST_TTL 1
-#define MULTICAST_IPV4_ADDR "232.10.11.12"
-#define LISTEN_ALL_IF
+#define SERVER_PORT 3333
+#define SERVER_IP "232.10.11.12"
 
 static const char *TAG = "CALIBRATION    ";
-
-// Milliseconds..
-#define STATE_TIMEOUT 1000 
-#define TICK_TIMEOUT 1000
-
-#define STATE(s) (ctx->CState = (s))
-#define COMPLETE() STATE(Complete)
-#define FAILED() STATE(Failed)
-
-#define STEP(s) (ctx->CStep = (s))
 
 void calibration_check_timeout(CalibrationCtx *ctx);
 int calibration_send_state(CalibrationCtx *ctx);
 void calibration_update_charger_state(CalibrationCtx *ctx);
 
-static const char *calibration_state_to_string(CalibrationState state) {
-    const char *_calibration_states[] = { FOREACH_CS(CS_STRING) };
-    size_t max_state = sizeof (_calibration_states) / sizeof (_calibration_states[0]);
-    if (state < 0 || state > max_state || !_calibration_states[state]) {
-        return "UnknownCalibrationState";
-    }
-    return _calibration_states[state];
-}
-
-static const char *calibration_step_to_string(CalibrationStep state) {
-    const char *_calibration_steps[] = { FOREACH_CLS(CS_STRING) };
-    size_t max_state = sizeof (_calibration_steps) / sizeof (_calibration_steps[0]);
-    if (state < 0 || state > max_state || !_calibration_steps[state]) {
-        return "UnknownStep";
-    }
-    return _calibration_steps[state];
-}
-
-static const char *charger_state_to_string(ChargerState state) {
-    const char *_charger_states[] = { FOREACH_CHS(CS_STRING) };
-    size_t max_state = sizeof (_charger_states) / sizeof (_charger_states[0]);
-    if (state < 0 || state > max_state || !_charger_states[state]) {
-        return "UnknownChargerState";
-    }
-    return _charger_states[state];
-}
-
-bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *ivals, float *vvals) {
-    MessageType ret;
-
-    if ((ret = MCU_SendCommandId(CommandCurrentSnapshot)) != MsgCommandAck) {
-        ESP_LOGE(TAG, "Couldn't send current snapshot command!");
-        return false;
-    }
-
-    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, ivals)) {
-        ESP_LOGE(TAG, "Couldn't get current snapshot!");
-        return false;
-    }
-
-    if ((ret = MCU_SendCommandId(CommandVoltageSnapshot)) != MsgCommandAck) {
-        ESP_LOGE(TAG, "Couldn't send voltage snapshot command!");
-        return false;
-    }
-
-    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, vvals)) {
-        ESP_LOGE(TAG, "Couldn't get voltage snapshot!");
-        return false;
-    }
-
-    return true;
-}
-
-CalibrationType calibration_state_to_type(CalibrationState state) {
-    switch (state) {
-        case CalibrateCurrentOffset: return CALIBRATION_TYPE_CURRENT_OFFSET;
-        case CalibrateCurrentGain: return CALIBRATION_TYPE_CURRENT_GAIN;
-        case CalibrateVoltageOffset: return CALIBRATION_TYPE_VOLTAGE_OFFSET;
-        case CalibrateVoltageGain: return CALIBRATION_TYPE_VOLTAGE_GAIN;
-        default: return CALIBRATION_TYPE_NONE;
-    }
-}
-
-int calibration_state_to_samples(CalibrationState state) {
-    switch (state) {
-        case CalibrateCurrentOffset:
-        case CalibrateVoltageOffset: return 20 * 5;
-        case CalibrateCurrentGain:
-        case CalibrateVoltageGain: return 17;
-        default: return 0;
-    }
-}
-
-uint16_t calibration_read_samples(void) {
-    ZapMessage msg = MCU_ReadParameter(ParamCalibrationSamples);
-    if (msg.type == MsgReadAck && msg.identifier == ParamCalibrationSamples && msg.length == 2) {
-        return GetUInt16(msg.data);
-    }
-    return 0;
-}
-
-bool calibration_read_average(int phase, float *average) {
-    ZapMessage msg = MCU_ReadParameter(ParamCalibrationAveragePhase1 + phase);
-    if (msg.type == MsgReadAck && msg.identifier == (ParamCalibrationAveragePhase1 + phase) && msg.length == 4) {
-        *average = GetFloat(msg.data);
-        return true;
-    }
-    return false;
-}
-
-uint16_t calibration_get_emeter_averages(CalibrationCtx *ctx, float *averages) {
-    uint16_t samples = calibration_read_samples();
-
-    if (samples == calibration_state_to_samples(ctx->State)) {
-        for (int phase = 0; phase < 3; phase++) {
-            if (!calibration_read_average(phase, &averages[phase])) {
-                ESP_LOGE(TAG, "Couldn't read phase %d average!", phase);
-                return 0;
-            }
-        }
-        return samples;
-    } else {
-        ESP_LOGE(TAG, "Unexpected samples: %d", samples);
-    }
-
-    return 0;
-}
-
-
-bool calibration_step_calibrate(CalibrationCtx *ctx) {
-    CalibrationStep step = ctx->CStep;
-
-    switch (ctx->CStep) {
-        case InitRelays:
-            // For now we just skip this but should probably ensure relays are
-            // open/closed...
-
-            // Treat zero stabilization tick as init/pre-calibration step
-            if (!ctx->StabilizationTick) {
-                for (int phase = 0; phase < 3; phase++) {
-                    emeter_write_float(I1_OFFS + phase, 0.0, 23);
-                    emeter_write_float(I1_GAIN + phase, 1.0, 21);
-                    emeter_write_float(V1_OFFS + phase, 0.0, 23);
-                    emeter_write_float(V1_GAIN + phase, 1.0, 21);
-                }
-
-                if (ctx->State == CalibrateCurrentOffset) {
-                    emeter_write_float(HPF_COEF_I, 0.0, 23);
-                    emeter_write_float(IARMS_OFF, 0.0, 23);
-                    emeter_write_float(IBRMS_OFF, 0.0, 23);
-                    emeter_write_float(ICRMS_OFF, 0.0, 23);
-                } else if (ctx->State == CalibrateCurrentGain) {
-                    emeter_write_float(IARMS_OFF, 0.0, 23);
-                    emeter_write_float(IBRMS_OFF, 0.0, 23);
-                    emeter_write_float(ICRMS_OFF, 0.0, 23);
-                } else if (ctx->State == CalibrateVoltageOffset) {
-                    // TODO ? 
-                } else if (ctx->State == CalibrateVoltageGain) {
-                    // TODO ?
-                }
-            }
-
-            // Setup stabilization for next step 
-            switch(ctx->State) {
-                case CalibrateCurrentGain  : ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(20000); break;
-                case CalibrateVoltageOffset: ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(10000); break;
-                case CalibrateVoltageGain  : ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(0); break;
-                case CalibrateCurrentOffset: ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(0); break;
-                default: break;
-            }
-
-            STEP(Stabilization);
-            break;
-        case Stabilization:
-
-            if (xTaskGetTickCount() > ctx->StabilizationTick) {
-                STEP(InitCalibration);
-            } else {
-                ESP_LOGI(TAG, "Stabilizing %d ...", ctx->StabilizationTick - xTaskGetTickCount());
-            }
-
-            break;
-        case InitCalibration: {
-            CalibrationType type = calibration_state_to_type(ctx->State);
-            MCU_SendUint8Parameter(ParamRunCalibration, type);
-            STEP(Calibrating);
-            break;
-        }
-        case Calibrating: {
-            float avg[3];
-
-            if (calibration_get_emeter_averages(ctx, avg)) {
-                ESP_LOGI(TAG, "AVG: %f %f %f", avg[0],avg[1],avg[2]);
-
-                // Start for verification
-                CalibrationType type = calibration_state_to_type(ctx->State);
-                MCU_SendUint8Parameter(ParamRunCalibration, type);
-     
-                STEP(Verify);
-            }
-
-
-            break;
-        }
-        case Verify:
-            STEP(VerifyRMS);
-            break;
-        case VerifyRMS:
-            STEP(CalibrationDone);
-            break;
-        case CalibrationDone:
-            // Reset
-            STEP(InitRelays);
-            // Complete state
-            COMPLETE();
-            break;
-    }
-
-    return ctx->CStep != step;
-}
-
 bool calibration_tick_calibrate(CalibrationCtx *ctx) {
     ChargerState state = ctx->CState;
-    CalibrationStep step = ctx->CStep;
 
     switch (ctx->CState) {
         case InProgress:
-            calibration_step_calibrate(ctx);
+            if (ctx->State == CalibrateCurrentOffset) {
+                calibration_step_calibrate_current_offset(ctx);
+            } else if (ctx->State == CalibrateCurrentGain) {
+                calibration_step_calibrate_current_gain(ctx);
+            } else if (ctx->State == CalibrateVoltageOffset) {
+                calibration_step_calibrate_voltage_offset(ctx);
+            } else {
+                calibration_step_calibrate_voltage_gain(ctx);
+            }
             break;
         case Complete:
             break;
@@ -272,20 +61,11 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
             break;
     }
 
-    if (ctx->CStep != step) {
-        ESP_LOGI(TAG, "CalibrationStep %s -> %s", calibration_step_to_string(step), calibration_step_to_string(ctx->CStep));
-    }
-
     return ctx->CState != state;
 }
 
 void calibration_tick_starting_init(CalibrationCtx *ctx) {
     MessageType ret;
-
-    if ((ret = MCU_SendCommandId(CommandStopChargingFinal)) != MsgCommandAck) {
-        ESP_LOGE(TAG, "Couldn't send start charing command!");
-        return;
-    }
 
     if ((ret = MCU_SendUint8Parameter(ParamIsStandalone, 1)) != MsgWriteAck) {
         ESP_LOGE(TAG, "Couldn't set standalone mode!");
@@ -331,7 +111,8 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
                 if ((ctx->Mode == CHARGE_OPERATION_STATE_STOPPED || ctx->Mode == CHARGE_OPERATION_STATE_PAUSED)) {
                     COMPLETE();
                 } else {
-                    ESP_LOGI(TAG, "Waiting for CHARGE_OPERATION_STATE_STOPPED currently %d ...", ctx->Mode);
+                    calibration_open_relays(ctx);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to open (MODE: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
                 }
 
             }
@@ -364,12 +145,7 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 }
 
 void calibration_tick_close_relays_init(CalibrationCtx *ctx) {
-    MessageType ret;
-
-    if ((ret = MCU_SendCommandId(CommandResumeChargingMCU)) != MsgCommandAck) {
-        ESP_LOGE(TAG, "Couldn't send resume charging command!");
-        return;
-    }
+    calibration_close_relays(ctx);
 
     ctx->InitTick = xTaskGetTickCount();
     ctx->InitState = true;
@@ -388,7 +164,8 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
                 if (ctx->Mode == CHARGE_OPERATION_STATE_CHARGING) {
                     COMPLETE();
                 } else {
-                    ESP_LOGI(TAG, "Waiting for CHARGE_OPERATION_STATE_CHARGING currently %d ...", ctx->Mode);
+                    calibration_close_relays(ctx);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to close (MODE: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
                 }
 
             }
@@ -466,14 +243,15 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                         COMPLETE();
                         break;
                     } else {
-                        ESP_LOGI(TAG, "Warming up @ %.1fA for %dms ...", expectedCurrent, pdTICKS_TO_MS(minimumDuration));
+                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %ds) ...", calibration_state_to_string(ctx->State), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
                     }
                 }
 
             } else {
                 ctx->WarmupTick = 0;
 
-                ESP_LOGI(TAG, "Waiting for warm up ... %.1fA +/- %.1f%% range ... I %.1f %.1f %.1f ...", expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
+                ESP_LOGI(TAG, "%s: Waiting to be in range (%.1fA +/- %.1f%% range, I %.1fA %.1fA %.1fA) ...",
+                        calibration_state_to_string(ctx->State), expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
             }
 
             break;
@@ -614,14 +392,8 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
             updated = calibration_tick_warmup_steady_state_temp(ctx);
             break;
         case CalibrateCurrentOffset:
-            updated = calibration_tick_calibrate(ctx);
-            break;
         case CalibrateVoltageOffset:
-            updated = calibration_tick_calibrate(ctx);
-            break;
         case CalibrateVoltageGain:
-            updated = calibration_tick_calibrate(ctx);
-            break;
         case CalibrateCurrentGain:
             updated = calibration_tick_calibrate(ctx);
             break;
@@ -646,7 +418,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     }
 
     if (updated) {
-        ESP_LOGI(TAG, "STATE %s: %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState));
+        ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState));
     }
 
     ctx->LastTick = xTaskGetTickCount();
@@ -721,7 +493,7 @@ int calibration_send_state(CalibrationCtx *ctx) {
 void calibration_update_charger_state(CalibrationCtx *ctx) {
     enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
     if (mode != ctx->Mode) {
-        ESP_LOGI(TAG, "ChargerOperationMode %d -> %d", ctx->Mode, mode);
+        ESP_LOGI(TAG, "%s: Operation mode changed (%d -> %d) ...", calibration_state_to_string(ctx->State), ctx->Mode, mode);
         ctx->Mode = mode;
     }
 }
@@ -738,7 +510,7 @@ void calibration_check_timeout(CalibrationCtx *ctx) {
 }
 
 void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMessage *msg) {
-    ESP_LOGD(TAG, "State { State = %d, Sequence = %d }", msg->State, msg->Sequence);
+    //ESP_LOGD(TAG, "State { State = %d, Sequence = %d }", msg->State, msg->Sequence);
 
     struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
@@ -761,7 +533,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
             return;
         } else if (ctx->Run != msg->Run.Run) {
             ctx->Run = msg->Run.Run;
-            ESP_LOGI(TAG, "Starting run %d", ctx->Run);
+            //ESP_LOGI(TAG, "Starting run %d", ctx->Run);
         }
     }
 
@@ -771,7 +543,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
     }
 
     if (ctx->State != msg->State) {
-        ESP_LOGI(TAG, "STATE: %s", calibration_state_to_string(msg->State));
+        /* ESP_LOGI(TAG, "%s", calibration_state_to_string(msg->State)); */
     } else {
         return;
     }
@@ -795,7 +567,7 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if) {
     struct in_addr iaddr = { 0 };
     int err = 0;
     // Configure source interface
-#ifdef LISTEN_ALL_IF
+#if 1
     imreq.imr_interface.s_addr = IPADDR_ANY;
 #else
     esp_netif_ip_info_t ip_info = { 0 };
@@ -807,16 +579,16 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if) {
     inet_addr_from_ip4addr(&iaddr, &ip_info.ip);
 #endif // LISTEN_ALL_IF
     // Configure multicast address to listen to
-    err = inet_aton(MULTICAST_IPV4_ADDR, &imreq.imr_multiaddr.s_addr);
+    err = inet_aton(SERVER_IP, &imreq.imr_multiaddr.s_addr);
     if (err != 1) {
-        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", MULTICAST_IPV4_ADDR);
+        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", SERVER_IP);
         // Errors in the return value have to be negative
         err = -1;
         goto err;
     }
     ESP_LOGI(TAG, "Configured IPV4 Multicast address %s", inet_ntoa(imreq.imr_multiaddr.s_addr));
     if (!IP_MULTICAST(ntohl(imreq.imr_multiaddr.s_addr))) {
-        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", MULTICAST_IPV4_ADDR);
+        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", SERVER_IP);
     }
 
     if (assign_source_if) {
@@ -854,7 +626,7 @@ static int create_multicast_ipv4_socket(void) {
 
     // Bind the socket to any address
     saddr.sin_family = PF_INET;
-    saddr.sin_port = htons(UDP_PORT);
+    saddr.sin_port = htons(SERVER_PORT);
     saddr.sin_addr.s_addr = htonl(INADDR_ANY);
     err = bind(sock, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
     if (err < 0) {
@@ -864,7 +636,7 @@ static int create_multicast_ipv4_socket(void) {
 
 
     // Assign multicast TTL (set separately from normal interface TTL)
-    uint8_t ttl = MULTICAST_TTL;
+    uint8_t ttl = 1;
     setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(uint8_t));
     if (err < 0) {
         ESP_LOGE(TAG, "Failed to set IP_MULTICAST_TTL: %d", errno);
@@ -919,10 +691,10 @@ void calibration_task(void *pvParameters) {
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,
-            .sin_port = htons(UDP_PORT),
+            .sin_port = htons(SERVER_PORT),
         };
 
-        inet_aton(MULTICAST_IPV4_ADDR, &sdestv4.sin_addr.s_addr);
+        inet_aton(SERVER_IP, &sdestv4.sin_addr.s_addr);
 
         int err = 1;
         while (err > 0) {

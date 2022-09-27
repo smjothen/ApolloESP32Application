@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define EMETER_SYS_GAIN 5.275001
+
 double snToFloat(uint32_t data, uint16_t radix);
 uint32_t floatToSn(double data, uint16_t radix);
 

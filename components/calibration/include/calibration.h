@@ -12,6 +12,19 @@
 
 #define CALIBRATION_KEY "GoTestBenchChangeMe!"
 
+#define EXPECTED_SAMPLES_GAIN 17
+#define EXPECTED_SAMPLES_OFFSET 100
+
+// Milliseconds..
+#define STATE_TIMEOUT 1000 
+#define TICK_TIMEOUT 1000
+
+#define STATE(s) (ctx->CState = (s))
+#define COMPLETE() STATE(Complete)
+#define FAILED() STATE(Failed)
+
+#define STEP(s) (ctx->CStep = (s))
+
 #define FOREACH_CS(CS)                 \
     CS(Starting, 1)                    \
     CS(ContactCleaning, 14)            \
@@ -98,6 +111,14 @@ typedef enum {
 } EMRegister;
 
 typedef struct {
+    double CurrentGain[3];
+    double VoltageGain[3];
+
+    double CurrentOffset[3];
+    double VoltageOffset[3];
+} CalibrationParameters;
+
+typedef struct {
     int Run;
     int Seq;
     int LastSeq;
@@ -130,8 +151,15 @@ typedef struct {
     TickType_t LastETick;
 
     TickType_t StabilizationTick;
+
+    CalibrationParameters Params;
 } CalibrationCtx;
 
 void calibration_task(void *pvParameters);
+
+bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx);
+bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx);
+bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx);
+bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx);
 
 #endif

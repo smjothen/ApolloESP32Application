@@ -16,7 +16,7 @@
 #include <lwip/netdb.h>
 
 #include "protocol_task.h"
-#include "emeter.h"
+#include "calibration_emeter.h"
 
 static const char *TAG = "EMETER         ";
 
@@ -54,7 +54,7 @@ void emeter_write_float(uint8_t reg, double value, int radix) {
 uint32_t emeter_read(uint8_t reg) {
 	ZapMessage msg = MCU_SendUint8WithReply(ParamCalibrationReadParameter, reg);
 	if (msg.identifier != ParamCalibrationReadParameter || msg.type != MsgWriteAck || msg.length != 4) {
-		ESP_LOGE(TAG, "Couldn't read eMeter register %d", reg);
+		ESP_LOGE(TAG, "Couldn't read eMeter register %d : ID %d Type %d Len %d", reg, msg.identifier, msg.type, msg.length);
 		return 0;
 	}
 	return GetUint32_t(msg.data);
