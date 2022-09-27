@@ -38,27 +38,27 @@ uint32_t floatToSn(double data, uint16_t radix) {
     return data * (1UL << radix);
 }
 
-void emeter_write(uint8_t reg, int registerValue) {
+bool emeter_write(uint8_t reg, int registerValue) {
 	uint32_t combined = ((uint8_t)reg) << 24 | (registerValue & 0xFFFFFF);
 	MessageType type = MCU_SendUint32Parameter(ParamCalibrationSetParameter, combined);
 	if (type != MsgWriteAck) {
-		ESP_LOGE(TAG, "Couldn't write eMeter register %d = %d", reg, registerValue);
+		return false;
 	}
+	return true;
 }
 
-void emeter_write_float(uint8_t reg, double value, int radix) {
+bool emeter_write_float(uint8_t reg, double value, int radix) {
 	int registerValue = floatToSn(value, radix);
-	emeter_write(reg, registerValue);
+	return emeter_write(reg, registerValue);
 }
 
-uint32_t emeter_read(uint8_t reg) {
+bool emeter_read(uint8_t reg, uint32_t *val) {
 	ZapMessage msg = MCU_SendUint8WithReply(ParamCalibrationReadParameter, reg);
 	if (msg.identifier != ParamCalibrationReadParameter || msg.type != MsgWriteAck || msg.length != 4) {
-		ESP_LOGE(TAG, "Couldn't read eMeter register %d : ID %d Type %d Len %d", reg, msg.identifier, msg.type, msg.length);
-		return 0;
+		return false;
 	}
-	return GetUint32_t(msg.data);
-
+	*val = GetUint32_t(msg.data);
+	return true;
 }
 
 double emeter_get_fsv(void) {

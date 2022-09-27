@@ -20,7 +20,7 @@ static const char *TAG = "CALIBRATION    ";
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
 
-    ESP_LOGI(TAG, "%s: %s %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState), calibration_step_to_string(ctx->CStep));
+    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
     switch (ctx->CStep) {
         case InitRelays:
@@ -31,13 +31,19 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
             }
 
             for (int phase = 0; phase < 3; phase++) {
-                emeter_write_float(V1_OFFS + phase, 0.0, 23);
+                if (!emeter_write_float(V1_OFFS + phase, 0.0, 23)) {
+                    ESP_LOGE(TAG, "Writing VOFFS(%d) failed!", phase);
+                    return false;
+                }
             }
 
-            emeter_write(HPF_COEF_V, 0x020000);
+            if (!emeter_write(HPF_COEF_V, 0x020000)) {
+                ESP_LOGE(TAG, "Writing HPF_COEF_V = 0x020000 failed!");
+                return false;
+            }
 
 
-            ESP_LOGI(TAG, "%s: Started voltage offset HPF filter ...", calibration_state_to_string(ctx->State));
+            ESP_LOGI(TAG, "%s: VOFFS HPF started", calibration_state_to_string(ctx->State));
 
             ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(7000);
             STEP(Stabilization);
@@ -46,9 +52,13 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
         case Stabilization:
 
             if (xTaskGetTickCount() > ctx->StabilizationTick) {
-                ESP_LOGI(TAG, "%s: Voltage offset HPF averaging completed", calibration_state_to_string(ctx->State));
+                ESP_LOGI(TAG, "%s: VOFFS HPF done", calibration_state_to_string(ctx->State));
 
-                emeter_write(HPF_COEF_V, 0);
+                if (!emeter_write(HPF_COEF_V, 0)) {
+                    ESP_LOGE(TAG, "Writing HPF_COEF_V = 0 failed!");
+                    return false;
+                }
+
                 STEP(InitCalibration);
             }
 
@@ -63,10 +73,16 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
             }
 
             for (int phase = 0; phase < 3; phase++) {
-                uint32_t rawOffset = emeter_read(V1_OFFS + phase);
+                uint32_t rawOffset;
+
+                if (!emeter_read(V1_OFFS + phase, &rawOffset)) {
+                    ESP_LOGE(TAG, "Writing VOFFS(%d) failed!", phase);
+                    return false;
+                }
+
                 double offset = snToFloat(rawOffset, 23);
 
-                ESP_LOGI(TAG, "%s: VOFFS (HPF) %d %f", calibration_state_to_string(ctx->State), phase, offset);
+                ESP_LOGI(TAG, "%s: VOFFS_HPF(%d) = %f", calibration_state_to_string(ctx->State), phase, offset);
 
                 ctx->Params.VoltageOffset[phase] = offset;
             }

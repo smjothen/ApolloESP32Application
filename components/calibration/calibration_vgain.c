@@ -20,7 +20,7 @@ static const char *TAG = "CALIBRATION    ";
 bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
 
-    ESP_LOGI(TAG, "%s: %s %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState), calibration_step_to_string(ctx->CStep));
+    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
     switch (ctx->CStep) {
         case InitRelays:
@@ -34,7 +34,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(0);
+            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
             STEP(Stabilization);
 
             break;
@@ -46,17 +46,17 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
             break;
         case InitCalibration: {
+
             if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_VOLTAGE_GAIN)) {
                 STEP(Calibrating);
             }
             break;
         }
         case Calibrating: {
+
             float avg[3];
 
             if (calibration_get_emeter_averages(ctx, EXPECTED_SAMPLES_GAIN, avg)) {
-                ESP_LOGI(TAG, "%s: Averages %f %f %f", calibration_state_to_string(ctx->State), avg[0], avg[1], avg[2]);
-
                 if (calibration_ref_voltage_is_recent(ctx)) {
 
                     for (int phase = 0; phase < 3; phase++) {
@@ -64,7 +64,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                         double gain = ctx->V[phase] / averageMeasurement;
                         ctx->Params.VoltageGain[phase] = gain;
 
-                        ESP_LOGI(TAG, "%s: Voltage gain %d %f", calibration_state_to_string(ctx->State), phase, gain);
+                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);
                     }
 
                     

@@ -20,7 +20,7 @@ static const char *TAG = "CALIBRATION    ";
 bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
 
-    ESP_LOGI(TAG, "%s: %s %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState), calibration_step_to_string(ctx->CStep));
+    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
     switch (ctx->CStep) {
         case InitRelays:
@@ -31,8 +31,12 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 }
 
                 for (int phase = 0; phase < 3; phase++) {
-                    emeter_write_float(I1_GAIN + phase, 1.0, 21);
-                    emeter_write_float(IARMS_OFF + phase, 0.0, 23);
+                    if (!emeter_write_float(I1_GAIN + phase, 1.0, 21)) {
+                        ESP_LOGE(TAG, "Writing IGAIN(%d) failed!", phase);
+                    }
+                    if (!emeter_write_float(IARMS_OFF + phase, 0.0, 23)) {
+                        ESP_LOGE(TAG, "Writing IARMS(%d) failed!", phase);
+                    }
                 }
             }
 
@@ -58,18 +62,14 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
             float avg[3];
 
             if (calibration_get_emeter_averages(ctx, EXPECTED_SAMPLES_GAIN, avg)) {
-                ESP_LOGI(TAG, "%s: Averages %f %f %f", calibration_state_to_string(ctx->State), avg[0], avg[1], avg[2]);
-
                 if (calibration_ref_current_is_recent(ctx)) {
-
                     for (int phase = 0; phase < 3; phase++) {
                         double averageMeasurement = calibration_scale_emeter(ctx->State, avg[phase]);
                         double gain = ctx->I[phase] / averageMeasurement;
                         ctx->Params.CurrentGain[phase] = gain;
 
-                        ESP_LOGI(TAG, "%s: Current gain %d %f", calibration_state_to_string(ctx->State), phase, gain);
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);
                     }
-                    
                 } else {
                     ESP_LOGI(TAG, "%s: Waiting for recent reference current", calibration_state_to_string(ctx->State));
                     break;
