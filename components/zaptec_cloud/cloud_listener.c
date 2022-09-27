@@ -2411,6 +2411,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"GetMCUSettings") != NULL)
+				{
+					SessionHandler_SendMCUSettings();
+					responseStatus = 200;
+				}
 
 
 			}

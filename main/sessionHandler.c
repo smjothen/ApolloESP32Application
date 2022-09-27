@@ -1480,6 +1480,26 @@ void sessionHandler_StopAndResetChargeSession()
 }
 
 
+void SessionHandler_SendMCUSettings()
+{
+	char mcuPayload[100];
+
+	ZapMessage rxMsg = MCU_ReadParameter(ParamIsEnabled);
+	uint8_t enabled = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamIsStandalone);
+	uint8_t standAlone = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(AuthenticationRequired);
+	uint8_t auth = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamCurrentInMaximum);
+	float maxC = GetFloat(rxMsg.data);
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f ", enabled, standAlone, auth, maxC);
+	ESP_LOGI(TAG, "%s", mcuPayload);
+	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+}
 
 /*
  * If we have received an already set SessionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
