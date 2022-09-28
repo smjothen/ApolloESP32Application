@@ -61,7 +61,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
                     for (int phase = 0; phase < 3; phase++) {
                         double averageMeasurement = calibration_scale_emeter(ctx->State, avg[phase]);
-                        double gain = ctx->V[phase] / averageMeasurement;
+                        double gain = ctx->Ref.V[phase] / averageMeasurement;
                         ctx->Params.VoltageGain[phase] = gain;
 
                         ESP_LOGI(TAG, "%s: VGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);

@@ -12,6 +12,9 @@
 
 #define CALIBRATION_KEY "GoTestBenchChangeMe!"
 
+#define SERVER_PORT 3333
+#define SERVER_IP "232.10.11.12"
+
 #define EXPECTED_SAMPLES_GAIN 17
 #define EXPECTED_SAMPLES_OFFSET 100
 
@@ -111,6 +114,8 @@ typedef enum {
 } EMRegister;
 
 typedef struct {
+    uint32_t CalibrationId;
+
     double CurrentGain[3];
     double VoltageGain[3];
 
@@ -119,10 +124,18 @@ typedef struct {
 } CalibrationParameters;
 
 typedef struct {
+    float I[3];
+    float V[3];
+    float E;
+    TickType_t LastITick;
+    TickType_t LastVTick;
+    TickType_t LastETick;
+} CalibrationReference;
+
+typedef struct {
     int Run;
     int Seq;
     int LastSeq;
-    uint32_t CalibrationId;
     TickType_t LastTick;
 
     int HaveServer;
@@ -141,17 +154,9 @@ typedef struct {
     TickType_t WarmupTick;
     uint32_t WarmupOptions;
 
-    float I[3];
-    TickType_t LastITick;
-
-    float V[3];
-    TickType_t LastVTick;
-
-    float E;
-    TickType_t LastETick;
-
     TickType_t StabilizationTick;
 
+    CalibrationReference Ref;
     CalibrationParameters Params;
 } CalibrationCtx;
 
@@ -162,4 +167,12 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx);
 
+bool calibration_total_charge_power(CalibrationCtx *ctx, float *val);
+bool calibration_set_standalone(CalibrationCtx *ctx, int standalone);
+bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current);
+bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
+bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
+
+int calibration_phases_within(float *phases, float nominal, float range);
+ 
 #endif

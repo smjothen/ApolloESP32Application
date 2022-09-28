@@ -44,15 +44,27 @@ const char *charger_state_to_string(ChargerState state) {
 }
 
 bool calibration_ref_voltage_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->LastVTick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ref.LastVTick < pdMS_TO_TICKS(500);
 }
 
 bool calibration_ref_current_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->LastITick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ref.LastITick < pdMS_TO_TICKS(500);
 }
 
 bool calibration_ref_energy_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->LastETick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ref.LastETick < pdMS_TO_TICKS(500);
+}
+
+int calibration_phases_within(float *phases, float nominal, float range) {
+    float min = nominal * (1.0 - range);
+    float max = nominal * (1.0 + range);
+
+    int count = 0;
+    if (phases[0] >= min && phases[0] <= max) count++;
+    if (phases[1] >= min && phases[1] <= max) count++;
+    if (phases[2] >= min && phases[2] <= max) count++;
+
+    return count;
 }
 
 double calibration_scale_emeter(CalibrationState state, double raw) {
@@ -194,4 +206,32 @@ bool calibration_start_calibration_run(CalibrationCtx *ctx, CalibrationType type
     return MCU_SendUint8Parameter(ParamRunCalibration, type) == MsgWriteAck;
 }
 
+
+bool calibration_total_charge_power(CalibrationCtx *ctx, float *val) {
+    ZapMessage msg = MCU_ReadParameter(ParamTotalChargePower);
+    if (msg.length == 4 && msg.identifier == ParamTotalChargePower) {
+        *val = GetFloat(msg.data);
+        return true;
+    }
+    return false;
+}
+
+bool calibration_set_standalone(CalibrationCtx *ctx, int standalone) {
+    return MCU_SendUint8Parameter(ParamIsStandalone, 1) == MsgWriteAck;
+}
+
+bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current) {
+    return MCU_SendFloatParameter(ParamSimplifiedModeMaxCurrent, 32.0) == MsgWriteAck;
+}
+
+bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock) {
+    return MCU_SendUint8Parameter(LockCableWhenConnected, 0) == MsgWriteAck;
+}
+
+bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
+    if (!MCU_GetMidStoredCalibrationId(id)) {
+        return false;
+    }
+    return true;
+}
 

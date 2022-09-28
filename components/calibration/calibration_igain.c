@@ -65,7 +65,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 if (calibration_ref_current_is_recent(ctx)) {
                     for (int phase = 0; phase < 3; phase++) {
                         double averageMeasurement = calibration_scale_emeter(ctx->State, avg[phase]);
-                        double gain = ctx->I[phase] / averageMeasurement;
+                        double gain = ctx->Ref.I[phase] / averageMeasurement;
                         ctx->Params.CurrentGain[phase] = gain;
 
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);

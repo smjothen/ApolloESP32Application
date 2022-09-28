@@ -31,14 +31,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#define SERVER_PORT 3333
-#define SERVER_IP "232.10.11.12"
-
 static const char *TAG = "CALIBRATION    ";
-
-void calibration_check_timeout(CalibrationCtx *ctx);
-int calibration_send_state(CalibrationCtx *ctx);
-void calibration_update_charger_state(CalibrationCtx *ctx);
 
 bool calibration_tick_calibrate(CalibrationCtx *ctx) {
     ChargerState state = ctx->CState;
@@ -65,33 +58,14 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 }
 
 void calibration_tick_starting_init(CalibrationCtx *ctx) {
-    MessageType ret;
+    uint32_t calId = 0;
 
-    if ((ret = MCU_SendUint8Parameter(ParamIsStandalone, 1)) != MsgWriteAck) {
-        ESP_LOGE(TAG, "Couldn't set standalone mode!");
-        return;
-    }
+    if (!calibration_set_standalone(ctx, 1)) { ESP_LOGE(TAG, "Setting standalone failed!"); return; }
+    if (!calibration_set_simplified_max_current(ctx, 1)) { ESP_LOGE(TAG, "Setting simplified max current failed!"); return; }
+    if (!calibration_set_lock_cable(ctx, 0)) { ESP_LOGE(TAG, "Setting disable cable lock failed!"); return; }
+    if (!calibration_get_calibration_id(ctx, &calId) || calId != 0) { ESP_LOGE(TAG, "Getting calibration ID failed or non-zero (%d)!", calId); return; }
 
-    if ((ret = MCU_SendFloatParameter(ParamSimplifiedModeMaxCurrent, 32.0)) != MsgWriteAck) {
-        ESP_LOGE(TAG, "Couldn't set simplified mode max current!");
-        return;
-    }
-
-    if ((ret = MCU_SendUint8Parameter(LockCableWhenConnected, 0)) != MsgWriteAck) {
-        ESP_LOGE(TAG, "Couldn't disable cable lock!");
-        return;
-    }
-
-    if (!MCU_GetMidStoredCalibrationId(&ctx->CalibrationId)) {
-        ESP_LOGE(TAG, "Couldn't read calibration ID!");
-        return;
-    }
-
-    if (ctx->CalibrationId != 0) {
-        ESP_LOGE(TAG, "Reading calibration ID, expected 0 but got %d!", ctx->CalibrationId);
-        return;
-    }
-
+    ctx->Params.CalibrationId = calId;
     ctx->InitState = true;
     ctx->InitTick = xTaskGetTickCount();
 }
@@ -112,7 +86,7 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
                     COMPLETE();
                 } else {
                     calibration_open_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to open (MODE: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to open (Mode: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
                 }
 
             }
@@ -149,7 +123,6 @@ void calibration_tick_close_relays_init(CalibrationCtx *ctx) {
 
     ctx->InitTick = xTaskGetTickCount();
     ctx->InitState = true;
-
 }
 
 bool calibration_tick_close_relays(CalibrationCtx *ctx) {
@@ -165,7 +138,7 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
                     COMPLETE();
                 } else {
                     calibration_close_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to close (MODE: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to close (Mode: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
                 }
 
             }
@@ -180,19 +153,6 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
     return ctx->CState != state;
 }
 
-int calibration_phases_within(float *phases, float nominal, float range) {
-    float min = nominal * (1.0 - range);
-    float max = nominal * (1.0 + range);
-
-    int count = 0;
-    if (phases[0] >= min && phases[0] <= max) count++;
-    if (phases[1] >= min && phases[1] <= max) count++;
-    if (phases[2] >= min && phases[2] <= max) count++;
-
-    return count;
-}
-
-
 bool calibration_tick_warming_up(CalibrationCtx *ctx) {
     ChargerState state = ctx->CState;
 
@@ -206,12 +166,10 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 break;
             }
 
-            if (pdTICKS_TO_MS(xTaskGetTickCount() - ctx->LastITick) > 2000) {
+            if (pdTICKS_TO_MS(xTaskGetTickCount() - ctx->Ref.LastITick) > 2000) {
                 // Ignore stale reference broadcasts... wait for more recent
                 break;
             }
-
-            //ESP_LOGI(TAG, "V: %f %f %f I: %f %f %f", voltage[0], voltage[1], voltage[2], current[0], current[1], current[2]);
 
             float expectedCurrent = 5.0;
             float expectedVoltage = 230.0;
@@ -269,9 +227,36 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
     ChargerState state = ctx->CState;
 
     switch (ctx->CState) {
-        case InProgress:
-            COMPLETE();
+        case InProgress: {
+
+            float totalPower;
+            if (calibration_total_charge_power(ctx, &totalPower)) {
+
+#ifdef CALIBRATION_SIMULATE
+                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
+                totalPower = 25.0f;
+#endif
+
+                if (totalPower <= 50.0f) {
+                    if (!ctx->StabilizationTick) {
+                        ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
+                    }
+
+                    if (xTaskGetTickCount() > ctx->StabilizationTick) {
+                        COMPLETE();
+                    } else {
+                        ESP_LOGI(TAG, "%s: Waiting for temperatures to even out ...", calibration_state_to_string(ctx->State));
+                    }
+                } else {
+                    ESP_LOGE(TAG, "%s: Total charge power too high %.1fW > 50W!", calibration_state_to_string(ctx->State), totalPower);
+                    ctx->StabilizationTick = 0;
+                }
+            } else {
+                ESP_LOGE(TAG, "%s: Sending total charge power failed!", calibration_state_to_string(ctx->State));
+            }
+
             break;
+        }
         case Complete:
             break;
         case Failed:
@@ -351,7 +336,10 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
-            COMPLETE();
+            if (calibration_open_relays(ctx)) {
+                COMPLETE();
+            }
+
             break;
         case Complete:
             break;
@@ -360,6 +348,51 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
     }
 
     return ctx->CState != state;
+}
+
+void calibration_update_charger_state(CalibrationCtx *ctx) {
+    enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
+    if (mode != ctx->Mode) {
+        /* ESP_LOGI(TAG, "%s: Operation mode changed (%d -> %d) ...", calibration_state_to_string(ctx->State), ctx->Mode, mode); */
+        ctx->Mode = mode;
+    }
+}
+
+int calibration_send_state(CalibrationCtx *ctx) {
+    char buf[128];
+
+    struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
+
+    ChargerStateUdpMessage reply = ChargerStateUdpMessage_init_zero;
+    reply.Serial = devInfo.serialNumber;
+    reply.State = ctx->CState;
+    reply.StateAck = ctx->State;
+    reply.SequenceAck = ctx->Seq;
+    reply.RunAck = ctx->Run;
+
+    // TODO: Init reply.Init?
+    pb_ostream_t strm = pb_ostream_from_buffer((uint8_t *)buf, sizeof (buf));
+
+    if (!pb_encode(&strm, ChargerStateUdpMessage_fields, &reply)) {
+        ESP_LOGE(TAG, "Encoding charger state message failed: %s", PB_GET_ERROR(&strm));
+        return 0;
+    }
+
+    int err = sendto(ctx->Server.Socket, buf, strm.bytes_written, 0, (struct sockaddr *)&ctx->Server.ServAddr, sizeof (ctx->Server.ServAddr));
+    if (err < 0) {
+        ESP_LOGE(TAG, "Sending charger state failed: %d", errno);
+        return 0;
+    }
+
+
+    /* ESP_LOGI(TAG, */
+    /*         "State { %d, %s, %s, %s }", */
+    /*         reply.SequenceAck, */
+    /*         calibration_state_to_string(ctx->State), */
+    /*         calibration_step_to_string(ctx->CStep), */
+    /*         charger_state_to_string(ctx->CState)); */
+
+    return ctx->Seq++;
 }
 
 void calibration_handle_tick(CalibrationCtx *ctx) {
@@ -432,80 +465,24 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
     if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterVoltage_tag) {
         CalibrationUdpMessage_DataMessage_PhaseSnapshot phases = msg->message_type.ReferenceMeterVoltage;
         /* ESP_LOGI(TAG, "RefMeterVoltage { %f, %f, %f }", phases.L1, phases.L2, phases.L3); */
-        ctx->V[0] = phases.L1;
-        ctx->V[1] = phases.L2;
-        ctx->V[2] = phases.L3;
-        ctx->LastVTick = xTaskGetTickCount();
+        ctx->Ref.V[0] = phases.L1;
+        ctx->Ref.V[1] = phases.L2;
+        ctx->Ref.V[2] = phases.L3;
+        ctx->Ref.LastVTick = xTaskGetTickCount();
     } else if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterCurrent_tag) {
         CalibrationUdpMessage_DataMessage_PhaseSnapshot phases = msg->message_type.ReferenceMeterCurrent;
         /* ESP_LOGI(TAG, "RefMeterCurrent { %f, %f, %f }", phases.L1, phases.L2, phases.L3); */
-        ctx->I[0] = phases.L1;
-        ctx->I[1] = phases.L2;
-        ctx->I[2] = phases.L3;
-        ctx->LastITick = xTaskGetTickCount();
+        ctx->Ref.I[0] = phases.L1;
+        ctx->Ref.I[1] = phases.L2;
+        ctx->Ref.I[2] = phases.L3;
+        ctx->Ref.LastITick = xTaskGetTickCount();
     } else if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterEnergy_tag) {
         CalibrationUdpMessage_DataMessage_EnergySnapshot energy = msg->message_type.ReferenceMeterEnergy;
         /* ESP_LOGI(TAG, "RefMeterEnergy { %f }", energy.WattHours); */
-        ctx->E = energy.WattHours;
-        ctx->LastETick = xTaskGetTickCount();
+        ctx->Ref.E = energy.WattHours;
+        ctx->Ref.LastETick = xTaskGetTickCount();
     } else {
         ESP_LOGE(TAG, "Unknown CalibrationUdpMessage.Data type!");
-    }
-}
-
-int calibration_send_state(CalibrationCtx *ctx) {
-    char buf[128];
-
-    struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-
-    ChargerStateUdpMessage reply = ChargerStateUdpMessage_init_zero;
-    reply.Serial = devInfo.serialNumber;
-    reply.State = ctx->CState;
-    reply.StateAck = ctx->State;
-    reply.SequenceAck = ctx->Seq;
-    reply.RunAck = ctx->Run;
-
-    // TODO: Init reply.Init?
-    pb_ostream_t strm = pb_ostream_from_buffer((uint8_t *)buf, sizeof (buf));
-
-    if (!pb_encode(&strm, ChargerStateUdpMessage_fields, &reply)) {
-        ESP_LOGE(TAG, "Encoding charger state message failed: %s", PB_GET_ERROR(&strm));
-        return 0;
-    }
-
-    int err = sendto(ctx->Server.Socket, buf, strm.bytes_written, 0, (struct sockaddr *)&ctx->Server.ServAddr, sizeof (ctx->Server.ServAddr));
-    if (err < 0) {
-        ESP_LOGE(TAG, "Sending charger state failed: %d", errno);
-        return 0;
-    }
-
-
-    /* ESP_LOGI(TAG, */
-    /*         "State { %d, %s, %s, %s }", */
-    /*         reply.SequenceAck, */
-    /*         calibration_state_to_string(ctx->State), */
-    /*         calibration_step_to_string(ctx->CStep), */
-    /*         charger_state_to_string(ctx->CState)); */
-
-    return ctx->Seq++;
-}
-
-void calibration_update_charger_state(CalibrationCtx *ctx) {
-    enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
-    if (mode != ctx->Mode) {
-        ESP_LOGI(TAG, "%s: Operation mode changed (%d -> %d) ...", calibration_state_to_string(ctx->State), ctx->Mode, mode);
-        ctx->Mode = mode;
-    }
-}
-
-void calibration_check_timeout(CalibrationCtx *ctx) {
-    TickType_t curTick = xTaskGetTickCount();
-
-    if (pdTICKS_TO_MS(curTick - ctx->StateTick) > STATE_TIMEOUT) {
-        calibration_send_state(ctx);
-        calibration_update_charger_state(ctx);
-
-        ctx->StateTick = curTick;
     }
 }
 
