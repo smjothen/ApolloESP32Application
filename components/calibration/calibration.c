@@ -67,7 +67,6 @@ void calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     ctx->Params.CalibrationId = calId;
     ctx->InitState = true;
-    ctx->InitTick = xTaskGetTickCount();
 }
 
 bool calibration_tick_starting(CalibrationCtx *ctx) {
@@ -121,7 +120,6 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 void calibration_tick_close_relays_init(CalibrationCtx *ctx) {
     calibration_close_relays(ctx);
 
-    ctx->InitTick = xTaskGetTickCount();
     ctx->InitState = true;
 }
 
@@ -166,7 +164,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 break;
             }
 
-            if (pdTICKS_TO_MS(xTaskGetTickCount() - ctx->Ref.LastITick) > 2000) {
+            if (pdTICKS_TO_MS(xTaskGetTickCount() - ctx->Ticks[CURRENT_TICK]) > 2000) {
                 // Ignore stale reference broadcasts... wait for more recent
                 break;
             }
@@ -194,10 +192,10 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
              && calibration_phases_within(voltage, expectedVoltage, allowedVoltage) == 3) {
 
-                if (ctx->WarmupTick == 0) {
-                    ctx->WarmupTick = xTaskGetTickCount();
+                if (ctx->Ticks[WARMUP_TICK] == 0) {
+                    ctx->Ticks[WARMUP_TICK] = xTaskGetTickCount();
                 } else {
-                    if (xTaskGetTickCount() - ctx->WarmupTick > minimumDuration) {
+                    if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > minimumDuration) {
                         COMPLETE();
                         break;
                     } else {
@@ -206,7 +204,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 }
 
             } else {
-                ctx->WarmupTick = 0;
+                ctx->Ticks[WARMUP_TICK] = 0;
 
                 ESP_LOGI(TAG, "%s: Waiting to be in range (%.1fA +/- %.1f%% range, I %.1fA %.1fA %.1fA) ...",
                         calibration_state_to_string(ctx->State), expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
@@ -232,24 +230,24 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
             float totalPower;
             if (calibration_total_charge_power(ctx, &totalPower)) {
 
-#ifdef CALIBRATION_SIMULATE
+#ifdef CALIBRATION_SIMULATION
                 ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
                 totalPower = 25.0f;
 #endif
 
                 if (totalPower <= 50.0f) {
-                    if (!ctx->StabilizationTick) {
-                        ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
+                    if (!ctx->Ticks[STABILIZATION_TICK]) {
+                        ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
                     }
 
-                    if (xTaskGetTickCount() > ctx->StabilizationTick) {
+                    if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
                         COMPLETE();
                     } else {
                         ESP_LOGI(TAG, "%s: Waiting for temperatures to even out ...", calibration_state_to_string(ctx->State));
                     }
                 } else {
+                    ctx->Ticks[STABILIZATION_TICK] = 0;
                     ESP_LOGE(TAG, "%s: Total charge power too high %.1fW > 50W!", calibration_state_to_string(ctx->State), totalPower);
-                    ctx->StabilizationTick = 0;
                 }
             } else {
                 ESP_LOGE(TAG, "%s: Sending total charge power failed!", calibration_state_to_string(ctx->State));
@@ -398,14 +396,14 @@ int calibration_send_state(CalibrationCtx *ctx) {
 void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
 
-    if (pdTICKS_TO_MS(curTick - ctx->StateTick) > STATE_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > STATE_TIMEOUT) {
         calibration_send_state(ctx);
         calibration_update_charger_state(ctx);
 
-        ctx->StateTick = curTick;
+        ctx->Ticks[STATE_TICK] = curTick;
     }
 
-    if (pdTICKS_TO_MS(curTick - ctx->LastTick) < TICK_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < TICK_TIMEOUT) {
         return;
     }
 
@@ -454,7 +452,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), charger_state_to_string(ctx->CState));
     }
 
-    ctx->LastTick = xTaskGetTickCount();
+    ctx->Ticks[TICK] = xTaskGetTickCount();
 }
 
 void calibration_handle_ack(CalibrationCtx *ctx, CalibrationUdpMessage_ChargerAck *msg) {
@@ -468,19 +466,19 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
         ctx->Ref.V[0] = phases.L1;
         ctx->Ref.V[1] = phases.L2;
         ctx->Ref.V[2] = phases.L3;
-        ctx->Ref.LastVTick = xTaskGetTickCount();
+        ctx->Ticks[VOLTAGE_TICK] = xTaskGetTickCount();
     } else if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterCurrent_tag) {
         CalibrationUdpMessage_DataMessage_PhaseSnapshot phases = msg->message_type.ReferenceMeterCurrent;
         /* ESP_LOGI(TAG, "RefMeterCurrent { %f, %f, %f }", phases.L1, phases.L2, phases.L3); */
         ctx->Ref.I[0] = phases.L1;
         ctx->Ref.I[1] = phases.L2;
         ctx->Ref.I[2] = phases.L3;
-        ctx->Ref.LastITick = xTaskGetTickCount();
+        ctx->Ticks[CURRENT_TICK] = xTaskGetTickCount();
     } else if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterEnergy_tag) {
         CalibrationUdpMessage_DataMessage_EnergySnapshot energy = msg->message_type.ReferenceMeterEnergy;
         /* ESP_LOGI(TAG, "RefMeterEnergy { %f }", energy.WattHours); */
         ctx->Ref.E = energy.WattHours;
-        ctx->Ref.LastETick = xTaskGetTickCount();
+        ctx->Ticks[ENERGY_TICK] = xTaskGetTickCount();
     } else {
         ESP_LOGE(TAG, "Unknown CalibrationUdpMessage.Data type!");
     }
@@ -663,7 +661,7 @@ void calibration_task(void *pvParameters) {
 
         ctx.Server = serv;
         ctx.HaveServer = false;
-        ctx.StateTick = xTaskGetTickCount();
+        ctx.Ticks[STATE_TICK] = xTaskGetTickCount();
         ctx.Mode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 
         struct sockaddr_in sdestv4 = {
@@ -737,6 +735,7 @@ void calibration_task(void *pvParameters) {
 
                     if (msg.has_State) {
                         calibration_handle_state(&ctx, &msg.State);
+                        ctx.LastSeq = msg.State.Sequence;
                     }
 
                     // Enabled use of malloc in nanopb, so free any dynamically allocated fields...

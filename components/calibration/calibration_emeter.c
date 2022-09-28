@@ -16,6 +16,7 @@
 #include <lwip/netdb.h>
 
 #include "protocol_task.h"
+#include "calibration.h"
 #include "calibration_emeter.h"
 
 static const char *TAG = "EMETER         ";
@@ -53,6 +54,18 @@ bool emeter_write_float(uint8_t reg, double value, int radix) {
 }
 
 bool emeter_read(uint8_t reg, uint32_t *val) {
+#ifdef CALIBRATION_SIMULATION
+
+	if (reg >= V1_OFFS && reg <= V3_OFFS) {
+		*val = floatToSn(0.000187, 23);
+	} else if (reg >= V1_GAIN && reg <= V3_GAIN) {
+		*val = floatToSn(0.000187, 23);
+	}
+
+	return true;
+
+#endif
+
 	ZapMessage msg = MCU_SendUint8WithReply(ParamCalibrationReadParameter, reg);
 	if (msg.identifier != ParamCalibrationReadParameter || msg.type != MsgWriteAck || msg.length != 4) {
 		return false;

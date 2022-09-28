@@ -24,7 +24,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
     switch (ctx->CStep) {
         case InitRelays:
-            if (!ctx->StabilizationTick) {
+            if (!ctx->Ticks[STABILIZATION_TICK]) {
                 if (!calibration_close_relays(ctx)) {
                     break;
                 }
@@ -45,13 +45,13 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
             ESP_LOGI(TAG, "%s: VOFFS HPF started", calibration_state_to_string(ctx->State));
 
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(7000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(7000);
             STEP(Stabilization);
 
             break;
         case Stabilization:
 
-            if (xTaskGetTickCount() > ctx->StabilizationTick) {
+            if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
                 ESP_LOGI(TAG, "%s: VOFFS HPF done", calibration_state_to_string(ctx->State));
 
                 if (!emeter_write(HPF_COEF_V, 0)) {
@@ -64,11 +64,11 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
             break;
         case InitCalibration:
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(2000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(2000);
             STEP(Calibrating);
             break;
         case Calibrating: {
-            if (xTaskGetTickCount() < ctx->StabilizationTick) {
+            if (xTaskGetTickCount() < ctx->Ticks[STABILIZATION_TICK]) {
                 break;
             }
 

@@ -24,7 +24,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
     switch (ctx->CStep) {
         case InitRelays:
-            if (!ctx->StabilizationTick) {
+            if (!ctx->Ticks[STABILIZATION_TICK]) {
 
                 if (!calibration_close_relays(ctx)) {
                     break;
@@ -40,13 +40,13 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
             STEP(Stabilization);
 
             break;
         case Stabilization:
 
-            if (xTaskGetTickCount() > ctx->StabilizationTick) {
+            if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
                 STEP(InitCalibration);
             }
 
@@ -68,7 +68,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                         double gain = ctx->Ref.I[phase] / averageMeasurement;
                         ctx->Params.CurrentGain[phase] = gain;
 
-                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = %f Ref / %f Avg", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.I[phase], averageMeasurement);
                     }
                 } else {
                     ESP_LOGI(TAG, "%s: Waiting for recent reference current", calibration_state_to_string(ctx->State));

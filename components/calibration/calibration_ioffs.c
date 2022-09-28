@@ -33,7 +33,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
 
     switch (ctx->CStep) {
         case InitRelays:
-            if (!ctx->StabilizationTick) {
+            if (!ctx->Ticks[STABILIZATION_TICK]) {
 
                 if (!calibration_open_relays(ctx)) {
                     break;
@@ -60,13 +60,13 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(0);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(0);
             STEP(Stabilization);
 
             break;
         case Stabilization:
 
-            if (xTaskGetTickCount() > ctx->StabilizationTick) {
+            if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
                 STEP(InitCalibration);
             }
 

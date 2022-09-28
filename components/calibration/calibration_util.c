@@ -44,15 +44,15 @@ const char *charger_state_to_string(ChargerState state) {
 }
 
 bool calibration_ref_voltage_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->Ref.LastVTick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ticks[VOLTAGE_TICK] < pdMS_TO_TICKS(500);
 }
 
 bool calibration_ref_current_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->Ref.LastITick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ticks[CURRENT_TICK] < pdMS_TO_TICKS(500);
 }
 
 bool calibration_ref_energy_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->Ref.LastETick < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ticks[ENERGY_TICK] < pdMS_TO_TICKS(500);
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
@@ -99,15 +99,33 @@ double calibration_inv_scale_emeter(CalibrationState state, float raw) {
     return 0.0;
 }
 
-bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *ivals, float *vvals) {
+static void calibration_set_sim_vals(float *iv, float *vv, float i, float v) {
+    for (int phase = 0; phase < 3; phase++) {
+        iv[phase] = i;
+        vv[phase] = v;
+    }
+}
+
+bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *iv, float *vv) {
     MessageType ret;
+
+#ifdef CALIBRATION_SIMULATION
+
+    switch(ctx->State) {
+        case WarmingUp: calibration_set_sim_vals(iv, vv, 0.5, 230.0); break;
+        default:        calibration_set_sim_vals(iv, vv, 5.0, 230.0); break;
+    }
+
+    return true;
+
+#endif
 
     if ((ret = MCU_SendCommandId(CommandCurrentSnapshot)) != MsgCommandAck) {
         ESP_LOGE(TAG, "Couldn't send current snapshot command!");
         return false;
     }
 
-    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, ivals)) {
+    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, iv)) {
         ESP_LOGE(TAG, "Couldn't get current snapshot!");
         return false;
     }
@@ -117,7 +135,7 @@ bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float
         return false;
     }
 
-    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, vvals)) {
+    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, source, vv)) {
         ESP_LOGE(TAG, "Couldn't get voltage snapshot!");
         return false;
     }
@@ -136,7 +154,7 @@ uint16_t calibration_read_samples(void) {
 bool calibration_read_average(CalibrationCtx *ctx, int phase, float *average) {
     (void)ctx;
 
-#ifdef CALIBRATION_SIMULATE_EMETER
+#ifdef CALIBRATION_SIMULATION
 
     switch(ctx->State) {
         case CalibrateCurrentGain  : *average = 5.001234 / emeter_get_fsi(); break;

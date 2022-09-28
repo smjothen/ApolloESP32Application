@@ -24,7 +24,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
     switch (ctx->CStep) {
         case InitRelays:
-            if (!ctx->StabilizationTick) {
+            if (!ctx->Ticks[STABILIZATION_TICK]) {
                 if (!calibration_close_relays(ctx)) {
                     break;
                 }
@@ -34,13 +34,13 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->StabilizationTick = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
             STEP(Stabilization);
 
             break;
         case Stabilization:
 
-            if (xTaskGetTickCount() > ctx->StabilizationTick) {
+            if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
                 STEP(InitCalibration);
             }
 
@@ -50,6 +50,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
             if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_VOLTAGE_GAIN)) {
                 STEP(Calibrating);
             }
+
             break;
         }
         case Calibrating: {

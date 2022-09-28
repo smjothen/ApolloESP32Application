@@ -11,6 +11,7 @@
 #include <lwip/netdb.h>
 
 #define CALIBRATION_KEY "GoTestBenchChangeMe!"
+#define CALIBRATION_SIMULATION
 
 #define SERVER_PORT 3333
 #define SERVER_IP "232.10.11.12"
@@ -18,7 +19,6 @@
 #define EXPECTED_SAMPLES_GAIN 17
 #define EXPECTED_SAMPLES_OFFSET 100
 
-// Milliseconds..
 #define STATE_TIMEOUT 1000 
 #define TICK_TIMEOUT 1000
 
@@ -93,7 +93,7 @@ typedef struct {
     struct sockaddr_in ServAddr;
 } CalibrationServer;
 
-typedef enum {
+enum {
     HPF_COEF_I = 0x6F, // S.23 (NV), Current input HPF coefficient. Positive values only
     HPF_COEF_V = 0x70, // S.23 (NV), Voltage input HPF coefficient. Positive values only
     V1_OFFS = 0x75, // S.23 (NV), Voltage Offset Calibration
@@ -111,7 +111,7 @@ typedef enum {
     IARMS_OFF = 0x81, // S.23 (NV), RMS Current dynamic offset adjust. Positive values only.
     IBRMS_OFF = 0x82, // S.23 (NV), RMS Current dynamic offset adjust. Positive values only.
     ICRMS_OFF = 0x83, // S.23 (NV), RMS Current dynamic offset adjust. Positive values only.
-} EMRegister;
+};
 
 typedef struct {
     uint32_t CalibrationId;
@@ -127,34 +127,36 @@ typedef struct {
     float I[3];
     float V[3];
     float E;
-    TickType_t LastITick;
-    TickType_t LastVTick;
-    TickType_t LastETick;
 } CalibrationReference;
+
+typedef enum {
+    TICK = 0,
+    STATE_TICK,
+    CURRENT_TICK,
+    VOLTAGE_TICK,
+    ENERGY_TICK,
+    WARMUP_TICK,
+    STABILIZATION_TICK,
+    LAST_TICK,
+} CalibrationTickType;
 
 typedef struct {
     int Run;
     int Seq;
     int LastSeq;
-    TickType_t LastTick;
-
     int HaveServer;
     CalibrationServer Server;
 
     bool InitState;
-    TickType_t InitTick;
-    TickType_t StateTick;
     CalibrationState State;
 
     CalibrationStep CStep;
     ChargerState CState;
 
     enum ChargerOperatingMode Mode;
-
-    TickType_t WarmupTick;
     uint32_t WarmupOptions;
 
-    TickType_t StabilizationTick;
+    TickType_t Ticks[LAST_TICK];
 
     CalibrationReference Ref;
     CalibrationParameters Params;
