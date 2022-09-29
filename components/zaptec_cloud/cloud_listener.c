@@ -2290,6 +2290,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"SS") != NULL)
 				{
+					if (strstr(commandString,"SSID")) {
+						// Probably SetNewWifi should handle this..
+						return responseStatus;
+					}
 					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
 
 					//Remove end of string formatting
