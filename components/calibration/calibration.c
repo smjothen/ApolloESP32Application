@@ -229,12 +229,6 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
 
             float totalPower;
             if (calibration_total_charge_power(ctx, &totalPower)) {
-
-#ifdef CALIBRATION_SIMULATION
-                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
-                totalPower = 25.0f;
-#endif
-
                 if (totalPower <= 50.0f) {
                     if (!ctx->Ticks[STABILIZATION_TICK]) {
                         ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);

@@ -252,6 +252,13 @@ bool calibration_start_calibration_run(CalibrationType type) {
 }
 
 bool calibration_total_charge_power(CalibrationCtx *ctx, float *val) {
+
+#ifdef CALIBRATION_SIMULATION
+                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
+                *val = 25.0f;
+                return true;
+#endif
+
     ZapMessage msg = MCU_ReadParameter(ParamTotalChargePower);
     if (msg.length == 4 && msg.identifier == ParamTotalChargePower) {
         *val = GetFloat(msg.data);

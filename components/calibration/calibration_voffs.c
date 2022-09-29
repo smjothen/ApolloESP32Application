@@ -1,6 +1,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <stdbool.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -19,9 +20,10 @@ static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
-    CalibrationType type = CALIBRATION_TYPE_VOLTAGE_OFFSET;
-    CalibrationType extra_type = CALIBRATION_TYPE_VOLTAGE_GAIN;
-    CalibrationUnit unit = UnitVoltage;
+    /* CalibrationType type = CALIBRATION_TYPE_VOLTAGE_OFFSET; */
+    /* CalibrationType extra_type = CALIBRATION_TYPE_VOLTAGE_GAIN; */
+    /* CalibrationUnit unit = UnitVoltage; */
+    float max_error = CALIBRATION_VOFF_MAX_ERROR;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -90,82 +92,37 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
                 ctx->Params.VoltageOffset[phase] = offset;
             }
 
-            if (calibration_start_calibration_run(type)) {
-                ctx->VerificationCount = 0;
-                //STEP(Verify);
-                STEP(CalibrationDone);
-            }
-
+            STEP(Verify);
             break;
         }
-
-        case Verify:
-            break;
-        case VerifyRMS:
-            break;
-
-        /*
         case Verify: {
-            float avg[3];
+            // Just simple verification that offset is reasonable
+            for (int phase = 0; phase < 3; phase++) {
+                uint32_t rawOffset;
 
-            if (calibration_get_emeter_averages(type, avg)) {
-                float max_error = CALIBRATION_VOFF_MAX_ERROR - 230.0;
-
-                for (int phase = 0; phase < 3; phase++) {
-                    float average = calibration_scale_emeter(unit, avg[phase]);
-                    if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: Verification pass L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                    } else {
-                        ESP_LOGE(TAG, "%s: Verification fail L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        FAILED();
-                        return false;
-                    }
+                if (!emeter_read(V1_OFFS + phase, &rawOffset)) {
+                    ESP_LOGE(TAG, "%s: VOFFS(%d) read failed!", calibration_state_to_string(ctx->State), phase);
+                    return false;
                 }
 
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
+                float offset = snToFloat(rawOffset, 23);
 
-                    if (calibration_start_calibration_run(extra_type)) {
-                        STEP(VerifyRMS);
-                    }
+                if (fabsf(offset) < max_error) {
+                    ESP_LOGI(TAG, "%s: VOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, fabsf(offset), max_error);
                 } else {
-                    calibration_start_calibration_run(type);
+                    ESP_LOGE(TAG, "%s: VOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, fabsf(offset), max_error);
+                    FAILED();
+                    return false;
                 }
             }
-
+ 
+            STEP(CalibrationDone);
             break;
         }
- 
-        case VerifyRMS: {
-            float avg[3];
-
-            // Verify RMS gain as well
-            if (calibration_get_emeter_averages(extra_type, avg)) {
-                float max_error = CALIBRATION_VOFF_MAX_RMS;
-
-                for (int phase = 0; phase < 3; phase++) {
-                    float average = calibration_scale_emeter(unit, avg[phase]);
-                    if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: Verification pass L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                    } else {
-                        ESP_LOGE(TAG, "%s: Verification fail L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        FAILED();
-                        return false;
-                    }
-                }
-
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
-                    STEP(CalibrationDone);
-                } else {
-                    calibration_start_calibration_run(extra_type);
-                }
-            }
-
+        case VerifyRMS:
+            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx->State));
+            FAILED();
             break;
-        }
-        */
- 
         case CalibrationDone:
             // Reset
             STEP(InitRelays);

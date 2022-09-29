@@ -127,6 +127,8 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
         }
         case VerifyRMS:
             // No RMS verification for gains
+            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx->State));
+            FAILED();
             break;
         case CalibrationDone:
             // Reset
