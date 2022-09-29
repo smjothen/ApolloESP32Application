@@ -79,7 +79,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
                 uint32_t rawOffset;
 
                 if (!emeter_read(V1_OFFS + phase, &rawOffset)) {
-                    ESP_LOGE(TAG, "Writing VOFFS(%d) failed!", phase);
+                    ESP_LOGE(TAG, "VOFFS(%d) write failed!", phase);
                     return false;
                 }
 

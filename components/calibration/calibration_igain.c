@@ -1,4 +1,5 @@
 #include <string.h>
+#include <math.h>
 #include <sys/param.h>
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
@@ -21,6 +22,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
     CalibrationType type = CALIBRATION_TYPE_CURRENT_GAIN;
     CalibrationUnit unit = UnitCurrent;
+    float max_error = CALIBRATION_IGAIN_MAX_ERROR;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -66,14 +68,20 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
             if (calibration_get_emeter_averages(type, avg)) {
                 if (calibration_ref_current_is_recent(ctx)) {
                     for (int phase = 0; phase < 3; phase++) {
-                        double averageMeasurement = calibration_scale_emeter(unit, avg[phase]);
-                        double gain = ctx->Ref.I[phase] / averageMeasurement;
+                        double average = calibration_scale_emeter(unit, avg[phase]);
+                        double gain = ctx->Ref.I[phase] / average;
+
                         ctx->Params.CurrentGain[phase] = gain;
 
-                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = %f Ref / %f Avg", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.I[phase], averageMeasurement);
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = (%f / %f)", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.I[phase], average);
+
+                        if (!emeter_write_float(I1_GAIN + phase, gain, 21)) {
+                            ESP_LOGE(TAG, "%s: IGAIN(%d) write failed!", calibration_state_to_string(ctx->State), phase);
+                            return false;
+                        }
                     }
                 } else {
-                    ESP_LOGI(TAG, "%s: Waiting for recent reference current", calibration_state_to_string(ctx->State));
+                    ESP_LOGI(TAG, "%s: IGAIN current reference too old. Waiting ...", calibration_state_to_string(ctx->State));
                     break;
                 }
 
@@ -84,11 +92,44 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
             break;
         }
-        case Verify:
-            STEP(VerifyRMS);
+        case Verify: {
+
+            float avg[3];
+
+            if (calibration_get_emeter_averages(type, avg)) {
+                for (int phase = 0; phase < 3; phase++) {
+                    float average = calibration_scale_emeter(unit, avg[phase]);
+
+                    float reference;
+                    if (!calibration_get_ref_unit(ctx, unit, phase, &reference)) {
+                        ESP_LOGE(TAG, "%s: IGAIN reference current too old. Waiting ...", calibration_state_to_string(ctx->State));
+                        return false;
+                    }
+
+                    float error = fabsf(1.0f - (reference / average));
+
+                    if (error < max_error) {
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, error, max_error);
+                    } else {
+                        ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, error, max_error);
+                        FAILED();
+                        return false;
+                    }
+                }
+
+                if (++ctx->VerificationCount >= 5) {
+                    ctx->VerificationCount = 0;
+                    STEP(CalibrationDone);
+                } else {
+                    calibration_start_calibration_run(type);
+                }
+            }
+
             break;
+
+        }
         case VerifyRMS:
-            STEP(CalibrationDone);
+            // No RMS verification for gains
             break;
         case CalibrationDone:
             // Reset

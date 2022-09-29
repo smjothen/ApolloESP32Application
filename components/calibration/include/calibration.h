@@ -37,33 +37,33 @@
 #define STEP(s) (ctx->CStep = (s))
 
 #define FOREACH_CS(CS)                 \
-    CS(Starting, 1)                    \
-    CS(ContactCleaning, 14)            \
-    CS(WarmingUp, 2)                   \
-    CS(WarmupSteadyStateTemp, 3)       \
-    CS(CalibrateCurrentOffset, 4)      \
-    CS(CalibrateVoltageOffset, 5)      \
-    CS(CalibrateVoltageGain, 6)        \
-    CS(CalibrateCurrentGain, 7)        \
-    CS(VerificationStart, 8)           \
-    CS(VerificationRunning, 9)         \
-    CS(VerificationDone, 10)           \
+    CS(Starting,                    1) \
+    CS(WarmingUp,                   2) \
+    CS(WarmupSteadyStateTemp,       3) \
+    CS(CalibrateCurrentOffset,      4) \
+    CS(CalibrateVoltageOffset,      5) \
+    CS(CalibrateVoltageGain,        6) \
+    CS(CalibrateCurrentGain,        7) \
+    CS(VerificationStart,           8) \
+    CS(VerificationRunning,         9) \
+    CS(VerificationDone,           10) \
     CS(WriteCalibrationParameters, 11) \
-    CS(CloseRelays, 13)                \
-    CS(Done, 12)
+    CS(Done,                       12) \
+    CS(CloseRelays,                13) \
+    CS(ContactCleaning,            14)
 
 #define FOREACH_CHS(CHS) \
-    CHS(InProgress, 0)   \
-    CHS(Complete, 1)     \
-    CHS(Failed, 2)
+    CHS(InProgress, 0) \
+    CHS(Complete,   1) \
+    CHS(Failed,     2)
 
 #define FOREACH_CLS(CLS)    \
-    CLS(InitRelays, 0)      \
-    CLS(Stabilization, 1)   \
+    CLS(InitRelays,      0) \
+    CLS(Stabilization,   1) \
     CLS(InitCalibration, 2) \
-    CLS(Calibrating, 3)     \
-    CLS(Verify, 4)          \
-    CLS(VerifyRMS, 5)       \
+    CLS(Calibrating,     3) \
+    CLS(Verify,          4) \
+    CLS(VerifyRMS,       5) \
     CLS(CalibrationDone, 6)
 
 #define CS_ENUM(A, B) A = B,

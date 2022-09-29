@@ -1,5 +1,6 @@
 #include <string.h>
 #include <sys/param.h>
+#include <math.h>
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,6 +22,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
     CalibrationType type = CALIBRATION_TYPE_VOLTAGE_GAIN;
     CalibrationUnit unit = UnitVoltage;
+    float max_error = CALIBRATION_VGAIN_MAX_ERROR;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -67,29 +69,64 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                         double gain = ctx->Ref.V[phase] / averageMeasurement;
                         ctx->Params.VoltageGain[phase] = gain;
 
-                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %f", calibration_state_to_string(ctx->State), phase, gain);
+                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %f (%f / %f)", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.V[phase], averageMeasurement);
+
+                        if (!emeter_write_float(V1_GAIN + phase, gain, 21)) {
+                            ESP_LOGE(TAG, "%s: VGAIN(%d) write failed!", calibration_state_to_string(ctx->State), phase);
+                            return false;
+                        }
                     }
 
-                    
                 } else {
-                    ESP_LOGI(TAG, "%s: Waiting for recent reference voltage", calibration_state_to_string(ctx->State));
+                    ESP_LOGI(TAG, "%s: VGAIN voltage reference too old. Waiting ...", calibration_state_to_string(ctx->State));
                     break;
                 }
 
                 if (calibration_start_calibration_run(type)) {
+                    ctx->VerificationCount = 0;
                     STEP(Verify);
-
-                    // Need to set GAIN registers here for verification in future..
                 }
             }
 
             break;
         }
-        case Verify:
-            STEP(VerifyRMS);
+        case Verify: {
+
+            float avg[3];
+
+            if (calibration_get_emeter_averages(type, avg)) {
+                for (int phase = 0; phase < 3; phase++) {
+                    float average = calibration_scale_emeter(unit, avg[phase]);
+
+                    float reference;
+                    if (!calibration_get_ref_unit(ctx, unit, phase, &reference)) {
+                        ESP_LOGE(TAG, "%s: VGAIN reference voltage too old. Waiting ...", calibration_state_to_string(ctx->State));
+                        return false;
+                    }
+
+                    float error = fabsf(1.0f - (reference / average));
+
+                    if (error < max_error) {
+                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, error, max_error);
+                    } else {
+                        ESP_LOGE(TAG, "%s: VGAIN(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, error, max_error);
+                        FAILED();
+                        return false;
+                    }
+                }
+
+                if (++ctx->VerificationCount >= 5) {
+                    ctx->VerificationCount = 0;
+                    STEP(CalibrationDone);
+                } else {
+                    calibration_start_calibration_run(type);
+                }
+            }
+
             break;
+        }
         case VerifyRMS:
-            STEP(CalibrationDone);
+            // No RMS verification for gains
             break;
         case CalibrationDone:
             // Reset

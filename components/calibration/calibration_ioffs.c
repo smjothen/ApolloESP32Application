@@ -78,10 +78,15 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
 
             if (calibration_get_emeter_averages(type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
-                    float offset = avg[phase] / EMETER_SYS_GAIN;
+                    double offset = avg[phase] / EMETER_SYS_GAIN;
                     ctx->Params.CurrentOffset[phase] = offset;
 
-                    ESP_LOGI(TAG, "%s: IOFFS(%d) = %f %f", calibration_state_to_string(ctx->State), phase, avg[phase], calibration_scale_emeter(unit, offset));
+                    ESP_LOGI(TAG, "%s: IOFFS(%d) = %f (%f)", calibration_state_to_string(ctx->State), phase, avg[phase], calibration_scale_emeter(unit, offset));
+
+                    if (!emeter_write_float(I1_OFFS + phase, offset, 23)) {
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) write failed!", calibration_state_to_string(ctx->State), phase);
+                        return false;
+                    }
                 }
 
                 if (calibration_start_calibration_run(type)) {
@@ -102,9 +107,9 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
                     if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: Verification L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: Verification L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                         FAILED();
                         return false;
                     }
@@ -134,9 +139,9 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
                     if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: Verification L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: Verification L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                         FAILED();
                         return false;
                     }

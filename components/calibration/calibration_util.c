@@ -168,7 +168,7 @@ bool calibration_read_average(CalibrationType type, int phase, float *average) {
             break;
         default:
             voltage = 230.0012;
-            current = 5.001234;
+            current = 0.501234;
             break;
     }
 
