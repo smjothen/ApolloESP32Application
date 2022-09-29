@@ -396,18 +396,35 @@ int calibration_send_state(CalibrationCtx *ctx) {
 void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
 
-    if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > STATE_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
         calibration_send_state(ctx);
         calibration_update_charger_state(ctx);
 
         ctx->Ticks[STATE_TICK] = curTick;
     }
 
-    if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < TICK_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < CALIBRATION_TIMEOUT) {
         return;
     }
 
     bool updated = false;
+
+    //
+    // Order of steps from App:
+    //
+    // 1. Starting - ensure relays open, initialize MCU settings
+    // 2. CalibrateCurrentOffset - possibly not needed can just use HPF_COEF_I, but for verification?
+    // 3. CloseRelays - ensure relays closed
+    // 4. WarmingUp
+    // 5. WarmupSteadyStateTemp 
+    // 6. CalibrateVoltageOffset
+    // 7. CalibrateVoltageGain
+    // 8. CalibrateCurrentGain
+    // 9. WriteCalibrationParameters
+    // 10. VerificationStart
+    // 11. VerificationRunning
+    // 12. VerificationDone
+    //
 
     switch(ctx->State) {
         case Starting:
@@ -554,16 +571,16 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if) {
     inet_addr_from_ip4addr(&iaddr, &ip_info.ip);
 #endif // LISTEN_ALL_IF
     // Configure multicast address to listen to
-    err = inet_aton(SERVER_IP, &imreq.imr_multiaddr.s_addr);
+    err = inet_aton(CALIBRATION_SERVER_IP, &imreq.imr_multiaddr.s_addr);
     if (err != 1) {
-        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", SERVER_IP);
+        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", CALIBRATION_SERVER_IP);
         // Errors in the return value have to be negative
         err = -1;
         goto err;
     }
     ESP_LOGI(TAG, "Configured IPV4 Multicast address %s", inet_ntoa(imreq.imr_multiaddr.s_addr));
     if (!IP_MULTICAST(ntohl(imreq.imr_multiaddr.s_addr))) {
-        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", SERVER_IP);
+        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", CALIBRATION_SERVER_IP);
     }
 
     if (assign_source_if) {
@@ -601,7 +618,7 @@ static int create_multicast_ipv4_socket(void) {
 
     // Bind the socket to any address
     saddr.sin_family = PF_INET;
-    saddr.sin_port = htons(SERVER_PORT);
+    saddr.sin_port = htons(CALIBRATION_SERVER_PORT);
     saddr.sin_addr.s_addr = htonl(INADDR_ANY);
     err = bind(sock, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
     if (err < 0) {
@@ -611,12 +628,21 @@ static int create_multicast_ipv4_socket(void) {
 
 
     // Assign multicast TTL (set separately from normal interface TTL)
-    uint8_t ttl = 1;
+    uint8_t ttl = 2;
     setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(uint8_t));
     if (err < 0) {
         ESP_LOGE(TAG, "Failed to set IP_MULTICAST_TTL: %d", errno);
         goto err;
     }
+
+
+    /*
+    int broadcast = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
+        ESP_LOGE(TAG, "Failed to set SO_BROADCAST");
+        goto err;
+    }
+    */
 
     // this is also a listening socket, so add it to the multicast
     // group for listening...
@@ -642,9 +668,7 @@ void calibration_task(void *pvParameters) {
 
         ESP_LOGI(TAG, "Creating UDP socket ...");
 
-        int sock;
-
-        sock = create_multicast_ipv4_socket();
+        int sock = create_multicast_ipv4_socket();
         if (sock < 0) {
             ESP_LOGE(TAG, "Failed to create IPv4 multicast socket");
             vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -666,10 +690,10 @@ void calibration_task(void *pvParameters) {
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,
-            .sin_port = htons(SERVER_PORT),
+            .sin_port = htons(CALIBRATION_SERVER_PORT),
         };
 
-        inet_aton(SERVER_IP, &sdestv4.sin_addr.s_addr);
+        inet_aton(CALIBRATION_SERVER_IP, &sdestv4.sin_addr.s_addr);
 
         int err = 1;
         while (err > 0) {

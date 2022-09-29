@@ -19,6 +19,8 @@ static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
+    CalibrationType type = CALIBRATION_TYPE_CURRENT_GAIN;
+    CalibrationUnit unit = UnitCurrent;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -52,7 +54,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
             break;
         case InitCalibration: {
-            if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_CURRENT_GAIN)) {
+            if (calibration_start_calibration_run(type)) {
                 STEP(Calibrating);
             }
 
@@ -61,10 +63,10 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
         case Calibrating: {
             float avg[3];
 
-            if (calibration_get_emeter_averages(ctx, EXPECTED_SAMPLES_GAIN, avg)) {
+            if (calibration_get_emeter_averages(type, avg)) {
                 if (calibration_ref_current_is_recent(ctx)) {
                     for (int phase = 0; phase < 3; phase++) {
-                        double averageMeasurement = calibration_scale_emeter(ctx->State, avg[phase]);
+                        double averageMeasurement = calibration_scale_emeter(unit, avg[phase]);
                         double gain = ctx->Ref.I[phase] / averageMeasurement;
                         ctx->Params.CurrentGain[phase] = gain;
 
@@ -75,7 +77,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                     break;
                 }
 
-                if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_CURRENT_GAIN)) {
+                if (calibration_start_calibration_run(type)) {
                     STEP(Verify);
                 }
             }

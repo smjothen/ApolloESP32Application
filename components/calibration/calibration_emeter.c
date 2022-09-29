@@ -19,10 +19,7 @@
 #include "calibration.h"
 #include "calibration_emeter.h"
 
-static const char *TAG = "EMETER         ";
-
 double snToFloat(uint32_t data, uint16_t radix) {
-    
     // Copy 24 bit sign to 32 bit sign
     if(data & 0x800000) {
         return -((double) (0xFFFFFF + 1 - data) / (1UL << radix));

@@ -19,6 +19,9 @@ static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
+    CalibrationType type = CALIBRATION_TYPE_VOLTAGE_OFFSET;
+    CalibrationType extra_type = CALIBRATION_TYPE_VOLTAGE_GAIN;
+    CalibrationUnit unit = UnitVoltage;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -82,20 +85,87 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
                 double offset = snToFloat(rawOffset, 23);
 
-                ESP_LOGI(TAG, "%s: VOFFS_HPF(%d) = %f", calibration_state_to_string(ctx->State), phase, offset);
+                ESP_LOGI(TAG, "%s: VOFFS(%d) = %f", calibration_state_to_string(ctx->State), phase, offset);
 
                 ctx->Params.VoltageOffset[phase] = offset;
             }
 
-            STEP(Verify);
+            if (calibration_start_calibration_run(type)) {
+                ctx->VerificationCount = 0;
+                //STEP(Verify);
+                STEP(CalibrationDone);
+            }
+
             break;
         }
+
         case Verify:
-            STEP(VerifyRMS);
             break;
         case VerifyRMS:
-            STEP(CalibrationDone);
             break;
+
+        /*
+        case Verify: {
+            float avg[3];
+
+            if (calibration_get_emeter_averages(type, avg)) {
+                float max_error = CALIBRATION_VOFF_MAX_ERROR - 230.0;
+
+                for (int phase = 0; phase < 3; phase++) {
+                    float average = calibration_scale_emeter(unit, avg[phase]);
+                    if (average < max_error) {
+                        ESP_LOGI(TAG, "%s: Verification pass L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                    } else {
+                        ESP_LOGE(TAG, "%s: Verification fail L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        FAILED();
+                        return false;
+                    }
+                }
+
+                if (++ctx->VerificationCount >= 5) {
+                    ctx->VerificationCount = 0;
+
+                    if (calibration_start_calibration_run(extra_type)) {
+                        STEP(VerifyRMS);
+                    }
+                } else {
+                    calibration_start_calibration_run(type);
+                }
+            }
+
+            break;
+        }
+ 
+        case VerifyRMS: {
+            float avg[3];
+
+            // Verify RMS gain as well
+            if (calibration_get_emeter_averages(extra_type, avg)) {
+                float max_error = CALIBRATION_VOFF_MAX_RMS;
+
+                for (int phase = 0; phase < 3; phase++) {
+                    float average = calibration_scale_emeter(unit, avg[phase]);
+                    if (average < max_error) {
+                        ESP_LOGI(TAG, "%s: Verification pass L%d = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                    } else {
+                        ESP_LOGE(TAG, "%s: Verification fail L%d = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        FAILED();
+                        return false;
+                    }
+                }
+
+                if (++ctx->VerificationCount >= 5) {
+                    ctx->VerificationCount = 0;
+                    STEP(CalibrationDone);
+                } else {
+                    calibration_start_calibration_run(extra_type);
+                }
+            }
+
+            break;
+        }
+        */
+ 
         case CalibrationDone:
             // Reset
             STEP(InitRelays);

@@ -44,11 +44,21 @@ const char *charger_state_to_string(ChargerState state) {
 }
 
 bool calibration_ref_voltage_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->Ticks[VOLTAGE_TICK] < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ticks[VOLTAGE_TICK] < pdMS_TO_TICKS(1000);
 }
 
 bool calibration_ref_current_is_recent(CalibrationCtx *ctx) {
-    return xTaskGetTickCount() - ctx->Ticks[CURRENT_TICK] < pdMS_TO_TICKS(500);
+    return xTaskGetTickCount() - ctx->Ticks[CURRENT_TICK] < pdMS_TO_TICKS(1000);
+}
+
+bool calibration_get_ref_unit(CalibrationCtx *ctx, CalibrationUnit unit, int phase, float *value) {
+    if (unit == UnitVoltage) {
+        *value = ctx->Ref.V[phase];
+        return calibration_ref_voltage_is_recent(ctx);
+    } else {
+        *value = ctx->Ref.I[phase];
+        return calibration_ref_current_is_recent(ctx);
+    }
 }
 
 bool calibration_ref_energy_is_recent(CalibrationCtx *ctx) {
@@ -67,36 +77,22 @@ int calibration_phases_within(float *phases, float nominal, float range) {
     return count;
 }
 
-double calibration_scale_emeter(CalibrationState state, double raw) {
-    switch(state) {
-        case CalibrateCurrentGain:
-        case CalibrateCurrentOffset:
+double calibration_scale_emeter(CalibrationUnit unit, double raw) {
+    switch(unit) {
+        case UnitCurrent:
             return raw * emeter_get_fsi();
-        case CalibrateVoltageGain:
-        case CalibrateVoltageOffset:
-            return raw * emeter_get_fsv();
         default:
-            break;
+            return raw * emeter_get_fsv();
     }
-
-    ESP_LOGE(TAG, "Invalid state for scaling!");
-    return 0.0;
 }
 
-double calibration_inv_scale_emeter(CalibrationState state, float raw) {
-    switch(state) {
-        case CalibrateCurrentGain:
-        case CalibrateCurrentOffset:
+double calibration_inv_scale_emeter(CalibrationUnit unit, float raw) {
+    switch(unit) {
+        case UnitCurrent:
             return raw / emeter_get_fsi();
-        case CalibrateVoltageGain:
-        case CalibrateVoltageOffset:
-            return raw / emeter_get_fsv();
         default:
-            break;
+            return raw / emeter_get_fsv();
     }
-
-    ESP_LOGE(TAG, "Invalid state for scaling!");
-    return 0.0;
 }
 
 static void calibration_set_sim_vals(float *iv, float *vv, float i, float v) {
@@ -151,17 +147,37 @@ uint16_t calibration_read_samples(void) {
     return 0;
 }
 
-bool calibration_read_average(CalibrationCtx *ctx, int phase, float *average) {
-    (void)ctx;
+bool calibration_read_average(CalibrationType type, int phase, float *average) {
+    (void)type;
 
 #ifdef CALIBRATION_SIMULATION
 
-    switch(ctx->State) {
-        case CalibrateCurrentGain  : *average = 5.001234 / emeter_get_fsi(); break;
-        case CalibrateVoltageGain  : *average = 230.0012 / emeter_get_fsv(); break;
-        case CalibrateVoltageOffset: *average = 0.001234; break;
-        case CalibrateCurrentOffset: *average = 0.001234; break;
-        default: *average = 0.0; break;
+    float currentOffset = 0.001234;
+    float voltageOffset = 0.001234;
+    float current;
+    float voltage;
+
+    enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
+
+    switch(mode) {
+        case CHARGE_OPERATION_STATE_DISCONNECTED:
+        case CHARGE_OPERATION_STATE_PAUSED:
+        case CHARGE_OPERATION_STATE_STOPPED:
+            voltage = 0.0012;
+            current = 0.001234;
+            break;
+        default:
+            voltage = 230.0012;
+            current = 5.001234;
+            break;
+    }
+
+    switch(type) {
+        case CALIBRATION_TYPE_CURRENT_GAIN  : *average = current / emeter_get_fsi(); break;
+        case CALIBRATION_TYPE_VOLTAGE_GAIN  : *average = voltage / emeter_get_fsv(); break;
+        case CALIBRATION_TYPE_CURRENT_OFFSET: *average = currentOffset / emeter_get_fsi(); break;
+        case CALIBRATION_TYPE_VOLTAGE_OFFSET: *average = voltageOffset / emeter_get_fsv(); break;
+        default                             : *average = 0.0; break;
     }
 
     return true;
@@ -176,19 +192,30 @@ bool calibration_read_average(CalibrationCtx *ctx, int phase, float *average) {
     return false;
 }
 
-uint16_t calibration_get_emeter_averages(CalibrationCtx *ctx, int wait_for_samples, float *averages) {
+uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages) {
     uint16_t samples = calibration_read_samples();
 
-    if (samples == wait_for_samples) {
+    uint16_t expected_samples;
+    switch(type) {
+        case CALIBRATION_TYPE_CURRENT_OFFSET:
+        case CALIBRATION_TYPE_VOLTAGE_OFFSET:
+            expected_samples = 100;
+            break;
+        default:
+            expected_samples = 17;
+            break;
+    }
+
+    if (samples == expected_samples) {
         for (int phase = 0; phase < 3; phase++) {
-            if (!calibration_read_average(ctx, phase, &averages[phase])) {
+            if (!calibration_read_average(type, phase, &averages[phase])) {
                 ESP_LOGE(TAG, "Couldn't read phase %d average!", phase);
                 return 0;
             }
         }
         return samples;
     } else {
-        ESP_LOGE(TAG, "Unexpected samples: %d", samples);
+        ESP_LOGE(TAG, "Samples not ready? %d", samples);
     }
 
     return 0;
@@ -220,10 +247,9 @@ bool calibration_close_relays(CalibrationCtx *ctx) {
     return true;
 }
 
-bool calibration_start_calibration_run(CalibrationCtx *ctx, CalibrationType type) {
+bool calibration_start_calibration_run(CalibrationType type) {
     return MCU_SendUint8Parameter(ParamRunCalibration, type) == MsgWriteAck;
 }
-
 
 bool calibration_total_charge_power(CalibrationCtx *ctx, float *val) {
     ZapMessage msg = MCU_ReadParameter(ParamTotalChargePower);

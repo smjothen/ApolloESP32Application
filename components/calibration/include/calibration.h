@@ -10,17 +10,25 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
-#define CALIBRATION_KEY "GoTestBenchChangeMe!"
+// Comment out to disable simulated eMeter/calibration values
 #define CALIBRATION_SIMULATION
 
-#define SERVER_PORT 3333
-#define SERVER_IP "232.10.11.12"
+#define CALIBRATION_KEY "GoTestBenchChangeMe!"
 
-#define EXPECTED_SAMPLES_GAIN 17
-#define EXPECTED_SAMPLES_OFFSET 100
+// TODO: Check these are reasonable?
+#define CALIBRATION_IOFF_MAX_ERROR 0.002
+#define CALIBRATION_VOFF_MAX_ERROR 0.002
 
-#define STATE_TIMEOUT 1000 
-#define TICK_TIMEOUT 1000
+#define CALIBRATION_IOFF_MAX_RMS 0.2  // 200mV
+#define CALIBRATION_VOFF_MAX_RMS 0.08 // 80mV
+
+#define CALIBRATION_IGAIN_MAX_ERROR 0.003 // 0.3%
+#define CALIBRATION_VGAIN_MAX_ERROR 0.002 // 0.2%
+
+#define CALIBRATION_SERVER_PORT 3333
+#define CALIBRATION_SERVER_IP "232.10.11.12"
+
+#define CALIBRATION_TIMEOUT 1000 
 
 #define STATE(s) (ctx->CState = (s))
 #define COMPLETE() STATE(Complete)
@@ -74,6 +82,11 @@ typedef enum {
 } ChargerState;
 
 typedef enum {
+    UnitVoltage = 0,
+    UnitCurrent,
+} CalibrationUnit;
+
+typedef enum {
     Default = 0,
     DisableTimeout = (1<<0),
     HighLevelCurrent = (1<<1),
@@ -113,6 +126,17 @@ enum {
     ICRMS_OFF = 0x83, // S.23 (NV), RMS Current dynamic offset adjust. Positive values only.
 };
 
+typedef enum {
+    TICK = 0,
+    STATE_TICK,
+    CURRENT_TICK,
+    VOLTAGE_TICK,
+    ENERGY_TICK,
+    WARMUP_TICK,
+    STABILIZATION_TICK,
+    LAST_TICK,
+} CalibrationTickType;
+
 typedef struct {
     uint32_t CalibrationId;
 
@@ -129,17 +153,6 @@ typedef struct {
     float E;
 } CalibrationReference;
 
-typedef enum {
-    TICK = 0,
-    STATE_TICK,
-    CURRENT_TICK,
-    VOLTAGE_TICK,
-    ENERGY_TICK,
-    WARMUP_TICK,
-    STABILIZATION_TICK,
-    LAST_TICK,
-} CalibrationTickType;
-
 typedef struct {
     int Run;
     int Seq;
@@ -155,6 +168,8 @@ typedef struct {
 
     enum ChargerOperatingMode Mode;
     uint32_t WarmupOptions;
+
+    int VerificationCount;
 
     TickType_t Ticks[LAST_TICK];
 

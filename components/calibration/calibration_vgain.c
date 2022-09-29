@@ -19,6 +19,8 @@ static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
+    CalibrationType type = CALIBRATION_TYPE_VOLTAGE_GAIN;
+    CalibrationUnit unit = UnitVoltage;
 
     ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
 
@@ -47,7 +49,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
             break;
         case InitCalibration: {
 
-            if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_VOLTAGE_GAIN)) {
+            if (calibration_start_calibration_run(type)) {
                 STEP(Calibrating);
             }
 
@@ -57,11 +59,11 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
             float avg[3];
 
-            if (calibration_get_emeter_averages(ctx, EXPECTED_SAMPLES_GAIN, avg)) {
+            if (calibration_get_emeter_averages(type, avg)) {
                 if (calibration_ref_voltage_is_recent(ctx)) {
 
                     for (int phase = 0; phase < 3; phase++) {
-                        double averageMeasurement = calibration_scale_emeter(ctx->State, avg[phase]);
+                        double averageMeasurement = calibration_scale_emeter(unit, avg[phase]);
                         double gain = ctx->Ref.V[phase] / averageMeasurement;
                         ctx->Params.VoltageGain[phase] = gain;
 
@@ -74,7 +76,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     break;
                 }
 
-                if (calibration_start_calibration_run(ctx, CALIBRATION_TYPE_VOLTAGE_GAIN)) {
+                if (calibration_start_calibration_run(type)) {
                     STEP(Verify);
 
                     // Need to set GAIN registers here for verification in future..
