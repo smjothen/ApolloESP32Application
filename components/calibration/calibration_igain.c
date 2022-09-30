@@ -71,7 +71,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                         double average = calibration_scale_emeter(unit, avg[phase]);
                         double gain = ctx->Ref.I[phase] / average;
 
-                        ctx->Params.CurrentGain[phase] = gain;
+                        calibration_write_parameter(ctx, type, phase, gain);
 
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = (%f / %f)", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.I[phase], average);
 
@@ -86,6 +86,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 }
 
                 if (calibration_start_calibration_run(type)) {
+                    ctx->Count = 0;
                     STEP(Verify);
                 }
             }
@@ -117,8 +118,8 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
+                if (++ctx->Count >= 5) {
+                    ctx->Count = 0;
                     STEP(CalibrationDone);
                 } else {
                     calibration_start_calibration_run(type);

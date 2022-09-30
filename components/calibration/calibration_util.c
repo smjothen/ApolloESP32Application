@@ -34,7 +34,7 @@ const char *calibration_step_to_string(CalibrationStep state) {
     return _calibration_steps[state];
 }
 
-const char *charger_state_to_string(ChargerState state) {
+const char *charger_state_to_string(CalibrationChargerState state) {
     const char *_charger_states[] = { FOREACH_CHS(CS_STRING) };
     size_t max_state = sizeof (_charger_states) / sizeof (_charger_states[0]);
     if (state < 0 || state > max_state || !_charger_states[state]) {
@@ -63,18 +63,6 @@ bool calibration_get_ref_unit(CalibrationCtx *ctx, CalibrationUnit unit, int pha
 
 bool calibration_ref_energy_is_recent(CalibrationCtx *ctx) {
     return xTaskGetTickCount() - ctx->Ticks[ENERGY_TICK] < pdMS_TO_TICKS(500);
-}
-
-int calibration_phases_within(float *phases, float nominal, float range) {
-    float min = nominal * (1.0 - range);
-    float max = nominal * (1.0 + range);
-
-    int count = 0;
-    if (phases[0] >= min && phases[0] <= max) count++;
-    if (phases[1] >= min && phases[1] <= max) count++;
-    if (phases[2] >= min && phases[2] <= max) count++;
-
-    return count;
 }
 
 double calibration_scale_emeter(CalibrationUnit unit, double raw) {
@@ -160,15 +148,13 @@ bool calibration_read_average(CalibrationType type, int phase, float *average) {
     enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
 
     switch(mode) {
-        case CHARGE_OPERATION_STATE_DISCONNECTED:
-        case CHARGE_OPERATION_STATE_PAUSED:
-        case CHARGE_OPERATION_STATE_STOPPED:
-            voltage = 0.0012;
-            current = 0.001234;
-            break;
-        default:
+        case CHARGE_OPERATION_STATE_CHARGING:
             voltage = 230.0012;
             current = 0.501234;
+            break;
+        default:
+            voltage = 0.0012;
+            current = 0.001234;
             break;
     }
 
@@ -227,11 +213,7 @@ bool calibration_open_relays(CalibrationCtx *ctx) {
         return false;
     }
 
-    if (!(ctx->Mode == CHARGE_OPERATION_STATE_STOPPED || ctx->Mode == CHARGE_OPERATION_STATE_PAUSED)) {
-        return false;
-    }
-
-    return true;
+    return !(ctx->Flags & CAL_FLAG_RELAY_CLOSED);
 }
 
 bool calibration_close_relays(CalibrationCtx *ctx) {
@@ -240,18 +222,14 @@ bool calibration_close_relays(CalibrationCtx *ctx) {
         return false;
     }
 
-    if (ctx->Mode != CHARGE_OPERATION_STATE_CHARGING) {
-        return false;
-    }
-
-    return true;
+    return !!(ctx->Flags & CAL_FLAG_RELAY_CLOSED);
 }
 
 bool calibration_start_calibration_run(CalibrationType type) {
     return MCU_SendUint8Parameter(ParamRunCalibration, type) == MsgWriteAck;
 }
 
-bool calibration_total_charge_power(CalibrationCtx *ctx, float *val) {
+bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
 #ifdef CALIBRATION_SIMULATION
                 ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
@@ -286,3 +264,23 @@ bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
     return true;
 }
 
+bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int phase, float value) {
+    CalibrationParameter *params = NULL;
+
+    switch (type) {
+        case CALIBRATION_TYPE_CURRENT_GAIN: params = ctx->Params.CurrentGain; break;
+        case CALIBRATION_TYPE_VOLTAGE_GAIN: params = ctx->Params.VoltageGain; break;
+        case CALIBRATION_TYPE_CURRENT_OFFSET: params = ctx->Params.CurrentOffset; break;
+        case CALIBRATION_TYPE_VOLTAGE_OFFSET: params = ctx->Params.VoltageOffset; break;
+        default: break;
+    }
+
+    if (!params) {
+        ESP_LOGE(TAG, "%s: Attempt to set invalid parameter type!", calibration_state_to_string(ctx->State));
+        return false;
+    }
+
+    params[phase].value = value;
+    params[phase].assigned = true;
+    return true;
+}

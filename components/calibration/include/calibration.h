@@ -79,7 +79,7 @@ typedef enum {
 
 typedef enum {
     FOREACH_CHS(CS_ENUM)
-} ChargerState;
+} CalibrationChargerState;
 
 typedef enum {
     UnitVoltage = 0,
@@ -91,7 +91,7 @@ typedef enum {
     DisableTimeout = (1<<0),
     HighLevelCurrent = (1<<1),
     MediumLevelCurrent = (1<<2),
-} WarmupSettings;
+} CalibrationWarmupSettings;
 
 typedef enum {
     CALIBRATION_TYPE_NONE = 0,
@@ -104,6 +104,7 @@ typedef enum {
 typedef struct {
     int Socket;
     struct sockaddr_in ServAddr;
+    int Initialized;
 } CalibrationServer;
 
 enum {
@@ -138,13 +139,17 @@ typedef enum {
 } CalibrationTickType;
 
 typedef struct {
+    bool assigned;
+    double value;
+} CalibrationParameter;
+
+typedef struct {
     uint32_t CalibrationId;
 
-    double CurrentGain[3];
-    double VoltageGain[3];
-
-    double CurrentOffset[3];
-    double VoltageOffset[3];
+    CalibrationParameter CurrentGain[3];
+    CalibrationParameter VoltageGain[3];
+    CalibrationParameter CurrentOffset[3];
+    CalibrationParameter VoltageOffset[3];
 } CalibrationParameters;
 
 typedef struct {
@@ -154,27 +159,37 @@ typedef struct {
 } CalibrationReference;
 
 typedef struct {
+    uint16_t crc;
+    uint32_t v_gain[3];
+    uint32_t v_offset[3];
+    uint32_t i_gain[3];
+    uint16_t functional_relay_revision;
+    uint32_t calibration_id;
+    uint16_t t_offs[3];
+} __attribute__((packed)) CalibrationHeader;
+
+typedef enum {
+    CAL_FLAG_INIT         = (1 << 0),
+    CAL_FLAG_WAIT_RESET   = (1 << 1),
+    CAL_FLAG_RELAY_CLOSED = (1 << 2),
+} CalibrationFlags;
+
+typedef struct {
     int Run;
     int Seq;
     int LastSeq;
-    int HaveServer;
+    int Count;
+
     CalibrationServer Server;
-
-    bool InitState;
     CalibrationState State;
-
     CalibrationStep CStep;
-    ChargerState CState;
-
-    enum ChargerOperatingMode Mode;
-    uint32_t WarmupOptions;
-
-    int VerificationCount;
-
-    TickType_t Ticks[LAST_TICK];
-
+    CalibrationChargerState CState;
+    CalibrationWarmupSettings Warmup;
+    CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
+
+    TickType_t Ticks[LAST_TICK];
 } CalibrationCtx;
 
 void calibration_task(void *pvParameters);
@@ -184,12 +199,10 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx);
 
-bool calibration_total_charge_power(CalibrationCtx *ctx, float *val);
+bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val);
 bool calibration_set_standalone(CalibrationCtx *ctx, int standalone);
 bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current);
 bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
 
-int calibration_phases_within(float *phases, float nominal, float range);
- 
 #endif

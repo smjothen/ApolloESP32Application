@@ -67,7 +67,8 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     for (int phase = 0; phase < 3; phase++) {
                         double averageMeasurement = calibration_scale_emeter(unit, avg[phase]);
                         double gain = ctx->Ref.V[phase] / averageMeasurement;
-                        ctx->Params.VoltageGain[phase] = gain;
+
+                        calibration_write_parameter(ctx, type, phase, gain);
 
                         ESP_LOGI(TAG, "%s: VGAIN(%d) = %f (%f / %f)", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.V[phase], averageMeasurement);
 
@@ -83,7 +84,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                 }
 
                 if (calibration_start_calibration_run(type)) {
-                    ctx->VerificationCount = 0;
+                    ctx->Count = 0;
                     STEP(Verify);
                 }
             }
@@ -115,8 +116,8 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
+                if (++ctx->Count >= 5) {
+                    ctx->Count = 0;
                     STEP(CalibrationDone);
                 } else {
                     calibration_start_calibration_run(type);

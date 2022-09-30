@@ -20,7 +20,7 @@ static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
     CalibrationStep step = ctx->CStep;
-    /* CalibrationType type = CALIBRATION_TYPE_VOLTAGE_OFFSET; */
+    CalibrationType type = CALIBRATION_TYPE_VOLTAGE_OFFSET;
     /* CalibrationType extra_type = CALIBRATION_TYPE_VOLTAGE_GAIN; */
     /* CalibrationUnit unit = UnitVoltage; */
     float max_error = CALIBRATION_VOFF_MAX_ERROR;
@@ -87,9 +87,9 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
                 double offset = snToFloat(rawOffset, 23);
 
-                ESP_LOGI(TAG, "%s: VOFFS(%d) = %f", calibration_state_to_string(ctx->State), phase, offset);
+                calibration_write_parameter(ctx, type, phase, offset);
 
-                ctx->Params.VoltageOffset[phase] = offset;
+                ESP_LOGI(TAG, "%s: VOFFS(%d) = %f", calibration_state_to_string(ctx->State), phase, offset);
             }
 
             STEP(Verify);

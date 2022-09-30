@@ -6,6 +6,7 @@ set(COMPONENT_SRCS
 	calibration_ioffs.c
 	calibration_igain.c
 
+	calibration_crc.c
 	calibration_util.c
 	calibration_emeter.c
 

@@ -5,7 +5,7 @@
 
 const char *calibration_state_to_string(CalibrationState state);
 const char *calibration_step_to_string(CalibrationStep state);
-const char *charger_state_to_string(ChargerState state);
+const char *charger_state_to_string(CalibrationChargerState state);
 
 bool calibration_ref_voltage_is_recent(CalibrationCtx *ctx);
 bool calibration_ref_current_is_recent(CalibrationCtx *ctx);
@@ -24,5 +24,7 @@ uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages);
 
 bool calibration_open_relays(CalibrationCtx *ctx);
 bool calibration_close_relays(CalibrationCtx *ctx);
+
+bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int phase, float value);
 
 #endif

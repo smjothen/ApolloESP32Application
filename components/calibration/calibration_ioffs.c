@@ -79,9 +79,10 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             if (calibration_get_emeter_averages(type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
                     double offset = avg[phase] / EMETER_SYS_GAIN;
-                    ctx->Params.CurrentOffset[phase] = offset;
 
                     ESP_LOGI(TAG, "%s: IOFFS(%d) = %f (%f)", calibration_state_to_string(ctx->State), phase, avg[phase], calibration_scale_emeter(unit, offset));
+
+                    calibration_write_parameter(ctx, type, phase, offset);
 
                     if (!emeter_write_float(I1_OFFS + phase, offset, 23)) {
                         ESP_LOGE(TAG, "%s: IOFFS(%d) write failed!", calibration_state_to_string(ctx->State), phase);
@@ -90,7 +91,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 }
 
                 if (calibration_start_calibration_run(type)) {
-                    ctx->VerificationCount = 0;
+                    ctx->Count = 0;
                     STEP(Verify);
                 }
             }
@@ -115,8 +116,8 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
+                if (++ctx->Count >= 5) {
+                    ctx->Count = 0;
 
                     if (calibration_start_calibration_run(extra_type)) {
                         STEP(VerifyRMS);
@@ -147,8 +148,8 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (++ctx->VerificationCount >= 5) {
-                    ctx->VerificationCount = 0;
+                if (++ctx->Count >= 5) {
+                    ctx->Count = 0;
                     STEP(CalibrationDone);
                 } else {
                     calibration_start_calibration_run(extra_type);

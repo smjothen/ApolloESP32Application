@@ -15,6 +15,7 @@ void protocol_task_ctrl_debug(int state);
 uint32_t GetMCUComErrors();
 
 MessageType MCU_SendCommandId(uint16_t paramIdentifier);
+MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, size_t length);
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
 MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);
 MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);

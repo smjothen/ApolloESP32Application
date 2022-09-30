@@ -22,6 +22,7 @@
 #include "sessionHandler.h"
 #include "zaptec_protocol_serialisation.h"
 
+#include "calibration_crc.h"
 #include "calibration_emeter.h"
 
 #include <calibration-message.pb.h>
@@ -34,7 +35,7 @@
 static const char *TAG = "CALIBRATION    ";
 
 bool calibration_tick_calibrate(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -66,26 +67,26 @@ void calibration_tick_starting_init(CalibrationCtx *ctx) {
     if (!calibration_get_calibration_id(ctx, &calId) || calId != 0) { ESP_LOGE(TAG, "Getting calibration ID failed or non-zero (%d)!", calId); return; }
 
     ctx->Params.CalibrationId = calId;
-    ctx->InitState = true;
+    ctx->Flags |= CAL_FLAG_INIT;
 }
 
 bool calibration_tick_starting(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress: {
 
             // Special pseudo-init state
-            if (!ctx->InitState) {
+            if (!(ctx->Flags & CAL_FLAG_INIT)) {
                 calibration_tick_starting_init(ctx);
             } else {
 
                 // Stop command seems to cause it to go to paused state so accept that too?
-                if ((ctx->Mode == CHARGE_OPERATION_STATE_STOPPED || ctx->Mode == CHARGE_OPERATION_STATE_PAUSED)) {
+                if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
                     COMPLETE();
                 } else {
                     calibration_open_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to open (Mode: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to open ...", calibration_state_to_string(ctx->State));
                 }
 
             }
@@ -102,7 +103,7 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -119,24 +120,23 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 
 void calibration_tick_close_relays_init(CalibrationCtx *ctx) {
     calibration_close_relays(ctx);
-
-    ctx->InitState = true;
+    ctx->Flags |= CAL_FLAG_INIT;
 }
 
 bool calibration_tick_close_relays(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress: {
-            if (!ctx->InitState) {
+            if (!(ctx->Flags & CAL_FLAG_INIT)) {
                 calibration_tick_close_relays_init(ctx);
             } else {
 
-                if (ctx->Mode == CHARGE_OPERATION_STATE_CHARGING) {
+                if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
                     COMPLETE();
                 } else {
                     calibration_close_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to close (Mode: %d) ...", calibration_state_to_string(ctx->State), ctx->Mode);
+                    ESP_LOGI(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx->State));
                 }
 
             }
@@ -151,8 +151,20 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
     return ctx->CState != state;
 }
 
+int calibration_phases_within(float *phases, float nominal, float range) {
+    float min = nominal * (1.0 - range);
+    float max = nominal * (1.0 + range);
+
+    int count = 0;
+    if (phases[0] >= min && phases[0] <= max) count++;
+    if (phases[1] >= min && phases[1] <= max) count++;
+    if (phases[2] >= min && phases[2] <= max) count++;
+
+    return count;
+}
+
 bool calibration_tick_warming_up(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress: {
@@ -177,10 +189,10 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
 
             TickType_t minimumDuration;
 
-            if (ctx->WarmupOptions & MediumLevelCurrent) {
+            if (ctx->Warmup & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
                 minimumDuration = pdMS_TO_TICKS(5 * 1000);
-            } else if (ctx->WarmupOptions & HighLevelCurrent) {
+            } else if (ctx->Warmup & HighLevelCurrent) {
                 expectedCurrent = 32.0;
                 minimumDuration = pdMS_TO_TICKS(5 * 1000);
             } else {
@@ -222,13 +234,13 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress: {
 
             float totalPower;
-            if (calibration_total_charge_power(ctx, &totalPower)) {
+            if (calibration_get_total_charge_power(ctx, &totalPower)) {
                 if (totalPower <= 50.0f) {
                     if (!ctx->Ticks[STABILIZATION_TICK]) {
                         ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
@@ -259,24 +271,88 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
+    CalibrationChargerState state = ctx->CState;
 
-    ChargerState state = ctx->CState;
-
-    switch (ctx->CState) {
-        case InProgress:
-            COMPLETE();
-            break;
-        case Complete:
-            break;
-        case Failed:
-            break;
+    if (ctx->CState != InProgress) {
+        return false;
     }
+
+    CalibrationParameter *params[] = {
+        ctx->Params.CurrentGain,
+        ctx->Params.VoltageGain,
+        ctx->Params.CurrentOffset,
+        ctx->Params.VoltageOffset,
+    };
+
+    for (int param = 0; param < 4; param++) {
+        for (int phase = 0; phase < 3; phase++) {
+            if (!params[param]->assigned) {
+                ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx->State), param, phase);
+                return false;
+            }
+        }
+    }
+
+    CalibrationHeader header;
+    header.crc = 0;
+    header.calibration_id = 1;
+    header.functional_relay_revision = 0;
+
+    CalibrationParameter *param = ctx->Params.CurrentGain;
+    header.i_gain[0] = floatToSn(param[0].value, 21);
+    header.i_gain[1] = floatToSn(param[1].value, 21);
+    header.i_gain[2] = floatToSn(param[2].value, 21);
+
+    param = ctx->Params.VoltageGain;
+    header.v_gain[0] = floatToSn(param[0].value, 21);
+    header.v_gain[1] = floatToSn(param[1].value, 21);
+    header.v_gain[2] = floatToSn(param[2].value, 21);
+
+    param = ctx->Params.VoltageOffset;
+    header.v_offset[0] = floatToSn(param[0].value, 23);
+    header.v_offset[1] = floatToSn(param[1].value, 23);
+    header.v_offset[2] = floatToSn(param[2].value, 23);
+
+    header.t_offs[0] = 0xA800;
+    header.t_offs[1] = 0xA800;
+    header.t_offs[2] = 0xA800;
+
+    const char *bytes = (const char *)&header;
+    const char *bytesAfterCrc = bytes + sizeof(header.crc);
+
+    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+    ZEncodeUint16(crc, (uint8_t *)bytes);
+
+    ESP_LOGI(TAG, "%s: Writing checksum: %04X", calibration_state_to_string(ctx->State), header.crc);
+
+    char hexBytes[256];
+    char *ptr = hexBytes;
+    for (size_t i = 0; i < sizeof (header); i++) {
+        ptr += sprintf(ptr, "%02X ", (uint8_t)bytes[i]);
+    }
+    *ptr = 0;
+
+    ESP_LOGI(TAG, "%s: Writing bytes: %s", calibration_state_to_string(ctx->State), hexBytes);
+
+    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+        ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx->State));
+        FAILED();
+        return false;
+    }
+
+
+    while (MCU_ReadParameter(DebugCounter).type != MsgReadAck) {
+        ESP_LOGI(TAG, "%s: Waiting for MCU to reboot ...", calibration_state_to_string(ctx->State));
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    COMPLETE();
 
     return ctx->CState != state;
 }
 
 bool calibration_tick_verification_start(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -292,7 +368,7 @@ bool calibration_tick_verification_start(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_verification_running(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -308,7 +384,7 @@ bool calibration_tick_verification_running(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_verification_done(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -324,7 +400,7 @@ bool calibration_tick_verification_done(CalibrationCtx *ctx) {
 }
 
 bool calibration_tick_done(CalibrationCtx *ctx) {
-    ChargerState state = ctx->CState;
+    CalibrationChargerState state = ctx->CState;
 
     switch (ctx->CState) {
         case InProgress:
@@ -343,10 +419,19 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 }
 
 void calibration_update_charger_state(CalibrationCtx *ctx) {
-    enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
-    if (mode != ctx->Mode) {
-        /* ESP_LOGI(TAG, "%s: Operation mode changed (%d -> %d) ...", calibration_state_to_string(ctx->State), ctx->Mode, mode); */
-        ctx->Mode = mode;
+    switch (MCU_GetChargeOperatingMode()) {
+        case CHARGE_OPERATION_STATE_CHARGING:
+            if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
+                ESP_LOGI(TAG, "%s: Relays closed!", calibration_state_to_string(ctx->State));
+            }
+            ctx->Flags |= CAL_FLAG_RELAY_CLOSED;
+            break;
+        default:
+            if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
+                ESP_LOGI(TAG, "%s: Relays open!", calibration_state_to_string(ctx->State));
+            }
+            ctx->Flags &= ~CAL_FLAG_RELAY_CLOSED;
+            break;
     }
 }
 
@@ -391,6 +476,9 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
 
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
+
+        //ESP_LOGI(TAG, "WM: %d", uxTaskGetStackHighWaterMark(NULL));
+
         calibration_send_state(ctx);
         calibration_update_charger_state(ctx);
 
@@ -536,13 +624,12 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
 
     if (msg->has_Verification) {
         if (ctx->State == WarmingUp) {
-            ctx->WarmupOptions = msg->Verification.TestId;
+            ctx->Warmup = msg->Verification.TestId;
         }
     }
 
     ctx->State = msg->State;
-    // Allow pseudo `init' step
-    ctx->InitState = false;
+    ctx->Flags &= ~CAL_FLAG_INIT;
 
     ctx->CState = InProgress;
     ctx->CStep = InitRelays;
@@ -676,11 +763,10 @@ void calibration_task(void *pvParameters) {
         bzero(&serv.ServAddr, sizeof (serv.ServAddr));
         serv.ServAddr.sin_port = htons(2020);
         serv.ServAddr.sin_family = PF_INET;
+        serv.Initialized = false;
 
         ctx.Server = serv;
-        ctx.HaveServer = false;
         ctx.Ticks[STATE_TICK] = xTaskGetTickCount();
-        ctx.Mode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,
@@ -737,7 +823,7 @@ void calibration_task(void *pvParameters) {
                     }
 
                     ctx.Server.ServAddr.sin_addr.s_addr = ((struct sockaddr_in *)&raddr)->sin_addr.s_addr;
-                    ctx.HaveServer = true;
+                    ctx.Server.Initialized = true;
 
                     ESP_LOGD(TAG, "UdpMessage { Ack: %d, Data: %d, State: %d }", msg.has_Ack, msg.has_Data, msg.has_State);
 
@@ -760,7 +846,7 @@ void calibration_task(void *pvParameters) {
                     pb_release(CalibrationUdpMessage_fields, &msg);
                 }
             } else {
-                if (!ctx.HaveServer) {
+                if (!ctx.Server.Initialized) {
                     /* ESP_LOGI(TAG, "Waiting for server broadcast ..."); */
                     continue;
                 }
