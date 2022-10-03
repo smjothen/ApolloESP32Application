@@ -800,6 +800,16 @@ bool MCU_SetMIDBlinkEnabled(bool enabled) {
     return MCU_SendUint8Parameter(ParamMIDBlinkEnabled, enabled) == MsgWriteAck;
 }
 
+bool MCU_GetInterpolatedEnergyCounter(float *energy) {
+    ZapMessage msg = MCU_ReadParameter(ParamSessionEnergyCountImportActiveInterpolated);
+    if (msg.length == 4 && msg.type == MsgReadAck && msg.identifier == ParamSessionEnergyCountImportActiveInterpolated) {
+        *energy = GetFloat(msg.data);
+        return true;
+    }
+    return false;
+}
+
+
 static uint8_t IT3OptimizationEnabled = 0;
 uint8_t MCU_UpdateIT3OptimizationState()
 {

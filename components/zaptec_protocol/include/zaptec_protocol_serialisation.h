@@ -112,6 +112,8 @@
 
         ParamCumulativeEnergyUsage = 564,
 
+        ParamSessionEnergyCountImportActiveInterpolated = 565,
+
         ParamChargeDuration = 701,
         ParamChargeMode = 702,
         ParamChargePilotLevelInstant = 703,
