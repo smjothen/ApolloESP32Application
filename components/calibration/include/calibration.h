@@ -13,7 +13,7 @@
 // Comment out to disable simulated eMeter/calibration values
 #define CALIBRATION_SIMULATION
 
-#define CALIBRATION_KEY "GoTestBenchChangeMe!"
+#define CALIBRATION_KEY "6ea2ac08d055bcf09ae52d570315f43e"
 
 // TODO: Check these are reasonable?
 #define CALIBRATION_IOFF_MAX_ERROR 0.002
@@ -31,9 +31,6 @@
 #define CALIBRATION_TIMEOUT 1000 
 
 #define STATE(s) (ctx->CState = (s))
-#define COMPLETE() STATE(Complete)
-#define FAILED() STATE(Failed)
-
 #define STEP(s) (ctx->CStep = (s))
 
 #define FOREACH_CS(CS)                 \

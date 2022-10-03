@@ -111,7 +111,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
                     ESP_LOGI(TAG, "%s: VOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, fabsf(offset), max_error);
                 } else {
                     ESP_LOGE(TAG, "%s: VOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, fabsf(offset), max_error);
-                    FAILED();
+                    STATE(Failed);
                     return false;
                 }
             }
@@ -121,13 +121,13 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
         }
         case VerifyRMS:
             ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx->State));
-            FAILED();
+            STATE(Failed);
             break;
         case CalibrationDone:
             // Reset
             STEP(InitRelays);
             // Complete state
-            COMPLETE();
+            STATE(Complete);
             break;
     }
 

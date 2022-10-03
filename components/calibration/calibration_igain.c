@@ -113,7 +113,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, error, max_error);
                     } else {
                         ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, error, max_error);
-                        FAILED();
+                        STATE(Failed);
                         return false;
                     }
                 }
@@ -132,13 +132,13 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
         case VerifyRMS:
             // No RMS verification for gains
             ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx->State));
-            FAILED();
+            STATE(Failed);
             break;
         case CalibrationDone:
             // Reset
             STEP(InitRelays);
             // Complete state
-            COMPLETE();
+            STATE(Complete);
             break;
     }
 

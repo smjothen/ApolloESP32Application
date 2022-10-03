@@ -111,7 +111,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                         ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                     } else {
                         ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        FAILED();
+                        STATE(Failed);
                         return false;
                     }
                 }
@@ -143,7 +143,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                         ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
                     } else {
                         ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        FAILED();
+                        STATE(Failed);
                         return false;
                     }
                 }
@@ -162,7 +162,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             // Reset
             STEP(InitRelays);
             // Complete state
-            COMPLETE();
+            STATE(Complete);
             break;
     }
 

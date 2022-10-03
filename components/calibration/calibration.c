@@ -83,7 +83,7 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
 
                 // Stop command seems to cause it to go to paused state so accept that too?
                 if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
-                    COMPLETE();
+                    STATE(Complete);
                 } else {
                     calibration_open_relays(ctx);
                     ESP_LOGI(TAG, "%s: Waiting for relays to open ...", calibration_state_to_string(ctx->State));
@@ -107,7 +107,7 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
-            COMPLETE();
+            STATE(Complete);
             break;
         case Complete:
             break;
@@ -133,7 +133,7 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
             } else {
 
                 if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
-                    COMPLETE();
+                    STATE(Complete);
                 } else {
                     calibration_close_relays(ctx);
                     ESP_LOGI(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx->State));
@@ -208,7 +208,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                     ctx->Ticks[WARMUP_TICK] = xTaskGetTickCount();
                 } else {
                     if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > minimumDuration) {
-                        COMPLETE();
+                        STATE(Complete);
                         break;
                     } else {
                         ESP_LOGI(TAG, "%s: Warming up (%.1fA for %ds) ...", calibration_state_to_string(ctx->State), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
@@ -247,7 +247,7 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
                     }
 
                     if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
-                        COMPLETE();
+                        STATE(Complete);
                     } else {
                         ESP_LOGI(TAG, "%s: Waiting for temperatures to even out ...", calibration_state_to_string(ctx->State));
                     }
@@ -336,7 +336,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
 
     if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
         ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx->State));
-        FAILED();
+        STATE(Failed);
         return false;
     }
 
@@ -346,7 +346,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    COMPLETE();
+    STATE(Complete);
 
     return ctx->CState != state;
 }
@@ -356,7 +356,7 @@ bool calibration_tick_verification_start(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
-            COMPLETE();
+            STATE(Complete);
             break;
         case Complete:
             break;
@@ -372,7 +372,7 @@ bool calibration_tick_verification_running(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
-            COMPLETE();
+            STATE(Complete);
             break;
         case Complete:
             break;
@@ -388,7 +388,7 @@ bool calibration_tick_verification_done(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
-            COMPLETE();
+            STATE(Complete);
             break;
         case Complete:
             break;
@@ -405,8 +405,12 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
     switch (ctx->CState) {
         case InProgress:
             if (calibration_open_relays(ctx)) {
-                COMPLETE();
+                STATE(Complete);
             }
+
+            // TODO: 
+            // 1. Mark calibration parameters as verified
+            // 2. Exit MID mode
 
             break;
         case Complete:
