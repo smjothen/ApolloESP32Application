@@ -53,6 +53,7 @@
         ProductCode = 152,
         HmiBrightness = 153,
         LockCableWhenConnected = 154,
+        ParamMIDBlinkEnabled = 155,
         
         ParamInternalTemperature = 201,
         ParamInternalTemperatureEmeter = 202,

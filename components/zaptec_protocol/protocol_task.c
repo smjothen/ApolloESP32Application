@@ -796,6 +796,9 @@ uint8_t MCU_GetOverrideGridType()
 }
 
 
+bool MCU_SetMIDBlinkEnabled(bool enabled) {
+    return MCU_SendUint8Parameter(ParamMIDBlinkEnabled, enabled) == MsgWriteAck;
+}
 
 static uint8_t IT3OptimizationEnabled = 0;
 uint8_t MCU_UpdateIT3OptimizationState()

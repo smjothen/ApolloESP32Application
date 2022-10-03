@@ -98,5 +98,6 @@ uint8_t GetFinalStopActiveStatus();
 bool MCU_IsReady();
 
 bool MCU_GetMidStoredCalibrationId(uint32_t *id);
+bool MCU_SetMIDBlinkEnabled(bool enabled);
 
 #endif /* PROTOCOL_TASK_H */
