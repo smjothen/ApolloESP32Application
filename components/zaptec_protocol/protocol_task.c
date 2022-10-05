@@ -292,6 +292,29 @@ void ActivateMCUWatchdog()
 	}
 }
 
+void MCU_SendMaxCurrent()
+{
+	//Write MaxCurrent setting to MCU if restarted
+	float currentInMaximum = storage_Get_CurrentInMaximum();
+	if((32.0 >= currentInMaximum) && (currentInMaximum >= 0.0))
+	{
+		MessageType ret = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
+			if(ret == MsgWriteAck)
+			{
+				ESP_LOGW(TAG, "Sent MaxCurrent to MCU after MCU start: %f \n", currentInMaximum);
+				break;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Failed sending MaxCurrent to MCU after start");
+			}
+		}
+	}
+}
+
 bool isMCUReady = false;
 
 //Call this to see if all MCU parametes has been received at start, before communicating to cloud
@@ -331,10 +354,11 @@ void uartSendTask(void *pvParameters){
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-
-    //Only applies to chargers with MCU bootloaders version 6 and greater.
+    //Send settings to MCU
     ActivateMCUWatchdog();
+    MCU_SendMaxCurrent();
 
+    //Read settings from MCU
     MCU_UpdateOverrideGridType();
     MCU_UpdateIT3OptimizationState();
     MCU_ReadHwIdMCUSpeed();
@@ -348,7 +372,9 @@ void uartSendTask(void *pvParameters){
     	if(mcuDebugCounter < previousMcuDebugCounter)
     	{
     		ActivateMCUWatchdog();
+    		MCU_SendMaxCurrent();
     		ESP_LOGW(TAG, "MCU restart detected");
+
     		previousMcuDebugCounter = mcuDebugCounter;
     	}
 

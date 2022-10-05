@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <time.h>
-
+#include "../../main/DeviceInfo.h"
 // do we need all these?
 // #include "crypto/sha256.h"
 #include "base64.h"

@@ -123,6 +123,7 @@ static void ota_task(void *pvParameters){
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
     TimerHandle_t timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
     
+    bool hasNewCertificate = false;
 
     while (true)
     {
@@ -153,13 +154,39 @@ static void ota_task(void *pvParameters){
 
         if(ret == 0x2700)
         {
-        	otaRunning = false;
-			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+
 			log_message("OTA certificate error 0x2700, downloading new");
 			ESP_LOGW(TAG, "Updating certificate, expired at OTA");
-			//certifcate_setOverrideVersion(8);//TODO REMOVE, for testing certificate update.
+
 			certificate_update(0);
+
+			int nrOfChecks = 0;
+			for (nrOfChecks = 0; nrOfChecks < 30; nrOfChecks++)
+			{
+				hasNewCertificate = certificate_CheckIfReceivedNew();
+				if(hasNewCertificate == true)
+					break;
+				else
+					log_message("Waiting for new certificate");
+
+				vTaskDelay(pdMS_TO_TICKS(3000));
+			}
+
+			if(hasNewCertificate == true)
+			{
+				log_message("Retrying with new certificate");
+				continue;
+			}
+
+			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+			otaRunning = false;
+
+			log_message("Timed out waiting for certificate. Aborting OTA");
+
+			// Must send command to MCU to clear purple led on charger
+			MCU_SendCommandId(CommandHostFwUpdateEnd);
+
 			continue;
         }
 

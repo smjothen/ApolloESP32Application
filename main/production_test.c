@@ -915,8 +915,8 @@ int test_hw_trig(){
 	MCU_SendCommandId(CommandTestHWTrig);
 
 	int trigResult = 0;
-	int timeout = 7;
-	while((trigResult != 3) && (timeout > 0))
+	int timeout = 8;
+	while(timeout > 0)
 	{
 		vTaskDelay(pdMS_TO_TICKS(1000));
 
@@ -924,7 +924,10 @@ int test_hw_trig(){
 		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
 		{
 			trigResult = rxMsgm.data[0];
-			break;
+			if(trigResult == 3)
+			{
+				break;
+			}
 		}
 		else
 		{

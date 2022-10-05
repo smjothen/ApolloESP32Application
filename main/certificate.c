@@ -229,6 +229,11 @@ void certifcate_setOverrideVersion(int override)
 	overrideVersion = override;
 }
 
+static bool hasReceivedNewCertificate = false;
+bool certificate_CheckIfReceivedNew()
+{
+	return hasReceivedNewCertificate;
+}
 
 void certificate_task(void* tlsErrorCause)
 {
@@ -348,6 +353,7 @@ void certificate_task(void* tlsErrorCause)
 
 			free(certificate_bundle);
 			certificateIsOk = true;
+			hasReceivedNewCertificate = true;
 		}
 		else if(certStatus == 1) //Not a valid header - back off and try again
 		{

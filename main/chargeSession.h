@@ -67,7 +67,6 @@ bool chargeSession_HasSessionId();
 
 void SetCarConnectedState(bool connectedState);
 bool chargeSession_IsCarConnected();
-void chargeSession_SetReceivedStartChargingCommand();
 
 #ifdef __cplusplus
 }
