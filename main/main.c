@@ -439,18 +439,18 @@ void app_main(void)
 	}
 	//#endif
 
-	xTaskCreate(&calibration_task, "calibration_task", 4096, NULL, 5, NULL);
+	xTaskCreate(&calibration_task, "calibration_task", 2*4096, NULL, 5, NULL);
 
     #ifndef BG_BRIDGE
     sessionHandler_init();
 	#endif
 
-    size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    char onTimeString[20]= {0};
+	char onTimeString[20]= {0};
 
-    bool hasBeenOnline = false;
-    int otaDelayCounter = 0;
+	bool hasBeenOnline = false;
+	int otaDelayCounter = 0;
 
 	while (true)
     {

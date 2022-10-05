@@ -27,4 +27,6 @@ bool calibration_close_relays(CalibrationCtx *ctx);
 
 bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int phase, float value);
 
+bool calibration_get_energy_counter(float *energy);
+
 #endif

@@ -809,6 +809,14 @@ bool MCU_GetInterpolatedEnergyCounter(float *energy) {
     return false;
 }
 
+bool MCU_IsCalibrationHandle(uint8_t *isCalibrationHandle) {
+    ZapMessage msg = MCU_ReadParameter(ParamIsCalibrationHandle);
+    if (msg.length == 1 && msg.type == MsgReadAck && msg.identifier == ParamIsCalibrationHandle) {
+        *isCalibrationHandle = msg.data[0];
+        return true;
+    }
+    return false;
+}
 
 static uint8_t IT3OptimizationEnabled = 0;
 uint8_t MCU_UpdateIT3OptimizationState()

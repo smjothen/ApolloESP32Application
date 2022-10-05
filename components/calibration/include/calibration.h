@@ -91,6 +91,19 @@ typedef enum {
 } CalibrationWarmupSettings;
 
 typedef enum {
+    NoLoad = 0,
+    StartingCurrent = 1,
+    I_min = 2,
+    I_tr_3_phase_PF1 = 3,
+    I_tr_3_phase_PF0_5 = 4,
+    I_tr_L1 = 5,
+    I_tr_L2 = 6,
+    I_max = 7,
+    PreFlashVerification = 8,
+    I_min_pre = 9,
+} CalibrationVerificationTest;
+
+typedef enum {
     CALIBRATION_TYPE_NONE = 0,
     CALIBRATION_TYPE_VOLTAGE_OFFSET = 1,
     CALIBRATION_TYPE_VOLTAGE_GAIN = 2,            
@@ -181,7 +194,7 @@ typedef struct {
     CalibrationState State;
     CalibrationStep CStep;
     CalibrationChargerState CState;
-    CalibrationWarmupSettings Warmup;
+    CalibrationVerificationTest VerTest;
     CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
@@ -195,6 +208,8 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx);
 bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx);
 bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx);
+
+bool calibration_tick_verification(CalibrationCtx *ctx);
 
 bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val);
 bool calibration_set_standalone(CalibrationCtx *ctx, int standalone);

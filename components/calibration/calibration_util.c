@@ -83,22 +83,39 @@ double calibration_inv_scale_emeter(CalibrationUnit unit, float raw) {
     }
 }
 
+/*
 static void calibration_set_sim_vals(float *iv, float *vv, float i, float v) {
     for (int phase = 0; phase < 3; phase++) {
         iv[phase] = i;
         vv[phase] = v;
     }
 }
+*/
 
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *iv, float *vv) {
     MessageType ret;
 
 #ifdef CALIBRATION_SIMULATION
 
+    iv[0] = iv[1] = iv[2] = 5.0;
+    vv[0] = vv[1] = vv[2] = 230.0;
+
+    /*
     switch(ctx->State) {
-        case WarmingUp: calibration_set_sim_vals(iv, vv, 0.5, 230.0); break;
-        default:        calibration_set_sim_vals(iv, vv, 5.0, 230.0); break;
+        case WarmingUp:
+            if (ctx->VerTest & HighLevelCurrent) {
+                calibration_set_sim_vals(iv, vv, 32.0, 230.0);
+            } else if (ctx->VerTest & MediumLevelCurrent) {
+                calibration_set_sim_vals(iv, vv, 16.0, 230.0);
+            } else {
+                calibration_set_sim_vals(iv, vv, 0.5, 230.0);
+            }
+            break;
+        default:
+            calibration_set_sim_vals(iv, vv, 5.0, 230.0);
+            break;
     }
+    */
 
     return true;
 
@@ -284,3 +301,20 @@ bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int 
     params[phase].assigned = true;
     return true;
 }
+
+bool calibration_get_energy_counter(float *energy) {
+    float buckets = 0.0;
+    for (int i = 0; i < 5; i++) {
+        if (MCU_GetInterpolatedEnergyCounter(&buckets)) {
+            // Returns -10.0 if reading the bucket fails
+            if (buckets > -5.0) {
+                *energy = buckets;
+                return true;
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+        }
+    }
+    return false;
+}
+

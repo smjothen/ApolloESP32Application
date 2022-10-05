@@ -67,7 +67,6 @@ void calibration_tick_starting_init(CalibrationCtx *ctx) {
     if (!calibration_get_calibration_id(ctx, &calId) || calId != 0) { ESP_LOGE(TAG, "Getting calibration ID failed or non-zero (%d)!", calId); return; }
 
     ctx->Params.CalibrationId = calId;
-    ctx->Flags |= CAL_FLAG_INIT;
 }
 
 bool calibration_tick_starting(CalibrationCtx *ctx) {
@@ -76,12 +75,11 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
     switch (ctx->CState) {
         case InProgress: {
 
-            // Special pseudo-init state
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
                 calibration_tick_starting_init(ctx);
+                ctx->Flags |= CAL_FLAG_INIT;
             } else {
 
-                // Stop command seems to cause it to go to paused state so accept that too?
                 if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
                     STATE(Complete);
                 } else {
@@ -107,6 +105,7 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 
     switch (ctx->CState) {
         case InProgress:
+            // TODO: Not implemented, do we need to?
             STATE(Complete);
             break;
         case Complete:
@@ -120,7 +119,6 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
 
 void calibration_tick_close_relays_init(CalibrationCtx *ctx) {
     calibration_close_relays(ctx);
-    ctx->Flags |= CAL_FLAG_INIT;
 }
 
 bool calibration_tick_close_relays(CalibrationCtx *ctx) {
@@ -130,6 +128,7 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
         case InProgress: {
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
                 calibration_tick_close_relays_init(ctx);
+                ctx->Flags |= CAL_FLAG_INIT;
             } else {
 
                 if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
@@ -152,6 +151,9 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
+#ifdef CALIBRATION_SIMULATION
+    return 3;
+#endif
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 
@@ -189,10 +191,10 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
 
             TickType_t minimumDuration;
 
-            if (ctx->Warmup & MediumLevelCurrent) {
+            if (ctx->VerTest & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
                 minimumDuration = pdMS_TO_TICKS(5 * 1000);
-            } else if (ctx->Warmup & HighLevelCurrent) {
+            } else if (ctx->VerTest & HighLevelCurrent) {
                 expectedCurrent = 32.0;
                 minimumDuration = pdMS_TO_TICKS(5 * 1000);
             } else {
@@ -351,54 +353,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     return ctx->CState != state;
 }
 
-bool calibration_tick_verification_start(CalibrationCtx *ctx) {
-    CalibrationChargerState state = ctx->CState;
-
-    switch (ctx->CState) {
-        case InProgress:
-            STATE(Complete);
-            break;
-        case Complete:
-            break;
-        case Failed:
-            break;
-    }
-
-    return ctx->CState != state;
-}
-
-bool calibration_tick_verification_running(CalibrationCtx *ctx) {
-    CalibrationChargerState state = ctx->CState;
-
-    switch (ctx->CState) {
-        case InProgress:
-            STATE(Complete);
-            break;
-        case Complete:
-            break;
-        case Failed:
-            break;
-    }
-
-    return ctx->CState != state;
-}
-
-bool calibration_tick_verification_done(CalibrationCtx *ctx) {
-    CalibrationChargerState state = ctx->CState;
-
-    switch (ctx->CState) {
-        case InProgress:
-            STATE(Complete);
-            break;
-        case Complete:
-            break;
-        case Failed:
-            break;
-    }
-
-    return ctx->CState != state;
-}
-
 bool calibration_tick_done(CalibrationCtx *ctx) {
     CalibrationChargerState state = ctx->CState;
 
@@ -465,7 +419,6 @@ int calibration_send_state(CalibrationCtx *ctx) {
         return 0;
     }
 
-
     /* ESP_LOGI(TAG, */
     /*         "State { %d, %s, %s, %s }", */
     /*         reply.SequenceAck, */
@@ -511,6 +464,9 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // 11. VerificationRunning
     // 12. VerificationDone
     //
+    // TODO: Some of these may be able to be skipped for the Go? Lots of verification and
+    //       warming up.
+    //
 
     switch(ctx->State) {
         case Starting:
@@ -532,13 +488,9 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
             updated = calibration_tick_calibrate(ctx);
             break;
         case VerificationStart:
-            updated = calibration_tick_verification_start(ctx);
-            break;
         case VerificationRunning:
-            updated = calibration_tick_verification_running(ctx);
-            break;
         case VerificationDone:
-            updated = calibration_tick_verification_done(ctx);
+            updated = calibration_tick_verification(ctx);
             break;
         case WriteCalibrationParameters:
             updated = calibration_tick_write_calibration_params(ctx);
@@ -627,9 +579,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
     }
 
     if (msg->has_Verification) {
-        if (ctx->State == WarmingUp) {
-            ctx->Warmup = msg->Verification.TestId;
-        }
+        ctx->VerTest = msg->Verification.TestId;
     }
 
     ctx->State = msg->State;
