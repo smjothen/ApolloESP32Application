@@ -2141,7 +2141,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"LogCurrent") != NULL)
 				{
-					SessionHandler_SetLogCurrents();
+					int interval = 0;
+					sscanf(&commandString[12], "%d", &interval);
+
+					ESP_LOGI(TAG, "Interval: %i", interval);
+
+					if((interval >= 0) && (interval <= 86400))
+					{
+						SessionHandler_SetLogCurrents(interval);
+					}
 				}
 				else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
 				{
@@ -2423,6 +2431,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SessionHandler_SendMCUSettings();
 					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"GetOPENSamples") != NULL)
+				{
+					char samples[161] = {0};
+					MCU_GetOPENSamples(samples);
+					publish_debug_telemetry_observation_Diagnostics(samples);
 				}
 
 

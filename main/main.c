@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "1.1.0.7";
+char softwareVersion[] = "0.0.0.151";//"1.1.0.7";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -352,7 +352,7 @@ void app_main(void)
 #endif
 
 
-//#define WriteThisDeviceInfo
+/*#define WriteThisDeviceInfo
 //#define Erase
 
 #ifdef Erase
@@ -362,7 +362,12 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
+	strcpy(writeDevInfo.serialNumber, "ZGB000001");
+	strcpy(writeDevInfo.PSK, "KIsLNIW2oM7P2Gl2LdlkhEIb56dqhNSAn43Tl32LB04=");
+	strcpy(writeDevInfo.Pin, "6802");
+	eeprom_wp_disable_nfc_disable();
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
+	eeprom_wp_enable_nfc_enable();
 #endif
 
 	// #define FORCE_NEW_ID
@@ -372,12 +377,12 @@ void app_main(void)
 	eeprom_wp_enable_nfc_enable();
 	#endif
 
-	// #define FORCE_FACTORY_TEST
+	 #define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
 	eeprom_wp_disable_nfc_disable();
 	EEPROM_WriteFactoryStage(FactoryStageFinnished);
 	eeprom_wp_enable_nfc_enable();
-	#endif
+	#endif*/
 
 	fat_static_mount();
 

@@ -54,7 +54,7 @@ enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode();
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
 bool SessionHandler_IsOfflineMode();
 void SessionHandler_SetOCMFHighInterval();
-void SessionHandler_SetLogCurrents();
+void SessionHandler_SetLogCurrents(int interval);
 void sessionHandler_ClearCarInterfaceResetConditions();
 void sessionHandler_SetStoppedByCloud(bool stateFromCloud);
 int sessionHandler_GetStackWatermarkOCMF();

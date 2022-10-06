@@ -40,6 +40,22 @@ struct RFIDTokens{
 };
 
 
+
+typedef enum {
+    HW_SPEED_UNKNOWN = 0,
+    HW_SPEED_1       = 1,
+    HW_SPEED_3_UK    = 3,
+} hw_speed_revision;
+
+
+typedef enum {
+    HW_POWER_UNKNOWN = 0,
+    HW_POWER_1      = 1,
+    HW_POWER_2      = 2,
+    HW_POWER_3_UK   = 3,
+} hw_power_revision;
+
+
 #define MAX_CERTIFICATE_SIZE 		50000
 #define MAX_CERTIFICATE_BUNDLE_SIZE 51000
 

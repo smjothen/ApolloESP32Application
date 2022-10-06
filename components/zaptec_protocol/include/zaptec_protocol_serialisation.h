@@ -84,6 +84,7 @@
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
+		ParamOPENVoltage = 526,
 		MaxCurrentConfigurationSource = 544,
 		SwitchPosition = 545,
 		ChargeCurrentInstallationMaxLimit = 546,
@@ -270,6 +271,7 @@
 		CommandITDiagnosticsStop = 807,
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
+		CommandGetOPENSamples = 812,
 
 		CommandDisableCertificateOnce = 820,
 		CommandDisableCertificateAlways = 821

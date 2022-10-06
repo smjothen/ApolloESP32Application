@@ -3,6 +3,7 @@
 
 #include "zaptec_protocol_serialisation.h"
 #include "../../main/sessionHandler.h"
+#include "../../main/DeviceInfo.h"
 
 float GetFloat(uint8_t * input);
 
@@ -28,11 +29,11 @@ int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
 char * MCU_GetSwVersionString();
-uint8_t MCU_ReadHwIdMCUSpeed();
-uint8_t MCU_GetHwIdMCUSpeed();
 
-uint8_t MCU_ReadHwIdMCUPower();
-uint8_t MCU_GetHwIdMCUPower();
+hw_speed_revision MCU_GetHwIdMCUSpeed();
+hw_power_revision MCU_GetHwIdMCUPower();
+
+float MCU_GetOPENVoltage();
 
 char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
@@ -75,6 +76,8 @@ void MCU_ServoCheckClear();
 void MCU_PerformServoCheck();
 float MCU_GetHWCurrentActiveLimit();
 float MCU_GetHWCurrentMaxLimit();
+
+void MCU_GetOPENSamples(char * samples);
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();
