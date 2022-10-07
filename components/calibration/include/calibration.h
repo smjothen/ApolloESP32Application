@@ -30,8 +30,9 @@
 
 #define CALIBRATION_TIMEOUT 1000 
 
-#define STATE(s) (ctx->CState = (s))
-#define STEP(s) (ctx->CStep = (s))
+#define CAL_STATE(ctx) (ctx)->State
+#define CAL_CSTATE(ctx) (ctx)->CState
+#define CAL_STEP(ctx) (ctx)->CStep
 
 #define FOREACH_CS(CS)                 \
     CS(Starting,                    1) \

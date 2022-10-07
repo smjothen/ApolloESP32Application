@@ -16,7 +16,8 @@
 
 static const char *TAG = "CALIBRATION    ";
 
-const char *calibration_state_to_string(CalibrationState state) {
+const char *calibration_state_to_string(CalibrationCtx *ctx) {
+    CalibrationState state = ctx->State;
     const char *_calibration_states[] = { FOREACH_CS(CS_STRING) };
     size_t max_state = sizeof (_calibration_states) / sizeof (_calibration_states[0]);
     if (state < 0 || state > max_state || !_calibration_states[state]) {
@@ -25,7 +26,8 @@ const char *calibration_state_to_string(CalibrationState state) {
     return _calibration_states[state];
 }
 
-const char *calibration_step_to_string(CalibrationStep state) {
+const char *calibration_step_to_string(CalibrationCtx *ctx) {
+    CalibrationStep state = ctx->CStep;
     const char *_calibration_steps[] = { FOREACH_CLS(CS_STRING) };
     size_t max_state = sizeof (_calibration_steps) / sizeof (_calibration_steps[0]);
     if (state < 0 || state > max_state || !_calibration_steps[state]) {
@@ -34,7 +36,8 @@ const char *calibration_step_to_string(CalibrationStep state) {
     return _calibration_steps[state];
 }
 
-const char *charger_state_to_string(CalibrationChargerState state) {
+const char *charger_state_to_string(CalibrationCtx *ctx) {
+    CalibrationChargerState state = ctx->CState;
     const char *_charger_states[] = { FOREACH_CHS(CS_STRING) };
     size_t max_state = sizeof (_charger_states) / sizeof (_charger_states[0]);
     if (state < 0 || state > max_state || !_charger_states[state]) {
@@ -101,7 +104,7 @@ bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float
     vv[0] = vv[1] = vv[2] = 230.0;
 
     /*
-    switch(ctx->State) {
+    switch(CAL_STATE(ctx)) {
         case WarmingUp:
             if (ctx->VerTest & HighLevelCurrent) {
                 calibration_set_sim_vals(iv, vv, 32.0, 230.0);
@@ -249,7 +252,7 @@ bool calibration_start_calibration_run(CalibrationType type) {
 bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
 #ifdef CALIBRATION_SIMULATION
-                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx->State));
+                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx));
                 *val = 25.0f;
                 return true;
 #endif
@@ -293,7 +296,7 @@ bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int 
     }
 
     if (!params) {
-        ESP_LOGE(TAG, "%s: Attempt to set invalid parameter type!", calibration_state_to_string(ctx->State));
+        ESP_LOGE(TAG, "%s: Attempt to set invalid parameter type!", calibration_state_to_string(ctx));
         return false;
     }
 

@@ -18,14 +18,14 @@
 static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
-    CalibrationStep step = ctx->CStep;
+    CalibrationStep step = CAL_STEP(ctx);
     CalibrationType type = CALIBRATION_TYPE_CURRENT_OFFSET;
     CalibrationType extra_type = CALIBRATION_TYPE_CURRENT_GAIN;
     CalibrationUnit unit = UnitCurrent;
 
-    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
+    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx), calibration_step_to_string(ctx));
 
-    switch (ctx->CStep) {
+    switch (CAL_STEP(ctx)) {
         case InitRelays:
             if (!ctx->Ticks[STABILIZATION_TICK]) {
 
@@ -55,20 +55,20 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             }
 
             ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(0);
-            STEP(Stabilization);
+            CAL_STEP(ctx) = Stabilization;
 
             break;
         case Stabilization:
 
             if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
-                STEP(InitCalibration);
+                CAL_STEP(ctx) = InitCalibration;
             }
 
             break;
         case InitCalibration: {
 
             if (calibration_start_calibration_run(type)) {
-                STEP(Calibrating);
+                CAL_STEP(ctx) = Calibrating;
             }
 
             break;
@@ -80,19 +80,19 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 for (int phase = 0; phase < 3; phase++) {
                     double offset = avg[phase] / EMETER_SYS_GAIN;
 
-                    ESP_LOGI(TAG, "%s: IOFFS(%d) = %f (%f)", calibration_state_to_string(ctx->State), phase, avg[phase], calibration_scale_emeter(unit, offset));
+                    ESP_LOGI(TAG, "%s: IOFFS(%d) = %f (%f)", calibration_state_to_string(ctx), phase, avg[phase], calibration_scale_emeter(unit, offset));
 
                     calibration_write_parameter(ctx, type, phase, offset);
 
                     if (!emeter_write_float(I1_OFFS + phase, offset, 23)) {
-                        ESP_LOGE(TAG, "%s: IOFFS(%d) write failed!", calibration_state_to_string(ctx->State), phase);
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) write failed!", calibration_state_to_string(ctx), phase);
                         return false;
                     }
                 }
 
                 if (calibration_start_calibration_run(type)) {
                     ctx->Count = 0;
-                    STEP(Verify);
+                    CAL_STEP(ctx) = Verify;
                 }
             }
 
@@ -108,10 +108,10 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
                     if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx), phase, average, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        STATE(Failed);
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx), phase, average, max_error);
+                        CAL_CSTATE(ctx) = Failed;
                         return false;
                     }
                 }
@@ -120,7 +120,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     ctx->Count = 0;
 
                     if (calibration_start_calibration_run(extra_type)) {
-                        STEP(VerifyRMS);
+                        CAL_STEP(ctx) = VerifyRMS;
                     }
                 } else {
                     calibration_start_calibration_run(type);
@@ -140,17 +140,17 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
                     if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, average, max_error);
+                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx), phase, average, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, average, max_error);
-                        STATE(Failed);
+                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx), phase, average, max_error);
+                        CAL_CSTATE(ctx) = Failed;
                         return false;
                     }
                 }
 
                 if (++ctx->Count >= 5) {
                     ctx->Count = 0;
-                    STEP(CalibrationDone);
+                    CAL_STEP(ctx) = CalibrationDone;
                 } else {
                     calibration_start_calibration_run(extra_type);
                 }
@@ -160,11 +160,11 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
         }
         case CalibrationDone:
             // Reset
-            STEP(InitRelays);
+            CAL_STEP(ctx) = InitRelays;
             // Complete state
-            STATE(Complete);
+            CAL_CSTATE(ctx) = Complete;
             break;
     }
 
-    return ctx->CStep != step;
+    return CAL_STEP(ctx) != step;
 }

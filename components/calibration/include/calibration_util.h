@@ -3,9 +3,9 @@
 
 #include "calibration.h"
 
-const char *calibration_state_to_string(CalibrationState state);
-const char *calibration_step_to_string(CalibrationStep state);
-const char *charger_state_to_string(CalibrationChargerState state);
+const char *calibration_state_to_string(CalibrationCtx *ctx);
+const char *calibration_step_to_string(CalibrationCtx *ctx);
+const char *charger_state_to_string(CalibrationCtx *ctx);
 
 bool calibration_ref_voltage_is_recent(CalibrationCtx *ctx);
 bool calibration_ref_current_is_recent(CalibrationCtx *ctx);

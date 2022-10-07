@@ -19,14 +19,14 @@
 static const char *TAG = "CALIBRATION    ";
 
 bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
-    CalibrationStep step = ctx->CStep;
+    CalibrationStep step = CAL_STEP(ctx);
     CalibrationType type = CALIBRATION_TYPE_CURRENT_GAIN;
     CalibrationUnit unit = UnitCurrent;
     float max_error = CALIBRATION_IGAIN_MAX_ERROR;
 
-    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx->State), calibration_step_to_string(ctx->CStep));
+    ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx), calibration_step_to_string(ctx));
 
-    switch (ctx->CStep) {
+    switch (CAL_STEP(ctx)) {
         case InitRelays:
             if (!ctx->Ticks[STABILIZATION_TICK]) {
 
@@ -45,19 +45,19 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
             }
 
             ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
-            STEP(Stabilization);
+            CAL_STEP(ctx) = Stabilization;
 
             break;
         case Stabilization:
 
             if (xTaskGetTickCount() > ctx->Ticks[STABILIZATION_TICK]) {
-                STEP(InitCalibration);
+                CAL_STEP(ctx) = InitCalibration;
             }
 
             break;
         case InitCalibration: {
             if (calibration_start_calibration_run(type)) {
-                STEP(Calibrating);
+                CAL_STEP(ctx) = Calibrating;
             }
 
             break;
@@ -73,21 +73,21 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
                         calibration_write_parameter(ctx, type, phase, gain);
 
-                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = (%f / %f)", calibration_state_to_string(ctx->State), phase, gain, ctx->Ref.I[phase], average);
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = (%f / %f)", calibration_state_to_string(ctx), phase, gain, ctx->Ref.I[phase], average);
 
                         if (!emeter_write_float(I1_GAIN + phase, gain, 21)) {
-                            ESP_LOGE(TAG, "%s: IGAIN(%d) write failed!", calibration_state_to_string(ctx->State), phase);
+                            ESP_LOGE(TAG, "%s: IGAIN(%d) write failed!", calibration_state_to_string(ctx), phase);
                             return false;
                         }
                     }
                 } else {
-                    ESP_LOGI(TAG, "%s: IGAIN current reference too old. Waiting ...", calibration_state_to_string(ctx->State));
+                    ESP_LOGI(TAG, "%s: IGAIN current reference too old. Waiting ...", calibration_state_to_string(ctx));
                     break;
                 }
 
                 if (calibration_start_calibration_run(type)) {
                     ctx->Count = 0;
-                    STEP(Verify);
+                    CAL_STEP(ctx) = Verify;
                 }
             }
 
@@ -103,24 +103,24 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
                     float reference;
                     if (!calibration_get_ref_unit(ctx, unit, phase, &reference)) {
-                        ESP_LOGE(TAG, "%s: IGAIN reference current too old. Waiting ...", calibration_state_to_string(ctx->State));
+                        ESP_LOGE(TAG, "%s: IGAIN reference current too old. Waiting ...", calibration_state_to_string(ctx));
                         return false;
                     }
 
                     float error = fabsf(1.0f - (reference / average));
 
                     if (error < max_error) {
-                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx->State), phase, error, max_error);
+                        ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx->State), phase, error, max_error);
-                        STATE(Failed);
+                        ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx), phase, error, max_error);
+                        CAL_CSTATE(ctx) = Failed;
                         return false;
                     }
                 }
 
                 if (++ctx->Count >= 5) {
                     ctx->Count = 0;
-                    STEP(CalibrationDone);
+                    CAL_STEP(ctx) = CalibrationDone;
                 } else {
                     calibration_start_calibration_run(type);
                 }
@@ -131,16 +131,16 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
         }
         case VerifyRMS:
             // No RMS verification for gains
-            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx->State));
-            STATE(Failed);
+            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx));
+            CAL_CSTATE(ctx) = Failed;
             break;
         case CalibrationDone:
             // Reset
-            STEP(InitRelays);
+            CAL_STEP(ctx) = InitRelays;
             // Complete state
-            STATE(Complete);
+            CAL_CSTATE(ctx) = Complete;
             break;
     }
 
-    return ctx->CStep != step;
+    return CAL_STEP(ctx) != step;
 }
