@@ -263,15 +263,15 @@ bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 }
 
 bool calibration_set_standalone(CalibrationCtx *ctx, int standalone) {
-    return MCU_SendUint8Parameter(ParamIsStandalone, 1) == MsgWriteAck;
+    return MCU_SendUint8Parameter(ParamIsStandalone, standalone) == MsgWriteAck;
 }
 
 bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current) {
-    return MCU_SendFloatParameter(ParamSimplifiedModeMaxCurrent, 32.0) == MsgWriteAck;
+    return MCU_SendFloatParameter(ParamSimplifiedModeMaxCurrent, current) == MsgWriteAck;
 }
 
 bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock) {
-    return MCU_SendUint8Parameter(LockCableWhenConnected, 0) == MsgWriteAck;
+    return MCU_SendUint8Parameter(LockCableWhenConnected, lock) == MsgWriteAck;
 }
 
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {

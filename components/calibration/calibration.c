@@ -58,15 +58,24 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
     return ctx->CState != state;
 }
 
-void calibration_tick_starting_init(CalibrationCtx *ctx) {
-    uint32_t calId = 0;
+int calibration_tick_starting_init(CalibrationCtx *ctx) {
+    if (!calibration_set_standalone(ctx, 1)) {
+        return -1;
+    }
 
-    if (!calibration_set_standalone(ctx, 1)) { ESP_LOGE(TAG, "Setting standalone failed!"); return; }
-    if (!calibration_set_simplified_max_current(ctx, 1)) { ESP_LOGE(TAG, "Setting simplified max current failed!"); return; }
-    if (!calibration_set_lock_cable(ctx, 0)) { ESP_LOGE(TAG, "Setting disable cable lock failed!"); return; }
-    if (!calibration_get_calibration_id(ctx, &calId) || calId != 0) { ESP_LOGE(TAG, "Getting calibration ID failed or non-zero (%d)!", calId); return; }
+    if (!calibration_set_simplified_max_current(ctx, 32.0)) {
+        return -2;
+    }
 
-    ctx->Params.CalibrationId = calId;
+    if (!calibration_set_lock_cable(ctx, 0)) {
+        return -3;
+    }
+
+    if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
+        return -4;
+    }
+
+    return 0;
 }
 
 bool calibration_tick_starting(CalibrationCtx *ctx) {
@@ -76,7 +85,10 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
         case InProgress: {
 
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
-                calibration_tick_starting_init(ctx);
+                if (calibration_tick_starting_init(ctx) < 0) {
+                    return false;
+                }
+
                 ctx->Flags |= CAL_FLAG_INIT;
             } else {
 
@@ -86,7 +98,6 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
                     calibration_open_relays(ctx);
                     ESP_LOGI(TAG, "%s: Waiting for relays to open ...", calibration_state_to_string(ctx->State));
                 }
-
             }
 
             break;
@@ -347,6 +358,9 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         ESP_LOGI(TAG, "%s: Waiting for MCU to reboot ...", calibration_state_to_string(ctx->State));
         vTaskDelay(pdMS_TO_TICKS(100));
     }
+
+    // Rebooted, set standalone current, etc again
+    calibration_tick_starting_init(ctx);
 
     STATE(Complete);
 

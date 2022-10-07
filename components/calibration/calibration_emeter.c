@@ -53,12 +53,8 @@ bool emeter_write_float(uint8_t reg, double value, int radix) {
 bool emeter_read(uint8_t reg, uint32_t *val) {
 #ifdef CALIBRATION_SIMULATION
 
-	if (reg >= V1_OFFS && reg <= V3_OFFS) {
-		*val = floatToSn(0.000187, 23);
-	} else if (reg >= V1_GAIN && reg <= V3_GAIN) {
-		*val = floatToSn(0.000187, 23);
-	}
-
+	// Only used directly for VOFFS calibration, so simulate a small offset
+	*val = floatToSn(0.000187, 23);
 	return true;
 
 #endif
