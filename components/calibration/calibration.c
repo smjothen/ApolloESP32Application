@@ -50,7 +50,6 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
             }
             break;
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -103,7 +102,6 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
             break;
         }
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -120,7 +118,6 @@ bool calibration_tick_contact_cleaning(CalibrationCtx *ctx) {
             CAL_CSTATE(ctx) = Complete;
             break;
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -152,7 +149,6 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
             break;
         }
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -237,7 +233,6 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             break;
         }
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -274,7 +269,6 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
             break;
         }
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -348,7 +342,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
 
     if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
         ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
-        CAL_CSTATE(ctx) = Failed;
+        CAL_CFAIL(ctx, 0);
         return false;
     }
 
@@ -381,7 +375,6 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
             break;
         case Complete:
-            break;
         case Failed:
             break;
     }
@@ -557,6 +550,10 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
 
     struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
+    if (CAL_CSTATE(ctx) == Failed || ctx->Failure != 0) {
+        return;
+    }
+
     if (msg->State == Starting && msg->has_Run) {
         int doCalibRun = 0;
 
@@ -684,15 +681,6 @@ static int create_multicast_ipv4_socket(void) {
         goto err;
     }
 
-
-    /*
-    int broadcast = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
-        ESP_LOGE(TAG, "Failed to set SO_BROADCAST");
-        goto err;
-    }
-    */
-
     // this is also a listening socket, so add it to the multicast
     // group for listening...
     err = socket_add_ipv4_multicast_group(sock, true);
@@ -735,6 +723,8 @@ void calibration_task(void *pvParameters) {
 
         ctx.Server = serv;
         ctx.Ticks[STATE_TICK] = xTaskGetTickCount();
+
+        CAL_FAIL(&ctx) = 0;
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,

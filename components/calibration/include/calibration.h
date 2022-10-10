@@ -34,6 +34,13 @@
 #define CAL_CSTATE(ctx) (ctx)->CState
 #define CAL_STEP(ctx) (ctx)->CStep
 
+#define CAL_FAIL(ctx) (ctx)->Failure
+
+#define CAL_CFAIL(ctx, reason) do { \
+    CAL_CSTATE((ctx)) = Failed;     \
+    CAL_FAIL((ctx)) |= reason;      \
+} while (0)
+
 #define FOREACH_CS(CS)                 \
     CS(Starting,                    1) \
     CS(WarmingUp,                   2) \
@@ -185,6 +192,10 @@ typedef enum {
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
 } CalibrationFlags;
 
+typedef enum {
+    CAL_FAIL_UNKNOWN = (1 << 0),
+} CalibrationFailure;
+
 typedef struct {
     int Run;
     int Seq;
@@ -199,6 +210,7 @@ typedef struct {
     CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
+    CalibrationFailure Failure;
 
     TickType_t Ticks[LAST_TICK];
 } CalibrationCtx;
