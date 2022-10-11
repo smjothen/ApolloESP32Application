@@ -199,6 +199,8 @@ static void ota_task(void *pvParameters){
         	{
         		ESP_LOGI(TAG, "Same version -> aborting");
         		updateOnlyIfNewVersion = false;
+        		// Must send command to MCU to clear purple led on charger
+				MCU_SendCommandId(CommandHostFwUpdateEnd);
         		otaRunning = false;
         	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
         	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
