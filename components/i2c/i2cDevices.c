@@ -60,6 +60,13 @@ struct DeviceInfo i2cGetLoadedDeviceInfo()
 	return deviceInfo;
 }
 
+bool i2cSerialIsZGB()
+{
+	if(strnstr(deviceInfo.serialNumber,"ZGB",3) != NULL)
+		return true;
+	else
+		return false;
+}
 
 /*
  * Chargers below serial number ~ZAP000149 had a different partition table without the "files" partition.

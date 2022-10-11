@@ -564,7 +564,7 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 }
 
 static uint32_t txCnt = 0;
-
+static float OPENVoltage = 0.0;
 int publish_debug_telemetry_observation_all(double rssi){
     cJSON *observations = create_observation_collection();
 
@@ -590,7 +590,8 @@ int publish_debug_telemetry_observation_all(double rssi){
 
     if(MCU_GetHwIdMCUPower() == HW_POWER_3_UK)
     {
-    	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
+    	OPENVoltage = MCU_GetOPENVoltage();
+    	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, OPENVoltage));
     }
 
 
@@ -610,7 +611,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	GetTimeOnString(buf);
 	if(MCU_GetHwIdMCUPower() == HW_POWER_3_UK)
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetOPENVoltage(), MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
 	}
 	else
 	{

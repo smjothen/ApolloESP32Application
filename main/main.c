@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "0.0.0.151";//"1.1.0.7";
+char softwareVersion[] = "2.0.0.152";//"1.1.0.7";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -362,9 +362,9 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
-	strcpy(writeDevInfo.serialNumber, "ZGB000001");
-	strcpy(writeDevInfo.PSK, "KIsLNIW2oM7P2Gl2LdlkhEIb56dqhNSAn43Tl32LB04=");
-	strcpy(writeDevInfo.Pin, "6802");
+	strcpy(writeDevInfo.serialNumber, "ZGB000005");
+	strcpy(writeDevInfo.PSK, "rxF1f/DGyyeWJ8Sq1Zp9hHeUiojODsF8vCZFM7kaFcQ=");
+	strcpy(writeDevInfo.Pin, "0394");
 	eeprom_wp_disable_nfc_disable();
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 	eeprom_wp_enable_nfc_enable();

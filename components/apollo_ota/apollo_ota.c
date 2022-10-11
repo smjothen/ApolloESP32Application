@@ -14,6 +14,7 @@
 #include "DeviceInfo.h"
 #include "certificate.h"
 #include "protocol_task.h"
+#include "i2cDevices.h"
 
 #define TAG "OTA"
 
@@ -207,6 +208,29 @@ static void ota_task(void *pvParameters){
         	{
         		// Must send command to MCU to set purple led on charger
         		MCU_SendCommandId(CommandHostFwUpdateStart);
+        	}
+        }
+
+
+        // For chargers with prefix ZGB, don't allow download of older ZAP-only firmware versions!
+        if(i2cSerialIsZGB() == true)
+        {
+        	// Deny all 0.X.X.X and 1.X.X.X versions. New versions must be at least "2.0.0.0"
+        	if((strnstr(image_version, "0.", 2) != NULL) || ((strnstr(image_version, "1.", 2)) != NULL))
+			{
+        		log_message("Not allowed to download ZAP-only version to ZGB!");
+				otaRunning = false;
+
+				// Must send command to MCU to clear purple led on charger
+				MCU_SendCommandId(CommandHostFwUpdateEnd);
+
+				xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+				xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+				continue;
+			}
+        	else
+        	{
+        		ESP_LOGW(TAG, "ZGB compatible version: %s", image_version);
         	}
         }
 
