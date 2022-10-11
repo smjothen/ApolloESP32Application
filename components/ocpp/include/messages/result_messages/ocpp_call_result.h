@@ -30,9 +30,9 @@ cJSON * ocpp_create_cancel_reservation_confirmation(const char * unique_id, cons
 cJSON * ocpp_create_reserve_now_confirmation(const char * unique_id, const char * status);
 
 //Smart Charging Profile
-//cJSON * ocpp_create_clear_charging_profile_confirmation(const char * unique_id, const char * status);
+cJSON * ocpp_create_clear_charging_profile_confirmation(const char * unique_id, const char * status);
 //cJSON * ocpp_create_get_composite_schedule_confirmation(const char * unique_id, const char * status, int connector_id, time_t schedule_start, char * charging_schedule);
-//cJSON * ocpp_create_set_charge_profile_confirmation(const char * unique_id, const char * status);
+cJSON * ocpp_create_set_charge_profile_confirmation(const char * unique_id, const char * status);
 
 //Remote Trigger Profile
 cJSON * ocpp_create_trigger_message_confirmation(const char * unique_id, const char * status);

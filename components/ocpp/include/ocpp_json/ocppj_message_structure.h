@@ -19,8 +19,9 @@ enum ocpp_message_type_id{
 #define	OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION "TypeConstraintViolation"
 #define	OCPPJ_ERROR_GENERIC "GenericError"
 
-typedef enum{
-	eOCPPJ_NO_ERROR,
+enum ocppj_err_t{
+	eOCPPJ_NO_ERROR, // Not part of specification: indicate success
+	eOCPPJ_NO_VALUE, // Not part of specification: indicate that field optional field is not present
 	eOCPPJ_ERROR_NOT_IMPLEMENTED,
 	eOCPPJ_ERROR_NOT_SUPPORTED,
 	eOCPPJ_ERROR_INTERNAL,
@@ -31,7 +32,7 @@ typedef enum{
 	eOCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION,
 	eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION,
 	eOCPPJ_ERROR_GENERIC,
-} ocppj_err_t;
+} ;
 
 //Actions
 #define	OCPPJ_ACTION_AUTORIZE "Authorize"
@@ -62,5 +63,7 @@ typedef enum{
 #define	OCPPJ_ACTION_TRIGGER_MESSAGE "TriggerMessage"
 #define	OCPPJ_ACTION_UNLOCK_CONNECTOR "UnlockConnector"
 #define	OCPPJ_ACTION_UPDATE_FIRMWARE "UpdateFirmware"
+
+const char * ocppj_error_code_from_id(enum ocppj_err_t error_id);
 
 #endif /*OCPPJ_MESSAGE_STRUCTURE_H*/

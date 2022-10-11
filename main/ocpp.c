@@ -12,10 +12,12 @@
 #include "storage.h"
 #include "sessionHandler.h"
 #include "offlineSession.h"
+#include "fat.h"
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
-#include "fat.h"
+#include "ocpp_smart_charging.h"
+
 #include "messages/call_messages/ocpp_call_request.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/result_messages/ocpp_call_result.h"
@@ -245,7 +247,7 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 		.unit = eOCPP_UNIT_A
 	};
 
-	sprintf(new_value.value, "%f", MCU_StandAloneCurrent());
+	sprintf(new_value.value, "%f", MCU_GetChargeCurrentUserMax());
 	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
 		return 0;
 
@@ -2460,6 +2462,7 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 	}
 
 	bool found_match = false;
+
 	for(size_t i = 0; i < sizeof(known_vendors); i++){
 		if(strcmp(vendor_id_json->valuestring, known_vendors[i]) == 0){
 			found_match = true;
@@ -2746,6 +2749,16 @@ static void ocpp_task(){
 		}while(err != 0);
 
 		start_ocpp_heartbeat();
+
+		ocpp_set_on_new_period_cb(sessionHandler_OcppSetChargingVariables);
+		if(ocpp_smart_charging_init(storage_Get_ocpp_number_of_connectors(),
+						storage_Get_ocpp_charge_profile_max_stack_level(),
+						storage_Get_ocpp_charging_schedule_allowed_charging_rate_unit(),
+						storage_Get_ocpp_charging_schedule_max_periods(),
+						storage_Get_ocpp_max_charging_profiles_installed()) != ESP_OK){
+
+			ESP_LOGE(TAG, "Unable to initiate smart charging");
+		}
 
 		//Handle ClockAlignedDataInterval
 		restart_clock_aligned_meter_values();

@@ -13,6 +13,7 @@ struct ocpp_id_tag_info{
 	char status[16];
 };
 
-ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_info * id_tag_out, char * error_description, size_t description_length);
+enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_info * id_tag_out,
+				char * error_description, size_t description_length);
 
 #endif /*OCPP_ID_TAG_INFO_H*/

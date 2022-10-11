@@ -31,6 +31,7 @@
 #include "fat.h"
 
 #include "ocpp_task.h"
+#include "ocpp_smart_charging.h"
 #include "ocpp.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/call_messages/ocpp_call_request.h"
@@ -358,6 +359,55 @@ time_t sessionHandler_OcppTransactionStartTime(){
 	return transaction_start;
 }
 
+float ocpp_min_limit = -1.0f;
+float ocpp_max_limit = -1.0f;
+uint8_t ocpp_active_phases = 0;
+uint8_t ocpp_requested_phases = 0;
+
+void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases){
+	ESP_LOGI(TAG, "Got new charging valiables: minimum: %f -> %f, maximum: %f -> %f, phases %d -> %d",
+		ocpp_min_limit, min_charging_limit, ocpp_max_limit, max_charging_limit, ocpp_requested_phases, number_phases);
+
+	if(ocpp_min_limit == -1){
+		ESP_LOGI(TAG, "Initializing ocpp charging values");
+		ocpp_min_limit = storage_Get_CurrentInMinimum();
+		ocpp_max_limit = storage_Get_StandaloneCurrent();
+		ocpp_active_phases = storage_Get_StandalonePhase();
+		ocpp_requested_phases = ocpp_active_phases;
+	}
+
+	if(ocpp_min_limit != min_charging_limit){
+ 		ESP_LOGI(TAG, "Changing minimum current: %f -> %f", ocpp_min_limit, min_charging_limit);
+		MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, min_charging_limit);
+		if(ret == MsgWriteAck){
+			ESP_LOGI(TAG, "Minimum current updated");
+			ocpp_max_limit = max_charging_limit;
+		}else{
+			ESP_LOGE(TAG, "Unable to update minimum current");
+		}
+	}
+	if(ocpp_max_limit != max_charging_limit){
+ 		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
+		if(ret == MsgWriteAck){
+			ESP_LOGI(TAG, "Max current updated");
+			ocpp_max_limit = max_charging_limit;
+		}else{
+			ESP_LOGE(TAG, "Unable to update max current");
+		}
+	}
+
+	ocpp_requested_phases = number_phases;
+
+	if(ocpp_requested_phases != ocpp_active_phases &&
+		(!sessionHandler_OcppTransactionIsActive(1) || storage_Get_ocpp_connector_switch_3_to_1_phase_supported())){
+
+		ESP_LOGW(TAG, "OCPP requested a legal change of number of phases, but this is currently not supported or meaningfull in current context");
+
+		ocpp_active_phases = ocpp_requested_phases;
+	}
+}
+
 void sessionHandler_OcppStopTransaction(const char * reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
@@ -386,9 +436,11 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 		int received_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
 
 		if(transaction_id != NULL && *transaction_id == tmp_id){
+			ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
+
 			*transaction_id = received_id;
 			is_current_transaction = true;
-			ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
+			ocpp_set_active_transaction_id(transaction_id);
 		}
 
 		esp_err_t err = offlineSession_UpdateTransactionId_ocpp(tmp_id, received_id);
@@ -691,6 +743,8 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 
 	free(transaction_id);
 	transaction_start = 0;
+
+	ocpp_set_active_transaction_id(NULL);
 	transaction_id = NULL;
 }
 
@@ -1313,6 +1367,7 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 
 		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
 		send_call_reply(reply);
+		cJSON_Delete(reply);
 		return;
 	}
 
@@ -1682,7 +1737,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 
 		if(change_availability_if_pending(0)) // TODO: check if needed elsewhere
 			break;
-
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
 			break;
@@ -1691,6 +1745,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 			chargeSession_SetStoppedReason(OCPP_REASON_EV_DISCONNECT);
 			stop_transaction();
+			ocpp_set_transaction_is_active(false);
 			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FINISHING:
@@ -1725,6 +1780,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
+			ocpp_set_transaction_is_active(true);
 			//This must be set to stop replying the same SessionIds to cloud
 			chargeSession_SetReceivedStartChargingCommand();
 			//Clear authorization for next transaction
@@ -1779,6 +1835,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 			stop_transaction();
+			ocpp_set_transaction_is_active(false);
 			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FAULTED:
@@ -1859,9 +1916,11 @@ static void handle_preparing(){
 	 */
 	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
 		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
+
+		//Use standalone until changed by ocpp_smart_charging
 		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, storage_Get_StandaloneCurrent());
 		if(ret == MsgWriteAck){
-			ESP_LOGI(TAG, "Max Current set");
+			ESP_LOGI(TAG, "Max Current set to %f", storage_Get_StandaloneCurrent());
 		}else{
 			ESP_LOGE(TAG, "Unable to set max current");
 		}

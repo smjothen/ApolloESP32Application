@@ -1,7 +1,9 @@
 
 idf_component_register(SRCS
-  "ocpp_task.c"
   "ocpp_listener.c"
+  "ocpp_smart_charging.c"
+  "ocpp_task.c"
+  "types/ocpp_charging_profile.c"
   "types/ocpp_ci_string_type.c"
   "types/ocpp_date_time.c"
   "types/ocpp_enum.c"
@@ -23,18 +25,22 @@ idf_component_register(SRCS
   "messages/result_messages/change_availability.c"
   "messages/result_messages/change_configuration.c"
   "messages/result_messages/clear_cache.c"
+  "messages/result_messages/clear_charging_profile.c"
   "messages/result_messages/data_transfer.c"
   "messages/result_messages/get_configuration.c"
   "messages/result_messages/get_local_list_version.c"
   "messages/result_messages/remote_start_stop_transaction.c"
   "messages/result_messages/reset.c"
   "messages/result_messages/send_local_list.c"
+  "messages/result_messages/set_charging_profile.c"
   "messages/result_messages/trigger_message.c"
   "messages/result_messages/unlock_connector.c"
   "messages/result_messages/update_firmware.c"
   "messages/result_messages/cancel_reservation.c"
   "messages/result_messages/reserve_now.c"
   "messages/result_messages/ocpp_create_result.c"
+  "ocpp_json/ocppj_message_structure.c"
+  "ocpp_json/ocppj_validation.c"
   INCLUDE_DIRS "./include"
-  REQUIRES esp_websocket_client json
+  REQUIRES esp_websocket_client json fatfs zaptec_cloud
   )

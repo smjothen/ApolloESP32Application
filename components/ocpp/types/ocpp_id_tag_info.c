@@ -6,7 +6,8 @@
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_date_time.h"
 
-ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_info * id_tag_out, char * error_description, size_t description_length){
+enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_info * id_tag_out,
+				char * error_description, size_t description_length){
 
 	if(!cJSON_HasObjectItem(idTagInfo, "status")){
 		snprintf(error_description, description_length, "Expected 'status' field");

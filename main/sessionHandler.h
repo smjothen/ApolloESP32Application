@@ -65,6 +65,7 @@ void sessionHandler_SetOfflineSessionFlag();
 bool sessionHandler_OcppTransactionIsActive(uint connector_id);
 int * sessionHandler_OcppGetTransactionId(uint connector_id);
 time_t sessionHandler_OcppTransactionStartTime();
+void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases);
 void sessionHandler_OcppStopTransaction(const char * reason);
 // Transfers the ownership of the meter values to sessionHandler
 void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length);
