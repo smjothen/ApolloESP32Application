@@ -27,7 +27,7 @@ esp_err_t ble_interface_init(void)
 	ESP_LOGI(TAG,"Initializing Bluetooth Driver");
 
 	// Release the memory reserved for classic BT, since we are not using it!
-	ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+	esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 	
 	esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 

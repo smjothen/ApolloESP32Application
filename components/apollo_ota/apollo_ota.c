@@ -15,6 +15,7 @@
 #include "certificate.h"
 #include "protocol_task.h"
 #include "i2cDevices.h"
+#include "ble_interface.h"
 
 #define TAG "OTA"
 
@@ -181,12 +182,14 @@ static void ota_task(void *pvParameters){
 
 			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
 			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
-			otaRunning = false;
+
 
 			log_message("Timed out waiting for certificate. Aborting OTA");
 
 			// Must send command to MCU to clear purple led on charger
 			MCU_SendCommandId(CommandHostFwUpdateEnd);
+			ble_interface_init();
+			otaRunning = false;
 
 			continue;
         }
@@ -201,7 +204,9 @@ static void ota_task(void *pvParameters){
         		updateOnlyIfNewVersion = false;
         		// Must send command to MCU to clear purple led on charger
 				MCU_SendCommandId(CommandHostFwUpdateEnd);
+				ble_interface_init();
         		otaRunning = false;
+
         	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
         	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
         		continue;
@@ -221,10 +226,11 @@ static void ota_task(void *pvParameters){
         	if((strnstr(image_version, "0.", 2) != NULL) || ((strnstr(image_version, "1.", 2)) != NULL))
 			{
         		log_message("Not allowed to download ZAP-only version to ZGB!");
-				otaRunning = false;
 
 				// Must send command to MCU to clear purple led on charger
 				MCU_SendCommandId(CommandHostFwUpdateEnd);
+				ble_interface_init();
+				otaRunning = false;
 
 				xEventGroupClearBits(event_group,OTA_UNBLOCKED);
 				xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
