@@ -21,6 +21,7 @@
 #include "../../main/chargeSession.h"
 #include "../../main/sessionHandler.h"
 #include "apollo_ota.h"
+#include "segmented_ota.h"
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
@@ -2438,6 +2439,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					char samples[161] = {0};
 					MCU_GetOPENSamples(samples);
 					publish_debug_telemetry_observation_Diagnostics(samples);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"AbortOTA") != NULL)
+				{
+					do_segment_ota_abort();
+					responseStatus = 200;
 				}
 
 

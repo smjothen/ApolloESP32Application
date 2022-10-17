@@ -60,9 +60,15 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+static bool doAbortOTA = false;
+void do_segment_ota_abort()
+{
+	doAbortOTA = true;
+}
+
 void do_segmented_ota(char *image_location){
     ESP_LOGW(TAG, "running experimental segmented ota");
-    ota_log_chunked_update_start(image_location);
+    //ota_log_chunked_update_start(image_location);
 
     const esp_partition_t * update_partition = esp_ota_get_next_update_partition(NULL);
 
@@ -101,6 +107,9 @@ void do_segmented_ota(char *image_location){
             break;
         }
 
+        if(doAbortOTA == true)
+        	break;
+
         esp_http_client_handle_t client = esp_http_client_init(&config);
 
         char range_header_value[64];
@@ -134,6 +143,13 @@ void do_segmented_ota(char *image_location){
         }
     }
     
+    if(doAbortOTA == true)
+    {
+    	doAbortOTA = false;
+    	ESP_LOGW(TAG, "Aborting OTA");
+    	return;
+    }
+
     esp_err_t end_err = esp_ota_end(update_handle);
     if(end_err!=ESP_OK){
         ESP_LOGE(TAG, "Partition validation error %d", end_err);

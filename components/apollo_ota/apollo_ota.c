@@ -116,6 +116,16 @@ void _do_sdk_ota(char *image_location){
     xTimerDelete(timeout_timer, portMAX_DELAY);
 }
 
+static void StopOTA()
+{
+	// Must send command to MCU to clear purple led on charger
+	MCU_SendCommandId(CommandHostFwUpdateEnd);
+	ble_interface_init();
+	otaRunning = false;
+
+	xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+	xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+}
 
 static void ota_task(void *pvParameters){
 
@@ -180,16 +190,9 @@ static void ota_task(void *pvParameters){
 				continue;
 			}
 
-			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
-
-
 			log_message("Timed out waiting for certificate. Aborting OTA");
 
-			// Must send command to MCU to clear purple led on charger
-			MCU_SendCommandId(CommandHostFwUpdateEnd);
-			ble_interface_init();
-			otaRunning = false;
+			StopOTA();
 
 			continue;
         }
@@ -202,13 +205,9 @@ static void ota_task(void *pvParameters){
         	{
         		ESP_LOGI(TAG, "Same version -> aborting");
         		updateOnlyIfNewVersion = false;
-        		// Must send command to MCU to clear purple led on charger
-				MCU_SendCommandId(CommandHostFwUpdateEnd);
-				ble_interface_init();
-        		otaRunning = false;
 
-        	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-        	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+        		StopOTA();
+
         		continue;
         	}
         	else
@@ -227,13 +226,7 @@ static void ota_task(void *pvParameters){
 			{
         		log_message("Not allowed to download ZAP-only version to ZGB!");
 
-				// Must send command to MCU to clear purple led on charger
-				MCU_SendCommandId(CommandHostFwUpdateEnd);
-				ble_interface_init();
-				otaRunning = false;
-
-				xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-				xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+				StopOTA();
 				continue;
 			}
         	else
@@ -249,8 +242,14 @@ static void ota_task(void *pvParameters){
 
         if((ota_selection_field & OTA_UNBLOCKED) != 0 ){
             _do_sdk_ota(image_location);
+
+            StopOTA();
+
         }else if((ota_selection_field & SEGMENTED_OTA_UNBLOCKED) != 0){
             do_segmented_ota(image_location);
+
+            StopOTA();
+
         }else{
             ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }

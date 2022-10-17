@@ -64,7 +64,7 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
     }
 
     int len = strlen(message);
-    //ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
+    ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
 
     int publish_err;
     if(blocking){
