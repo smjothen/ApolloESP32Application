@@ -13,6 +13,9 @@ extern "C" {
 
 void storage_Init();
 void storage_Init_Configuration();
+void storage_Initialize_ScheduleParameteres();
+void storage_Initialize_UK_TestScheduleParameteres();
+void storage_Initialize_NO_TestScheduleParameteres();
 
 //Set Cloud settings
 void storage_Set_AuthenticationRequired(uint8_t newValue);
@@ -44,6 +47,11 @@ void storage_Set_PulseInterval(uint32_t newValue);
 void storage_Set_And_Save_DiagnosticsLog(char * newString);
 void storage_Clear_And_Save_DiagnosticsLog();
 
+void storage_Set_Location(char * newString);
+void storage_Set_Timezone(char * newString);
+void storage_Set_TimeSchedule(char * newString);
+void storage_Set_MaxStartDelay(uint32_t newValue);
+
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
 float storage_Get_CurrentInMaximum();
@@ -58,7 +66,7 @@ char * storage_Get_ChargerName();
 uint32_t storage_Get_DiagnosticsMode();
 uint32_t storage_Get_TransmitInterval();
 float storage_Get_TransmitChangeLevel();
-
+uint32_t storage_Get_MaxStartDelay();
 
 //Get Local settings
 uint8_t storage_Get_CommunicationMode();
@@ -74,6 +82,10 @@ uint8_t storage_Get_NetworkTypeOverride();
 uint32_t storage_Get_PulseInterval();
 char * storage_Get_DiagnosticsLog();
 int storage_Get_DiagnosticsLogLength();
+
+char * storage_Get_Location();
+char * storage_Get_Timezone();
+char * storage_Get_TimeSchedule();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();

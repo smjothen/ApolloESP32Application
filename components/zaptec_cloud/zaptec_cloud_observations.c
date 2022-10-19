@@ -22,8 +22,10 @@
 #include "../../main/certificate.h"
 #include "sessionHandler.h"
 #include "../components/adc/adc_control.h"
+#include "../components/ble/ble_service_wifi_config.h"
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
+#include "chargeController.h"
 #include "mqtt_client.h"
 #include <math.h>
 
@@ -266,6 +268,9 @@ int publish_debug_telemetry_observation_power(){
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, chargeSession_Get().Energy));
 
     return publish_json(observations);
 }
@@ -523,13 +528,34 @@ int publish_debug_telemetry_observation_LteParameters()
     return publish_json(observations);
 }
 
+/*
+ * Use bitmask to pick which observations are to be sedt
+ */
+int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask)
+{
+    ESP_LOGD(TAG, "sending Loc, TZ and Schedule");
+
+    cJSON *observations = create_observation_collection();
+
+    if(bitmask & 0x01)
+    	add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+
+    if(bitmask & 0x02)
+    	add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+
+    if(bitmask & 0x04)
+    	add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 {
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
-    //return publish_json(observations);
-    return publish_json_blocked(observations, 10000);
+    return publish_json(observations);
+    //return publish_json_blocked(observations, 10000);
 }
 
 static uint32_t txCnt = 0;
@@ -540,9 +566,13 @@ int publish_debug_telemetry_observation_all(double rssi){
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
 
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+
     //Only send temperatures periodically when charging is active
     if(MCU_GetChargeMode() == eCAR_CHARGING)
     {
+
+
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
@@ -626,7 +656,10 @@ static uint32_t previousNumberOfTagsCount = 0;
 static uint8_t previousOverrideGridType = 0xff;
 static uint8_t previousIT3OptimizationEnabled = 0xff;
 static bool previousPingReplyState = 1;
-
+static uint32_t previousMaxStartDelay = 0;
+static int8_t sendUpdateInSeconds = 0;
+static bool sendPower = false;
+static float powerLimit = 0.0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -769,7 +802,7 @@ int publish_telemetry_observation_on_change(){
 		else
 		{
 			valueToSend = maxInstallationCurrentConfig;
-			ESP_LOGW(TAG, "Sending MCU value: %f", maxInstallationCurrentConfig);
+			ESP_LOGW(TAG, "Sending MCUs MaxInstCurrent: %f", maxInstallationCurrentConfig);
 		}
 
 		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, valueToSend));
@@ -803,9 +836,40 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	//Send on change larger than 500 W, or if power changes from down to 0W.
-	if((power > previousPower + 500) || (power < (previousPower - 500)) || ((power == 0) && (previousPower > 0)))
+
+	/// In Watts
+	if (power > 7000.0)
+		powerLimit = 500.0;
+	else
+		powerLimit = 200.0;
+
+	/// Evaluate conditions for sending power, to avoid frequent transmission, but give good accuracy
+
+	if(((power > previousPower + powerLimit) || (power < (previousPower - powerLimit))) && (sendUpdateInSeconds == 0))
 	{
+		sendUpdateInSeconds = 5;
+	}
+
+	if((power == 0.0) && (previousPower > 0.0))
+	{
+		sendPower = true;
+	}
+
+	if(sendUpdateInSeconds > 0)
+	{
+		sendUpdateInSeconds--;
+		ESP_LOGW(TAG, "Blocking power: %i", sendUpdateInSeconds);
+		if(sendUpdateInSeconds == 0)
+		{
+			sendPower = true;
+		}
+	}
+
+	if(sendPower == true)
+	{
+		sendPower = false;
+		sendUpdateInSeconds = 0;
+
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 
 		float currents[3] = {0};
@@ -845,6 +909,8 @@ int publish_telemetry_observation_on_change(){
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
 		}
+
+		ESP_LOGW(TAG, "Sending power: %i - %4.2f W (%4.2f)", sendUpdateInSeconds, power, previousPower);
 
 		previousPower = power;
 		isChange = true;
@@ -1005,6 +1071,44 @@ int publish_telemetry_observation_on_change(){
 			isChange = true;
 		}
 	}
+
+	if(chargeController_CheckForNewScheduleEvent())
+	{
+		add_observation_to_collection(observations, create_observation(NextScheduleEvent, chargeController_GetNextStartString()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewLocation())
+	{
+		add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+		isChange = true;
+	}
+
+
+	if(BLE_CheckForNewTimezone())
+	{
+		add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewTimeSchedule())
+	{
+		add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
+		isChange = true;
+	}
+
+	if(strncmp(storage_Get_Location(), "GBR", 3) == 0)
+	{
+		uint32_t maxStartDelay = storage_Get_MaxStartDelay();
+		if(previousMaxStartDelay != maxStartDelay)
+		{
+			add_observation_to_collection(observations, create_uint32_t_observation(MaxStartDelay, maxStartDelay));
+			previousMaxStartDelay = maxStartDelay;
+			isChange = true;
+		}
+	}
+
+
 	//Check ret and retry?
     int ret = 0;
 

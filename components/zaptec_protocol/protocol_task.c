@@ -15,6 +15,8 @@
 #include "../i2c/include/i2cDevices.h"
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
+#include "../../main/chargeController.h"
+#include "../../main/chargeSession.h"
 
 const char *TAG = "MCU            ";
 
@@ -203,7 +205,7 @@ static uint16_t espNotifications = 0;
 static uint16_t mcuNotifications = 0;
 
 int holdSetPhases = 0;
-static uint8_t finalStopActive = false;
+static uint8_t finalStopActive = 0;
 
 float GetFloat(uint8_t * input)
 {
@@ -719,7 +721,7 @@ void MCU_StartLedOverride()
 void MCU_StopLedOverride()
 {
 	ESP_LOGI(TAG, "Clear overriding LED on MCU");
-	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);//Color defined here is no longer used actively in MCU
 	if(ret == MsgWriteAck)
 	{
 		ESP_LOGI(TAG, "MCU Cleared ledoverride OK");
@@ -898,20 +900,36 @@ int8_t MCU_GetChargeMode()
 	return chargeMode;
 }
 
-static bool useTransitionState = false;
-void SetTransitionOperatingModeState(bool newTransitionState)
+
+static enum ChargerOperatingMode overrideOpModeState = CHARGE_OPERATION_STATE_UNINITIALIZED;
+void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState)
 {
-	useTransitionState = newTransitionState;
+	overrideOpModeState = newTransitionState;
 }
-bool GetTransitionOperatingModeState()
+enum ChargerOperatingMode GetTransitionOperatingModeState()
 {
-	return useTransitionState;
+	return overrideOpModeState;
 }
 
 uint8_t MCU_GetChargeOperatingMode()
 {
-	if((useTransitionState == true) && (chargeMode != eCAR_CHARGING))
+	/// Used for Session reset
+	if(overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED)
+		return CHARGE_OPERATION_STATE_PAUSED;
+
+	/// Used for Session reset
+	if(overrideOpModeState == CHARGE_OPERATION_STATE_DISCONNECTED)
 		return CHARGE_OPERATION_STATE_DISCONNECTED;
+
+	///Used to avoid sending requesting while in paused schedule state
+	if((chargeOperationMode == CHARGE_OPERATION_STATE_REQUESTING) && (chargecontroller_IsPauseBySchedule() == true))
+	{
+		//ESP_LOGW(TAG, "# Replaced REQUESTING with PAUSED #");
+		if(chargeSession_HasNewSessionId() == true)
+			return CHARGE_OPERATION_STATE_PAUSED;
+		else
+			return CHARGE_OPERATION_STATE_REQUESTING;
+	}
 
 	return chargeOperationMode;
 }
@@ -1183,6 +1201,9 @@ float MCU_GetHWCurrentMaxLimit()
 
 	return limit;
 }
+
+
+
 
 
 void SetEspNotification(uint16_t notification)

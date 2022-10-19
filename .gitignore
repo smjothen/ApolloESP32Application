@@ -11,3 +11,4 @@ core
 secure_boot_signing_key.pem
 secure_boot_signing_ec.pem
 *.pem
+.cache

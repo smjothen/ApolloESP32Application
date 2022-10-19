@@ -2,6 +2,7 @@
 #define PROTOCOL_TASK_H
 
 #include "zaptec_protocol_serialisation.h"
+#include "../../main/sessionHandler.h"
 
 float GetFloat(uint8_t * input);
 
@@ -48,8 +49,8 @@ void MCU_ClearMaximumEnergy();
 
 int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
-void SetTransitionOperatingModeState(bool newTransitionState);
-bool GetTransitionOperatingModeState();
+void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState);
+enum ChargerOperatingMode GetTransitionOperatingModeState();
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();

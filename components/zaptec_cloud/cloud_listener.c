@@ -30,6 +30,8 @@
 #include "../../main/offline_log.h"
 #include "../../main/offlineHandler.h"
 #include "../../main/offlineSession.h"
+#include "../../main/chargeController.h"
+#include "../../main/production_test.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -608,10 +610,11 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				if(standalone != (int)storage_Get_Standalone())
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
-					if(ret == MsgWriteAck)
+					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
+					//if(ret == MsgWriteAck)
+					if(chargeController_SetStandaloneState(standalone))
 					{
-						storage_Set_Standalone((uint8_t)standalone);
+						//storage_Set_Standalone((uint8_t)standalone);
 						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
 
 						cloud_listener_SetMQTTKeepAliveTime(standalone);
@@ -809,10 +812,11 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 
 				if((standalone == 0) || (standalone == 1))
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
-					if(ret == MsgWriteAck)
+					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
+					//if(ret == MsgWriteAck)
+					if(chargeController_SetStandaloneState(standalone))
 					{
-						storage_Set_Standalone(standalone);
+						//storage_Set_Standalone(standalone);
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
 
@@ -1197,22 +1201,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				responseStatus = 200;
 				ESP_LOGW(TAG, "Charge Start from Cloud: %f PhaseId: %d \n", currentFromCloud, phaseFromCloud);
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
+
+				bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_CLOUD);
+				//MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				if(isSent)
 				{
-					responseStatus = 200;
-					ESP_LOGI(TAG, "MCU Start command OK");
+					//ESP_LOGI(TAG, "MCU Start command OK");
 
 					HOLD_SetPhases(phaseFromCloud);
 					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
 
 					//This must be set to stop replying the same SessionIds to cloud
 					chargeSession_SetReceivedStartChargingCommand();
+
+					responseStatus = 200;
 				}
 				else
 				{
 					responseStatus = 400;
-					ESP_LOGI(TAG, "MCU Start command FAILED");
+					//ESP_LOGI(TAG, "MCU Start command FAILED");
 				}
 			}
 			else
@@ -1314,7 +1321,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//rTOPIC=$iothub/methods/POST/504/?$rid=1
 		//rDATA=["806b2f4e-54e1-4913-aa90-376e14daedba"]
 
-		sessionHandler_InitiateResetChargeSession();
+		//sessionHandler_InitiateResetChargeSession();
 
 		//Clear user UUID
 		//if((storage_Get_AuthenticationRequired() == 1) && (storage_Get_Standalone() == 0))//Only in system mode
@@ -1328,6 +1335,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				if((storage_Get_Standalone() == 0))
 				{
 					//Clear session
+					SetUUIDFlagAsCleared();
 					sessionHandler_InitiateResetChargeSession();
 				}
 				return 200;
@@ -1377,6 +1385,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			responseStatus = 200;
 			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK");
 			SetFinalStopActiveStatus(1);
+			chargeController_CancelOverride();
+			chargeController_SetPauseByCloudCommand(true);
 		}
 		else
 		{
@@ -1396,6 +1406,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK");
 			SetFinalStopActiveStatus(0);
 			sessionHandler_ClearCarInterfaceResetConditions();
+			chargeController_Override();
+			chargeController_SetPauseByCloudCommand(false);
 		}
 		else
 		{
@@ -1586,12 +1598,20 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				// Factory reset
 				else if(strstr(commandString,"Factory reset") != NULL)
 				{
-					storage_clearWifiParameters();
-					storage_Init_Configuration();
-					storage_SaveConfiguration();
 
-					ESP_LOGI(TAG, "Factory reset");
-					responseStatus = 200;
+					MessageType ret = MCU_SendUint8Parameter(CommandFactoryReset, 0);
+					if(ret == MsgWriteAck) {
+						ESP_LOGI(TAG, "MCU Factory Reset OK");
+						storage_clearWifiParameters();
+						storage_Init_Configuration();
+						storage_SaveConfiguration();
+						responseStatus = 200;
+						ESP_LOGI(TAG, "Factory reset complete");
+					}
+					else {
+						ESP_LOGE(TAG, "MCU Factory Reset FAILED");						
+						responseStatus=400;
+					}
 				}else if(strstr(commandString, "segmentota") != NULL){
 
 					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
@@ -2199,6 +2219,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					start_segmented_ota();
 					responseStatus = 200;
 				}
+				//Run factory test function - dev - disable socket connection
+				else if(strstr(commandString,"factest") != NULL)
+				{
+					run_component_tests();
+					responseStatus = 200;
+				}
+
 
 				///OfflineSessions
 
@@ -2232,6 +2259,171 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 					responseStatus = 200;
 				}
+
+				/*else if(strstr(commandString,"StartTimer") != NULL)
+				{
+					//chargeController_SetStartTimer();
+					chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+					responseStatus = 200;
+				}*/
+
+
+				else if(strstr(commandString,"Loc ") != NULL)
+				{
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					storage_Set_Location(&commandString[6]);
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"Tz ") != NULL)
+				{
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					storage_Set_Timezone(&commandString[5]);
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"SS") != NULL)
+				{
+					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+					if(end >= 19)
+					{
+						chargeController_WriteNewTimeSchedule(&commandString[4]);
+						chargeController_Activation();
+						storage_SaveConfiguration();
+						chargeController_SetRandomStartDelay();
+					}
+					else
+					{
+						char* p = "";
+						chargeController_WriteNewTimeSchedule(p);
+						chargeController_Activation();
+						storage_SaveConfiguration();
+						chargeController_ClearRandomStartDelay();
+						chargeController_ClearNextStartTime();
+						chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
+					}
+					//chargeController_SetTimes();
+
+
+
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+					//chargeController_SetStartTimer();
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"NT") != NULL)
+				{
+					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+
+					//Remove end of string formatting
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					chargeController_SetNowTime(&commandString[4]);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"SIMSTOP") != NULL)
+				{
+					//505
+					sessionHandler_InitiateResetChargeSession();
+
+					//504
+					sessionHandler_InitiateResetChargeSession();
+					chargeSession_HoldUserUUID();
+
+					//502
+					MessageType ret = MCU_SendCommandId(CommandStopCharging);
+					if(ret == MsgCommandAck)
+					{
+						responseStatus = 200;
+						ESP_LOGI(TAG, "MCU Stop command OK");
+					}
+					else
+					{
+						responseStatus = 400;
+						ESP_LOGE(TAG, "MCU Stop command FAILED");
+					}
+
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"StartNow") != NULL)
+				{
+					chargeController_Override();
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"SchedDiag") != NULL)
+				{
+					chargeController_SetSendScheduleDiagnosticsFlag();
+
+					responseStatus = 200;
+				}
+
+				/*else if(strstr(commandString,"ClearSchedule") != NULL)
+				{
+					storage_Initialize_ScheduleParameteres();
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					chargeController_ClearNextStartTime();
+
+					responseStatus = 200;
+				}*/
+				else if(strstr(commandString,"SetSchedule") != NULL)
+				{
+					if(strstr(commandString,"SetScheduleUK") != NULL)
+						storage_Initialize_UK_TestScheduleParameteres();
+					else if(strstr(commandString,"SetScheduleNO") != NULL)
+						storage_Initialize_NO_TestScheduleParameteres();
+					else
+						storage_Initialize_ScheduleParameteres();
+
+					storage_SaveConfiguration();
+					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+					chargeController_Activation();
+
+					chargeController_ClearNextStartTime();
+
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"SetMaxStartDelay ") != NULL)
+				{
+					int newMaxValue = 0;
+					sscanf(&commandString[19], "%d", &newMaxValue);
+					if((newMaxValue >= 0) && (newMaxValue <= 3600))
+					{
+						storage_Set_MaxStartDelay(newMaxValue);
+						storage_SaveConfiguration();
+						chargeController_SetRandomStartDelay();
+					}
+
+					responseStatus = 200;
+				}
+
+
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -2553,7 +2745,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         break;
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "About to connect, refreshing the token");
-        refresh_token(&mqtt_config);
+
+       	refresh_token(&mqtt_config);
 		ESP_LOGD(TAG, "setting config with the new token");
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         reconnectionAttempt++;

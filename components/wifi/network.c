@@ -181,6 +181,9 @@ static void on_wifi_disconnect(void *arg, esp_event_base_t event_base,
 	if(network_wifiIsValid() == false)
 		return;
 
+	//Ensure disconnect / reconnect don't take to much resources
+	vTaskDelay(1000 / portTICK_PERIOD_MS);
+
     esp_wifi_connect();
     xEventGroupSetBits(s_connect_event_group, CONNECTED_BITS);
 }
