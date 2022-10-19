@@ -9,6 +9,7 @@
 #include "types/ocpp_charging_profile.h"
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
+#include "types/ocpp_csl.h"
 #include "ocpp_json/ocppj_validation.h"
 
 static const char * TAG = "OCPP CHARGING";
@@ -124,11 +125,7 @@ enum ocppj_err_t charging_schedule_from_json(cJSON * chargingSchedule, const cha
 				OCPP_CHARGING_RATE_W,
 				OCPP_CHARGING_RATE_A) == 0){
 
-		char * allowed_unit_ptr = strstr(allowed_charging_rate_units, value_str);
-		// Expect allowed_charging_rate_units to be "A", "W", "A,W" or "W,A" and expect value_str to be 'A' or 'W'
-		if(allowed_unit_ptr != NULL
-			&& (allowed_unit_ptr == allowed_charging_rate_units || *(allowed_unit_ptr-1) == ',') // Is first csl item or preceded by ','
-			&& (*(allowed_unit_ptr + strlen(value_str)) == '\0' || *(allowed_unit_ptr + strlen(value_str)) == ',')){ // is last ,csl item or followed by ','
+		if(ocpp_csl_contains(allowed_charging_rate_units, value_str)){
 
 			charging_schedule_out->charge_rate_unit = ocpp_charging_rate_unit_to_id(value_str);
 		}else{
@@ -444,6 +441,18 @@ enum ocpp_charging_rate_unit ocpp_charging_rate_unit_to_id(const char * unit){
 
 }
 
+const char * ocpp_charging_rate_unit_from_id(const enum ocpp_charging_rate_unit charge_rate_unit){
+	switch(charge_rate_unit){
+	case eOCPP_CHARGING_RATE_W:
+		return OCPP_CHARGING_RATE_W;
+	case eOCPP_CHARGING_RATE_A:
+		return OCPP_CHARGING_RATE_A;
+	default:
+		ESP_LOGE(TAG, "Invalud conversion of charging rate unit");
+		return "";
+	}
+}
+
 static time_t default_start = 0;
 
 static struct ocpp_charging_profile profile_default_max = {
@@ -490,4 +499,73 @@ struct ocpp_charging_profile * ocpp_get_default_charging_profile(enum ocpp_charg
 	}else{
 		return &profile_default_tx;
 	}
+}
+
+static cJSON * ocpp_create_charging_schedule_period_list_json(struct ocpp_charging_schedule_period_list * schedule_period){
+
+	cJSON * payload = cJSON_CreateArray();
+	if(payload == NULL)
+		return NULL;
+
+	while(schedule_period != NULL){
+		cJSON * period = cJSON_CreateObject();
+		if(period == NULL)
+			goto error;
+
+		if(cJSON_AddNumberToObject(period, "startPeriod", schedule_period->value.start_period) == NULL)
+			goto error;
+
+		if(cJSON_AddNumberToObject(period, "limit", schedule_period->value.limit) == NULL)
+			goto error;
+
+		if(cJSON_AddNumberToObject(period, "number_phases", schedule_period->value.number_phases) == NULL)
+			goto error;
+
+		cJSON_AddItemToArray(payload, period);
+
+		schedule_period = schedule_period->next;
+	}
+
+	return payload;
+error:
+	cJSON_Delete(payload);
+	return NULL;
+}
+
+cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charging_schedule){
+	cJSON * payload = cJSON_CreateObject();
+	if(payload == NULL)
+		return NULL;
+
+	if(charging_schedule->duration != NULL && cJSON_AddNumberToObject(payload, "duration", *charging_schedule->duration) == NULL)
+		goto error;
+
+	if(charging_schedule->start_schedule != NULL){
+		char timestamp_buffer[30];
+
+		size_t written_length = ocpp_print_date_time(*charging_schedule->start_schedule,
+							timestamp_buffer, sizeof(timestamp_buffer));
+		if(written_length == 0)
+			goto error;
+
+		if(cJSON_AddStringToObject(payload, "startSchedule", timestamp_buffer) == NULL)
+			goto error;
+	}
+
+	if(cJSON_AddStringToObject(payload, "chargingRateUnit", ocpp_charging_rate_unit_from_id(charging_schedule->charge_rate_unit)) == NULL)
+		goto error;
+
+	cJSON * period_list_json = ocpp_create_charging_schedule_period_list_json(&charging_schedule->schedule_period);
+	if(period_list_json == NULL)
+		goto error;
+
+	cJSON_AddItemToObject(payload, "chargingSchedulePeriod", period_list_json);
+
+	if(cJSON_AddNumberToObject(payload, "minChargingRate", charging_schedule->min_charging_rate) == NULL)
+		goto error;
+
+	return payload;
+error:
+	cJSON_Delete(payload);
+	return NULL;
 }

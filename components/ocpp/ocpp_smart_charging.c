@@ -13,7 +13,9 @@
 #include "ocpp_listener.h"
 #include "types/ocpp_charging_profile_status.h"
 #include "types/ocpp_clear_charging_profile_status.h"
+#include "types/ocpp_get_composite_schedule_status.h"
 #include "types/ocpp_enum.h"
+#include "types/ocpp_csl.h"
 #include "ocpp_json/ocppj_validation.h"
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
@@ -942,19 +944,6 @@ error:
 	}
 }
 
-void get_composite_schedule_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Received request for get composite schedule");
-
-	cJSON * reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_NOT_IMPLEMENTED, "Implementation of this feature is under development", NULL);
-
-	if(reply != NULL){
-		send_call_reply(reply);
-		cJSON_Delete(reply);
-	}else{
-		ESP_LOGE(TAG, "Unable to create ocpp error for not implemented");
-	}
-}
-
 void set_charging_profile_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Received request to set charging profile");
 
@@ -1283,40 +1272,13 @@ bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint tim
 	}
 }
 
-static void create_composite_schedule(time_t when, time_t relative_start,
-				uint32_t wanted_duration, struct ocpp_charging_profile * profile_tx,
-				struct ocpp_charging_profile * profile_max, struct ocpp_charging_schedule * schedule_out){
-	ESP_LOGI(TAG, "Creating composite schedule");
+static esp_err_t extend_composite_schedule(time_t when, time_t relative_start, uint32_t wanted_duration, size_t max_periods,
+					struct ocpp_charging_profile * profile_tx, struct ocpp_charging_profile * profile_max,
+					struct ocpp_charging_schedule_period_list * period_list_out, int old_duration, int * new_duration_out){
 
+	ESP_LOGI(TAG, "Extending composite schedule");
 
-	if(!(profile_tx->valid_from < relative_start && profile_max->valid_from < relative_start
-			&& profile_tx->valid_to > relative_start && profile_max->valid_to > relative_start)){
-
-		ESP_LOGE(TAG, "Requested composit schedule is not valid at requested start time");
-
-		schedule_out->charge_rate_unit = eOCPP_CHARGING_RATE_A;
-		schedule_out->schedule_period.value = local_schedule_period_max;
-		goto error;
-	}
-
-	schedule_out->start_schedule = malloc(sizeof(time_t));
-	if(schedule_out->start_schedule == NULL){
-		ESP_LOGE(TAG, "Unable to allocate memory for composite schedule start time");
-		goto error;
-	}
-
-	*schedule_out->start_schedule = when;
-	schedule_out->charge_rate_unit = eOCPP_CHARGING_RATE_A;
-
-	schedule_out->min_charging_rate = 6.0f;
-	if(schedule_out->min_charging_rate < profile_tx->charging_schedule.min_charging_rate){
-		schedule_out->min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
-	}
-
-	if(schedule_out->min_charging_rate < profile_max->charging_schedule.min_charging_rate){
-		schedule_out->min_charging_rate = profile_max->charging_schedule.min_charging_rate;
-	}
-
+	uint8_t created_periods = 0;
 	uint time_since_start_tx = when - get_absolute_start_time(relative_start, profile_tx);
 	uint time_since_start_max = when - get_absolute_start_time(relative_start, profile_max);
 
@@ -1328,12 +1290,10 @@ static void create_composite_schedule(time_t when, time_t relative_start,
 	struct ocpp_charging_schedule_period period_max;
 	uint32_t next_period_max = 0;
 
-	struct ocpp_charging_schedule_period_list * period_list = &schedule_out->schedule_period;
+	struct ocpp_charging_schedule_period_list * period_list = period_list_out;
 	struct ocpp_charging_schedule_period_list * last_period = NULL;
 
-	uint8_t created_periods = 0;
-
-	while(duration_created < wanted_duration && created_periods < conf_max_periods){
+	while(duration_created < wanted_duration && created_periods < max_periods){
 
 		if(duration_created >= next_period_tx){
 			uint32_t next_period_offset;
@@ -1371,7 +1331,7 @@ static void create_composite_schedule(time_t when, time_t relative_start,
 			period_list = malloc(sizeof(struct ocpp_charging_schedule_period_list));
 			if(period_list == NULL){
 				ESP_LOGE(TAG, "Unable to allocate memory for next schedule period");
-				goto error;
+				return ESP_ERR_NO_MEM;
 			}
 			period_list->next = NULL;
 		}
@@ -1379,7 +1339,7 @@ static void create_composite_schedule(time_t when, time_t relative_start,
 		period_list->value.limit = (period_tx.limit < period_max.limit) ? period_tx.limit : period_max.limit;
 		period_list->value.number_phases = (period_tx.number_phases < period_max.number_phases) ? period_tx.number_phases : period_max.number_phases;
 
-		period_list->value.start_period = duration_created;
+		period_list->value.start_period = duration_created + old_duration;
 		duration_created = (next_period_tx < next_period_max) ? next_period_tx : next_period_max;
 
 		created_periods++;
@@ -1390,20 +1350,237 @@ static void create_composite_schedule(time_t when, time_t relative_start,
 		last_period = period_list;
 		period_list = period_list->next;
 	}
+	*new_duration_out = when + duration_created;
+
+	if(duration_created >= wanted_duration){
+		return ESP_OK;
+	}else if(created_periods < max_periods){
+		return ESP_ERR_INVALID_SIZE;
+	}else{
+		return ESP_FAIL;
+	}
+}
+
+static esp_err_t create_composite_schedule(time_t when, time_t relative_start,
+					uint32_t wanted_duration, enum ocpp_charging_rate_unit charge_rate_unit,
+					struct ocpp_charging_profile * profile_tx, struct ocpp_charging_profile * profile_max,
+					struct ocpp_charging_schedule * schedule_out){
+
+	ESP_LOGI(TAG, "Creating composite schedule");
+
+	if(charge_rate_unit != eOCPP_CHARGING_RATE_A){
+		ESP_LOGE(TAG, "Unsupported charging rate unit");
+
+		schedule_out->schedule_period.value = local_schedule_period_max;
+		return ESP_ERR_NOT_SUPPORTED;
+	}
+	schedule_out->charge_rate_unit = charge_rate_unit;
+
+	if(!(profile_tx->valid_from < relative_start && profile_max->valid_from < relative_start
+			&& profile_tx->valid_to > relative_start && profile_max->valid_to > relative_start)){
+
+		ESP_LOGE(TAG, "Requested composit schedule is not valid at requested start time");
+
+		schedule_out->schedule_period.value = local_schedule_period_max;
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	schedule_out->start_schedule = malloc(sizeof(time_t));
+	if(schedule_out->start_schedule == NULL){
+		ESP_LOGE(TAG, "Unable to allocate memory for composite schedule start time");
+
+		schedule_out->schedule_period.value = local_schedule_period_max;
+		return ESP_ERR_NO_MEM;
+	}
+	*schedule_out->start_schedule = when;
 
 	schedule_out->duration = malloc(sizeof(int));
 	if(schedule_out->duration == NULL){
 		ESP_LOGE(TAG, "Unable to allocate space for schedule duration");
+		free(schedule_out->start_schedule);
+
+		schedule_out->schedule_period.value = local_schedule_period_max;
+		return ESP_ERR_NO_MEM;
+	}
+	*schedule_out->duration = 0;
+
+	schedule_out->min_charging_rate = 6.0f;
+	if(schedule_out->min_charging_rate < profile_tx->charging_schedule.min_charging_rate){
+		schedule_out->min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
+	}
+
+	if(schedule_out->min_charging_rate < profile_max->charging_schedule.min_charging_rate){
+		schedule_out->min_charging_rate = profile_max->charging_schedule.min_charging_rate;
+	}
+
+	return extend_composite_schedule(when, relative_start, wanted_duration, conf_max_periods,
+					profile_tx, profile_max, &schedule_out->schedule_period, 0, schedule_out->duration);
+}
+
+void get_composite_schedule_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Received request for get composite schedule");
+
+	char err_str[124] = {0};
+
+	int connector_id;
+	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", true, &connector_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Invalid connectorId in request: '%s'", err_str);
 		goto error;
 	}
 
-	*schedule_out->duration = duration_created;
-	return;
+	int duration;
+	err = ocppj_get_int_field(payload, "duration", true, &duration, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Invalid duration in request: '%s'", err_str);
+		goto error;
+	}
+
+	char * charging_rate_unit = NULL;
+	enum ocpp_charging_rate_unit unit_id = eOCPP_CHARGING_RATE_A;
+
+	err = ocppj_get_string_field(payload, "chargingRateUnit", false, &charging_rate_unit, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_VALUE){
+
+		if(err == eOCPPJ_NO_ERROR){
+			ESP_LOGW(TAG, "Invalid chargingRateUnit in request: '%s'", err_str);
+			goto error;
+		}
+
+		if(ocpp_validate_enum(charging_rate_unit, true, 1,
+					OCPP_CHARGING_RATE_A,
+					OCPP_CHARGING_RATE_W) != 0){
+
+			err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			strcpy(err_str, "Expected 'chargingRateUnit' to be ChargingRateUnit type");
+			goto error;
+
+		}
+
+		if(!ocpp_csl_contains(conf_allowed_charging_rate_unit, charging_rate_unit)){
+			err = eOCPPJ_ERROR_NOT_SUPPORTED;
+			strcpy(err_str, "'Requested chargingRateUnit' is not supported");
+			goto error;
+		}
+
+		unit_id = ocpp_charging_rate_unit_to_id(charging_rate_unit);
+	}
+
+	struct ocpp_charging_profile * profile_tx = NULL; // tx or txDefault profile
+	struct ocpp_charging_profile * profile_max = NULL;
+	struct ocpp_charging_schedule * schedule = NULL;
+
+	time_t start_time = time(NULL);
+
+	time_t renewal_time_tx = 0;
+	time_t renewal_time_max = 0;
+
+	int duration_created = 0;
+	int segment_duration_created;
+
+	while(duration > duration_created){
+		segment_duration_created = 0;
+		time_t creation_time = start_time + duration_created;
+
+		if(creation_time >= renewal_time_tx){
+			ocpp_free_charging_profile(profile_tx);
+
+			get_active_profiles(creation_time, start_time, active_transaction_id,
+					&profile_tx, next_tx_or_tx_default_profile, &renewal_time_tx);
+		}
+
+		if(creation_time >= renewal_time_max){
+			ocpp_free_charging_profile(profile_max);
+
+			get_active_profiles(creation_time, start_time, active_transaction_id,
+					&profile_max, next_max_profile, &renewal_time_max);
+		}
+
+		uint segment_duration;
+		if(renewal_time_max < renewal_time_tx){
+			segment_duration = renewal_time_max - creation_time;
+		}else{
+			segment_duration = renewal_time_tx - creation_time;
+		}
+
+		if(segment_duration < 1){
+			ESP_LOGE(TAG, "Expected segment duration is insufficient");
+			segment_duration = 1;
+		}
+
+		struct ocpp_charging_schedule_period_list * period_list = &schedule->schedule_period;
+		size_t period_count = 0;
+
+		esp_err_t schedule_error = ESP_OK;
+		if(schedule == NULL){
+			schedule_error = create_composite_schedule(creation_time, start_time, segment_duration, unit_id,
+							profile_tx, profile_max, schedule);
+			if(schedule->duration != NULL){
+				segment_duration_created = *schedule->duration;
+			}else{
+				ESP_LOGE(TAG, "Unable to determin duration of composite schedule");
+				goto error;
+			}
+		}else{
+			schedule_error = extend_composite_schedule(creation_time, start_time, segment_duration, conf_max_periods - period_count,
+								profile_tx, profile_max, period_list->next, duration_created, &segment_duration_created);
+
+			*schedule->duration += segment_duration_created;
+		}
+
+		if(schedule_error != ESP_OK){
+			if(err == ESP_ERR_INVALID_SIZE){
+				ESP_LOGW(TAG, "Unable to fill requested duration; would exceed max periods");
+				break;
+			}else{
+				ESP_LOGE(TAG, "Unable to create composite schedule: %s", esp_err_to_name(err));
+				err = eOCPPJ_ERROR_INTERNAL;
+				sprintf(err_str, "Error occured while attempting to create composite schedule");
+				goto error;
+			}
+		}
+
+		while(period_list != NULL){
+			period_count++;
+			period_list = period_list->next;
+		}
+
+		if(segment_duration_created == 0){
+			ESP_LOGE(TAG, "Unable to continue schdule creation");
+			break;
+		}else{
+			duration_created += segment_duration_created;
+		}
+	}
+
+	cJSON * reply = ocpp_create_get_composite_schedule_confirmation(unique_id, OCPP_GET_COMPOSITE_SCHEDULE_STATUS_ACCEPTED,
+									&connector_id, start_time, schedule);
+	ocpp_free_charging_schedule(schedule);
+
+	if(reply != NULL){
+		send_call_reply(reply);
+		cJSON_Delete(reply);
+	}else{
+		ESP_LOGE(TAG, "Unable to create ocpp error for not implemented");
+		err = eOCPPJ_ERROR_INTERNAL;
+		sprintf(err_str, "Error occured while attempting to create GetCompositeSchedule.conf");
+		goto error;
+	}
 
 error:
-	// TODO: clean up
-	return;
+	if(err == eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Unknown error occured during get composite schedule");
+		err = eOCPPJ_ERROR_INTERNAL;
+	}
+
+	cJSON * error_reply = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	if(error_reply == NULL){
+		ESP_LOGE(TAG, "Unable to create error reply");
+	}else{
+		send_call_reply(error_reply);
+	}
 }
+
 
 static void ocpp_smart_task(){
 	time_t current_time = time(NULL);
@@ -1582,7 +1759,7 @@ static void ocpp_smart_task(){
 				}
 
 				create_composite_schedule(current_time, transaction_start_time,
-							(tmp_schedule_dt < UINT32_MAX) ? tmp_schedule_dt: UINT32_MAX,
+							(tmp_schedule_dt < UINT32_MAX) ? tmp_schedule_dt: UINT32_MAX, eOCPP_CHARGING_RATE_A,
 							profile_tx, profile_max, schedule);
 
 				current_min = schedule->min_charging_rate;

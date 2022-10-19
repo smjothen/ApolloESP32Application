@@ -51,6 +51,7 @@ enum ocpp_charging_rate_unit{
 };
 
 enum ocpp_charging_rate_unit ocpp_charging_rate_unit_to_id(const char * unit);
+const char * ocpp_charging_rate_unit_from_id(const enum ocpp_charging_rate_unit charge_rate_unit);
 
 struct ocpp_charging_schedule_period{
 	int start_period;
@@ -91,4 +92,6 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule);
 void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile);
 struct ocpp_charging_profile * ocpp_get_default_charging_profile(enum ocpp_charging_profile_purpose purpose);
+
+cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charging_schedule);
 #endif /*OCPP_CHARGING_PROFILE_H*/
