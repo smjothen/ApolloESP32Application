@@ -64,7 +64,7 @@ int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
     }
 
     int len = strlen(message);
-    ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
+    //ESP_LOGE(TAG, "<<<sending>>> %d: %s", len, message);
 
     int publish_err;
     if(blocking){
@@ -272,7 +272,7 @@ int publish_debug_telemetry_observation_power(){
     add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
     add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, chargeSession_Get().Energy));
 
-    if(MCU_GetHwIdMCUPower() == HW_POWER_3_UK)
+    if(IsUKOPENPowerBoardRevision())
     {
     	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
     }
@@ -579,7 +579,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 
 
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
-		if(MCU_GetHwIdMCUPower() != HW_POWER_3_UK)
+		if(IsUKOPENPowerBoardRevision() == false)
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
 			add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
@@ -588,7 +588,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, MCU_GetTemperaturePowerBoard(1)));
     }
 
-    if(MCU_GetHwIdMCUPower() == HW_POWER_3_UK)
+    if(IsUKOPENPowerBoardRevision())
     {
     	OPENVoltage = MCU_GetOPENVoltage();
     	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, OPENVoltage));
@@ -609,7 +609,7 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	if(MCU_GetHwIdMCUPower() == HW_POWER_3_UK)
+	if(IsUKOPENPowerBoardRevision())
 	{
 		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
 	}
@@ -699,7 +699,7 @@ int publish_telemetry_observation_on_change(){
 		if (chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
-			if(MCU_GetHwIdMCUPower() != HW_POWER_3_UK)
+			if(IsUKOPENPowerBoardRevision() == false)
 			{
 				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
 				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
@@ -724,7 +724,7 @@ int publish_telemetry_observation_on_change(){
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != -1))
 	{
 		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
-		if((MCU_GetHwIdMCUPower() == HW_POWER_3_UK) && (chargeMode == 6))
+		if(IsUKOPENPowerBoardRevision() && (chargeMode == 6))
 			add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
 
 		add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)chargeMode));
@@ -934,7 +934,7 @@ int publish_telemetry_observation_on_change(){
 		{
 			//When power changes also update currents to be responsive
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, currents[0]));
-			if(MCU_GetHwIdMCUPower() != HW_POWER_3_UK)
+			if(IsUKOPENPowerBoardRevision() == false)
 			{
 				add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
 				add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
@@ -975,7 +975,7 @@ int publish_telemetry_observation_on_change(){
 		if ((energy >= 0.1) && (previousEnergy < 0.1))
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
-			if(MCU_GetHwIdMCUPower() != HW_POWER_3_UK)
+			if(IsUKOPENPowerBoardRevision() == false)
 			{
 				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
 				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));

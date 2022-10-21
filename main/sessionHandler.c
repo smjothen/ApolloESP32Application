@@ -1521,7 +1521,10 @@ void SessionHandler_SendMCUSettings()
 	rxMsg = MCU_ReadParameter(ParamCurrentInMaximum);
 	float maxC = GetFloat(rxMsg.data);
 
-	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f ", enabled, standAlone, auth, maxC);
+	rxMsg = MCU_ReadParameter(MCUFaultPins);
+	uint8_t faultPins = rxMsg.data[0];
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X", enabled, standAlone, auth, maxC, faultPins);
 	ESP_LOGI(TAG, "%s", mcuPayload);
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }

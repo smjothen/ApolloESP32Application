@@ -57,6 +57,11 @@ struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
 	// This line is for debugging units with failed production test
 	//deviceInfo.factory_stage = FactoryStageFinnished;
+
+#ifdef RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+
 	return deviceInfo;
 }
 

@@ -10,6 +10,7 @@
 
 //#define ENABLE_LOGGING	//default commented out
 //#define DEVELOPEMENT_URL	//default commented out
+//#define RUN_FACTORY_TESTS //default commented out
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -49,10 +50,12 @@ typedef enum {
 
 
 typedef enum {
-    HW_POWER_UNKNOWN = 0,
-    HW_POWER_1      = 1,
-    HW_POWER_2      = 2,
-    HW_POWER_3_UK   = 3,
+    HW_POWER_UNKNOWN 	= 0,
+    HW_POWER_1      	= 1,
+    HW_POWER_2      	= 2,
+    HW_POWER_3_UK   	= 3,
+    HW_POWER_4_X804  	= 4,
+    HW_POWER_5_UK_X804 	= 5,
 } hw_power_revision;
 
 

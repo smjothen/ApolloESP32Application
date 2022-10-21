@@ -163,6 +163,7 @@
 		McuToESPPacketErrors  = 813,
         ESPToMcuPacketErrors = 814,
 		ESPResetSource = 815,
+		MCUFaultPins	= 816,
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,

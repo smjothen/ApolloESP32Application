@@ -858,6 +858,13 @@ hw_power_revision MCU_GetHwIdMCUPower()
 	return HwIdPower;
 }
 
+bool IsUKOPENPowerBoardRevision()
+{
+	if((HwIdPower == HW_POWER_3_UK) || (HwIdPower == HW_POWER_5_UK_X804))
+		return true;
+	else
+		return false;
+}
 
 float MCU_GetOPENVoltage()
 {
@@ -1170,9 +1177,9 @@ float MCU_StandAloneCurrent()
 
 
 
-uint16_t MCU_GetServoCheckParameter(int parameterDefinition)
+int16_t MCU_GetServoCheckParameter(int parameterDefinition)
 {
-	uint16_t servoCheckParameter = 0;
+	int16_t servoCheckParameter = 0;
 	ZapMessage rxMsgm = MCU_ReadParameter(parameterDefinition);
 	if((rxMsgm.length == 2) && (rxMsgm.identifier == parameterDefinition))
 	{

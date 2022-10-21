@@ -276,6 +276,10 @@ void app_main(void)
 	//PROD url used
 #endif
 
+#ifdef RUN_FACTORY_TESTS
+	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
+#endif
+
 #ifndef ENABLE_LOGGING
 	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
@@ -338,7 +342,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-    validate_booted_image();
+    //validate_booted_image();
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -352,19 +356,19 @@ void app_main(void)
 #endif
 
 
-/*#define WriteThisDeviceInfo
+#define WriteThisDeviceInfo
 //#define Erase
 
 #ifdef Erase
 	EEPROM_Erase();
 #endif
 
-#ifdef WriteThisDeviceInfo
+/*#ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
-	strcpy(writeDevInfo.serialNumber, "ZGB000005");
-	strcpy(writeDevInfo.PSK, "rxF1f/DGyyeWJ8Sq1Zp9hHeUiojODsF8vCZFM7kaFcQ=");
-	strcpy(writeDevInfo.Pin, "0394");
+	strcpy(writeDevInfo.serialNumber, "ZAP000215");
+	strcpy(writeDevInfo.PSK, "f9hbpuMj63XmplVy9UJ2QWVF67whmK5hV3aCwMAzbo0=");
+	strcpy(writeDevInfo.Pin, "8101");
 	eeprom_wp_disable_nfc_disable();
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
 	eeprom_wp_enable_nfc_enable();

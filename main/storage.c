@@ -1248,6 +1248,10 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 		tmp *= 4;
 		sprintf(PSK,"%d", tmp);
 		//strcpy(WifiPSK, "52718816");
+	#ifdef RUN_FACTORY_TESTS
+
+		ESP_LOGE(TAG, " Using dev-factory Wifi: SSID: %s PSK: ******** !!!", SSID);
+	#endif
 
 		return 0;
 	}

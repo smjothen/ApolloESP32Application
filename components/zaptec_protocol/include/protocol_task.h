@@ -32,6 +32,7 @@ char * MCU_GetSwVersionString();
 
 hw_speed_revision MCU_GetHwIdMCUSpeed();
 hw_power_revision MCU_GetHwIdMCUPower();
+bool IsUKOPENPowerBoardRevision();
 
 float MCU_GetOPENVoltage();
 
@@ -70,7 +71,7 @@ uint16_t MCU_ProximityInst();
 float MCU_ChargeCurrentInstallationMaxLimit();
 float MCU_StandAloneCurrent();
 
-uint16_t MCU_GetServoCheckParameter(int parameterDefinition);
+int16_t MCU_GetServoCheckParameter(int parameterDefinition);
 bool MCU_ServoCheckRunning();
 void MCU_ServoCheckClear();
 void MCU_PerformServoCheck();

@@ -945,9 +945,9 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 		fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
 		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%d", activeFileNumber, nrOfOCMFElements);
 		fclose(sessionFile);
-
-		xSemaphoreGive(offs_lock);
 	}
+
+	xSemaphoreGive(offs_lock);
 }
 
 /*int offlineSession_ReadOldestSession(char * SessionString)
