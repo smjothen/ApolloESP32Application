@@ -55,11 +55,13 @@ void i2c_ctrl_debug(int state)
 
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
-	// This line is for debugging units with failed production test
-	//deviceInfo.factory_stage = FactoryStageFinnished;
 
 #ifdef RUN_FACTORY_TESTS
 	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
 #endif
 
 	return deviceInfo;
@@ -239,6 +241,14 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		}
 	}
 	deviceInfoLoaded = true;
+
+#ifdef RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
+#endif
 
 	return deviceInfo;
 }

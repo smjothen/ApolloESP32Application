@@ -79,6 +79,7 @@ float MCU_GetHWCurrentActiveLimit();
 float MCU_GetHWCurrentMaxLimit();
 
 void MCU_GetOPENSamples(char * samples);
+uint8_t MCU_GetRelayStates();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();

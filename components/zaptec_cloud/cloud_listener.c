@@ -2446,6 +2446,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					do_segment_ota_abort();
 					responseStatus = 200;
 				}
+				else if(strstr(commandString,"GetRelayStates") != NULL)
+				{
+					SesionHandler_SendRelayStates();
+					responseStatus = 200;
+				}
 
 
 			}

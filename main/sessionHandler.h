@@ -63,6 +63,7 @@ void sessionHandler_CheckAndSendOfflineSessions();
 void sessionHandler_SetOfflineSessionFlag();
 void ChargeModeUpdateToCloudNeeded();
 void SessionHandler_SendMCUSettings();
+void SesionHandler_SendRelayStates();
 void StackDiagnostics(bool state);
 void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);

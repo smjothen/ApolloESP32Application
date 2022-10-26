@@ -164,6 +164,7 @@
         ESPToMcuPacketErrors = 814,
 		ESPResetSource = 815,
 		MCUFaultPins	= 816,
+		RelayStates		= 817,
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,
@@ -266,6 +267,9 @@
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
 		CommandTestHWTrig = 705,
+        CommandOpenPENRelay = 706,
+        CommandClosePENRelay = 707,
+
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,

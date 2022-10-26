@@ -10,6 +10,7 @@
 
 //#define ENABLE_LOGGING	//default commented out
 //#define DEVELOPEMENT_URL	//default commented out
+//#define RUN_FACTORY_ASSIGN_ID //default commented out
 //#define RUN_FACTORY_TESTS //default commented out
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};

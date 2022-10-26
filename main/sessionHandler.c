@@ -1529,6 +1529,18 @@ void SessionHandler_SendMCUSettings()
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }
 
+void SesionHandler_SendRelayStates()
+{
+	char mcuPayload[100];
+
+	uint8_t states = MCU_GetRelayStates();
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "RelayStates: %i - PEN: %i, L1: %i", states, ((states >> 1) & 0x01), (states & 0x01));
+	ESP_LOGI(TAG, "%s", mcuPayload);
+	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+}
+
+
 /*
  * If we have received an already set SessionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
  * This indicates that cloud does not have the correct chargeOperatingMode recorded.

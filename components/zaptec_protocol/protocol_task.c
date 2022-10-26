@@ -1276,6 +1276,14 @@ void MCU_GetOPENSamples(char * samples)
 	}
 }
 
+uint8_t MCU_GetRelayStates()
+{
+	ZapMessage rxMsg = MCU_ReadParameter(RelayStates);
+	uint8_t relayStates = 0xFF;
+	if((rxMsg.length == 1) && (rxMsg.identifier == RelayStates))
+		relayStates = rxMsg.data[0];
+	return relayStates;
+}
 
 void SetEspNotification(uint16_t notification)
 {
