@@ -508,6 +508,8 @@ static void sessionHandler_task()
 
 		networkInterface = connectivity_GetActivateInterface();
 
+#ifndef MCU_APP_ONLY
+
 		// Check for MCU communication fault and restart with conditions:
 	 	// Not instantly, let mcu upgrade and start
 		// Not when OTA in progress
@@ -548,6 +550,8 @@ static void sessionHandler_task()
 				esp_restart();
 			}
 		}
+
+#endif
 
 		if(networkInterface == eCONNECTION_NONE)
 		{
