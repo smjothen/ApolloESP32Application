@@ -8,7 +8,10 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define DISABLE_LOGGING
+//#define ENABLE_LOGGING	//default commented out
+//#define DEVELOPEMENT_URL	//default commented out
+//#define RUN_FACTORY_ASSIGN_ID //default commented out
+//#define RUN_FACTORY_TESTS //default commented out
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -37,6 +40,24 @@ struct RFIDTokens{
 	int Action;
 	char *ExpiryDate;//[37];
 };
+
+
+
+typedef enum {
+    HW_SPEED_UNKNOWN = 0,
+    HW_SPEED_1       = 1,
+    HW_SPEED_3_UK    = 3,
+} hw_speed_revision;
+
+
+typedef enum {
+    HW_POWER_UNKNOWN 	= 0,
+    HW_POWER_1      	= 1,
+    HW_POWER_2      	= 2,
+    HW_POWER_3_UK   	= 3,
+    HW_POWER_4_X804  	= 4,
+    HW_POWER_5_UK_X804 	= 5,
+} hw_power_revision;
 
 
 #define MAX_CERTIFICATE_SIZE 		50000

@@ -29,8 +29,6 @@ static char sidOrigin[6] = {0};
 
 static bool isCarConnected = false;
 
-static bool hasReceivedStartChargingCommand = false;
-
 static void ChargeSession_Set_GUID()
 {
 	volatile uint32_t GUID[4] = {0};
@@ -197,11 +195,8 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 	{
 		ESP_LOGI(TAG, "SessionId already set");
 
-		//Only resend sessionId to cloud if we have never received a start command - like when waiting in eco-mode
-		if(hasReceivedStartChargingCommand == false)
-		{
-			hasNewSessionIdFromCloud = true;
-		}
+		//Ensure we reply the SessionId every time Cloud sends it to charger
+		hasNewSessionIdFromCloud = true;
 
 		return 1;
 	}
@@ -372,7 +367,6 @@ void chargeSession_Clear()
 
 	strcpy(sidOrigin, "     ");
 	hasNewSessionIdFromCloud = false;
-	hasReceivedStartChargingCommand = false;
 
 	ESP_LOGI(TAG, "* FINALIZED AND CLEARED SESSION *");
 }
@@ -515,11 +509,6 @@ bool chargeSession_IsAuthenticated()
 		return true;
 	else
 		return false;
-}
-
-void chargeSession_SetReceivedStartChargingCommand()
-{
-	hasReceivedStartChargingCommand = true;
 }
 
 bool chargeSession_HasSessionId()

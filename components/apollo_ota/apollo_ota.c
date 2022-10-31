@@ -14,6 +14,8 @@
 #include "DeviceInfo.h"
 #include "certificate.h"
 #include "protocol_task.h"
+#include "i2cDevices.h"
+#include "ble_interface.h"
 
 #define TAG "OTA"
 
@@ -93,8 +95,8 @@ void _do_sdk_ota(char *image_location){
     };
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_TIMEOUT_MINUTES*60*1000);
-    TimerHandle_t timeout_timer = xTimerCreate( "sdk_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
-    xTimerReset( timeout_timer, portMAX_DELAY );
+    TimerHandle_t local_timeout_timer = xTimerCreate( "sdk_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
+    xTimerReset( local_timeout_timer, portMAX_DELAY );
 
     ota_log_download_start(image_location);
     esp_err_t ret = esp_https_ota(&config);
@@ -111,7 +113,33 @@ void _do_sdk_ota(char *image_location){
         ota_log_lib_error();
     }
 
-    xTimerDelete(timeout_timer, portMAX_DELAY);
+    xTimerDelete(local_timeout_timer, portMAX_DELAY);
+}
+
+
+static void StopOTA(TimerHandle_t timer)
+{
+	// Must send command to MCU to clear purple led on charger
+	MCU_SendCommandId(CommandHostFwUpdateEnd);
+	ble_interface_init();
+	otaRunning = false;
+
+	xTimerStop(timer, portMAX_DELAY);
+
+	ESP_LOGI(TAG, "Conditional stop");
+
+	xEventGroupClearBits(event_group,OTA_UNBLOCKED);
+	xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+}
+
+static TimerHandle_t timeout_timer;
+void ota_time_left()
+{
+	TickType_t timeLeft;
+
+	timeLeft = (xTimerGetExpiryTime(timeout_timer) - xTaskGetTickCount());
+
+	ESP_LOGE(TAG, "OTA time left: %i, %s", timeLeft, xTimerIsTimerActive(timeout_timer)==pdFALSE ? "INACTIVE" : "ACTIVE");
 }
 
 
@@ -121,8 +149,9 @@ static void ota_task(void *pvParameters){
     char image_version[16] = {0};
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
-    TimerHandle_t timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
+    timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
     
+    bool hasNewCertificate = false;
 
     while (true)
     {
@@ -140,6 +169,7 @@ static void ota_task(void *pvParameters){
 
         ESP_LOGW(TAG, "attempting ota update");
 
+        //Reactivate the reset timeout if it is inactive
         if(xTimerIsTimerActive(timeout_timer)==pdFALSE){
             xTimerReset( timeout_timer, portMAX_DELAY );
         }
@@ -153,13 +183,34 @@ static void ota_task(void *pvParameters){
 
         if(ret == 0x2700)
         {
-        	otaRunning = false;
-			xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-			xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+
 			log_message("OTA certificate error 0x2700, downloading new");
 			ESP_LOGW(TAG, "Updating certificate, expired at OTA");
-			//certifcate_setOverrideVersion(8);//TODO REMOVE, for testing certificate update.
+
 			certificate_update(0);
+
+			int nrOfChecks = 0;
+			for (nrOfChecks = 0; nrOfChecks < 30; nrOfChecks++)
+			{
+				hasNewCertificate = certificate_CheckIfReceivedNew();
+				if(hasNewCertificate == true)
+					break;
+				else
+					log_message("Waiting for new certificate");
+
+				vTaskDelay(pdMS_TO_TICKS(3000));
+			}
+
+			if(hasNewCertificate == true)
+			{
+				log_message("Retrying with new certificate");
+				continue;
+			}
+
+			log_message("Timed out waiting for certificate. Aborting OTA");
+
+			StopOTA(timeout_timer);
+
 			continue;
         }
 
@@ -171,9 +222,9 @@ static void ota_task(void *pvParameters){
         	{
         		ESP_LOGI(TAG, "Same version -> aborting");
         		updateOnlyIfNewVersion = false;
-        		otaRunning = false;
-        	    xEventGroupClearBits(event_group,OTA_UNBLOCKED);
-        	    xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+
+        		StopOTA(timeout_timer);
+
         		continue;
         	}
         	else
@@ -184,14 +235,38 @@ static void ota_task(void *pvParameters){
         }
 
 
+        // For chargers with prefix ZGB, don't allow download of older ZAP-only firmware versions!
+        if(i2cSerialIsZGB() == true)
+        {
+        	// Deny all 0.X.X.X and 1.X.X.X versions. New versions must be at least "2.0.0.0"
+        	if((strnstr(image_version, "0.", 2) != NULL) || ((strnstr(image_version, "1.", 2)) != NULL))
+			{
+        		log_message("Not allowed to download ZAP-only version to ZGB!");
+
+				StopOTA(timeout_timer);
+				continue;
+			}
+        	else
+        	{
+        		ESP_LOGW(TAG, "ZGB compatible version: %s", image_version);
+        	}
+        }
+
+
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
 
         if((ota_selection_field & OTA_UNBLOCKED) != 0 ){
             _do_sdk_ota(image_location);
+
+            StopOTA(timeout_timer);
+
         }else if((ota_selection_field & SEGMENTED_OTA_UNBLOCKED) != 0){
             do_segmented_ota(image_location);
+
+            StopOTA(timeout_timer);
+
         }else{
             ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }

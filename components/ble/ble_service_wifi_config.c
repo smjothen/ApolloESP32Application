@@ -1708,6 +1708,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 				ESP_LOGW(TAG, "Saving EMPTY timeSchedule: %s", charBuf);
 				storage_SaveConfiguration();
 				chargeController_ClearRandomStartDelay();
+				chargeController_ClearNextStartTime();
 				chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
 				ESP_LOGW(TAG, "Readback EMPTY timeSchedule: %s", storage_Get_TimeSchedule());
 				break;

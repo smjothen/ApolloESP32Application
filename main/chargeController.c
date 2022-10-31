@@ -14,6 +14,7 @@
 #include "zaptec_cloud_listener.h"
 #include "utz.h"
 #include "zones.h"
+#include "chargeSession.h"
 
 static const char *TAG = "CHARGECONTROL  ";
 
@@ -58,9 +59,10 @@ void chargeController_Init()
 	TimerHandle_t startTimerHandle = xTimerCreate( "StartChargeTimer", startChargeTimer, pdTRUE, NULL, RunStartChargeTimer);
 	xTimerReset( startTimerHandle, portMAX_DELAY);
 
-	chargeController_SetRandomStartDelay();
 	previousStandaloneCurrent = storage_Get_StandaloneCurrent();
 	chargeController_Activation();
+	if(enforceScheduleAndDelay == true)
+		chargeController_SetRandomStartDelay();
 }
 
 void chargeController_Activation()
@@ -155,6 +157,9 @@ int chargeController_GetLocalTime(udatetime_t *utcTime, ulocaltime_t *localTime)
 	chargeController_GetZone(&zone);
 
 	utz_utc_to_local(&ctx, utcTime, localTime, &zone);
+
+	//ESP_LOGW(TAG, "TZ: %s, offset: %d", zone.name, localTime->offset);
+
 	return localTime->offset;
 }
 
@@ -262,7 +267,7 @@ void chargeController_SetTimes()
 
 
 	}
-	startDelayCounter = 0;
+
 }
 
 
@@ -405,13 +410,18 @@ static uint8_t printCtrl = 3;
 void RunStartChargeTimer()
 {
 	enum ChargerOperatingMode opMode = MCU_GetChargeOperatingMode();
+	enum CarChargeMode chargeMode = MCU_GetChargeMode();
 
 	/// When booting with car connected, the random delay should always be applied
-	if((applyDelayAtBoot == true) && (opMode > CHARGE_OPERATION_STATE_DISCONNECTED))
+	if((applyDelayAtBoot == true) && (chargeMode != eCAR_UNINITIALIZED))
 	{
-		startDelayCounter = randomStartDelay;
+		if(chargeMode < eCAR_DISCONNECTED)
+		{
+			startDelayCounter = randomStartDelay;
+		}
+
+		applyDelayAtBoot = false;
 	}
-	applyDelayAtBoot = false;
 
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
@@ -543,7 +553,7 @@ void RunStartChargeTimer()
 			/// Clear next event in two cases:
 			/// 1) Schedule ended with no car connected,
 			/// 2) Schedule ended with car connected and starDelayCounter deactivated.
-			if((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0))
+			if(((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0)) || (overrideTimer == 1))
 				chargeController_ClearNextStartTime();
 
 			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
@@ -612,8 +622,8 @@ void RunStartChargeTimer()
 		if((sentClearStartTimeAtBoot == false) && (isPausedByAnySchedule == 0))
 		{
 			hasNewStartTime = true;
-			sentClearStartTimeAtBoot = true;
 		}
+		sentClearStartTimeAtBoot = true;
 
 		printCtrl--;
 		if(printCtrl == 0)
@@ -625,11 +635,12 @@ void RunStartChargeTimer()
 	else
 	{
 		//Here schedule is not active, but start delay applies. Send requesting state to Cloud when done.
-
+		//ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
 		isPausedByAnySchedule = 0x0000;
 		if(startDelayCounter > 0)
 		{
 			startDelayCounter--;
+			//ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
 			if((startDelayCounter == 0) && (storage_Get_Standalone() == 0) && isMqttConnected())
 			{
 				ESP_LOGW(TAG, "Sending requesting (no sched)");
@@ -644,7 +655,7 @@ void RunStartChargeTimer()
 		sendScheduleDiagnostics = false;
 	}
 
-	if(storage_Get_Standalone() == 1)
+	if((storage_Get_Standalone() == 1) && (isScheduleActive == true))
 	{
 		if(opMode == CHARGE_OPERATION_STATE_REQUESTING)
 		{
@@ -657,10 +668,14 @@ void RunStartChargeTimer()
 		float standaloneCurrent = storage_Get_StandaloneCurrent();
 		if (standaloneCurrent != previousStandaloneCurrent)
 		{
-			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standaloneCurrent);
+			float currentToSend = standaloneCurrent;
+			if(MCU_GetGridType() == NETWORK_3P3W)
+				currentToSend = standaloneCurrent/1.732;
+
+			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentToSend);
 			if(ret == MsgWriteAck)
 			{
-				ESP_LOGW(TAG, "Updating Standalone current %2.2f -> %2.2fA", previousStandaloneCurrent, standaloneCurrent);
+				ESP_LOGW(TAG, "Updating Standalone current %2.2f -> %2.2fA(IT3: %2.2fA)", previousStandaloneCurrent, standaloneCurrent, currentToSend);
 				previousStandaloneCurrent = standaloneCurrent;
 			}
 			else
@@ -670,7 +685,7 @@ void RunStartChargeTimer()
 		}
 	}
 
-	if(opMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+	if(chargeMode == eCAR_DISCONNECTED)
 	{
 		//ESP_LOGW(TAG, "Clearing overrideTimer");
 		overrideTimer = 0;
@@ -721,13 +736,22 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 	sessionHandler_ClearCarInterfaceResetConditions();
 
 	enum ChargerOperatingMode chOpMode = MCU_GetChargeOperatingMode();
-	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1))
+	if((chOpMode == CHARGE_OPERATION_STATE_REQUESTING) && (storage_Get_Standalone() == 1) && (isScheduleActive == true))
 	{
+		//Do not Continue if not authenticated
+		if((storage_Get_AuthenticationRequired() == true) && (chargeSession_IsAuthenticated() == false))
+			return retval;
+
 		//Use Standalone current as if from cloud command
 		float standAloneCurrent = storage_Get_StandaloneCurrent();
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, standAloneCurrent);
 
-		ESP_LOGW(TAG, "********* 1 Starting from state \"Standalone\" : CHARGE_OPERATION_STATE_REQUESTING ST-AC: %2.2fA **************", standAloneCurrent);
+		float currentToSend = standAloneCurrent;
+		if(MCU_GetGridType() == NETWORK_3P3W)
+			currentToSend = standAloneCurrent/1.732;
+
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, currentToSend);
+
+		ESP_LOGW(TAG, "********* 1 Starting from state \"Standalone\" : CHARGE_OPERATION_STATE_REQUESTING ST-AC: %2.2fA(IT3: %2.2fA) **************", standAloneCurrent, currentToSend);
 
 		if(ret == MsgWriteAck)
 		{
@@ -808,7 +832,7 @@ bool chargeController_SetStandaloneState(uint8_t isStandalone)
 	if(ret == MsgWriteAck)
 	{
 		storage_Set_Standalone((uint8_t)isStandalone);
-		ESP_LOGI(TAG, "DoSave 712 standalone=%d\n", isStandalone);
+		ESP_LOGI(TAG, "Set Standalone: MCU=%d ESP=%d\n", (enforceScheduleAndDelay ? 0 : isStandalone), isStandalone);
 		return true;
 	}
 	else

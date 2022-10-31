@@ -264,17 +264,34 @@ void SessionHandler_SetOCMFHighInterval()
 
 static bool logCurrents = false;
 static uint16_t logCurrentsCounter = 0;
-void SessionHandler_SetLogCurrents()
+static uint16_t logCurrentsInterval = 5;
+static uint16_t logCurrentStop = 0;
+/*
+ * Function for sending power values at configurable interval for testing
+ */
+void SessionHandler_SetLogCurrents(int interval)
 {
-	if(logCurrents == false)
+	logCurrentsInterval = interval;
+
+	//Stop logging after 5 min if interval is 60 sec or less
+	if(logCurrentsInterval <= 60)
+		logCurrentStop = 300;
+	else
+		logCurrentStop = 0;
+
+	if(interval > 0)
 	{
 		logCurrents = true;
-		logCurrentsCounter = 0;
+
 	}
 	else
 	{
 		logCurrents = false;
 	}
+
+	ESP_LOGW(TAG, "Logging: %i, %i", logCurrents, logCurrentsInterval);
+
+	logCurrentsCounter = 0;
 }
 
 static bool carInterfaceRestartTried = false;
@@ -400,6 +417,14 @@ static void sessionHandler_task()
     /// For developement testing only
     //SessionHandler_SetOCMFHighInterval();
 
+    ///Ensure MCU is up and running before continuing to ensure settings can be written
+    int MCUtimeout = 15;
+    while ((!MCU_IsReady() && MCUtimeout > 0))
+	{
+    	MCUtimeout--;
+		ESP_LOGW(TAG, "Waiting for MCU: %i", MCUtimeout);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}
     chargeController_Init();
 
     offlineSession_Init();
@@ -544,6 +569,7 @@ static void sessionHandler_task()
 			}
 
 			int ret = publish_string_observation(SessionIdentifier, chargeSession_GetSessionId());
+			ESP_LOGI(TAG, "Sending sessionId: %s (%i)", chargeSession_GetSessionId(), ret);
 			if(ret == 0)
 				chargeSession_ClearHasNewSession();
 		}
@@ -1279,13 +1305,21 @@ static void sessionHandler_task()
 
 			if(logCurrents == true)
 			{
-				if(logCurrentsCounter < 300)
-					logCurrentsCounter++;
-				if(logCurrentsCounter == 300)
-					logCurrents = false;
+				logCurrentsCounter++;
+				//This turns off high frequency logging if interval is below 5 min
 
-				if(logCurrentsCounter % 2 == 0)
+				if((logCurrentStop > 0) && (logCurrentsCounter > logCurrentStop))
+				{
+					logCurrents = false;
+					logCurrentsCounter = 0;
+				}
+
+				if(logCurrentsCounter % logCurrentsInterval == 0)
+				{
 					publish_debug_telemetry_observation_power();
+					logCurrentsCounter = 0;
+				}
+
 			}
 
 
@@ -1470,6 +1504,41 @@ void sessionHandler_StopAndResetChargeSession()
 	ESP_LOGE(TAG, "sessionResetMode: %i cnt %i", sessionResetMode, waitForCarCountDown);
 }
 
+
+void SessionHandler_SendMCUSettings()
+{
+	char mcuPayload[100];
+
+	ZapMessage rxMsg = MCU_ReadParameter(ParamIsEnabled);
+	uint8_t enabled = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamIsStandalone);
+	uint8_t standAlone = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(AuthenticationRequired);
+	uint8_t auth = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamCurrentInMaximum);
+	float maxC = GetFloat(rxMsg.data);
+
+	rxMsg = MCU_ReadParameter(MCUFaultPins);
+	uint8_t faultPins = rxMsg.data[0];
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X", enabled, standAlone, auth, maxC, faultPins);
+	ESP_LOGI(TAG, "%s", mcuPayload);
+	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+}
+
+void SesionHandler_SendRelayStates()
+{
+	char mcuPayload[100];
+
+	uint8_t states = MCU_GetRelayStates();
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "RelayStates: %i - PEN: %i, L1: %i", states, ((states >> 1) & 0x01), (states & 0x01));
+	ESP_LOGI(TAG, "%s", mcuPayload);
+	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+}
 
 
 /*

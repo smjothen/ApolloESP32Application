@@ -55,9 +55,42 @@ void i2c_ctrl_debug(int state)
 
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
-	// This line is for debugging units with failed production test
-	//deviceInfo.factory_stage = FactoryStageFinnished;
+
+#ifdef RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
+#endif
+
 	return deviceInfo;
+}
+
+bool i2cSerialIsZGB()
+{
+	if(strnstr(deviceInfo.serialNumber,"ZGB",3) != NULL)
+		return true;
+	else
+		return false;
+}
+
+/*
+ * Chargers below serial number ~ZAP000149 had a different partition table without the "files" partition.
+ * This function can be used to identify chargers that MAY have the partition.
+ */
+bool i2cCheckSerialForDiskPartition()
+{
+	if(strstr(deviceInfo.serialNumber,"ZAP") != NULL) 	///ZGB should always return false since it always has the new partition table
+	{
+		int serial = atoi(&deviceInfo.serialNumber[3]);
+		if(serial < 149)
+			return true;
+		else
+			return false;
+	}
+
+	return false;
 }
 
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo)
@@ -173,7 +206,7 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		int len = strlen(deviceInfo.serialNumber);
 
 		//Check for valid serial number
-		if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+		if((len == 9) && ((strncmp(deviceInfo.serialNumber, "ZAP", 3) == 0) || (strncmp(deviceInfo.serialNumber, "ZGB", 3) == 0)))
 		{
 			ESP_LOGI(TAG_EEPROM, "Serial number: %s", deviceInfo.serialNumber);
 
@@ -208,6 +241,14 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		}
 	}
 	deviceInfoLoaded = true;
+
+#ifdef RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
+#endif
 
 	return deviceInfo;
 }

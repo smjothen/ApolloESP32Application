@@ -11,7 +11,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "mcu_communication.h"
 #include "../apollo_ota/include/pic_update.h"
-#include "../../main/DeviceInfo.h"
+
 #include "../i2c/include/i2cDevices.h"
 #include "../../main/storage.h"
 #include "../../main/sessionHandler.h"
@@ -23,6 +23,8 @@ const char *TAG = "MCU            ";
 #define RX_TIMEOUT  (2000 / (portTICK_PERIOD_MS))
 #define SEMAPHORE_TIMEOUT  (20000 / (portTICK_PERIOD_MS))
 
+static uint8_t MCU_ReadHwIdMCUSpeed();
+static uint8_t MCU_ReadHwIdMCUPower();
 
 void uartSendTask(void *pvParameters);
 void uartRecvTask(void *pvParameters);
@@ -303,6 +305,29 @@ void ActivateMCUWatchdog()
 	}
 }
 
+void MCU_SendMaxCurrent()
+{
+	//Write MaxCurrent setting to MCU if restarted
+	float currentInMaximum = storage_Get_CurrentInMaximum();
+	if((32.0 >= currentInMaximum) && (currentInMaximum >= 0.0))
+	{
+		MessageType ret = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			ret = MCU_SendFloatParameter(ParamCurrentInMaximum, currentInMaximum);
+			if(ret == MsgWriteAck)
+			{
+				ESP_LOGW(TAG, "Sent MaxCurrent to MCU after MCU start: %f \n", currentInMaximum);
+				break;
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Failed sending MaxCurrent to MCU after start");
+			}
+		}
+	}
+}
+
 bool isMCUReady = false;
 
 //Call this to see if all MCU parametes has been received at start, before communicating to cloud
@@ -342,10 +367,11 @@ void uartSendTask(void *pvParameters){
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-
-    //Only applies to chargers with MCU bootloaders version 6 and greater.
+    //Send settings to MCU
     ActivateMCUWatchdog();
+    MCU_SendMaxCurrent();
 
+    //Read settings from MCU
     MCU_UpdateOverrideGridType();
     MCU_UpdateIT3OptimizationState();
     MCU_ReadHwIdMCUSpeed();
@@ -359,7 +385,9 @@ void uartSendTask(void *pvParameters){
     	if(mcuDebugCounter < previousMcuDebugCounter)
     	{
     		ActivateMCUWatchdog();
+    		MCU_SendMaxCurrent();
     		ESP_LOGW(TAG, "MCU restart detected");
+
     		previousMcuDebugCounter = mcuDebugCounter;
     	}
 
@@ -847,8 +875,8 @@ char * MCU_GetSwVersionString()
 }
 
 
-static uint8_t HwIdSpeed = 0;
-uint8_t MCU_ReadHwIdMCUSpeed()
+static hw_speed_revision HwIdSpeed = 0;
+static uint8_t MCU_ReadHwIdMCUSpeed()
 {
 	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUSpeed);
 	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUSpeed))
@@ -864,13 +892,13 @@ uint8_t MCU_ReadHwIdMCUSpeed()
 	}
 }
 
-uint8_t MCU_GetHwIdMCUSpeed()
+hw_speed_revision MCU_GetHwIdMCUSpeed()
 {
 	return HwIdSpeed;
 }
 
-static uint8_t HwIdPower = 0;
-uint8_t MCU_ReadHwIdMCUPower()
+static hw_power_revision HwIdPower = 0;
+static uint8_t MCU_ReadHwIdMCUPower()
 {
 	ZapMessage rxMsgm = MCU_ReadParameter(HwIdMCUPower);
 	if((rxMsgm.length == 1) && (rxMsgm.identifier == HwIdMCUPower))
@@ -886,13 +914,34 @@ uint8_t MCU_ReadHwIdMCUPower()
 	}
 }
 
-uint8_t MCU_GetHwIdMCUPower()
+hw_power_revision MCU_GetHwIdMCUPower()
 {
 	return HwIdPower;
 }
 
+bool IsUKOPENPowerBoardRevision()
+{
+	if((HwIdPower == HW_POWER_3_UK) || (HwIdPower == HW_POWER_5_UK_X804))
+		return true;
+	else
+		return false;
+}
 
-
+float MCU_GetOPENVoltage()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(ParamOPENVoltage);
+	if((rxMsgm.length == 4) && (rxMsgm.identifier == ParamOPENVoltage))
+	{
+		float OPENVoltage = GetFloat(rxMsgm.data);
+		ESP_LOGW(TAG, "Read L1/O-PEN voltage: %f ", OPENVoltage);
+		return OPENVoltage;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read L1/O-PEN voltage FAILED");
+		return -1.0;
+	}
+}
 
 
 
@@ -1202,9 +1251,9 @@ bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret) {
   return false;
 }
 
-uint16_t MCU_GetServoCheckParameter(int parameterDefinition)
+int16_t MCU_GetServoCheckParameter(int parameterDefinition)
 {
-	uint16_t servoCheckParameter = 0;
+	int16_t servoCheckParameter = 0;
 	ZapMessage rxMsgm = MCU_ReadParameter(parameterDefinition);
 	if((rxMsgm.length == 2) && (rxMsgm.identifier == parameterDefinition))
 	{
@@ -1287,6 +1336,38 @@ bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
     return true;
 }
 
+void MCU_GetOPENSamples(char * samples)
+{
+	if(MsgCommandAck == MCU_SendCommandId(CommandGetOPENSamples))
+	{
+		vTaskDelay(pdMS_TO_TICKS(1500));
+		ZapMessage rxMsg = MCU_ReadParameter(ParamDiagnosticsString);
+		ESP_LOGW(TAG, "rxMsg.length: %i",  rxMsg.length);
+		if(rxMsg.length == 114)
+		{
+			int i;
+			for (i = 0; i < rxMsg.length; i=i+3)
+			{
+				snprintf(samples + strlen(samples), 160, "%c%c%c ", rxMsg.data[i], rxMsg.data[i+1], rxMsg.data[i+2]);
+			}
+			ESP_LOGW(TAG, "Samples: %s",  samples);
+
+		}
+		else
+		{
+			snprintf(samples, 50, "Nr of Samples: %i", rxMsg.length);
+		}
+	}
+}
+
+uint8_t MCU_GetRelayStates()
+{
+	ZapMessage rxMsg = MCU_ReadParameter(RelayStates);
+	uint8_t relayStates = 0xFF;
+	if((rxMsg.length == 1) && (rxMsg.identifier == RelayStates))
+		relayStates = rxMsg.data[0];
+	return relayStates;
+}
 
 void SetEspNotification(uint16_t notification)
 {
