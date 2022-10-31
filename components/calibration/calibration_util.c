@@ -245,6 +245,26 @@ bool calibration_close_relays(CalibrationCtx *ctx) {
     return !!(ctx->Flags & CAL_FLAG_RELAY_CLOSED);
 }
 
+bool calibration_refresh(CalibrationCtx *ctx) {
+    ZapMessage msg = MCU_ReadParameter(ParamContinueCalibration);
+    if (msg.type == MsgReadAck && msg.identifier == ParamContinueCalibration && msg.length == 1) {
+        return msg.data[0] == 1;
+    }
+    return false;
+}
+
+bool calibration_is_active(CalibrationCtx *ctx) {
+    ZapMessage msg = MCU_ReadParameter(ParamStartCalibrations);
+    if (msg.type == MsgReadAck && msg.identifier == ParamStartCalibrations && msg.length == 1) {
+        return msg.data[0] == 1;
+    }
+    return false;
+}
+
+bool calibration_start(CalibrationCtx *ctx) {
+    return MCU_SendUint8Parameter(ParamStartCalibrations, 0x4D) == MsgWriteAck;
+}
+
 bool calibration_start_calibration_run(CalibrationType type) {
     return MCU_SendUint8Parameter(ParamRunCalibration, type) == MsgWriteAck;
 }

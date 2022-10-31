@@ -365,14 +365,21 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress:
-            if (calibration_open_relays(ctx)) {
-                CAL_CSTATE(ctx) = Complete;
+            if (!calibration_open_relays(ctx)) {
+                return false;
+            }
+
+            // Init stage sets some parameters which get stored to flash on MCU so we should
+            // do a factory reset...?
+            if (MCU_SendCommandId(CommandFactoryReset) != MsgCommandAck) {
+                return false;
             }
 
             // TODO: 
             // 1. Mark calibration parameters as verified
             // 2. Exit MID mode
 
+            CAL_CSTATE(ctx) = Complete;
             break;
         case Complete:
         case Failed:
@@ -439,8 +446,15 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
 
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
-
         //ESP_LOGI(TAG, "WM: %d", uxTaskGetStackHighWaterMark(NULL));
+
+        bool midModeActive = calibration_refresh(ctx);
+        bool calibrationActive = calibration_is_active(ctx);
+
+        if (!midModeActive || !calibrationActive) {
+            ESP_LOGI(TAG, "%s: Trying to enter MID mode!", calibration_state_to_string(ctx));
+            calibration_start(ctx);
+        }
 
         calibration_send_state(ctx);
         calibration_update_charger_state(ctx);
@@ -449,6 +463,14 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     }
 
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < CALIBRATION_TIMEOUT) {
+        return;
+    }
+
+    bool midMode = calibration_refresh(ctx);
+
+    if (!midMode) {
+        ESP_LOGE(TAG, "%s: Charger exited MID mode!", calibration_state_to_string(ctx));
+        CAL_CSTATE(ctx) = Failed;
         return;
     }
 

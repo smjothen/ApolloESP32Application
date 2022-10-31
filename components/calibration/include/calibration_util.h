@@ -18,7 +18,12 @@ double calibration_inv_scale_emeter(CalibrationUnit unit, float raw);
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *ivals, float *vvals);
 uint16_t calibration_read_samples(void);
 
+bool calibration_refresh(CalibrationCtx *ctx);
+bool calibration_is_active(CalibrationCtx *ctx);
+bool calibration_start(CalibrationCtx *ctx);
+
 bool calibration_start_calibration_run(CalibrationType type);
+
 bool calibration_read_average(CalibrationType type, int phase, float *average) ;
 uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages);
 
