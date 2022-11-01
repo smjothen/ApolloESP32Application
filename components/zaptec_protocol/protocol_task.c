@@ -872,7 +872,7 @@ float MCU_GetOPENVoltage()
 	if((rxMsgm.length == 4) && (rxMsgm.identifier == ParamOPENVoltage))
 	{
 		float OPENVoltage = GetFloat(rxMsgm.data);
-		ESP_LOGW(TAG, "Read L1/O-PEN voltage: %f ", OPENVoltage);
+		//ESP_LOGI(TAG, "Read L1/O-PEN voltage: %f ", OPENVoltage);
 		return OPENVoltage;
 	}
 	else

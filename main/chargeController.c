@@ -426,7 +426,7 @@ void RunStartChargeTimer()
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
 	{
-		ESP_LOGE(TAG, "**** DISCONNECTED: Clearing all paused-flags ****");
+		ESP_LOGI(TAG, "**** DISCONNECTED: Clearing all paused-flags ****");
 		int scheduleNr;
 		for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
 		{
