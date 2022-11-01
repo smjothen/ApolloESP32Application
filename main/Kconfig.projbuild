@@ -12,3 +12,28 @@ config ESP_WIFI_PASSWORD
     help
 	WiFi password (WPA or WPA2) for the example to use.
 endmenu
+
+menu "Zaptec"
+     choice  ZAPTEC_BUILD_TYPE
+     	     bool "Build type"
+     	     default ZAPTEC_BUILD_TYPE_DEVELOPMENT
+     	     help
+		Specify the purpose of the build.
+		In order to choose production build, secure boot and encryption must be enabled (flash and nvs).
+		Development build indicates to component which default values should be used. See ZAPTEC_CLOUD_URL_TYPE as an example.
+
+	     config ZAPTEC_BUILD_TYPE_DEVELOPMENT
+	     	    bool "Development"
+		    select ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
+
+	     config ZAPTEC_BUILD_TYPE_PRODUCTION
+	     	    bool "Production"
+		    depends on SECURE_BOOT && SECURE_FLASH_ENC_ENABLED && NVS_ENCRYPTION && !SECURE_BOOT_INSECURE
+     endchoice
+
+     config ZAPTEC_BUILD_TYPE
+     	    int
+	    default 0 if ZAPTEC_BUILD_TYPE_DEVELOPMENT
+	    default 1 if ZAPTEC_BUILD_TYPE_PRODUCTION
+
+endmenu
