@@ -761,7 +761,7 @@ int publish_telemetry_observation_on_change(){
 		{
 			if(((warnings & 0x400000) && !(previousWarnings & 0x400000)) || (!(warnings & 0x400000) && (previousWarnings & 0x400000)))
 			{
-				ESP_LOGW(TAG, "Sending O-PEN voltage on warning change: 0x%06X, 0x%06X", warnings, previousWarnings);
+				ESP_LOGI(TAG, "Sending O-PEN voltage on warning change: 0x%06X, 0x%06X", warnings, previousWarnings);
 				add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
 			}
 		}

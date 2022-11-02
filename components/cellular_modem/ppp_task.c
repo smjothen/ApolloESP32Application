@@ -591,7 +591,7 @@ int configure_modem_for_ppp(void){
     		if(pName != NULL)
     		{
     			strcpy(modemName, name);
-   			    ESP_LOGW(TAG, "got name %s", modemName);
+   			    ESP_LOGI(TAG, "got name %s", modemName);
     			break;
     		}
     		else
