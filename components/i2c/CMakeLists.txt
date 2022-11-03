@@ -8,6 +8,7 @@ set(COMPONENT_SRCS  "i2cDevices.c"
 					"EEPROM.c"
 					"CLRC661.c"
 					"eeprom_wp.c"
+					"SFH7776.c"
 					)
 
 set(COMPONENT_ADD_INCLUDEDIRS ". include")
