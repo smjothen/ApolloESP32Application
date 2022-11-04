@@ -41,9 +41,9 @@
 #define TAG "CLOUD LISTENER "
 
 #ifdef DEVELOPEMENT_URL
-	#define MQTT_HOST "zap-d-iothub.azure-devices.net" //FOR DEVELOPEMENT
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT //FOR DEVELOPEMENT
 #else
-	#define MQTT_HOST "zapcloud.azure-devices.net"
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_MAIN_MQTT
 #endif
 
 #define MQTT_PORT 8883
