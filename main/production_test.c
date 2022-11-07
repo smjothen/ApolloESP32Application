@@ -915,8 +915,8 @@ int test_hw_trig(){
 	MCU_SendCommandId(CommandTestHWTrig);
 
 	int trigResult = 0;
-	int timeout = 7;
-	while((trigResult != 3) && (timeout > 0))
+	int timeout = 0;
+	while(timeout < 15)
 	{
 		vTaskDelay(pdMS_TO_TICKS(1000));
 
@@ -924,19 +924,19 @@ int test_hw_trig(){
 		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
 		{
 			trigResult = rxMsgm.data[0];
-			break;
+			if(trigResult == 7)
+			{
+				break;
+			}
 		}
-		else
-		{
-			timeout--;
-		}
+
+		timeout++;
 	}
 
 	char trig_string[100];
-	snprintf(trig_string, 100, "HW Trig: 0x%x\r\n", trigResult);
+	snprintf(trig_string, 100, "HW Trig: 0x%x(%i)\r\n", trigResult, timeout);
 
-    if(trigResult == 3){
-		//the switch must be in pos 0 when it leaves the factory
+    if(trigResult == 7){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
 		return 0;
 	}else{
