@@ -48,7 +48,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                         return false;
                     }
                     if (!emeter_write_float(I1_GAIN + phase, 1.0, 21)) {
-                        ESP_LOGE(TAG, "Writing IGAIN(%d) = 0.0 failed!", phase);
+                        ESP_LOGE(TAG, "Writing IGAIN(%d) = 1.0 failed!", phase);
                         return false;
                     }
                 }

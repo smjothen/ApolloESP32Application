@@ -218,6 +218,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float allowedVoltage = 0.1;
 
             TickType_t minimumDuration;
+            TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
@@ -229,6 +230,8 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 expectedCurrent = 16.0;
                 minimumDuration = pdMS_TO_TICKS(30 * 1000);
             }
+
+
 
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
              && calibration_phases_within(voltage, expectedVoltage, allowedVoltage) == 3) {
@@ -246,6 +249,14 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
 
             } else {
                 ctx->Ticks[WARMUP_TICK] = 0;
+
+                if (ctx->Ticks[WARMUP_WAIT_TICK] == 0) {
+                    ctx->Ticks[WARMUP_WAIT_TICK] = xTaskGetTickCount();
+                } else if (xTaskGetTickCount() - ctx->Ticks[WARMUP_WAIT_TICK] > maxWait) {
+                    ESP_LOGE(TAG, "Warm up current/voltage out of range too long!");
+                    CAL_CSTATE(ctx) = Failed;
+                    break;
+                }
 
                 ESP_LOGI(TAG, "%s: Waiting to be in range (%.1fA +/- %.1f%% range, I %.1fA %.1fA %.1fA) ...", calibration_state_to_string(ctx), expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
             }
@@ -327,7 +338,8 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
 
         CalibrationHeader header;
         header.crc = 0;
-        header.calibration_id = 1;
+        //header.calibration_id = 1;
+        header.calibration_id = 0;
         header.functional_relay_revision = 0;
 
         CalibrationParameter *param = ctx->Params.CurrentGain;
