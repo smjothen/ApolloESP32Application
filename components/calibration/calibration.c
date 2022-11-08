@@ -247,8 +247,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             } else {
                 ctx->Ticks[WARMUP_TICK] = 0;
 
-                ESP_LOGI(TAG, "%s: Waiting to be in range (%.1fA +/- %.1f%% range, I %.1fA %.1fA %.1fA) ...",
-                        calibration_state_to_string(ctx), expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
+                ESP_LOGI(TAG, "%s: Waiting to be in range (%.1fA +/- %.1f%% range, I %.1fA %.1fA %.1fA) ...", calibration_state_to_string(ctx), expectedCurrent, allowedCurrent * 100.0, current[0], current[1], current[2]);
             }
 
             break;
@@ -308,86 +307,107 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         return false;
     }
 
-    CalibrationParameter *params[] = {
-        ctx->Params.CurrentGain,
-        ctx->Params.VoltageGain,
-        ctx->Params.CurrentOffset,
-        ctx->Params.VoltageOffset,
-    };
+    if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
 
-    for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
-        for (int phase = 0; phase < 3; phase++) {
-            if (!params[param][phase].assigned) {
-                ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
-                return false;
+        CalibrationParameter *params[] = {
+            ctx->Params.CurrentGain,
+            ctx->Params.VoltageGain,
+            ctx->Params.CurrentOffset,
+            ctx->Params.VoltageOffset,
+        };
+
+        for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
+            for (int phase = 0; phase < 3; phase++) {
+                if (!params[param][phase].assigned) {
+                    ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
+                    return false;
+                }
             }
         }
-    }
 
-    CalibrationHeader header;
-    header.crc = 0;
-    header.calibration_id = 1;
-    header.functional_relay_revision = 0;
+        CalibrationHeader header;
+        header.crc = 0;
+        header.calibration_id = 1;
+        header.functional_relay_revision = 0;
 
-    CalibrationParameter *param = ctx->Params.CurrentGain;
-    header.i_gain[0] = floatToSn(param[0].value, 21);
-    header.i_gain[1] = floatToSn(param[1].value, 21);
-    header.i_gain[2] = floatToSn(param[2].value, 21);
+        CalibrationParameter *param = ctx->Params.CurrentGain;
+        header.i_gain[0] = floatToSn(param[0].value, 21);
+        header.i_gain[1] = floatToSn(param[1].value, 21);
+        header.i_gain[2] = floatToSn(param[2].value, 21);
 
-    param = ctx->Params.VoltageGain;
-    header.v_gain[0] = floatToSn(param[0].value, 21);
-    header.v_gain[1] = floatToSn(param[1].value, 21);
-    header.v_gain[2] = floatToSn(param[2].value, 21);
+        param = ctx->Params.VoltageGain;
+        header.v_gain[0] = floatToSn(param[0].value, 21);
+        header.v_gain[1] = floatToSn(param[1].value, 21);
+        header.v_gain[2] = floatToSn(param[2].value, 21);
 
-    param = ctx->Params.VoltageOffset;
-    header.v_offset[0] = floatToSn(param[0].value, 23);
-    header.v_offset[1] = floatToSn(param[1].value, 23);
-    header.v_offset[2] = floatToSn(param[2].value, 23);
+        param = ctx->Params.VoltageOffset;
+        header.v_offset[0] = floatToSn(param[0].value, 23);
+        header.v_offset[1] = floatToSn(param[1].value, 23);
+        header.v_offset[2] = floatToSn(param[2].value, 23);
 
-    header.t_offs[0] = 0xA800;
-    header.t_offs[1] = 0xA800;
-    header.t_offs[2] = 0xA800;
+        header.t_offs[0] = 0xA800;
+        header.t_offs[1] = 0xA800;
+        header.t_offs[2] = 0xA800;
 
-    const char *bytes = (const char *)&header;
-    const char *bytesAfterCrc = bytes + sizeof(header.crc);
+        const char *bytes = (const char *)&header;
+        const char *bytesAfterCrc = bytes + sizeof(header.crc);
 
-    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
-    ZEncodeUint16(crc, (uint8_t *)bytes);
+        uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+        ZEncodeUint16(crc, (uint8_t *)bytes);
 
-    ESP_LOGI(TAG, "%s: Writing checksum: %04X", calibration_state_to_string(ctx), header.crc);
+        ESP_LOGI(TAG, "%s: Writing checksum: %04X", calibration_state_to_string(ctx), header.crc);
 
-    char *ptr = hexbuf;
-    for (size_t i = 0; i < sizeof (header); i++) {
-        ptr += sprintf(ptr, "%02X ", (uint8_t)bytes[i]);
-    }
-    *ptr = 0;
+        char *ptr = hexbuf;
+        for (size_t i = 0; i < sizeof (header); i++) {
+            ptr += sprintf(ptr, "%02X ", (uint8_t)bytes[i]);
+        }
+        *ptr = 0;
 
-    ESP_LOGI(TAG, "%s: Writing bytes: %s", calibration_state_to_string(ctx), hexbuf);
+        ESP_LOGI(TAG, "%s: Writing bytes: %s", calibration_state_to_string(ctx), hexbuf);
 
-    // Let charger go into "idle" state where we don't fail if not in MID mode
-    ctx->Flags |= CAL_FLAG_IDLE;
+        // Let charger go into "idle" state where we don't fail if not in MID mode
+        ctx->Flags |= CAL_FLAG_IDLE;
 
-    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
-        ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
-        CAL_CFAIL(ctx, 0);
+        if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+            ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
+            CAL_CFAIL(ctx, 0);
+            return false;
+        }
+
+        ctx->Flags |= CAL_FLAG_WROTE_PARAMS;
+        ctx->Ticks[WRITE_TICK] = 0;
+
         return false;
+    } else {
+
+        if (!calibration_is_active(ctx)) {
+            ESP_LOGI(TAG, "%s: Waiting to enter MID mode ...", calibration_state_to_string(ctx));
+            return false;
+        }
+
+        // Give MCU ~10 seconds to reboot and curren to stabilize, otherwise current transformers
+        // go into overload even after relays close, requiring a manual reset.
+        if (!ctx->Ticks[WRITE_TICK]) {
+            ctx->Ticks[WRITE_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(10000);
+            return false;
+        }
+
+        if (xTaskGetTickCount() < ctx->Ticks[WRITE_TICK]) {
+            ESP_LOGI(TAG, "%s: Delaying completion ...", calibration_state_to_string(ctx));
+            return false;
+        }
+
+        // Out of idle state, must be in MID mode!
+        ctx->Flags &= ~CAL_FLAG_IDLE;
+
+        // Rebooted, set standalone current, etc again
+        calibration_tick_starting_init(ctx);
+
+        CAL_CSTATE(ctx) = Complete;
+
+        return CAL_CSTATE(ctx) != state;
+
     }
-
-    while (!calibration_is_active(ctx)) {
-        calibration_start(ctx);
-        ESP_LOGI(TAG, "%s: Waiting for reboot and MID mode...", calibration_state_to_string(ctx));
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
-    // Out of idle state, must be in MID mode!
-    ctx->Flags &= ~CAL_FLAG_IDLE;
-
-    // Rebooted, set standalone current, etc again
-    calibration_tick_starting_init(ctx);
-
-    CAL_CSTATE(ctx) = Complete;
-
-    return CAL_CSTATE(ctx) != state;
 }
 
 bool calibration_tick_done(CalibrationCtx *ctx) {
@@ -664,7 +684,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
     }
 
     if (msg->has_Verification) {
-        ESP_LOGI(TAG, "%s: Verification %d", calibration_state_to_string(ctx), msg->Verification.TestId);
+        ESP_LOGI(TAG, "%s: Test ID %d", calibration_state_to_string(ctx), msg->Verification.TestId);
         ctx->VerTest = msg->Verification.TestId;
     }
 

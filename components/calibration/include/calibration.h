@@ -154,6 +154,7 @@ typedef enum {
     WARMUP_TICK,
     STABILIZATION_TICK,
     VERIFICATION_TICK,
+    WRITE_TICK,
     LAST_TICK,
 } CalibrationTickType;
 
@@ -194,9 +195,9 @@ typedef struct {
 
 typedef enum {
     CAL_FLAG_INIT         = (1 << 0),
-    CAL_FLAG_WAIT_RESET   = (1 << 1),
+    CAL_FLAG_WROTE_PARAMS = (1 << 1),
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
-    CAL_FLAG_IDLE = (1 << 3),
+    CAL_FLAG_IDLE         = (1 << 3),
 } CalibrationFlags;
 
 typedef enum {
