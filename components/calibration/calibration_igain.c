@@ -28,19 +28,17 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
     switch (CAL_STEP(ctx)) {
         case InitRelays:
-            if (!ctx->Ticks[STABILIZATION_TICK]) {
+            if (!calibration_close_relays(ctx)) {
+                ESP_LOGE(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
+                return false;
+            }
 
-                if (!calibration_close_relays(ctx)) {
-                    break;
+            for (int phase = 0; phase < 3; phase++) {
+                if (!emeter_write_float(I1_GAIN + phase, 1.0, 21)) {
+                    ESP_LOGE(TAG, "Writing IGAIN(%d) failed!", phase);
                 }
-
-                for (int phase = 0; phase < 3; phase++) {
-                    if (!emeter_write_float(I1_GAIN + phase, 1.0, 21)) {
-                        ESP_LOGE(TAG, "Writing IGAIN(%d) failed!", phase);
-                    }
-                    if (!emeter_write_float(IARMS_OFF + phase, 0.0, 23)) {
-                        ESP_LOGE(TAG, "Writing IARMS(%d) failed!", phase);
-                    }
+                if (!emeter_write_float(IARMS_OFF + phase, 0.0, 23)) {
+                    ESP_LOGE(TAG, "Writing IARMS(%d) failed!", phase);
                 }
             }
 

@@ -320,8 +320,11 @@ bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int 
         return false;
     }
 
+    ESP_LOGI(TAG, "Writing %d (L%d) = %f ASSIGNED", type, phase, value);
+
     params[phase].value = value;
     params[phase].assigned = true;
+
     return true;
 }
 

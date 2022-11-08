@@ -11,7 +11,7 @@
 #include <lwip/netdb.h>
 
 // Comment out to disable simulated eMeter/calibration values
-#define CALIBRATION_SIMULATION
+//#define CALIBRATION_SIMULATION
 
 #define CALIBRATION_KEY "6ea2ac08d055bcf09ae52d570315f43e"
 
@@ -153,6 +153,7 @@ typedef enum {
     ENERGY_TICK,
     WARMUP_TICK,
     STABILIZATION_TICK,
+    VERIFICATION_TICK,
     LAST_TICK,
 } CalibrationTickType;
 
@@ -174,6 +175,11 @@ typedef struct {
     float I[3];
     float V[3];
     float E;
+
+    // Charger energy start/end
+    float CE[2];
+    // Reference energy start/end
+    float RE[2];
 } CalibrationReference;
 
 typedef struct {
@@ -190,6 +196,7 @@ typedef enum {
     CAL_FLAG_INIT         = (1 << 0),
     CAL_FLAG_WAIT_RESET   = (1 << 1),
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
+    CAL_FLAG_IDLE = (1 << 3),
 } CalibrationFlags;
 
 typedef enum {
@@ -230,4 +237,8 @@ bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current);
 bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
 
+void calibration_task_start(void);
+void calibration_task_stop(void);
+int calibration_task_watermark(void);
+ 
 #endif

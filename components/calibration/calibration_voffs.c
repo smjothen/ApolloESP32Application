@@ -29,10 +29,9 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
     switch (CAL_STEP(ctx)) {
         case InitRelays:
-            if (!ctx->Ticks[STABILIZATION_TICK]) {
-                if (!calibration_close_relays(ctx)) {
-                    break;
-                }
+            if (!calibration_close_relays(ctx)) {
+                ESP_LOGE(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
+                return false;
             }
 
             for (int phase = 0; phase < 3; phase++) {

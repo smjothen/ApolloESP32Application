@@ -1336,6 +1336,17 @@ bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
     return true;
 }
 
+bool MCU_GetMidStatus(uint32_t *id) {
+    ZapMessage msg = MCU_ReadParameter(ParamMidStatus);
+    if (msg.length != 4 || msg.identifier != ParamMidStatus) {
+        return false;
+    }
+
+    *id = GetUint32_t(msg.data);
+    return true;
+}
+
+
 void MCU_GetOPENSamples(char * samples)
 {
 	if(MsgCommandAck == MCU_SendCommandId(CommandGetOPENSamples))

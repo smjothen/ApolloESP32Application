@@ -19,6 +19,8 @@
 #include "calibration.h"
 #include "calibration_emeter.h"
 
+//static const char *TAG = "CALIBRATION    ";
+
 double snToFloat(uint32_t data, uint16_t radix) {
     // Copy 24 bit sign to 32 bit sign
     if(data & 0x800000) {
@@ -36,8 +38,8 @@ uint32_t floatToSn(double data, uint16_t radix) {
     return data * (1UL << radix);
 }
 
-bool emeter_write(uint8_t reg, int registerValue) {
-	uint32_t combined = ((uint8_t)reg) << 24 | (registerValue & 0xFFFFFF);
+bool emeter_write(uint8_t reg, uint32_t registerValue) {
+	uint32_t combined = (reg << 24) | (registerValue & 0xFFFFFF);
 	MessageType type = MCU_SendUint32Parameter(ParamCalibrationSetParameter, combined);
 	if (type != MsgWriteAck) {
 		return false;
@@ -45,8 +47,8 @@ bool emeter_write(uint8_t reg, int registerValue) {
 	return true;
 }
 
-bool emeter_write_float(uint8_t reg, double value, int radix) {
-	int registerValue = floatToSn(value, radix);
+bool emeter_write_float(uint8_t reg, double value, uint8_t radix) {
+	uint32_t registerValue = floatToSn(value, radix);
 	return emeter_write(reg, registerValue);
 }
 
@@ -67,11 +69,38 @@ bool emeter_read(uint8_t reg, uint32_t *val) {
 	return true;
 }
 
+#define FSV_POWER2 (435.54 * 1.406)
+#define FSI_POWER2 (159.16 * 1.986)
+
+#define FSV_POWER1 (435.54 * 0.988)
+#define FSI_POWER1 (159.16 * 2.037)
+ 
 double emeter_get_fsv(void) {
-	// Should probably fix this to get ~1.0 gains
-	return 435.54;
+	switch(MCU_GetHwIdMCUPower()) {
+		case HW_POWER_UNKNOWN:
+		case HW_POWER_1:
+			return FSV_POWER1;
+		case HW_POWER_2:
+		case HW_POWER_3_UK:
+		case HW_POWER_4_X804:
+		case HW_POWER_5_UK_X804:
+			return FSV_POWER2;
+	}
+
+	return FSV_POWER2;
 }
 
 double emeter_get_fsi(void) {
-	return 159.16;
+	switch(MCU_GetHwIdMCUPower()) {
+		case HW_POWER_UNKNOWN:
+		case HW_POWER_1:
+			return FSI_POWER1;
+		case HW_POWER_2:
+		case HW_POWER_3_UK:
+		case HW_POWER_4_X804:
+		case HW_POWER_5_UK_X804:
+			return FSI_POWER2;
+	}
+
+	return FSI_POWER2;
 }

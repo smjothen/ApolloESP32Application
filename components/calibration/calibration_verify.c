@@ -21,132 +21,141 @@ static const char *TAG = "CALIBRATION    ";
 bool calibration_tick_verification(CalibrationCtx *ctx) {
     CalibrationChargerState state = CAL_CSTATE(ctx);
 
-    static float ref_energy_start = -1.0,
-                 ref_energy_end = -1.0,
-                 energy_start = -1.0,
-                 energy_end = -1.0;
-
-    switch(CAL_STATE(ctx)) {
-        case VerificationStart:
-            // We can assume the data message with energy gets handled prior to the tick that calls
-            // this function...
-            if (ref_energy_start == -1.0) {
-                ref_energy_start = ctx->Ref.E;
-                ESP_LOGI(TAG, "%s: Verification %d started with ref. energy %.1f kWh", calibration_state_to_string(ctx), ctx->VerTest, ctx->Ref.E);
-            }
-            break;
-        case VerificationRunning:
-            break;
-        case VerificationDone:
-            if (ref_energy_end == -1.0) {
-                ref_energy_end = ctx->Ref.E;
-                ESP_LOGI(TAG, "%s: Verification %d ended with ref. energy %.1f kWh", calibration_state_to_string(ctx), ctx->VerTest, ctx->Ref.E);
-            }
-            break;
-        default:
-            return false;
+    // Relays should be closed anyway, but ...
+    if (!calibration_close_relays(ctx)) {
+        ESP_LOGE(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx));
+        return false;
     }
-
-    /*
-    float expectedCurrent;
-    int expectedPhases = 0;
-
-    switch(ctx->VerTest) {
-        case I_tr_3_phase_PF1:
-        case I_tr_3_phase_PF0_5:
-            expectedCurrent = 5.0;
-            break;
-        case I_tr_L1:
-            expectedCurrent = 5.0;
-            expectedPhases = 1;
-            break;
-        case I_tr_L2:
-            expectedCurrent = 5.0;
-            expectedPhases = 2;
-            break;
-        case I_max:
-            expectedCurrent = 32.0;
-            break;
-    }
-    */
 
     if (CAL_CSTATE(ctx) != InProgress) {
         return false;
     }
 
     if (CAL_STATE(ctx) == VerificationStart) {
-        if (!calibration_close_relays(ctx)) {
-            ESP_LOGE(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx));
-            return false;
+        if (!ctx->Ticks[VERIFICATION_TICK]) {
+            ctx->Ticks[VERIFICATION_TICK] = xTaskGetTickCount();
         }
 
-        // TODO: Retry a few times?
         float energy;
-        if (!MCU_GetInterpolatedEnergyCounter(&energy)) {
-            ESP_LOGE(TAG, "%s: Couldn't read energy counter ...", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
+        if (!calibration_get_energy_counter(&energy)) {
+            ESP_LOGI(TAG, "%s: Couldn't read start charger energy (busy?) ...", calibration_state_to_string(ctx));
             return true;
         }
-        
-        energy_start = energy * 0.1;
-        ESP_LOGI(TAG, "%s: Received start energy counter: %0.1f Wh", calibration_state_to_string(ctx), energy_start);
+
+        float ref_energy;
+        if (ctx->Ticks[ENERGY_TICK] < ctx->Ticks[VERIFICATION_TICK]) {
+            ESP_LOGI(TAG, "%s: Couldn't read start reference energy (too old) ...", calibration_state_to_string(ctx));
+            return true;
+        }
+
+        ref_energy = ctx->Ref.E;
+
+        ctx->Ref.CE[0] = energy * 0.1; // Impulses => Wh
+        ctx->Ref.RE[0] = ref_energy * 1000.0; // kWh => Wh
+
+        ESP_LOGI(TAG, "%s: Received start charger & reference energy (%f / %f)", calibration_state_to_string(ctx), ctx->Ref.CE[0], ctx->Ref.RE[0]);
+
+        ctx->Ticks[VERIFICATION_TICK] = 0;
 
         CAL_CSTATE(ctx) = Complete;
         return true;
     }
 
     if (CAL_STATE(ctx) == VerificationRunning) {
-        if (ref_energy_start == -1.0) {
-            ESP_LOGE(TAG, "%s: Verification started without reference energy!", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
-            return false;
-        }
-
+        // Always complete?
         CAL_CSTATE(ctx) = Complete;
         return true;
     }
 
     if (CAL_STATE(ctx) == VerificationDone) {
-        float energy;
-
-        if (energy_start == -1.0 || ref_energy_start == -1.0) {
-            ESP_LOGE(TAG, "%s: Verification ended without ref. energy %f / %f!", calibration_state_to_string(ctx), energy_start, ref_energy_start);
-            CAL_CSTATE(ctx) = Failed;
-            return false;
-        } else if (ref_energy_end == -1.0) {
-            ESP_LOGI(TAG, "%s: Waiting for end ref. energy ...", calibration_state_to_string(ctx));
-            return false;
-        } else if (!MCU_GetInterpolatedEnergyCounter(&energy)) {
-            ESP_LOGE(TAG, "%s: Couldn't read energy counter ...", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
-            return false;
+        if (!ctx->Ticks[VERIFICATION_TICK]) {
+            ctx->Ticks[VERIFICATION_TICK] = xTaskGetTickCount();
         }
 
-        energy_end = energy * 0.1;
-        ESP_LOGI(TAG, "%s: Received end energy counter: %0.1f Wh", calibration_state_to_string(ctx), energy_end);
+        float energy;
+        if (!calibration_get_energy_counter(&energy)) {
+            ESP_LOGI(TAG, "%s: Couldn't read end charger energy (busy?) ...", calibration_state_to_string(ctx));
+            return true;
+        }
 
-        float charger_energy = energy_end - energy_start;
-        float ref_energy = (ref_energy_end - ref_energy_start) * 1000.0;
+        float ref_energy;
+        if (ctx->Ticks[ENERGY_TICK] < ctx->Ticks[VERIFICATION_TICK]) {
+            ESP_LOGI(TAG, "%s: Couldn't read end reference energy (too old) ...", calibration_state_to_string(ctx));
+            return true;
+        }
+
+        ref_energy = ctx->Ref.E;
+
+        ctx->Ref.CE[1] = energy * 0.1; // Impulses => Wh
+        ctx->Ref.RE[1] = ref_energy * 1000.0; // kWh => Wh
+
+        ESP_LOGI(TAG, "%s: Received end charger & reference energy (%f / %f)", calibration_state_to_string(ctx), ctx->Ref.CE[1], ctx->Ref.RE[1]);
+
+        energy = ctx->Ref.CE[1] - ctx->Ref.CE[0];
+        ref_energy = ctx->Ref.RE[1] - ctx->Ref.RE[0];
 
         float error;
         if (ref_energy == 0.0) {
-            error = charger_energy == 0.0 ? 0.0 : 1.0;
+            error = energy == 0.0 ? 0.0 : 1.0;
         } else {
-            error = (charger_energy / ref_energy) - 1.0;
+            error = (energy / ref_energy) - 1.0;
         }
 
+        error = fabs(error);
+
 #ifdef CALIBRATION_SIMULATION
-        error = 0.0001;
+        error = 0.0000;
 #endif
 
-        ESP_LOGI(TAG, "%s: Verification completed, Test %.3f Wh vs. Reference %.3f Wh, Error = %.3f", calibration_state_to_string(ctx), charger_energy, ref_energy, error);
+        float max_error = 0.0;
 
-        CAL_CSTATE(ctx) = Complete;
+        switch (ctx->VerTest) {
+            case NoLoad:
+                break;
+            case StartingCurrent:
+                max_error = 0.2;
+                break;
+            case I_min:
+                max_error = 0.02;
+                break;
+            case I_tr_L1:
+            case I_tr_L2:
+                max_error = 0.0075;
+                break;
+            case I_tr_3_phase_PF0_5:
+                max_error = 0.009;
+                break;
+            case I_tr_3_phase_PF1:
+            case I_max:
+            case PreFlashVerification:
+            case I_min_pre:
+                max_error = 0.005;
+                break;
+        }
+        
+        if (ctx->VerTest == NoLoad) {
+            if (energy > 0.1) {
+                ESP_LOGE(TAG, "%s: Verification FAIL %.3fWh > 0.1Wh with no load!", calibration_state_to_string(ctx), energy);
+                CAL_CSTATE(ctx) = Failed;
+            } else {
+                ESP_LOGI(TAG, "%s: Verification GOOD %.3fWh < 0.1Wh with no load!", calibration_state_to_string(ctx), energy);
+                CAL_CSTATE(ctx) = Complete;
+            }
+        } else {
+            if (error > max_error) {
+                ESP_LOGE(TAG, "%s: Verification FAIL %.3fWh vs. %.3fWh, Err = %.3f%% >  %.3f%%", calibration_state_to_string(ctx), energy, ref_energy, error * 100.0, max_error * 100.0);
+                CAL_CSTATE(ctx) = Failed;
+            } else {
+                ESP_LOGI(TAG, "%s: Verification GOOD %.3fWh vs. %.3fWh, Err = %.3f%% <= %.3f%%", calibration_state_to_string(ctx), energy, ref_energy, error * 100.0, max_error * 100.0);
+                CAL_CSTATE(ctx) = Complete;
+            }
+        }
 
-        ref_energy_start = -1.0;
-        ref_energy_end = -1.0;
-        energy_start = -1.0;
-        energy_end = -1.0;
+        ctx->Ref.CE[0] = 0.0;
+        ctx->Ref.RE[0] = 0.0;
+        ctx->Ref.CE[1] = 0.0;
+        ctx->Ref.RE[1] = 0.0;
+        ctx->Ticks[VERIFICATION_TICK] = 0;
 
         return true;
     }

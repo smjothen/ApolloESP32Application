@@ -54,7 +54,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(0);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(3000);
             CAL_STEP(ctx) = Stabilization;
 
             break;
@@ -98,22 +98,15 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
 
             break;
         }
+
         case Verify: {
             float avg[3];
 
-            // Verify RMS gain as well
+            // Verify offset as well
             if (calibration_get_emeter_averages(type, avg)) {
-                float max_error = CALIBRATION_IOFF_MAX_ERROR;
-
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
-                    if (average < max_error) {
-                        ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx), phase, average, max_error);
-                    } else {
-                        ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx), phase, average, max_error);
-                        CAL_CSTATE(ctx) = Failed;
-                        return false;
-                    }
+                    ESP_LOGI(TAG, "%s: IOFFS(%d) Verification = %f (%f)", calibration_state_to_string(ctx), phase, average, avg[phase]);
                 }
 
                 if (++ctx->Count >= 5) {
