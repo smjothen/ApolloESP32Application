@@ -79,6 +79,11 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 }
 
 int calibration_tick_starting_init(CalibrationCtx *ctx) {
+
+    if (!calibration_set_led_blue(ctx)) {
+        return -5;
+    }
+
     if (!calibration_set_standalone(ctx, 1)) {
         return -1;
     }
@@ -530,11 +535,13 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // No tick within states if done or failed, but allow above to execute so we send
     // state back to the app
     if (CAL_STATE(ctx) == Done && CAL_CSTATE(ctx) == Complete) {
+        calibration_set_led_green(ctx);
         ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
         return;
     }
 
     if (CAL_CSTATE(ctx) == Failed) {
+        calibration_set_led_red(ctx);
         ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
         return;
     }
@@ -891,7 +898,7 @@ void calibration_task(void *pvParameters) {
                     ctx.Server.ServAddr.sin_addr.s_addr = ((struct sockaddr_in *)&raddr)->sin_addr.s_addr;
                     ctx.Server.Initialized = true;
 
-                    ESP_LOGD(TAG, "UdpMessage { Ack: %d, Data: %d, State: %d }", msg.has_Ack, msg.has_Data, msg.has_State);
+                    //ESP_LOGD(TAG, "UdpMessage { Ack: %d, Data: %d, State: %d }", msg.has_Ack, msg.has_Data, msg.has_State);
 
                     if (msg.has_Ack) {
                         calibration_handle_ack(&ctx, &msg.Ack);

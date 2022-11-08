@@ -34,4 +34,8 @@ bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int 
 
 bool calibration_get_energy_counter(float *energy);
 
+bool calibration_set_led_blue(CalibrationCtx *ctx);
+bool calibration_set_led_green(CalibrationCtx *ctx);
+bool calibration_set_led_red(CalibrationCtx *ctx);
+
 #endif

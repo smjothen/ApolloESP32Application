@@ -132,21 +132,26 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
                 max_error = 0.005;
                 break;
         }
+
+        int id = ctx->VerTest;
         
         if (ctx->VerTest == NoLoad) {
             if (energy > 0.1) {
-                ESP_LOGE(TAG, "%s: Verification FAIL %.3fWh > 0.1Wh with no load!", calibration_state_to_string(ctx), energy);
+                ESP_LOGE(TAG, "%s: %d FAIL %.3fWh > 0.1Wh with no load!", calibration_state_to_string(ctx), id, energy);
                 CAL_CSTATE(ctx) = Failed;
             } else {
-                ESP_LOGI(TAG, "%s: Verification GOOD %.3fWh < 0.1Wh with no load!", calibration_state_to_string(ctx), energy);
+                ESP_LOGI(TAG, "%s: %d PASS %.3fWh < 0.1Wh with no load!", calibration_state_to_string(ctx), id, energy);
                 CAL_CSTATE(ctx) = Complete;
             }
+        } else if (ctx->VerTest == I_min_pre) {
+            // I_min_pre not really for verification, so don't fail
+            CAL_CSTATE(ctx) = Complete;
         } else {
             if (error > max_error) {
-                ESP_LOGE(TAG, "%s: Verification FAIL %.3fWh vs. %.3fWh, Err = %.3f%% >  %.3f%%", calibration_state_to_string(ctx), energy, ref_energy, error * 100.0, max_error * 100.0);
+                ESP_LOGE(TAG, "%s: %d FAIL %.3fWh vs. %.3fWh, Err = %.3f%% >  %.3f%%", calibration_state_to_string(ctx), id, energy, ref_energy, error * 100.0, max_error * 100.0);
                 CAL_CSTATE(ctx) = Failed;
             } else {
-                ESP_LOGI(TAG, "%s: Verification GOOD %.3fWh vs. %.3fWh, Err = %.3f%% <= %.3f%%", calibration_state_to_string(ctx), energy, ref_energy, error * 100.0, max_error * 100.0);
+                ESP_LOGI(TAG, "%s: %d PASS %.3fWh vs. %.3fWh, Err = %.3f%% <= %.3f%%", calibration_state_to_string(ctx), id, energy, ref_energy, error * 100.0, max_error * 100.0);
                 CAL_CSTATE(ctx) = Complete;
             }
         }
