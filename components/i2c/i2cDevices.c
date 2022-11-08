@@ -194,7 +194,9 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		int len = strlen(deviceInfo.serialNumber);
 
 		//Check for valid serial number
-		if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+		if((len == 9)
+			&& (((deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+				|| ((deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'G') && (deviceInfo.serialNumber[2] == 'B'))))
 		{
 			ESP_LOGI(TAG_EEPROM, "Serial number: %s", deviceInfo.serialNumber);
 
@@ -284,10 +286,94 @@ enum tamper_status_id{
 	eTAMPER_STATUS_SENSOR_FAULT
 };
 
-#define PROXIMITY_COVER_ON_OFF_LIMIT 260 // Should be calibrated
-#define PROXIMITY_COVER_ON_OFF_MARGIN 20 // Should be calibrated
-#define PROXIMITY_SAMPLE_COUNT 5 // Samples used in combination to determin if cover is on
-#define PROXIMITY_SAMPLE_RATE_SEC 2
+#define PROXIMITY_COVER_ON_VALUE 0x100 // Should be calibrated
+#define PROXIMITY_COVER_ON_MARGIN 0x50 // Should be calibrated
+#define PROXIMITY_ON_OFF_DELAY 5 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
+
+enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
+
+bool tamper_has_new_value = false;
+time_t tamper_transition_end = 0; // Time when PROXIMITY_ON_OFF_DELAY expires after tamper_has_new_value
+uint8_t tamper_change_count = 0; // Times change has been detected since last delay was exceeded without change.
+
+static void tamper_isr_hander(void * args){
+	tamper_has_new_value = true;
+}
+
+esp_err_t configure_tamper_protection(){
+
+	// Normal mode, ambient light in standby, proximity repetition time 400ms
+	if(SFH7776_set_mode_control(0b0100) != ESP_OK)
+		return ESP_FAIL;
+
+	// Proximity output 50 mA LED. TODO: Test with 25 mA
+	if(SFH7776_set_sensor_control(0b0100) != ESP_OK)
+		return ESP_FAIL;
+
+	// Interrupt is updated after each measurement
+	if(SFH7776_set_persistence_control(1) != ESP_OK)
+		return ESP_FAIL;
+
+	// Interrupt on proximity only, Interrupt when higher or lower than thresholds, stable if new value is same, no latch
+	if(SFH7776_set_interrupt_control(0b100101) != ESP_OK)
+		return ESP_FAIL;
+
+	if(SFH7776_set_proximity_interrupt_high_threshold(PROXIMITY_COVER_ON_VALUE + PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	if(SFH7776_set_proximity_interrupt_low_threshold(PROXIMITY_COVER_ON_VALUE - PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	gpio_install_isr_service(0);
+	if(SFH7776_configure_interrupt_pin(true, tamper_isr_hander) != ESP_OK)
+		return ESP_FAIL;
+
+	return ESP_OK;
+}
+
+void detect_tamper(){
+	enum tamper_status_id old_status = tamper_status;
+
+	if(tamper_has_new_value){
+		ESP_LOGW(TAG, "Proximity sensor registered change");
+		tamper_has_new_value = false;
+		tamper_transition_end = time(NULL) + PROXIMITY_ON_OFF_DELAY;
+		tamper_change_count++;
+
+		if(tamper_change_count > 3){
+			ESP_LOGW(TAG, "Rapid change in cover proximity detected.");
+
+			tamper_status = eTAMPER_STATUS_COVER_OFF;
+			tamper_change_count = 0;
+		}
+
+	}else if(tamper_transition_end != 0 && (time(NULL) > tamper_transition_end)){
+		tamper_change_count = 0;
+		tamper_transition_end = 0;
+
+		uint16_t proximity;
+		if(SFH7776_get_proximity(&proximity) != ESP_OK){
+
+			ESP_LOGE(TAG, "Error while reading proximity");
+			tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
+		} else {
+			ESP_LOGI(TAG, "Read proximity: %#04x", proximity);
+		}
+
+		if((proximity > (PROXIMITY_COVER_ON_VALUE - PROXIMITY_COVER_ON_MARGIN))
+			&& (proximity < (PROXIMITY_COVER_ON_VALUE + PROXIMITY_COVER_ON_MARGIN))){
+
+			tamper_status = eTAMPER_STATUS_COVER_ON;
+		} else {
+			tamper_status = eTAMPER_STATUS_COVER_OFF;
+		}
+	}
+
+	if(old_status != tamper_status){
+		ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
+		publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+	}
+}
 
 static void i2cDevice_task(void *pvParameters)
 {
@@ -316,21 +402,20 @@ static void i2cDevice_task(void *pvParameters)
 
 	NFCInit();
 
-	enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
-	//enum tamper_status_id old_status = tamper_status;
-	//enum tamper_status_id cloud_status = tamper_status;
-
-	time_t tamper_last_check = 0;
-	uint16_t proximity_samples[PROXIMITY_SAMPLE_COUNT] = {0xff};
-	size_t proximity_index = 0;
-
-	esp_err_t test_result = SFH7776_test();
+	esp_err_t test_result = SFH7776_detect();
 	if(test_result != ESP_OK){
-		ESP_LOGE(TAG, "Tamper protection not present");
+		ESP_LOGE(TAG, "Tamper protection chip not present");
 		tamper_status = eTAMPER_STATUS_DISABLED;
 	}else{
-		ESP_LOGI(TAG, "Tamper protection enabled");
-		tamper_status = eTAMPER_STATUS_ENABLED;
+		ESP_LOGI(TAG, "Tamper protection chip detected");
+		if(configure_tamper_protection() != ESP_OK){
+			ESP_LOGE(TAG, "Unable to configure tamper protection");
+			tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
+		}else{
+			ESP_LOGI(TAG, "Tamper protection chip configured");
+			tamper_status = eTAMPER_STATUS_ENABLED;
+			tamper_transition_end = time(NULL) + PROXIMITY_ON_OFF_DELAY; // Start an initial read
+		}
 	}
 
 	while (true)
@@ -544,46 +629,12 @@ static void i2cDevice_task(void *pvParameters)
 			RTCHasNewTime = false;
 		}
 
-
+		if(tamper_status != eTAMPER_STATUS_DISABLED){
+			detect_tamper();
+		}
 
 		//Read from NFC at 2Hz for user to not notice delay
 		vTaskDelay(500 / portTICK_RATE_MS);
-	}
-
-
-	if(tamper_status != eTAMPER_STATUS_DISABLED){
-
-		time_t sample_time = time(NULL);
-
-		if(sample_time - tamper_last_check > PROXIMITY_SAMPLE_RATE_SEC){
-			proximity_index++; // Note that the first index will be written last
-			if(proximity_index >= PROXIMITY_SAMPLE_COUNT)
-				proximity_index = 0; // The array is used as a circular buffer
-
-			if(SFH7776_read_proximity(&proximity_samples[proximity_index]) != ESP_OK){
-				ESP_LOGE(TAG, "Error while reading proximity");
-				tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
-
-			}else if(proximity_samples[0] != 0xff){ // If not failed to read and all required samples have been read
-				publish_debug_telemetry_observation_tamper_cover_state(proximity_samples[proximity_index]); // DEBUG
-
-				enum tamper_status_id new_status = eTAMPER_STATUS_COVER_ON;
-				for(size_t i = 1; i < PROXIMITY_SAMPLE_COUNT; i++){
-					if(abs(proximity_samples[i-1] - proximity_samples[i]) > PROXIMITY_COVER_ON_OFF_MARGIN // If there is a large change
-						|| ((proximity_samples[i] < PROXIMITY_COVER_ON_OFF_LIMIT - PROXIMITY_COVER_ON_OFF_MARGIN) // or item too near
-							|| (proximity_samples[i] < PROXIMITY_COVER_ON_OFF_LIMIT + PROXIMITY_COVER_ON_OFF_MARGIN))) // or to far away
-					{
-						// Then the cover must be off
-						new_status = eTAMPER_STATUS_COVER_OFF;
-						break;
-					}
-				}
-				tamper_status = new_status;
-			}
-
-			/* if(tamper_status != old_status) */
-			/* 	publish_debug_telemetry_observation_tamper_cover_state(tamper_status); */
-		}
 	}
 }
 

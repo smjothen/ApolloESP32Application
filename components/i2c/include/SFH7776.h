@@ -8,12 +8,13 @@
 
 esp_err_t SFH7776_set_register(uint8_t reg, uint8_t value);
 esp_err_t SFH7776_get_register(uint8_t reg, uint8_t * value);
-esp_err_t SFH7776_read_lsb_then_msb(uint8_t lsb_addr, uint16_t * value);
+esp_err_t SFH7776_set_lsb_then_msb(uint8_t lsb_addr, uint16_t value);
+esp_err_t SFH7776_get_lsb_then_msb(uint8_t lsb_addr, uint16_t * value);
 
 /**
- * Test the availability of the SFH7776 sensor. TODO: change to detect instead of test once testing is complete
+ * Detect the availability of the SFH7776 sensor.
  */
-esp_err_t SFH7776_test();
+esp_err_t SFH7776_detect();
 
 /**
  * Set the SYSTEM_CONTROL register (0x40h)
@@ -39,10 +40,40 @@ esp_err_t SFH7776_test();
 #define SFH7776_set_sensor_control(ctrl) ({SFH7776_set_register(0x42, ctrl);})
 #define SFH7776_get_sensor_control(ctrl) ({SFH7776_get_register(0x42, ctrl);})
 
-#define SFH7776_read_proximity(proximity_out) ({SFH7776_read_lsb_then_msb(0x44, proximity_out);})
+/**
+ * Set the PERRSISTENCE register (0x43h)
+ * Used to change the how interrupt interprets the proximity sensor values.
+ * Bit 3-0 can be set to require multiple consecutive values to be the same or with the same treshold to set the interrupt.
+ */
+#define SFH7776_set_persistence_control(ctrl) ({SFH7776_set_register(0x43, ctrl);})
+#define SFH7776_get_persistence_control(ctrl) ({SFH7776_get_register(0x43, ctrl);})
 
-#define SFH7776_read_ambient_light_visibile(ambient_light_out) ({SFH7776_read_lsb_then_msb(0x46, ambient_light_out);})
-#define SFH7776_read_ambient_light_ir(ambient_light_out) ({SFH7776_read_lsb_then_msb(0x48, ambient_light_out);})
+/**
+ * Enables or disables the interrupt pin and attaches a isr callback (IO22)
+ */
+esp_err_t SFH7776_configure_interrupt_pin(bool on, gpio_isr_t handle);
 
+#define SFH7776_get_proximity(proximity_out) ({SFH7776_get_lsb_then_msb(0x44, proximity_out);})
+
+#define SFH7776_get_ambient_light_visibile(ambient_light_out) ({SFH7776_get_lsb_then_msb(0x46, ambient_light_out);})
+#define SFH7776_get_ambient_light_ir(ambient_light_out) ({SFH7776_get_lsb_then_msb(0x48, ambient_light_out);})
+
+/**
+ * Set the INTERRUPT_CONTROL register (0x4ah)
+ * Used to change interrupt behavior.
+ * Bit 7-6 read only value of interrupt state for PS (proximity sensor) and ALS (Ambient light sensor) respectivly
+ * Bit 5-4 how interrupt threshold values are used for PS.
+ * Bit 3 can be set to re-assert interrupt state on equvalent value to last read.
+ * Bit 2 can be set disable latch (update after each measurement)
+ * 1-0 can be set to enable the trigger for ALS and PS repectivly.
+ */
+#define SFH7776_set_interrupt_control(ctrl) ({SFH7776_set_register(0x4a, ctrl);})
+#define SFH7776_get_interrupt_control(ctrl) ({SFH7776_get_register(0x4a, ctrl);})
+
+#define SFH7776_set_proximity_interrupt_high_threshold(threshold) ({SFH7776_set_lsb_then_msb(0x4b, threshold);})
+#define SFH7776_get_proximity_interrupt_high_threshold(threshold) ({SFH7776_get_lsb_then_msb(0x4b, threshold);})
+
+#define SFH7776_set_proximity_interrupt_low_threshold(threshold) ({SFH7776_set_lsb_then_msb(0x4d, threshold);})
+#define SFH7776_get_proximity_interrupt_low_threshold(threshold) ({SFH7776_get_lsb_then_msb(0x4d, threshold);})
 
 #endif /* SFH7776_H */
