@@ -319,7 +319,7 @@ int at_command_save_baud(void){
     return at_command_with_ok_ack("AT&W", 300);
 }
 
-int at_command_registered(void){
+/*int at_command_registered_creg(void){
     char line[64];
     int at_success = at_command_two_line_response("AT+CREG?", line, 64, 300, 300);
 
@@ -335,6 +335,37 @@ int at_command_registered(void){
         ESP_LOGI(TAG, "BG is registered with %c", registration_result_code);
         return 1;
     }
+
+    return 0;
+}*/
+
+int at_command_registered(void){
+    char line[64];
+    int at_success = at_command_two_line_response("AT+CEREG?", line, 64, 300, 300);
+
+    if(at_success  != 0){
+        ESP_LOGW(TAG, "register check failed ");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "AT+CEREG?> %s", line);
+
+    char registration_result_code = line[10];
+    ESP_LOGI(TAG, "BG is registered with %c", registration_result_code);
+    ///Cant use atoi since 0 is a valid result
+    if((registration_result_code == '0'))
+        return 0;
+    else if((registration_result_code == '1'))
+        return 1;
+    else if((registration_result_code == '2'))
+        return 2;
+    else if((registration_result_code == '3'))
+        return 3;
+    else if((registration_result_code == '4'))
+        return 4;
+    else if((registration_result_code == '5'))
+		return 5;
+    else
 
     return 0;
 }
