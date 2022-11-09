@@ -950,6 +950,13 @@ void calibration_task_start(void) {
 void calibration_task_stop(void) {
     if (handle) {
         ESP_LOGE(TAG, "Killing calibration task!");
+
+        shutdown(serv.Socket, 0);
+        close(serv.Socket);
+        serv.Initialized = false;
+
+        calibration_reset(&ctx);
+
         vTaskDelete(handle);
         handle = NULL;
     }

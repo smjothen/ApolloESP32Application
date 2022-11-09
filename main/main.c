@@ -457,8 +457,6 @@ void app_main(void)
 	}
 	//#endif
 
-	calibration_task_start();
-
   #ifndef BG_BRIDGE
     sessionHandler_init();
 	#endif
@@ -470,6 +468,8 @@ void app_main(void)
     bool hasBeenOnline = false;
     int otaDelayCounter = 0;
     int lowMemCounter = 0;
+
+		bool calibrationMode = false;
 
 	while (true)
     {
@@ -607,6 +607,19 @@ void app_main(void)
 			otaDelayCounter = 0;
 		}
 
+		uint8_t calModeNow = 0;
+
+		if (MCU_IsCalibrationHandle(&calModeNow)) {
+			if (calModeNow && !calibrationMode) {
+				ESP_LOGI(TAG_MAIN, "Starting calibration task!");
+				calibration_task_start();
+				calibrationMode = true;
+			} else if (!calModeNow && calibrationMode) {
+				ESP_LOGI(TAG_MAIN, "Killing calibration task!");
+				calibration_task_stop();
+				calibrationMode = false;
+			}
+		}
 
 	#ifdef useSimpleConsole
 		int i;
