@@ -813,19 +813,20 @@ err:
 
 void calibration_task(void *pvParameters) {
     while (1) {
-        while (!network_WifiIsConnected()) {
-          ESP_LOGI(TAG, "Waiting for WiFi connection ...");
-          vTaskDelay(3000 / portTICK_PERIOD_MS);
+        if (!network_WifiIsConnected()) {
+            ESP_LOGI(TAG, "Waiting for WiFi connection ...");
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            continue;
         }
-
-        ESP_LOGI(TAG, "Creating UDP socket ...");
 
         int sock = create_multicast_ipv4_socket();
         if (sock < 0) {
             ESP_LOGE(TAG, "Failed to create IPv4 multicast socket");
-            vTaskDelay(5 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
+
+        ESP_LOGI(TAG, "UDP socket created ...");
 
         serv.Socket = sock;
         bzero(&serv.ServAddr, sizeof (serv.ServAddr));
@@ -845,12 +846,8 @@ void calibration_task(void *pvParameters) {
 
         inet_aton(CALIBRATION_SERVER_IP, &sdestv4.sin_addr.s_addr);
 
-        int i = 0;
-
         int err = 1;
         while (err > 0) {
-            i++;
-
             struct timeval tv = {
                 .tv_sec = 0,
                 .tv_usec = 500 * 1000, // 0.5 second tick
@@ -950,12 +947,6 @@ void calibration_task_start(void) {
 void calibration_task_stop(void) {
     if (handle) {
         ESP_LOGE(TAG, "Killing calibration task!");
-
-        shutdown(serv.Socket, 0);
-        close(serv.Socket);
-        serv.Initialized = false;
-
-        calibration_reset(&ctx);
 
         vTaskDelete(handle);
         handle = NULL;

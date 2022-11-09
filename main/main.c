@@ -614,10 +614,6 @@ void app_main(void)
 				ESP_LOGI(TAG_MAIN, "Starting calibration task!");
 				calibration_task_start();
 				calibrationMode = true;
-			} else if (!calModeNow && calibrationMode) {
-				ESP_LOGI(TAG_MAIN, "Killing calibration task!");
-				calibration_task_stop();
-				calibrationMode = false;
 			}
 		}
 
