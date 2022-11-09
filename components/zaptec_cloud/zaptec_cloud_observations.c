@@ -399,6 +399,32 @@ int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
     return publish_json(observations);
 }
 
+//TODO: consider changing event_name to id/enum value
+/**
+ * event_name may be truncated to a 16 character limit.
+ * event_description may be truncated to a 200 char limit.
+ */
+int publish_debug_telemetry_security_log(const char * event_name, const char * event_description){
+
+    ESP_LOGD(TAG, "sending security log");
+
+    cJSON *observations = create_observation_collection();
+
+    char log_entry[256];
+    time_t timestamp = time(NULL);
+    char timestamp_str[32];
+
+    if(strftime(timestamp_str, sizeof(timestamp_str), "%FT%T%z", localtime(&timestamp)) == 0){
+	    ESP_LOGE(TAG, "Unable to create security log timestamp");
+	    return -1;
+    }
+
+    sprintf(log_entry, "[%s] %-16.16s: %.200s", timestamp_str, event_name, event_description);
+
+    add_observation_to_collection(observations, create_observation(789 /*temporary enum value*/, log_entry));
+
+    return publish_json(observations);
+}
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics)
 {
