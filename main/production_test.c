@@ -1020,15 +1020,13 @@ int test_hw_trig(){
 		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
 		{
 			trigResult = rxMsgm.data[0];
-			if(trigResult == 7)
+			if((trigResult == 7) || (trigResult > 0xF))
 			{
 				break;
 			}
 		}
-		else
-		{
-			timeout++;
-		}
+
+		timeout++;
 	}
 
 	char trig_string[100];
@@ -1367,6 +1365,9 @@ int charge_cycle_test(){
 	
 	current_max = 8.0;
 	current_min = 6.5;
+
+	float eMCompareVoltage = 0.0;
+	float OpenCompareVoltage = 0.0;
 	
 #ifdef RUN_FACTORY_TESTS
 	current_min = -1.0;
@@ -1400,6 +1401,9 @@ int charge_cycle_test(){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
 
 			if(i==5){
+				eMCompareVoltage = MCU_GetVoltages(0);
+				OpenCompareVoltage = MCU_GetOPENVoltage();
+
 				if(MCU_GetCurrents(0)<current_min || MCU_GetCurrents(0) > current_max){
 					prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "current out of range");
 					prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
@@ -1409,6 +1413,24 @@ int charge_cycle_test(){
 
 			vTaskDelay(pdMS_TO_TICKS(1000));
 		}
+
+		///Compare the eMeter L1 vs the O-PEN measurements, sampled in the middle of the load test
+		///Output the values and fail if not within limit.
+		float vDiff = eMCompareVoltage - OpenCompareVoltage;
+		if(vDiff < 0.0)
+			vDiff *= -1.0;
+
+		snprintf(payload, 100, "eM: %.2f V, O-PEN: %.2f V, Diff: %.2f V",  eMCompareVoltage, OpenCompareVoltage, vDiff);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
+	#ifndef RUN_FACTORY_TESTS
+		if(vDiff >= 3.0)
+		{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");
+			return -1;
+		}
+	#endif
+
 	}
 	else
 	{
