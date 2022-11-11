@@ -237,8 +237,6 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 minimumDuration = pdMS_TO_TICKS(30 * 1000);
             }
 
-
-
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
              && calibration_phases_within(voltage, expectedVoltage, allowedVoltage) == 3) {
 
@@ -493,6 +491,7 @@ int calibration_send_state(CalibrationCtx *ctx) {
     reply.StateAck = CAL_STATE(ctx);
     reply.SequenceAck = ctx->Seq;
     reply.RunAck = ctx->Run;
+    reply.OverloadedPhases = ctx->Overloaded;
 
     if (ctx->FailReason) {
         reply.has_Status = 1;
@@ -678,6 +677,8 @@ void calibration_handle_ack(CalibrationCtx *ctx, CalibrationUdpMessage_ChargerAc
 }
 
 void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMessage *msg) {
+    bool hasCurrent = false;
+
     if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterVoltage_tag) {
         CalibrationUdpMessage_DataMessage_PhaseSnapshot phases = msg->message_type.ReferenceMeterVoltage;
         ctx->Ref.V[0] = phases.L1;
@@ -690,12 +691,45 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
         ctx->Ref.I[1] = phases.L2;
         ctx->Ref.I[2] = phases.L3;
         ctx->Ticks[CURRENT_TICK] = xTaskGetTickCount();
+
+        hasCurrent = true;
     } else if (msg->which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterEnergy_tag) {
         CalibrationUdpMessage_DataMessage_EnergySnapshot energy = msg->message_type.ReferenceMeterEnergy;
         ctx->Ref.E = energy.WattHours;
         ctx->Ticks[ENERGY_TICK] = xTaskGetTickCount();
     } else {
         ESP_LOGE(TAG, "Unknown CalibrationUdpMessage.Data type!");
+    }
+
+    // Do simplified overload checking
+    ctx->Overloaded = None;
+
+    float localCurrents[3];
+    if (!calibration_get_current_snapshot(ctx, localCurrents)) {
+        return;
+    }
+   
+    if (ctx->Ref.OverloadIsEstimated) {
+        for (int i = 0; i < 3; i++) {
+            if (ctx->Ref.OverloadPhases & (1 << i)) {
+                float localCurrent = localCurrents[i];
+                float remoteCurrent = ctx->Ref.OverloadCurrent;
+                if (remoteCurrent > 0.35 && localCurrent < (remoteCurrent * 0.5)) {
+                    ctx->Overloaded |= (1 << i);
+                }
+            }
+        }
+    }
+
+    if (hasCurrent) {
+        for (int i = 0; i < 3; i++) {
+            float remoteCurrent = ctx->Ref.I[i];
+            float localCurrent = localCurrents[i];
+
+            if (remoteCurrent > 0.35 && localCurrent < (remoteCurrent * 0.5)) {
+                ctx->Overloaded |= (1 << i);
+            }
+        }
     }
 }
 

@@ -96,6 +96,14 @@ typedef enum {
 } CalibrationWarmupSettings;
 
 typedef enum {
+		None = 0,
+		L1 = (1<<0),
+		L2 = (1<<1),
+		L3 = (1<<2),
+		All = L1 | L2 | L3,
+} CalibrationOverload;
+
+typedef enum {
     NoLoad = 0,
     StartingCurrent = 1,
     I_min = 2,
@@ -179,6 +187,10 @@ typedef struct {
     float CE[2];
     // Reference energy start/end
     float RE[2];
+
+    CalibrationOverload OverloadPhases;
+    bool OverloadIsEstimated;
+    float OverloadCurrent;
 } CalibrationReference;
 
 typedef struct {
@@ -197,6 +209,7 @@ typedef enum {
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
     CAL_FLAG_IDLE         = (1 << 3), // Allow not to fail when we boot up in non-MID mode
     CAL_FLAG_DONE         = (1 << 4), // Set when we're sure MCU is in done state (out of MID mode, LED green or red, etc)
+    CAL_FLAG_EST_CURRENT  = (1 << 5), // Estimated current for overload checking
 } CalibrationFlags;
 
 typedef struct {
@@ -215,6 +228,7 @@ typedef struct {
     CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
+    CalibrationOverload Overloaded;
 
     TickType_t Ticks[LAST_TICK];
 } CalibrationCtx;

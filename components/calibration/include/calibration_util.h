@@ -15,6 +15,7 @@ bool calibration_get_ref_unit(CalibrationCtx *ctx, CalibrationUnit unit, int pha
 double calibration_scale_emeter(CalibrationUnit unit, double raw);
 double calibration_inv_scale_emeter(CalibrationUnit unit, float raw);
 
+bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv);
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *ivals, float *vvals);
 uint16_t calibration_read_samples(void);
 

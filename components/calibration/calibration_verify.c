@@ -21,6 +21,39 @@ static const char *TAG = "CALIBRATION    ";
 bool calibration_tick_verification(CalibrationCtx *ctx) {
     CalibrationChargerState state = CAL_CSTATE(ctx);
 
+    float expectedCurrent = 0;
+    CalibrationOverload expectedPhases = All;
+
+    switch (ctx->VerTest) {
+        case NoLoad:
+            break;
+        case StartingCurrent:
+            expectedCurrent = 0.025;
+            break;
+        case I_min:
+            expectedCurrent = 0.25;
+            break;
+        case I_tr_L1:
+            expectedCurrent = 5.0;
+            expectedPhases = L1;
+            break;
+        case I_tr_L2:
+            expectedCurrent = 5.0;
+            expectedPhases = L2;
+            break;
+        case I_tr_3_phase_PF0_5:
+        case I_tr_3_phase_PF1:
+            expectedCurrent = 5.0;
+            break;
+        case I_max:
+            expectedCurrent = 32.0;
+            break;
+        case PreFlashVerification:
+        case I_min_pre:
+            expectedCurrent = 0.025;
+            break;
+    }
+
     // Relays should be closed anyway, but ...
     if (!calibration_close_relays(ctx)) {
         ESP_LOGE(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx));
@@ -62,6 +95,11 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
     }
 
     if (CAL_STATE(ctx) == VerificationRunning) {
+
+        ctx->Ref.OverloadIsEstimated = true;
+        ctx->Ref.OverloadCurrent = expectedCurrent;
+        ctx->Ref.OverloadPhases = expectedPhases;
+
         // Always complete?
         CAL_CSTATE(ctx) = Complete;
         return true;
@@ -163,6 +201,8 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
         ctx->Ref.CE[1] = 0.0;
         ctx->Ref.RE[1] = 0.0;
         ctx->Ticks[VERIFICATION_TICK] = 0;
+
+        ctx->Ref.OverloadIsEstimated = false;
 
         return true;
     }

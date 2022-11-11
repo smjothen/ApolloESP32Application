@@ -95,6 +95,23 @@ static void calibration_set_sim_vals(float *iv, float *vv, float i, float v) {
 }
 */
 
+bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv) {
+    MessageType ret;
+
+    if ((ret = MCU_SendCommandId(CommandCurrentSnapshot)) != MsgCommandAck) {
+        ESP_LOGE(TAG, "Couldn't send current snapshot command!");
+        return false;
+    }
+
+    uint8_t source;
+    if (!MCU_GetEmeterSnapshot(ParamEmeterVoltageSnapshot, &source, iv)) {
+        ESP_LOGE(TAG, "Couldn't get current snapshot!");
+        return false;
+    }
+
+    return true;
+}
+
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *iv, float *vv) {
     MessageType ret;
 
