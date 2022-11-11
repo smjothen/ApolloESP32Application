@@ -261,13 +261,32 @@ bool calibration_is_active(CalibrationCtx *ctx) {
     return false;
 }
 
-bool calibration_start(CalibrationCtx *ctx) {
+bool calibration_stop_mid_mode(CalibrationCtx *ctx) {
+    return MCU_SendUint8Parameter(ParamStartCalibrations, 0x00) == MsgWriteAck;
+}
+
+bool calibration_start_mid_mode(CalibrationCtx *ctx) {
     return MCU_SendUint8Parameter(ParamStartCalibrations, 0x4D) == MsgWriteAck;
 }
 
 bool calibration_start_calibration_run(CalibrationType type) {
     return MCU_SendUint8Parameter(ParamRunCalibration, type) == MsgWriteAck;
 }
+
+bool calibration_read_warnings(uint32_t *warnings) {
+    ZapMessage msg = MCU_ReadParameter(ParamWarnings);
+    if (msg.type == MsgReadAck && msg.identifier == ParamWarnings && msg.length == 4) {
+        *warnings = GetUint32_t(msg.data);
+        return true;
+    }
+    *warnings = 0;
+    return false;
+}
+
+bool calibration_read_mid_status(uint32_t *status) {
+    return MCU_GetMidStatus(status);
+}
+
 
 bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
@@ -354,3 +373,35 @@ bool calibration_get_energy_counter(float *energy) {
     return false;
 }
 
+static void _calibration_error_append(CalibrationCtx *ctx, char *error) {
+    if (ctx->FailReason) {
+        char *ptr = NULL;
+        if (asprintf(&ptr, "%s\n%s", ctx->FailReason, error) > 0) {
+            free(ctx->FailReason);
+            ctx->FailReason = ptr;
+        }
+    } else {
+        ctx->FailReason = error;
+    }
+}
+
+int calibration_error_append(CalibrationCtx *ctx, const char *format, ...) {
+    int ret;
+    char *ptr = NULL;
+
+    va_list ap;
+
+    va_start(ap, format);
+
+    ret = vasprintf(&ptr, format, ap);
+
+    if (ret < 0) {
+        return ret;
+    }
+
+    _calibration_error_append(ctx, ptr);
+
+    va_end(ap);
+
+    return ret;
+}

@@ -42,7 +42,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(20000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
             CAL_STEP(ctx) = Stabilization;
 
             break;
@@ -111,12 +111,13 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
                         ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx), phase, error, max_error);
+                        calibration_error_append(ctx, "Current gain too large for L%d: %f >= %f", phase + 1, average, max_error);
                         CAL_CSTATE(ctx) = Failed;
                         return false;
                     }
                 }
 
-                if (++ctx->Count >= 5) {
+                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
                     ctx->Count = 0;
                     CAL_STEP(ctx) = CalibrationDone;
                 } else {

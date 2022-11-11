@@ -10,10 +10,14 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
+#define WARNING_PILOT_NO_PROXIMITY  (1l << 23)
+
 // Comment out to disable simulated eMeter/calibration values
 //#define CALIBRATION_SIMULATION
 
 #define CALIBRATION_KEY "6ea2ac08d055bcf09ae52d570315f43e"
+
+#define CALIBRATION_VERIFY_TIMES 1
 
 // TODO: Check these are reasonable?
 #define CALIBRATION_IOFF_MAX_ERROR 0.002
@@ -33,13 +37,6 @@
 #define CAL_STATE(ctx) (ctx)->State
 #define CAL_CSTATE(ctx) (ctx)->CState
 #define CAL_STEP(ctx) (ctx)->CStep
-
-#define CAL_FAIL(ctx) (ctx)->Failure
-
-#define CAL_CFAIL(ctx, reason) do { \
-    CAL_CSTATE((ctx)) = Failed;     \
-    CAL_FAIL((ctx)) |= reason;      \
-} while (0)
 
 #define FOREACH_CS(CS)                 \
     CS(Starting,                    1) \
@@ -198,18 +195,17 @@ typedef enum {
     CAL_FLAG_INIT         = (1 << 0),
     CAL_FLAG_WROTE_PARAMS = (1 << 1),
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
-    CAL_FLAG_IDLE         = (1 << 3),
+    CAL_FLAG_IDLE         = (1 << 3), // Allow not to fail when we boot up in non-MID mode
+    CAL_FLAG_DONE         = (1 << 4), // Set when we're sure MCU is in done state (out of MID mode, LED green or red, etc)
 } CalibrationFlags;
-
-typedef enum {
-    CAL_FAIL_UNKNOWN = (1 << 0),
-} CalibrationFailure;
 
 typedef struct {
     int Run;
     int Seq;
     int LastSeq;
     int Count;
+
+    char *FailReason;
 
     CalibrationServer Server;
     CalibrationState State;
@@ -219,7 +215,6 @@ typedef struct {
     CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
-    CalibrationFailure Failure;
 
     TickType_t Ticks[LAST_TICK];
 } CalibrationCtx;

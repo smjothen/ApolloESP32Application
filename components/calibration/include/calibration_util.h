@@ -20,7 +20,8 @@ uint16_t calibration_read_samples(void);
 
 bool calibration_refresh(CalibrationCtx *ctx);
 bool calibration_is_active(CalibrationCtx *ctx);
-bool calibration_start(CalibrationCtx *ctx);
+bool calibration_start_mid_mode(CalibrationCtx *ctx);
+bool calibration_stop_mid_mode(CalibrationCtx *ctx);
 
 bool calibration_start_calibration_run(CalibrationType type);
 
@@ -37,5 +38,10 @@ bool calibration_get_energy_counter(float *energy);
 bool calibration_set_led_blue(CalibrationCtx *ctx);
 bool calibration_set_led_green(CalibrationCtx *ctx);
 bool calibration_set_led_red(CalibrationCtx *ctx);
+
+bool calibration_read_warnings(uint32_t *warnings);
+bool calibration_read_mid_status(uint32_t *status);
+
+int calibration_error_append(CalibrationCtx *ctx, const char *format, ...);
 
 #endif

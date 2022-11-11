@@ -109,7 +109,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     ESP_LOGI(TAG, "%s: IOFFS(%d) Verification = %f (%f)", calibration_state_to_string(ctx), phase, average, avg[phase]);
                 }
 
-                if (++ctx->Count >= 5) {
+                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
                     ctx->Count = 0;
 
                     if (calibration_start_calibration_run(extra_type)) {
@@ -136,12 +136,13 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                         ESP_LOGI(TAG, "%s: IOFFS(%d) = %f  < %f", calibration_state_to_string(ctx), phase, average, max_error);
                     } else {
                         ESP_LOGE(TAG, "%s: IOFFS(%d) = %f >= %f", calibration_state_to_string(ctx), phase, average, max_error);
+                        calibration_error_append(ctx, "Current offset too large for L%d: %f >= %f", phase + 1, average, max_error);
                         CAL_CSTATE(ctx) = Failed;
                         return false;
                     }
                 }
 
-                if (++ctx->Count >= 5) {
+                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
                     ctx->Count = 0;
                     CAL_STEP(ctx) = CalibrationDone;
                 } else {
