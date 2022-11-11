@@ -559,6 +559,14 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
+    // Need to have received message from server in last 20 seconds, otherwise fail
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[ALIVE_TICK]) > 20000) {
+        ESP_LOGE(TAG, "No message from server in 20s, fail!");
+        calibration_error_append(ctx, "No message from server in last 20 seconds");
+        CAL_CSTATE(ctx) = Failed;
+        return;
+    }
+
     uint32_t status;
     if (calibration_read_mid_status(&status)) {
         if (status && status != 0x180) {
@@ -1040,6 +1048,8 @@ void calibration_task(void *pvParameters) {
                         calibration_handle_state(&ctx, &msg.State);
                         ctx.LastSeq = msg.State.Sequence;
                     }
+
+                    ctx.Ticks[ALIVE_TICK] = xTaskGetTickCount();
 
                     // Enabled use of malloc in nanopb, so free any dynamically allocated fields...
                     pb_release(CalibrationUdpMessage_fields, &msg);

@@ -161,6 +161,7 @@ typedef enum {
     STABILIZATION_TICK,
     VERIFICATION_TICK,
     WRITE_TICK,
+    ALIVE_TICK,
     LAST_TICK,
 } CalibrationTickType;
 
@@ -209,7 +210,6 @@ typedef enum {
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
     CAL_FLAG_IDLE         = (1 << 3), // Allow not to fail when we boot up in non-MID mode
     CAL_FLAG_DONE         = (1 << 4), // Set when we're sure MCU is in done state (out of MID mode, LED green or red, etc)
-    CAL_FLAG_EST_CURRENT  = (1 << 5), // Estimated current for overload checking
 } CalibrationFlags;
 
 typedef struct {
