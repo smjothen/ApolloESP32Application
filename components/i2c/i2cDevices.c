@@ -372,6 +372,17 @@ void detect_tamper(){
 	if(old_status != tamper_status){
 		ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
 		publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+
+		switch(tamper_status){
+		case eTAMPER_STATUS_COVER_ON:
+			publish_debug_telemetry_security_log("Cover status", "on");
+			break;
+		case eTAMPER_STATUS_COVER_OFF:
+			publish_debug_telemetry_security_log("Cover status", "off");
+			break;
+		default:
+			publish_debug_telemetry_security_log("Cover status", "unknown");
+		}
 	}
 }
 
