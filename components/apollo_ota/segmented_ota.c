@@ -9,6 +9,8 @@
 #include "esp_log.h"
 #include "certificate.h"
 
+#include "zaptec_cloud_observations.h"
+
 static const char *TAG = "segmented_ota";
 
 int total_size = 0;
@@ -138,9 +140,11 @@ void do_segmented_ota(char *image_location){
     if(end_err!=ESP_OK){
         ESP_LOGE(TAG, "Partition validation error %d", end_err);
         ota_log_chunk_validation_error(end_err);
+	publish_debug_telemetry_security_log("OTA", "Rejected");
     }else{
         ESP_LOGW(TAG, "update complete, rebooting soon");
         ota_log_all_chunks_success();
+	publish_debug_telemetry_security_log("OTA", "Accepted");
     }
     vTaskDelay(pdMS_TO_TICKS(3000));
     end_err = esp_ota_set_boot_partition(update_partition);

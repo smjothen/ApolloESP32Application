@@ -47,6 +47,8 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
 
 int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state);
 
+int publish_debug_telemetry_security_log(const char * event_name, const char * event_description);
+
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics);
 
 int publish_debug_telemetry_observation_DiagnosticsLog();
