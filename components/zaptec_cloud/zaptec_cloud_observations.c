@@ -421,7 +421,7 @@ int publish_debug_telemetry_security_log(const char * event_name, const char * e
 
     sprintf(log_entry, "[%s] %-16.16s: %.200s", timestamp_str, event_name, event_description);
 
-    add_observation_to_collection(observations, create_observation(789 /*temporary enum value*/, log_entry));
+    add_observation_to_collection(observations, create_observation(SecurityLog, log_entry));
 
     return publish_json(observations);
 }

@@ -167,6 +167,8 @@
 		DataUsage = 822,
 		CertificateVersion = 823,
         //..
+        SecurityLog = 830,
+        //..
         CarSessionLog = 850,
         CommunicationModeConfigurationInconsistency = 851,
         RawPilotMonitor = 852,
