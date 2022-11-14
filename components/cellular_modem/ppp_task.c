@@ -457,6 +457,7 @@ int configure_modem_for_ppp(void){
 
         	xEventGroupClearBits(event_group, UART_TO_PPP);
 			xEventGroupSetBits(event_group, UART_TO_LINES);
+			clear_lines();
         	cellularPinsOn();
         	powerOnCount++;
         	if(powerOnCount >= 10)
