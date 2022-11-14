@@ -449,9 +449,14 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
 	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
+#ifdef DEVELOPEMENT_URL
+    char sourceVersionString[38] = {0};
+    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_ota_get_app_description()->version);
+    add_observation_to_collection(observations, create_observation(SourceVersion, sourceVersionString));
+#else
     add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
+#endif
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
-
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));

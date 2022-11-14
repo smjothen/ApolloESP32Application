@@ -1363,8 +1363,7 @@ int charge_cycle_test(){
 	float volt_min2 = 200.0; 
 	float volt_max2 = 260.0;
 	
-	current_max = 8.0;
-	current_min = 6.5;
+
 
 	float eMCompareVoltage = 0.0;
 	float OpenCompareVoltage = 0.0;
@@ -1375,6 +1374,9 @@ int charge_cycle_test(){
 
 	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
 	{
+		current_max = 9.0;
+		current_min = 4.0;
+
 		/// Voltages2 1-phase
 		sprintf(payload, "Emeter voltages while charging: %f", emeter_voltages2[0]);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
@@ -1434,6 +1436,9 @@ int charge_cycle_test(){
 	}
 	else
 	{
+		current_max = 8.0;
+		current_min = 6.5;
+
 		/// Voltages2 3-phase
 		sprintf(payload, "Emeter voltages while charging: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
