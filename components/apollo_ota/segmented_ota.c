@@ -124,6 +124,7 @@ void do_segmented_ota(char *image_location){
                 esp_http_client_get_content_length(client));
         }else{
             ota_log_chunk_http_error(err);
+            continue;
         }
         esp_http_client_cleanup(client);
 

@@ -13,6 +13,7 @@
 
 #include "ppp_task.h"
 #include "at_commands.h"
+#include "../../main/storage.h"
 
 static const char *TAG = "PPP_TASK       ";
 
@@ -377,6 +378,7 @@ int GetNumberAsString(char * inputString, char * outputString, int maxLength)
 	return 0;
 }
 
+static uint8_t powerOnCount = 0;
 int configure_modem_for_ppp(void){
 
     bool startup_confirmed = false;
@@ -456,6 +458,13 @@ int configure_modem_for_ppp(void){
         	xEventGroupClearBits(event_group, UART_TO_PPP);
 			xEventGroupSetBits(event_group, UART_TO_LINES);
         	cellularPinsOn();
+        	powerOnCount++;
+        	if(powerOnCount >= 10)
+        	{
+        		ESP_LOGE(TAG, "NO BG BOOT DETECTED");
+				storage_Set_And_Save_DiagnosticsLog("#13 No BG boot detected (10 attempts)");
+				esp_restart();
+        	}
         	timeout = 0;
         }
         //timeout++;
