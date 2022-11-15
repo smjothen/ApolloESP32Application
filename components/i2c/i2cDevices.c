@@ -306,7 +306,7 @@ esp_err_t configure_tamper_protection(){
 	if(SFH7776_set_mode_control(0b0100) != ESP_OK)
 		return ESP_FAIL;
 
-	// Proximity output 50 mA LED. TODO: Test with 25 mA
+	// Proximity output 25 mA LED.
 	if(SFH7776_set_sensor_control(0b0100) != ESP_OK)
 		return ESP_FAIL;
 
@@ -357,7 +357,7 @@ void detect_tamper(){
 			ESP_LOGE(TAG, "Error while reading proximity");
 			tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
 		} else {
-			ESP_LOGI(TAG, "Read proximity: %#04x", proximity);
+			ESP_LOGI(TAG, "Read proximity: %#06x", proximity);
 		}
 
 		if((proximity > (PROXIMITY_COVER_ON_VALUE - PROXIMITY_COVER_ON_MARGIN))

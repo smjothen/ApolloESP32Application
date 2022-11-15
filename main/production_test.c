@@ -22,6 +22,7 @@
 #include "protocol_task.h"
 #include "audioBuzzer.h"
 #include "CLRC661.h"
+#include "SFH7776.h"
 #include "at_commands.h"
 #include "ppp_task.h"
 #include "protocol_task.h"
@@ -246,7 +247,8 @@ enum test_state{
 };
 
 enum test_item{
-	TEST_ITEM_COMPONENT_BUZZER, 
+	TEST_ITEM_COMPONENT_BUZZER,
+	TEST_ITEM_COMPONENT_PROXIMITY,
 	TEST_ITEM_COMPONENT_RTC,
 	TEST_ITEM_COMPONENT_LED,
 	TEST_ITEM_COMPONENT_SWITCH,
@@ -820,6 +822,49 @@ int test_buzzer(){
 	return -1;
 }
 
+int test_proximity(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+
+	esp_err_t err = SFH7776_detect();
+
+	//TODO: replace test question with hardware version check
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_PROXIMITY, "Has proximity sensor?|yes|no");
+
+	int should_exist = await_prodtest_external_step_acceptance("yes", true);
+	if((err == ESP_OK && should_exist != 0) || (err == ESP_FAIL && should_exist == 0)){
+		goto fail;
+
+	}else if(should_exist != 0){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+		return 0;
+	}
+
+	if(SFH7776_set_mode_control(0b0100) != ESP_OK
+		|| SFH7776_set_sensor_control(0b0100) != ESP_OK)
+		goto fail;
+
+	vTaskDelay(pdMS_TO_TICKS(500));
+
+	uint16_t proximity;
+	if(SFH7776_get_proximity(&proximity) != ESP_OK)
+		goto fail;
+
+	//Expect cover to be off, with no clear obstruction.
+	if(proximity > 0x15 && proximity < 0x25){ // TODO: should be calibrated
+		ESP_LOGI(TAG, "Proximity: %#06x", proximity);
+	}else{
+		goto fail;
+	}
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return 0;
+
+fail:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return -1;
+}
+
 int test_switch(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
@@ -974,6 +1019,10 @@ int run_component_tests(){
 	}
 
 	if(test_speed_hwid()<0){
+		goto err;
+	}
+
+	if(test_proximity()<0){
 		goto err;
 	}
 

@@ -1,8 +1,10 @@
 #ifndef SFH7776_H
 #define SFH7776_H
 
+#include "driver/gpio.h"
+
 /**
- * SFH7776 is a proximity and ambient ligth sensor. The proximity range depend on configuration and relectivity of detected object.
+ * SFH7776 is a proximity and ambient ligth sensor. The proximity range depend on configuration and reflectivity of detected object.
  * Under ideal settings it has a maximum range of ca 250mm.
  */
 
