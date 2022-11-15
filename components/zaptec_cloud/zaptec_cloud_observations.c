@@ -394,7 +394,7 @@ int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_uint32_t_observation(788 /*temporary enum value*/, cover_state));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamTamperCover, cover_state));
 
     return publish_json(observations);
 }

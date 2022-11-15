@@ -52,6 +52,7 @@
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
+        ParamTamperCover = 280,
 
 		ParamLedOverride = 290,
 		ParamLedOverrideClear = 291,
