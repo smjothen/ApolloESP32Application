@@ -25,6 +25,7 @@
 #include "calibration_crc.h"
 #include "calibration_util.h"
 #include "calibration_emeter.h"
+#include "calibration_mid.h"
 
 #include <calibration-message.pb.h>
 #include <calibration.h>
@@ -569,7 +570,11 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
 
     uint32_t status;
     if (calibration_read_mid_status(&status)) {
-        if (status && status != 0x180) {
+        status &= ~MID_STATUS_ALL_PAGES_EMPTY;
+        status &= ~MID_STATUS_NOT_CALIBRATED;
+        status &= ~MID_STATUS_NOT_VERIFIED;
+
+        if (status) {
             ESP_LOGE(TAG, "%s: MID status 0x%08X on charger!", calibration_state_to_string(ctx), status);
             calibration_error_append(ctx, "Unexpected MID status %08X", status);
             CAL_CSTATE(ctx) = Failed;
