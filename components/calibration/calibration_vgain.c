@@ -29,7 +29,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
     switch (CAL_STEP(ctx)) {
         case InitRelays:
             if (!calibration_close_relays(ctx)) {
-                ESP_LOGE(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
+                ESP_LOGI(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
                 return false;
             }
 
@@ -69,7 +69,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
                         calibration_write_parameter(ctx, type, phase, gain);
 
-                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %f (%f / %f)", calibration_state_to_string(ctx), phase, gain, ctx->Ref.V[phase], averageMeasurement);
+                        ESP_LOGI(TAG, "%s: VGAIN(%d) = %.6f Scaled = %f (%f / %f)", calibration_state_to_string(ctx), phase, avg[phase], gain, ctx->Ref.V[phase], averageMeasurement);
 
                         if (!emeter_write_float(V1_GAIN + phase, gain, 21)) {
                             ESP_LOGE(TAG, "%s: VGAIN(%d) write failed!", calibration_state_to_string(ctx), phase);

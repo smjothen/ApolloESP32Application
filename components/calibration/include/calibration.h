@@ -114,6 +114,7 @@ typedef enum {
     I_max = 7,
     PreFlashVerification = 8,
     I_min_pre = 9,
+    I_tr_L3 = 10,
 } CalibrationVerificationTest;
 
 typedef enum {

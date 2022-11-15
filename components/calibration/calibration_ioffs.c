@@ -30,6 +30,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             if (!ctx->Ticks[STABILIZATION_TICK]) {
 
                 if (!calibration_open_relays(ctx)) {
+                    ESP_LOGI(TAG, "%s: Waiting for relays to open...", calibration_state_to_string(ctx));
                     break;
                 }
 
