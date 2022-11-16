@@ -42,7 +42,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                 }
             }
 
-            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
+            ctx->Ticks[STABILIZATION_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(10000);
             CAL_STEP(ctx) = Stabilization;
 
             break;
