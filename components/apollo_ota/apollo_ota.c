@@ -9,6 +9,7 @@
 #include "apollo_ota.h"
 #include "ota_location.h"
 #include "segmented_ota.h"
+#include "safe_ota.h"
 #include "pic_update.h"
 #include "ota_log.h"
 #include "DeviceInfo.h"
@@ -263,7 +264,8 @@ static void ota_task(void *pvParameters){
             StopOTA(timeout_timer);
 
         }else if((ota_selection_field & SEGMENTED_OTA_UNBLOCKED) != 0){
-            do_segmented_ota(image_location);
+            //do_segmented_ota(image_location);
+        	do_safe_ota(image_location);
 
             StopOTA(timeout_timer);
 

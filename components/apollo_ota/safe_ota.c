@@ -9,11 +9,15 @@
 #include "esp_log.h"
 #include "certificate.h"
 
-static const char *TAG = "segmented_ota";
+static const char *TAG = "safe_ota";
 
 static int total_size = 0;
 static esp_ota_handle_t update_handle = { 0 };
+static unsigned char * blockBuffer = NULL;
+static int bufLength = 0;
 
+static int sentBlockCnt = 0;
+static int recvBlockCnt = 0;
 
 //extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 
@@ -41,17 +45,20 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_DATA:
-        ESP_LOGI(TAG, "got ota data, %d bytes", evt->data_len);
-        esp_err_t err = esp_ota_write(update_handle, evt->data, evt->data_len);
-        if(err!=ESP_OK){
-            ESP_LOGE(TAG, "Writing data to flash failed");
-            *error_p = 3;
-            ota_log_chunk_flash_error(err);
-        }
-
+        memcpy(&blockBuffer[bufLength], evt->data, evt->data_len);
+        bufLength += evt->data_len;
+        ESP_LOGI(TAG, "got ota data to buffered, %d bytes, %d tot", evt->data_len, bufLength);
         break;
     case HTTP_EVENT_ON_FINISH:
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+
+        ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH - SAVING BLOCK LENGTH %d", bufLength);
+        /*esp_err_t err = esp_ota_write(update_handle, blockBuffer, bufLength);
+		if(err!=ESP_OK){
+			ESP_LOGE(TAG, "Writing data to flash failed");
+			*error_p = 3;
+			ota_log_chunk_flash_error(err);
+		}*/
+
         break;
     case HTTP_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
@@ -61,13 +68,15 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 }
 
 static bool doAbortOTA = false;
-void do_segment_ota_abort()
+void do_safe_ota_abort()
 {
 	doAbortOTA = true;
 }
 
-void do_segmented_ota(char *image_location){
-    ESP_LOGW(TAG, "running experimental segmented ota");
+
+
+void do_safe_ota(char *image_location){
+    ESP_LOGW(TAG, "running experimental safe ota");
     ota_log_chunked_update_start(image_location);
 
     const esp_partition_t * update_partition = esp_ota_get_next_update_partition(NULL);
@@ -101,6 +110,10 @@ void do_segmented_ota(char *image_location){
         .user_data = &flash_error,
     };
 
+    blockBuffer = malloc(chunk_size);
+    recvBlockCnt = 0;
+    sentBlockCnt = 0;
+
     while(true){
         if((total_size > 0 )&&(read_start>total_size)){
             ESP_LOGW(TAG, "Flashing all segments done, proceeding to validation");
@@ -110,6 +123,9 @@ void do_segmented_ota(char *image_location){
         if(doAbortOTA == true)
         	break;
 
+        bufLength = 0;
+        memset(blockBuffer, 0, chunk_size);
+
         esp_http_client_handle_t client = esp_http_client_init(&config);
 
         char range_header_value[64];
@@ -117,13 +133,33 @@ void do_segmented_ota(char *image_location){
         esp_http_client_set_header(client, "Range", range_header_value);
 
         ESP_LOGI(TAG, "fetching [%s]", range_header_value);
+
+        //sentBlockCnt++;
+        //ESP_LOGW(TAG, "Sending block #%d", sentBlockCnt);
+
         esp_err_t err = esp_http_client_perform(client);
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "Status = %d, content_length = %d",
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
+
+
+	    	recvBlockCnt++;
+	    	ESP_LOGW(TAG, "Received block #%d Start: %d", recvBlockCnt, read_start);
+
+            esp_err_t errf = esp_ota_write(update_handle, blockBuffer, bufLength);
+			if(errf!=ESP_OK){
+				ESP_LOGE(TAG, "Writing data to flash failed");
+				ota_log_chunk_flash_error(errf);
+			}
+
         }else{
+        	ESP_LOGE(TAG, "HTTP ERROR %d. RETRYING SAME BLOCK Start: %d", err, read_start);
+        	/// Do not write anything - retry same block
             ota_log_chunk_http_error(err);
+            esp_http_client_cleanup(client);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            continue;
         }
         esp_http_client_cleanup(client);
 
@@ -143,6 +179,8 @@ void do_segmented_ota(char *image_location){
         }
     }
     
+    free(blockBuffer);
+
     if(doAbortOTA == true)
     {
     	doAbortOTA = false;
