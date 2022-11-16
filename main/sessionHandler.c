@@ -401,6 +401,7 @@ static void sessionHandler_task()
 	//Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
 
+    uint32_t previousWarnings = 0;
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
@@ -795,6 +796,16 @@ static void sessionHandler_task()
 				}
 			}*/
 		}
+
+
+		///When warnings are cleared - like O-PEN warning - make sure it get a new wake-up sequence in case it is sleeping.
+		uint32_t warnings = MCU_GetWarnings();
+		if((warnings == 0) && (previousWarnings != 0))
+		{
+			sessionHandler_ClearCarInterfaceResetConditions();
+			ESP_LOGW(TAG, "ClearedInterfaceResetCondition");
+		}
+		previousWarnings = warnings;
 
 
 		//If the car has not responded to charging being available for 30 seconds, run car interface reset sequence once - like Pro

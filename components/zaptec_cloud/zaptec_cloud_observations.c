@@ -449,9 +449,14 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
 	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
+#ifdef DEVELOPEMENT_URL
+    char sourceVersionString[38] = {0};
+    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_ota_get_app_description()->version);
+    add_observation_to_collection(observations, create_observation(SourceVersion, sourceVersionString));
+#else
     add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
+#endif
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
-
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
@@ -723,10 +728,6 @@ int publish_telemetry_observation_on_change(){
     int8_t chargeMode = MCU_GetChargeMode();
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != -1))
 	{
-		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
-		if(IsUKOPENPowerBoardRevision() && (chargeMode == 6))
-			add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
-
 		add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)chargeMode));
 		previousChargeMode = chargeMode;
 		isChange = true;
@@ -761,6 +762,15 @@ int publish_telemetry_observation_on_change(){
     uint32_t warnings = MCU_GetWarnings();
     if(previousWarnings != warnings)
     {
+		if(IsUKOPENPowerBoardRevision())
+		{
+			if(((warnings & 0x400000) && !(previousWarnings & 0x400000)) || (!(warnings & 0x400000) && (previousWarnings & 0x400000)))
+			{
+				ESP_LOGI(TAG, "Sending O-PEN voltage on warning change: 0x%06X, 0x%06X", warnings, previousWarnings);
+				add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
+			}
+		}
+
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, warnings));
     	previousWarnings = warnings;
     	isChange = true;
@@ -883,10 +893,11 @@ int publish_telemetry_observation_on_change(){
 		sendPower = true;
 	}
 
+	/// This delays sending the power value to let it stabilize. Avoids sending often during frequent change to save data/server load
 	if(sendUpdateInSeconds > 0)
 	{
 		sendUpdateInSeconds--;
-		ESP_LOGW(TAG, "Blocking power: %i", sendUpdateInSeconds);
+		ESP_LOGI(TAG, "Delay power: %i", sendUpdateInSeconds);
 		if(sendUpdateInSeconds == 0)
 		{
 			sendPower = true;
@@ -941,7 +952,7 @@ int publish_telemetry_observation_on_change(){
 			}
 		}
 
-		ESP_LOGW(TAG, "Sending power: %i - %4.2f W (%4.2f)", sendUpdateInSeconds, power, previousPower);
+		ESP_LOGI(TAG, "Sending power: %i: %4.2f W (%4.2f)", sendUpdateInSeconds, power, previousPower);
 
 		previousPower = power;
 		isChange = true;
