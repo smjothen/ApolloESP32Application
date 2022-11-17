@@ -12,6 +12,7 @@ esp_err_t SFH7776_set_register(uint8_t reg, uint8_t value);
 esp_err_t SFH7776_get_register(uint8_t reg, uint8_t * value);
 esp_err_t SFH7776_set_lsb_then_msb(uint8_t lsb_addr, uint16_t value);
 esp_err_t SFH7776_get_lsb_then_msb(uint8_t lsb_addr, uint16_t * value);
+esp_err_t SFH7776_record_tare_value(uint8_t reg, int tare_duration_ms);
 
 /**
  * Detect the availability of the SFH7776 sensor.
@@ -59,6 +60,19 @@ esp_err_t SFH7776_configure_interrupt_pin(bool on, gpio_isr_t handle);
 
 #define SFH7776_get_ambient_light_visibile(ambient_light_out) ({SFH7776_get_lsb_then_msb(0x46, ambient_light_out);})
 #define SFH7776_get_ambient_light_ir(ambient_light_out) ({SFH7776_get_lsb_then_msb(0x48, ambient_light_out);})
+
+/**
+ * Record a mean value over a duration that can be accessed or overwritten later.
+ */
+#define SFH7776_record_tare_proximity(tare_duration_ms) ({SFH7776_record_tare_value(0x44, tare_duration_ms);})
+#define SFH7776_record_tare_light_visible(tare_duration_ms) ({SFH7776_record_tare_value(0x46, tare_duration_ms);})
+#define SFH7776_record_tare_light_ir(tare_duration_ms) ({SFH7776_record_tare_value(0x48, tare_duration_ms);})
+
+/**
+ * Get the latest value recorded with one of the SFH7776_record_tare_ commands.
+ * returns 0 if no value has been set.
+ */
+uint16_t SFH7776_get_tare_value();
 
 /**
  * Set the INTERRUPT_CONTROL register (0x4ah)

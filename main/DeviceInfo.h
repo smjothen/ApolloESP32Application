@@ -61,6 +61,8 @@ struct RFIDTokens{
 
 #define DEFAULT_MAX_CHARGE_DELAY 600
 
+#define DEFAULT_COVER_ON_VALUE 0xd0
+
 //Numbers should match Pro
 enum CommunicationMode
 {
@@ -137,6 +139,8 @@ struct Configuration
 	//uint8_t useSchedule;
 	char timeSchedule[SCHEDULE_SIZE];
 	uint32_t maxStartDelay;
+
+	uint16_t cover_on_value;
 };
 
 
