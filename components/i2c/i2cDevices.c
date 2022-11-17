@@ -286,9 +286,35 @@ enum tamper_status_id{
 	eTAMPER_STATUS_SENSOR_FAULT
 };
 
-#define PROXIMITY_COVER_ON_VALUE 0x100 // Should be calibrated
-#define PROXIMITY_COVER_ON_MARGIN 0x50 // Should be calibrated
+/**
+ * Consider changing the margin and proximity_cover_on_value.
+ *
+ * The expected difference in reading when cover is on and when cover is off, depend on the use of reflective surface and configuration.
+ *
+ * When configured to 200 mA:
+ * - cover on (reflective): around 0x062a
+ * - cover on (black): around 0x0140
+ * - cover off: around 0x0138
+ *
+ * When configured to 100 mA:
+ * - cover on (reflective): around 0x035d
+ * - cover on (black): around 0x00a9
+ * - cover off: around 0x00aa
+ *
+ * When configured to 50 mA:
+ * - cover on (reflective): around 0x01ae
+ * - cover on (black): around 0x005a
+ * - cover off: around 0x0050
+ *
+ * When configured to 25 mA:
+ * - cover on (reflective): around 0x00d0
+ * - cover on (black): around 0x0028
+ * - cover off: around 0x0028
+ */
+#define PROXIMITY_COVER_ON_MARGIN 0x30
 #define PROXIMITY_ON_OFF_DELAY 5 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
+
+static uint16_t proximity_cover_on_value = 0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
 
 enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
 
@@ -298,6 +324,27 @@ uint8_t tamper_change_count = 0; // Times change has been detected since last de
 
 static void tamper_isr_hander(void * args){
 	tamper_has_new_value = true;
+}
+
+esp_err_t tamper_interrupt_set_limits(uint16_t cover_on_value){
+
+	if(cover_on_value < PROXIMITY_COVER_ON_MARGIN){
+		ESP_LOGE(TAG, "Cover on value too low");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if(cover_on_value + PROXIMITY_COVER_ON_MARGIN > 0x0fff){ // SFH7776 uses 12 of the 16 bits, 0x0fff should be its theoretical limit
+		ESP_LOGE(TAG, "Cover on value too high");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if(SFH7776_set_proximity_interrupt_high_threshold(cover_on_value + PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	if(SFH7776_set_proximity_interrupt_low_threshold(cover_on_value - PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	return ESP_OK;
 }
 
 esp_err_t configure_tamper_protection(){
@@ -318,15 +365,43 @@ esp_err_t configure_tamper_protection(){
 	if(SFH7776_set_interrupt_control(0b100101) != ESP_OK)
 		return ESP_FAIL;
 
-	if(SFH7776_set_proximity_interrupt_high_threshold(PROXIMITY_COVER_ON_VALUE + PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
-		return ESP_FAIL;
+	proximity_cover_on_value = storage_Get_cover_on_value();
 
-	if(SFH7776_set_proximity_interrupt_low_threshold(PROXIMITY_COVER_ON_VALUE - PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+	if(tamper_interrupt_set_limits(proximity_cover_on_value) != ESP_OK)
 		return ESP_FAIL;
 
 	gpio_install_isr_service(0);
 	if(SFH7776_configure_interrupt_pin(true, tamper_isr_hander) != ESP_OK)
 		return ESP_FAIL;
+
+	return ESP_OK;
+}
+
+esp_err_t I2CCalibrateCoverProximity(){
+	ESP_LOGI(TAG, "Calibrating cover proximity");
+
+	if(tamper_status == eTAMPER_STATUS_DISABLED){
+		ESP_LOGE(TAG, "Tamper disabled, unable to calibrate");
+		return ESP_ERR_NOT_SUPPORTED;
+	}
+
+	ESP_LOGI(TAG, "Tare starting...");
+	if(SFH7776_record_tare_proximity(2000) != ESP_OK){
+		ESP_LOGE(TAG, "Failed to calibrate");
+		return ESP_FAIL;
+	}
+	ESP_LOGI(TAG, "Tare finished");
+
+	uint16_t cover_on_value = SFH7776_get_tare_value();
+	ESP_LOGI(TAG, "New calibration value: %#06x", cover_on_value);
+
+	if(tamper_interrupt_set_limits(cover_on_value) != ESP_OK)
+		return ESP_FAIL;
+
+	storage_Set_cover_on_value(cover_on_value);
+	storage_SaveConfiguration();
+
+	proximity_cover_on_value = storage_Get_cover_on_value();
 
 	return ESP_OK;
 }
@@ -360,8 +435,8 @@ void detect_tamper(){
 			ESP_LOGI(TAG, "Read proximity: %#06x", proximity);
 		}
 
-		if((proximity > (PROXIMITY_COVER_ON_VALUE - PROXIMITY_COVER_ON_MARGIN))
-			&& (proximity < (PROXIMITY_COVER_ON_VALUE + PROXIMITY_COVER_ON_MARGIN))){
+		if((proximity > (proximity_cover_on_value - PROXIMITY_COVER_ON_MARGIN))
+			&& (proximity < (proximity_cover_on_value + PROXIMITY_COVER_ON_MARGIN))){
 
 			tamper_status = eTAMPER_STATUS_COVER_ON;
 		} else {

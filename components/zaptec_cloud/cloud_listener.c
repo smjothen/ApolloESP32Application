@@ -2423,7 +2423,22 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+				else if(strstr(commandString, "CalibrateCoverProximity"))
+				{
+					esp_err_t err = I2CCalibrateCoverProximity();
 
+					switch(err){
+					case ESP_OK:
+						responseStatus = 200;
+						break;
+					case ESP_FAIL:
+						responseStatus = 500;
+						break;
+					case ESP_ERR_NOT_SUPPORTED:
+						responseStatus = 501; // TODO: See if more appropriate status code exist. (405?)
+						break;
+					}
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))

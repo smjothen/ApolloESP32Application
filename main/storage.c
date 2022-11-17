@@ -96,6 +96,8 @@ void storage_Init_Configuration()
 	memset(configurationStruct.diagnosticsLog, 0, DIAGNOSTICS_STRING_SIZE);
 
 	storage_Initialize_ScheduleParameteres();
+
+	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 }
 
 
@@ -332,6 +334,12 @@ void storage_Set_TimeSchedule(char * newString)
 void storage_Set_MaxStartDelay(uint32_t newValue)
 {
 	configurationStruct.maxStartDelay = newValue;
+}
+
+void storage_Set_cover_on_value(uint16_t newValue)
+{
+
+	configurationStruct.cover_on_value = newValue;
 }
 
 //****************************************************
@@ -593,6 +601,12 @@ uint32_t storage_Get_MaxStartDelay()
 	return configurationStruct.maxStartDelay;
 }
 
+uint16_t storage_Get_cover_on_value()
+{
+
+	return configurationStruct.cover_on_value;
+}
+
 //************************************************
 
 esp_err_t storage_SaveConfiguration()
@@ -638,6 +652,9 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "Timezone", configurationStruct.timezone);
 	err += nvs_set_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule);
 	err += nvs_set_u32(configuration_handle, "MaxStartDelay", configurationStruct.maxStartDelay);
+
+	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
+
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
 
@@ -706,6 +723,9 @@ esp_err_t storage_ReadConfiguration()
 	///When updating chargers, set it to default value if not previously in NVS
 	if(check != ESP_OK)
 		configurationStruct.maxStartDelay = DEFAULT_MAX_CHARGE_DELAY;
+
+	if(nvs_get_u16(configuration_handle, "CoverOnValue", &configurationStruct.cover_on_value) != ESP_OK)
+		configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
