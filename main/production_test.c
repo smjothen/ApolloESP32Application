@@ -866,32 +866,37 @@ int test_proximity(){
 
 	esp_err_t err = SFH7776_detect();
 
-	//TODO: replace test question with hardware version check
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_PROXIMITY, "Has proximity sensor?|yes|no");
-
-	int should_exist = await_prodtest_external_step_acceptance("yes", true);
-	if((err == ESP_OK && should_exist != 0) || (err == ESP_FAIL && should_exist == 0)){
+	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
+		ESP_LOGE(TAG, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
 		goto fail;
 
-	}else if(should_exist != 0){
+	}else if(!should_exist){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
 		return 0;
 	}
 
 	if(SFH7776_set_mode_control(0b0100) != ESP_OK
-		|| SFH7776_set_sensor_control(0b0100) != ESP_OK)
+		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
+
+		ESP_LOGE(TAG, "Proximity sensor write error");
+
 		goto fail;
+	}
 
 	vTaskDelay(pdMS_TO_TICKS(500));
 
 	uint16_t proximity;
-	if(SFH7776_get_proximity(&proximity) != ESP_OK)
+	if(SFH7776_get_proximity(&proximity) != ESP_OK){
+		ESP_LOGE(TAG, "Proximity sensor read error");
 		goto fail;
+	}
 
 	//Expect cover to be off, with no clear obstruction.
-	if(proximity > 0x15 && proximity < 0x25){ // TODO: should be calibrated
+	if(proximity > 0x15 && proximity < 0x35){ // TODO: should be calibrated
 		ESP_LOGI(TAG, "Proximity: %#06x", proximity);
 	}else{
+		ESP_LOGE(TAG, "Proximity; %#06x", proximity);
 		goto fail;
 	}
 
