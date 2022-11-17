@@ -85,6 +85,7 @@
         ParamRcdCurrentRaw = 523,
         ParamRcdCalibration = 524,
         ParamRcdCalibrationNoise = 525,*/
+		ParamOPENVoltage = 526,
 		MaxCurrentConfigurationSource = 544,
 		SwitchPosition = 545,
 		ChargeCurrentInstallationMaxLimit = 546,
@@ -163,6 +164,8 @@
 		McuToESPPacketErrors  = 813,
         ESPToMcuPacketErrors = 814,
 		ESPResetSource = 815,
+		MCUFaultPins	= 816,
+		RelayStates		= 817,
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,
@@ -239,6 +242,7 @@
         CommandUpgradeMcuFirmware = 204,
         CommandHostFwUpdateStart = 205,
 		CommandFpgaFwUpdateStart = 206,
+		CommandHostFwUpdateEnd = 207,
 
         CommandResetCommsErrors = 260,
         CommandResetNotifications = 261,
@@ -266,12 +270,16 @@
 		CommandEnterProductionMode = 701,
 		CommandServoClearCalibration = 702,
 		CommandTestHWTrig = 705,
+        CommandOpenPENRelay = 706,
+        CommandClosePENRelay = 707,
+
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,
 		CommandITDiagnosticsStop = 807,
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
+		CommandGetOPENSamples = 812,
 
 		CommandDisableCertificateOnce = 820,
 		CommandDisableCertificateAlways = 821

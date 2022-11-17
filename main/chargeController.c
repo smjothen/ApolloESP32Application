@@ -59,9 +59,10 @@ void chargeController_Init()
 	TimerHandle_t startTimerHandle = xTimerCreate( "StartChargeTimer", startChargeTimer, pdTRUE, NULL, RunStartChargeTimer);
 	xTimerReset( startTimerHandle, portMAX_DELAY);
 
-	chargeController_SetRandomStartDelay();
 	previousStandaloneCurrent = storage_Get_StandaloneCurrent();
 	chargeController_Activation();
+	if(enforceScheduleAndDelay == true)
+		chargeController_SetRandomStartDelay();
 }
 
 void chargeController_Activation()
@@ -425,7 +426,7 @@ void RunStartChargeTimer()
 	/// This check is needed to ensure NextStartTime is communicated and cleared correctly
 	if(hasBeenDisconnected == true)
 	{
-		ESP_LOGE(TAG, "**** DISCONNECTED: Clearing all paused-flags ****");
+		ESP_LOGI(TAG, "**** DISCONNECTED: Clearing all paused-flags ****");
 		int scheduleNr;
 		for(scheduleNr = 0; scheduleNr < nrOfSchedules; scheduleNr++)
 		{
@@ -634,11 +635,12 @@ void RunStartChargeTimer()
 	else
 	{
 		//Here schedule is not active, but start delay applies. Send requesting state to Cloud when done.
-
+		//ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
 		isPausedByAnySchedule = 0x0000;
 		if(startDelayCounter > 0)
 		{
 			startDelayCounter--;
+			//ESP_LOGW(TAG, "startDelayCounter: %i", startDelayCounter);
 			if((startDelayCounter == 0) && (storage_Get_Standalone() == 0) && isMqttConnected())
 			{
 				ESP_LOGW(TAG, "Sending requesting (no sched)");

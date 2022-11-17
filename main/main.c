@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "1.1.0.5";
+char softwareVersion[] = "2.0.0.168";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -271,11 +271,20 @@ void app_main(void)
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL
-	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URL USED");
+	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
+#else
+	//PROD url used
 #endif
 
-#ifdef DISABLE_LOGGING
+#ifdef RUN_FACTORY_TESTS
+	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
+#endif
+
+#ifndef ENABLE_LOGGING
+	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
+#else
+	//Logging enabled
 #endif
 
 	//First check hardware revision in order to configure io accordingly
@@ -357,7 +366,12 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
+	strcpy(writeDevInfo.serialNumber, "");
+	strcpy(writeDevInfo.PSK, "");
+	strcpy(writeDevInfo.Pin, "");
+	eeprom_wp_disable_nfc_disable();
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
+	eeprom_wp_enable_nfc_enable();
 #endif
 
 	// #define FORCE_NEW_ID
@@ -453,6 +467,9 @@ void app_main(void)
 	while (true)
     {
 		onTimeCounter++;
+
+		///For diagnostics
+		//ota_time_left();
 
     	if(onTimeCounter % 10 == 0)
     	{

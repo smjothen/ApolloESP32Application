@@ -1,13 +1,13 @@
 menu "Zaptec cloud"
-     config ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
-     	    bool
-     	    default N
+	config ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
+		bool
+		default N
 
-     config ZAPTEC_CLOUD_URL_MAIN_MQTT
-       	    string "MQTT URL to use for development builds"
-       	    default "zapcloud.azure-devices.net"
+	config ZAPTEC_CLOUD_URL_MAIN_MQTT
+		string "MQTT URL to use for production builds"
+		default "zapcloud.azure-devices.net"
 
-     config ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT
-     	    string "MQTT URL to use for production builds"
-	    default "zap-d-iothub.azure-devices.net"
+	config ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT
+		string "MQTT URL to use for development builds"
+		default "zap-d-iothub.azure-devices.net"
 endmenu

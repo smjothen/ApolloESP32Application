@@ -21,6 +21,7 @@
 #include "../../main/chargeSession.h"
 #include "../../main/sessionHandler.h"
 #include "apollo_ota.h"
+#include "segmented_ota.h"
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
@@ -1211,9 +1212,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					HOLD_SetPhases(phaseFromCloud);
 					sessionHandler_HoldParametersFromCloud(currentFromCloud, phaseFromCloud);
 
-					//This must be set to stop replying the same SessionIds to cloud
-					chargeSession_SetReceivedStartChargingCommand();
-
 					responseStatus = 200;
 				}
 				else
@@ -2144,7 +2142,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"LogCurrent") != NULL)
 				{
-					SessionHandler_SetLogCurrents();
+					int interval = 0;
+					sscanf(&commandString[12], "%d", &interval);
+
+					ESP_LOGI(TAG, "Interval: %i", interval);
+
+					if((interval >= 0) && (interval <= 86400))
+					{
+						SessionHandler_SetLogCurrents(interval);
+					}
 				}
 				else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
 				{
@@ -2420,6 +2426,29 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						chargeController_SetRandomStartDelay();
 					}
 
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"GetMCUSettings") != NULL)
+				{
+					SessionHandler_SendMCUSettings();
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString,"GetOPENSamples") != NULL)
+				{
+					char samples[161] = {0};
+					MCU_GetOPENSamples(samples);
+					publish_debug_telemetry_observation_Diagnostics(samples);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"AbortOTA") != NULL)
+				{
+					do_segment_ota_abort();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"GetRelayStates") != NULL)
+				{
+					SesionHandler_SendRelayStates();
 					responseStatus = 200;
 				}
 
