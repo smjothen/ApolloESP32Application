@@ -378,6 +378,47 @@ int GetNumberAsString(char * inputString, char * outputString, int maxLength)
 	return 0;
 }
 
+
+void EnsureBandAndLTEMOnBoot()
+{
+	 //Check if correct Band setting
+	char response[100] = {0};
+	at_command_get_LTE_band(response, 100);
+	if(response != NULL)
+	{
+		ESP_LOGI(TAG, "LTE Band: %s", response);
+
+		char * bandSet = strstr(response, ",0x8080084,");
+		if(bandSet == NULL)
+		{
+			ESP_LOGI(TAG, "Band not set, writing and soft restarting");
+
+			int lteOK = at_command_set_LTE_M_only_at_boot();
+			if(lteOK == 0)
+				ESP_LOGI(TAG, "Set to LTE-M only");
+			else
+				ESP_LOGE(TAG, "Failed to set LTE-M only");
+
+
+			int lteBandOK = at_command_set_LTE_band_at_boot();
+			if(lteBandOK == 0)
+				ESP_LOGI(TAG, "Set to LTE-M band");
+			else
+				ESP_LOGE(TAG, "Failed to set LTE-M band");
+
+			ESP_LOGW(TAG, "Soft restarting BG");
+			at_command_soft_restart();
+
+			/// Give BG time to soft restart.
+			/// Can probably be reduced to 7.5 sec, but longer times her gives less time to wait for network registration later
+			vTaskDelay(pdMS_TO_TICKS(15000));
+		}
+	}
+}
+
+
+
+
 static uint8_t powerOnCount = 0;
 int configure_modem_for_ppp(void){
 
@@ -481,37 +522,9 @@ int configure_modem_for_ppp(void){
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
-    //Check if correct Band setting
-    char response[100] = {0};
-    at_command_get_LTE_band(response, 100);
-    if(response != NULL)
-    {
-    	ESP_LOGI(TAG, "LTE Band: %s", response);
-
-    	char * bandSet = strstr(response, ",0x8080084,");
-    	if(bandSet == NULL)
-    	{
-    		ESP_LOGI(TAG, "Band not set, writing and soft restarting");
-
-    	    int lteOK = at_command_set_LTE_M_only_at_boot();
-    	    if(lteOK == 0)
-    	    	ESP_LOGI(TAG, "Set to LTE-M only");
-    	    else
-    	    	ESP_LOGE(TAG, "Failed to set LTE-M only");
-
-
-    	    int lteBandOK = at_command_set_LTE_band_at_boot();
-    		if(lteBandOK == 0)
-    			ESP_LOGI(TAG, "Set to LTE-M band");
-    		else
-    			ESP_LOGE(TAG, "Failed to set LTE-M band");
-
-    		ESP_LOGW(TAG, "Soft restarting BG");
-    		at_command_soft_restart();
-
-    		vTaskDelay(pdMS_TO_TICKS(15000));
-    	}
-    }
+    /// Applies when upgrading old chargers below v2.0.0.0.
+    /// On chargers above v2.0.0.0 this is set during factory test and just verified here on later bootups.
+    EnsureBandAndLTEMOnBoot();
 
 
     //Checking both CREG and Operator is redundant. Now just checking operator as before.
@@ -904,7 +917,7 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         if(bg_started)
             break;
 
-        log_cb("turning on BG95");
+        log_cb("Turning on BG95");
         cellularPinsOn();
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
@@ -943,7 +956,6 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
 
     ESP_LOGI(TAG, "BG started");
 
-
     int at_result = at_command_at();
 
     while(at_result < 0){
@@ -951,6 +963,11 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         vTaskDelay(pdMS_TO_TICKS(1000));
         at_result = at_command_at();
     }
+
+    //Set band and LTE-M only mode at start of production test.
+    EnsureBandAndLTEMOnBoot();
+
+    clear_lines();
 
     ESP_LOGI(TAG, "[BG] Go for prodtest");
     return 0;

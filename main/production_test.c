@@ -679,15 +679,17 @@ int test_bg(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	char payload[128];
 
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem starting up");
+
 	if(configure_modem_for_prodtest(bg_log_cb)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup error");
 		goto err;
 	}
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup complete");
 
 	char version[40];
 	if(at_command_get_detailed_version(version, 40)){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem version read error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem version read error");
 		goto err;
 	}
 
@@ -706,7 +708,7 @@ int test_bg(){
 
 	char imei[20];
     if(at_command_get_imei(imei, 20)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem imei error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imei error");
 		goto err;
 	}
 	sprintf(payload, "IMEI: %s\r\n", imei);
@@ -714,7 +716,7 @@ int test_bg(){
 
 	char ccid[30];
     if(at_command_get_ccid(ccid, 30)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem ccid error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem ccid error");
 		goto err;
 	}
 	sprintf(payload, "CCID: %s\r\n", ccid);
@@ -746,11 +748,11 @@ int test_bg(){
 
 	// deactivate incase there already is a context
 	int preventive_deactivate_result = at_command_deactivate_pdp_context();
-	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
+	sprintf(payload, "PDP cleanup result: %d\r\n", preventive_deactivate_result);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Waiting for BG95 to REGISTER");
-	for(int i = 0; i <= 20; i++){
+	for(int i = 0; i <= 40; i++){
 		int registered = at_command_registered();
 		if((registered == 1) || (registered == 5)){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "BG REGISTERED");
@@ -767,13 +769,13 @@ int test_bg(){
 			goto err;
 		}*/
 
-		if(i >= 20){
+		if(i >= 40){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Timing out on BG95 network registration");
 			bg_debug_log();
 			goto err;
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(10000));
+		vTaskDelay(pdMS_TO_TICKS(5000));
 	}
 
 	bg_debug_log();
