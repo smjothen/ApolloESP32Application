@@ -37,8 +37,8 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
-#ifdef useAdvancedConsole
-	//#include "apollo_console.h"
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
+	#include "apollo_console.h"
 #endif
 
 static const char *TAG_MAIN = "MAIN           ";
@@ -280,7 +280,7 @@ void app_main(void)
 	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
 #endif
 
-#ifndef ENABLE_LOGGING
+#ifndef CONFIG_ZAPTEC_ENABLE_LOGGING
 	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
 #else
@@ -293,7 +293,7 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-#ifdef useAdvancedConsole
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	gpio_pullup_en(GPIO_NUM_3);
 	apollo_console_init();
 #endif

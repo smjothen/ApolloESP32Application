@@ -24,16 +24,21 @@ menu "Zaptec"
 
 	     config ZAPTEC_BUILD_TYPE_DEVELOPMENT
 	     	    bool "Development"
-		    select ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
 
 	     config ZAPTEC_BUILD_TYPE_PRODUCTION
 	     	    bool "Production"
-		    depends on SECURE_BOOT && SECURE_FLASH_ENC_ENABLED && NVS_ENCRYPTION && !SECURE_BOOT_INSECURE
+		    depends on SECURE_BOOT && SECURE_FLASH_ENCRYPTION_MODE_RELEASE && NVS_ENCRYPTION && !SECURE_BOOT_INSECURE && !ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
      endchoice
 
      config ZAPTEC_BUILD_TYPE
      	    int
 	    default 0 if ZAPTEC_BUILD_TYPE_DEVELOPMENT
 	    default 1 if ZAPTEC_BUILD_TYPE_PRODUCTION
+
+     config ZAPTEC_USE_ADVANCED_CONSOLE
+     	    bool "Use console with command input"
+
+     config ZAPTEC_ENABLE_LOGGING
+     	    bool "Enable logging"
 
 endmenu

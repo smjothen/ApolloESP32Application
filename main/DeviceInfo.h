@@ -8,7 +8,6 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-//#define ENABLE_LOGGING	//default commented out
 
 #ifdef CONFIG_ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
 #define DEVELOPEMENT_URL
