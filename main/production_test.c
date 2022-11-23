@@ -586,8 +586,6 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 		goto cleanup;
 	}
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test");
-
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark charge cycle test pass on eeprom");
@@ -599,12 +597,15 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	}
 
 	eeprom_wp_enable_nfc_enable();
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test info");
+
 	sprintf(payload, "PASS\r\n");
 	prodtest_sock_send( payload);
 	set_prodtest_led_state(TEST_STAGE_PASS);
 	audio_play_nfc_card_accepted();
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test info");
+
 
 	cleanup:
 	vTaskDelete(socket_task_handle);
@@ -1376,7 +1377,7 @@ int charge_cycle_test(){
 
 	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
 	{
-		current_max = 9.0;
+		current_max = 9.5;
 		current_min = 4.0;
 
 		/// Voltages2 1-phase
@@ -1457,6 +1458,7 @@ int charge_cycle_test(){
 		}
 
 		/// Current 3-phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Sampling charge currents" );
 
 		for(int i = 0; i<10; i++){
