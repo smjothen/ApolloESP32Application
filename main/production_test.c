@@ -715,6 +715,14 @@ int test_bg(){
 	sprintf(payload, "IMEI: %s\r\n", imei);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	char imsi[20];
+	if(at_command_get_imsi(imsi, 20)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imsi error");
+		goto err;
+	}
+	sprintf(payload, "IMSI: %s\r\n", imsi);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
 	char ccid[30];
     if(at_command_get_ccid(ccid, 30)<0){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem ccid error");

@@ -1906,7 +1906,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						newNetworkType = NETWORK_3P4W;
 
 					//Sanity check
-					if((4 >= newNetworkType) && (newNetworkType >= 0))
+					if(IsUKOPENPowerBoardRevision())
+					{
+						responseStatus = 400;
+					}
+					else if((4 >= newNetworkType) && (newNetworkType >= 0))
 					{
 						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
 
