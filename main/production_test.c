@@ -435,7 +435,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AAAC96DC")==0)
 		return "10.0.1.16";
 
-	//Wet future line
+	//Wet line 3
 	if(strcmp(latest_tag.idAsString, "nfc-AA0615EC")==0)
 		return "10.0.1.17";
 	if(strcmp(latest_tag.idAsString, "nfc-AA229EDC")==0)
@@ -443,7 +443,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA5180DC")==0)
 		return "10.0.1.17";
 
-	//Wet future line
+	//Wet line 4
 	if(strcmp(latest_tag.idAsString, "nfc-AA2EC4EC")==0)
 		return "10.0.1.18";
 	if(strcmp(latest_tag.idAsString, "nfc-AA4145EC")==0)
@@ -451,7 +451,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA87C2DC")==0)
 		return "10.0.1.18";
 
-	//Wet future line
+	//Wet line 5 (UK)
 	if(strcmp(latest_tag.idAsString, "nfc-AA47BCEC")==0)
 		return "10.0.1.19";
 	if(strcmp(latest_tag.idAsString, "nfc-AA0598DC")==0)
@@ -769,7 +769,7 @@ int test_bg(){
 		}
 		else if ((registered == 0) || (registered == 2)){
 			ESP_LOGW(TAG, "BG not REGISTER yet");
-			sprintf(payload, "BG waited %i seconds for network registration. Status: %i\r\n", i*10, registered);
+			sprintf(payload, "BG waited %i seconds for network registration. Status: %i\r\n", i*5, registered);
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 		}
 		//Wait to see if state change or timeout
@@ -876,15 +876,18 @@ int test_OPEN_relay(){
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
 
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "Handle connected with switches OFF?|yes|no");
+	int result0 = await_prodtest_external_step_acceptance("yes", false);
+
 	MCU_SendCommandId(CommandOpenPENRelay);
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay open. Is resistance = open circuit?|yes|no");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay open. Does multimeter show more than 10000 ohm?|yes|no");
 	int result1 = await_prodtest_external_step_acceptance("yes", false);
 
 	MCU_SendCommandId(CommandClosePENRelay);
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay closed. Is resistance < 10 ohm?|yes|no");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay closed. Does multimeter show less than 10 ohm?|yes|no");
 	int result2 = await_prodtest_external_step_acceptance("yes", false);
 
-	if((result1==0) && (result2==0)){
+	if((result0==0) && (result1==0) && (result2==0)){
 		ESP_LOGI(TAG, "OPEN relay test accepted");
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
 		return 0;
@@ -1159,27 +1162,27 @@ int run_component_tests(){
 		goto err;
 	}
 
-	if(IsUKOPENPowerBoardRevision())
-	{
-		if(test_OPEN_relay()<0){
-			goto err;
-		}
-	}
-
 	if(test_rtc()<0){
 		goto err;
 	}
-		
+
 	if(test_servo()<0){
 		goto err;
 	}
-
+		
 	if(test_hw_trig()<0){
 		goto err;
 	}
 
 	if(test_grid_open()<0){
 		goto err;
+	}
+
+	if(IsUKOPENPowerBoardRevision())
+	{
+		if(test_OPEN_relay()<0){
+			goto err;
+		}
 	}
 
 	return 0;
@@ -1341,8 +1344,11 @@ int charge_cycle_test(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");*/
 
+	if(IsUKOPENPowerBoardRevision())
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Start charging");
+	else
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Waiting for handle connect and charging start");
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Waiting for handle connect and charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
 	while(MCU_GetChargeMode()!=eCAR_CHARGING){
@@ -1386,7 +1392,7 @@ int charge_cycle_test(){
 	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
 	{
 		current_max = 9.5;
-		current_min = 4.0;
+		current_min = 7.0;
 
 		/// Voltages2 1-phase
 		sprintf(payload, "Emeter voltages while charging: %f", emeter_voltages2[0]);
