@@ -817,13 +817,30 @@ void ppp_task_start(void){
 
     esp_netif_init();
     esp_event_loop_create_default();
-    esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, NULL);
-    esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, NULL);
 
     // Init netif object
     esp_netif_config_t cfg = ESP_NETIF_DEFAULT_PPP();
     ppp_netif = esp_netif_new(&cfg);
     assert(ppp_netif);
+
+    esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, ppp_netif);
+    esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, ppp_netif);
+
+    // Note: (Steve)
+    //
+    // In 4.4.1 there's a bug where `ppp_netif' doesn't get assigned as the
+    // lwIP default interface because it's not in UP state, seems the esp_netif
+    // code checks UP status with netif_is_link_up but calls only netif_set_up
+    // and not netif_set_link_up!
+    //
+    // A quick fix is to add default handlers for connection/disconnection which
+    // seems to set the default interface and subsequently brings the interface into
+    // UP state as well.
+    //
+    // This can probably be removed for ESP-IDF 5.0 as they seem to handle the link
+    // separately from the interface.
+    esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_GOT_IP, esp_netif_action_connected, ppp_netif);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_LOST_IP, esp_netif_action_disconnected, ppp_netif);
 
     if(connectionStatus == 0)
     {
