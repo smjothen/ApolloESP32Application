@@ -815,7 +815,7 @@ void ppp_task_start(void){
 
     int connectionStatus = configure_modem_for_ppp(); // TODO rename
 
-    esp_netif_init();
+    esp_netif_init(); // TODO: ensure compliance with "This function should be called exactly once from application code, when the application starts up."
     esp_event_loop_create_default();
 
     // Init netif object

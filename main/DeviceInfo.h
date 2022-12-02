@@ -13,8 +13,8 @@
 #define DEVELOPEMENT_URL
 #endif
 
-//#define RUN_FACTORY_ASSIGN_ID //default commented out
-//#define RUN_FACTORY_TESTS //default commented out
+//#define RUN_FACTORY_ASSIGN_ID //default commented out /* Replaced by CONFIG_ZAPTEC_FACTORY_ASSIGN_ID, se Kconfig / Menuconfig */
+//#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 

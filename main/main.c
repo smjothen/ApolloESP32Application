@@ -276,7 +276,7 @@ void app_main(void)
 	//PROD url used
 #endif
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
 #endif
 

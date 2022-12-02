@@ -395,11 +395,17 @@ char *host_from_rfid(){
 
 	ESP_LOGI(TAG, "using rfid tag: %s", latest_tag.idAsString);
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	//if(strcmp(latest_tag.idAsString, "nfc-5237AB3B")==0) // c365
 	if(strcmp(latest_tag.idAsString, "nfc-530796E7")==0) // c365
 		return "10.4.210.129";
-#endif
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	if(strcmp(latest_tag.idAsString, CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_ID)==0)
+		return CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_IP;
+
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID */
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_TESTS */
+
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-D69E1A3B")==0) // c365
@@ -521,7 +527,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	goto cleanup;*/
 
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	onePhaseTest = true;
 #endif
 
@@ -860,7 +866,12 @@ int test_buzzer(){
 	return -1;
 }
 
+#define COVER_OFF_MIN 0x0010
+#define COVER_OFF_MAX 0x00a0
+
 int test_proximity(){
+	char payload[128];
+
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
 
@@ -868,7 +879,10 @@ int test_proximity(){
 
 	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
-		ESP_LOGE(TAG, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
 		goto fail;
 
 	}else if(!should_exist){
@@ -879,8 +893,11 @@ int test_proximity(){
 	if(SFH7776_set_mode_control(0b0100) != ESP_OK
 		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
 
-		ESP_LOGE(TAG, "Proximity sensor write error");
 
+		sprintf(payload, "Unable to write sensor registers");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
 		goto fail;
 	}
 
@@ -888,17 +905,27 @@ int test_proximity(){
 
 	uint16_t proximity;
 	if(SFH7776_get_proximity(&proximity) != ESP_OK){
-		ESP_LOGE(TAG, "Proximity sensor read error");
+
+		sprintf(payload, "Unable to read proximity value");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
 		goto fail;
 	}
 
+	sprintf(payload, "Proximity value %#06x.", proximity);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
 	//Expect cover to be off, with no clear obstruction.
-	if(proximity > 0x15 && proximity < 0x35){ // TODO: should be calibrated
-		ESP_LOGI(TAG, "Proximity: %#06x", proximity);
-	}else{
+	if(proximity < COVER_OFF_MIN || proximity > COVER_OFF_MAX){ // TODO: should be calibrated
 		ESP_LOGE(TAG, "Proximity; %#06x", proximity);
+
+		sprintf(payload, "Value out of range, expected %#06x - %#06x", COVER_OFF_MIN, COVER_OFF_MAX);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
 		goto fail;
 	}
+
 
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
 	return 0;
@@ -1016,7 +1043,7 @@ int test_speed_hwid(){
 	snprintf(id_string, 100, "Speed HW ID: %i\r\n", speed_hw_id);
 
 
-/*#ifdef RUN_FACTORY_TESTS
+/*#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	speed_hw_id = 3;
 #endif*/
 
@@ -1420,7 +1447,7 @@ int charge_cycle_test(){
 	float eMCompareVoltage = 0.0;
 	float OpenCompareVoltage = 0.0;
 	
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	current_min = -1.0;
 #endif
 
@@ -1476,7 +1503,7 @@ int charge_cycle_test(){
 
 		snprintf(payload, 100, "eM: %.2f V, O-PEN: %.2f V, Diff: %.2f V",  eMCompareVoltage, OpenCompareVoltage, vDiff);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
-	#ifndef RUN_FACTORY_TESTS
+	#ifndef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 		if(vDiff >= 3.0)
 		{
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");

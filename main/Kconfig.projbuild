@@ -41,4 +41,34 @@ menu "Zaptec"
      config ZAPTEC_ENABLE_LOGGING
      	    bool "Enable logging"
 
+     config ZAPTEC_RUN_FACTORY_TESTS
+     	    bool "Runs production test even if already passed"
+
+     config ZAPTEC_RUN_FACTORY_SSID
+     	    string "Wifi ssid to use with ZAPTEC_RUN_FACTORY_TESTS"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+	    default "ZapWan"
+
+     config ZAPTEC_RUN_FACTORY_PSK
+     	    string "Wifi psk to use with ZAPTEC_RUN_FACTORY_TESTS"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+	    default "52718816"
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+     	    bool "Use an extra RFID to start production test"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_ID
+     	    string "RFID tag to add"
+	    depends on ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	    default "nfc-530796E7"
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_IP
+     	    string "IP serving ZaptecProgram"
+	    depends on ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	    default "10.4.210.129"
+
+     config ZAPTEC_RUN_FACTORY_ASSIGN_ID
+     	    bool "Requests the serial number even if already assigned"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
 endmenu

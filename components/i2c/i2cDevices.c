@@ -58,10 +58,10 @@ void i2c_ctrl_debug(int state)
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	deviceInfo.factory_stage = FactoryStageUnknown2;
 #endif
-#ifdef RUN_FACTORY_ASSIGN_ID
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ASSIGN_ID
 	deviceInfo.factory_stage = FactoryStageUnknown;
 	deviceInfo.EEPROMFormatVersion = 0xff;
 #endif
@@ -244,10 +244,10 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 	}
 	deviceInfoLoaded = true;
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	deviceInfo.factory_stage = FactoryStageUnknown2;
 #endif
-#ifdef RUN_FACTORY_ASSIGN_ID
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ASSIGN_ID
 	deviceInfo.factory_stage = FactoryStageUnknown;
 	deviceInfo.EEPROMFormatVersion = 0xff;
 #endif

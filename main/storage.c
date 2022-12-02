@@ -1272,9 +1272,9 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 		tmp *= 4;
 		sprintf(PSK,"%d", tmp);
 		//strcpy(WifiPSK, "52718816");
-	#ifdef RUN_FACTORY_TESTS
-		strcpy(SSID, "");
-		strcpy(PSK, "");
+	#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+		strcpy(SSID, CONFIG_ZAPTEC_RUN_FACTORY_SSID);
+		strcpy(PSK, CONFIG_ZAPTEC_RUN_FACTORY_PSK);
 		ESP_LOGE(TAG, " Using dev-factory Wifi: SSID: %s PSK: ******** !!!", SSID);
 	#endif
 
