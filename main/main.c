@@ -37,8 +37,8 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
-#ifdef useAdvancedConsole
-	//#include "apollo_console.h"
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
+	#include "apollo_console.h"
 #endif
 #include "ocpp.h"
 
@@ -49,7 +49,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "1.0.0.0";
+char softwareVersion[] = "2.0.1.1";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -267,17 +267,25 @@ void SetOnlineWatchdog()
 
 
 
-
 void app_main(void)
 {
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL
-	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URL USED");
+	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
+#else
+	//PROD url used
 #endif
 
-#ifdef DISABLE_LOGGING
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
+#endif
+
+#ifndef CONFIG_ZAPTEC_ENABLE_LOGGING
+	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
+#else
+	//Logging enabled
 #endif
 
 	//First check hardware revision in order to configure io accordingly
@@ -286,7 +294,7 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-#ifdef useAdvancedConsole
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	gpio_pullup_en(GPIO_NUM_3);
 	apollo_console_init();
 #endif
@@ -359,7 +367,12 @@ void app_main(void)
 #ifdef WriteThisDeviceInfo
 	volatile struct DeviceInfo writeDevInfo;
 	writeDevInfo.EEPROMFormatVersion = 1;
+	strcpy(writeDevInfo.serialNumber, "");
+	strcpy(writeDevInfo.PSK, "");
+	strcpy(writeDevInfo.Pin, "");
+	eeprom_wp_disable_nfc_disable();
 	i2cWriteDeviceInfoToEEPROM(writeDevInfo);
+	eeprom_wp_enable_nfc_enable();
 #endif
 
 	// #define FORCE_NEW_ID
@@ -372,7 +385,7 @@ void app_main(void)
 	// #define FORCE_FACTORY_TEST
 	#ifdef FORCE_FACTORY_TEST
 	eeprom_wp_disable_nfc_disable();
-	EEPROM_WriteFactoryStage(FactoryStageUnknown2);
+	EEPROM_WriteFactoryStage(FactoryStageFinnished);
 	eeprom_wp_enable_nfc_enable();
 	#endif
 
@@ -453,10 +466,14 @@ void app_main(void)
 
     bool hasBeenOnline = false;
     int otaDelayCounter = 0;
+    int lowMemCounter = 0;
 
 	while (true)
     {
 		onTimeCounter++;
+
+		///For diagnostics
+		//ota_time_left();
 
     	if(onTimeCounter % 10 == 0)
     	{
@@ -464,6 +481,18 @@ void app_main(void)
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
 			
+			//If available memory is critically low, to a controlled restart to avoid undefined insufficient memory states
+			if((min_dma < 2000) || (free_dma < 2000))
+			{
+				lowMemCounter++;
+				if(lowMemCounter >= 30)
+				{
+					ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
+					storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
+					esp_restart();
+				}
+			}
+
 			ESP_LOGI(TAG_MAIN, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
     	}
 

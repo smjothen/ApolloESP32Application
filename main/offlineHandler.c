@@ -10,7 +10,7 @@
 #include "zaptec_cloud_listener.h"
 #include "zaptec_cloud_observations.h"
 #include "storage.h"
-
+#include "chargeController.h"
 
 static const char *TAG = "OFFLINEHANDLER ";
 
@@ -184,8 +184,9 @@ void offlineHandler_CheckForOffline()
 				MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 				if(ret == MsgWriteAck)
 				{
-					MessageType ret = MCU_SendCommandId(CommandStartCharging);
-					if(ret == MsgCommandAck)
+					bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_START_OFFLINE);
+					//MessageType ret = MCU_SendCommandId(CommandStartCharging);
+					if(isSent)
 					{
 						ESP_LOGI(TAG, "Offline MCU Start command OK: %fA", offlineCurrent);
 					}
@@ -229,8 +230,9 @@ void offlineHandler_CheckForOffline()
 			MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, offlineCurrent);
 			if(ret == MsgWriteAck)
 			{
-				MessageType ret = MCU_SendCommandId(CommandStartCharging);
-				if(ret == MsgCommandAck)
+				//MessageType ret = MCU_SendCommandId(CommandStartCharging);
+				bool isSent = chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_GONE_OFFLINE);
+				if(isSent)
 				{
 					offlineCurrentSent = true;
 					ESP_LOGW(TAG, "### Offline MCU Start command OK: %fA ###", offlineCurrent);

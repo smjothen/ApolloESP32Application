@@ -1554,7 +1554,7 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 	}
 
 	cJSON * reply = ocpp_create_get_composite_schedule_confirmation(unique_id, OCPP_GET_COMPOSITE_SCHEDULE_STATUS_ACCEPTED,
-									&connector_id, start_time, schedule);
+									&connector_id, &start_time, schedule);
 	ocpp_free_charging_schedule(schedule);
 
 	if(reply != NULL){

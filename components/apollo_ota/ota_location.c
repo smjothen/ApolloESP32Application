@@ -9,6 +9,8 @@
 #include "i2cDevices.h"
 #include "string.h"
 #include "certificate.h"
+#include "../../main/DeviceInfo.h"
+
 
 #define TAG "OTA_LOCATION"
 
@@ -167,9 +169,13 @@ static void log_task_info(void)
 
 int get_image_location(char *location, int buffersize, char * version)
 {
-    char url [100];
-    snprintf ( url, 100, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
-    //snprintf ( url, 100, "https://dev-api2.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    char url [150];
+#ifdef DEVELOPEMENT_URL
+    snprintf(url, 150, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    ESP_LOGE(TAG, "###### USING DEVELOPMENT URL !!! #######");
+#else
+    snprintf(url, 150, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+#endif
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);
 

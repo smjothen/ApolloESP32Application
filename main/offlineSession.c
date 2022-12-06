@@ -16,6 +16,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "chargeSession.h"
 #include "../components/ntp/zntp.h"
+#include "../components/i2c/include/i2cDevices.h"
 
 #include "../components/ocpp/include/messages/call_messages/ocpp_call_request.h"
 #include "../components/ocpp/include/types/ocpp_reason.h"
@@ -99,7 +100,22 @@ bool offlineSession_mount_folder()
 	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
+
+		//If failing to mount, try using partition for chargers numbers below ~ZAP000150
+		if((err == ESP_ERR_NOT_FOUND) && (i2cCheckSerialForDiskPartition() == true))
+		{
+			err = esp_vfs_fat_spiflash_mount(tmp_path, "disk", &mount_config, &s_wl_handle);
+			if (err != ESP_OK) {
+				ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
+
+				return mounted;
+			}
+
+		}
+		else
+		{
+			return mounted;
+		}
 	}
 
 	mounted = true;
@@ -729,6 +745,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 	if(crcRead != crcCalc)
 	{
+		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
 		return ESP_ERR_INVALID_CRC;
 	}
@@ -878,6 +895,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	if(crcRead != crcCalc)
 	{
 		fclose(sessionFile);
+		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
 		return NULL;
 	}
@@ -1822,9 +1840,9 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 		fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
 		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%d", activeFileNumber, nrOfOCMFElements);
 		fclose(sessionFile);
-
-		xSemaphoreGive(offs_lock);
 	}
+
+	xSemaphoreGive(offs_lock);
 }
 
 /*int offlineSession_ReadOldestSession(char * SessionString)

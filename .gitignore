@@ -2,8 +2,14 @@ build
 sdkconfig.old
 
 .vscode
+.vscode/**
 .ipynb_checkpoints
 
 **/certs/*.pem
 
 core
+secure_boot_signing_key.pem
+secure_boot_signing_ec.pem
+flash_encryption_key.bin
+*.pem
+.cache

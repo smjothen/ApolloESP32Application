@@ -72,6 +72,24 @@ struct tm zntp_GetLatestNTPTime()
 }
 
 
+void zntp_GetTimeStruct(struct tm *tmUpdatedTime)
+{
+	time_t nowInSeconds;
+
+	time(&nowInSeconds);
+	localtime_r(&nowInSeconds, tmUpdatedTime);
+}
+
+
+void zntp_GetLocalTimeZoneStruct(struct tm *tmUpdatedTime, time_t offsetSeconds)
+{
+	time_t nowInSeconds;
+
+	time(&nowInSeconds);
+	nowInSeconds += offsetSeconds;
+	localtime_r(&nowInSeconds, tmUpdatedTime);
+}
+
 /*
  * This function returns the format required for SignedMeterValue OCMF messages.
  */
@@ -219,3 +237,32 @@ uint8_t zntp_enabled()
 {
 	return sntp_enabled();
 }
+
+
+/*
+ * This function provides the UTC time a give number of seconds into the future
+ */
+/*void GetUTCTimeStringWithOffset(char * timeString, uint32_t offset)
+{
+	time_t now = 0;
+	struct tm timeinfo = { 0 };
+	char strftime_buf[64] = {0};
+
+	time(&now);
+
+	setenv("TZ", "UTC-0", 1);
+	tzset();
+
+	now += offset;
+
+	localtime_r(&now, &timeinfo);
+
+	struct timeval t_now;
+	gettimeofday(&t_now, NULL);
+
+	strftime(strftime_buf, sizeof(strftime_buf), "%Y-%02m-%02dT%02H:%02M:%02S", &timeinfo);
+
+	sprintf(strftime_buf+strlen(strftime_buf), ".%06dZ", (uint32_t)t_now.tv_usec);
+	strcpy(timeString, strftime_buf);
+
+}*/

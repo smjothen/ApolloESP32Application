@@ -20,6 +20,7 @@
 #include "freertos/task.h"
 #include "DeviceInfo.h"
 #include "storage.h"
+#include "zaptec_cloud_observations.h"
 
 static const char *TAG = "FAT            ";
 
@@ -147,6 +148,8 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
 
     fclose(f);
     ESP_LOGI(TAG, "File written: %d bytes", wrt);
+
+    publish_debug_telemetry_security_log("Certificate", "Renewed");
 
 }
 

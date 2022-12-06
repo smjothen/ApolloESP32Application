@@ -71,7 +71,7 @@ void storage_Init_Configuration()
 	strcpy(configurationStruct.installationId,"00000000-0000-0000-0000-000000000000");
 	strcpy(configurationStruct.routingId, "default");
 
-	memset(configurationStruct.chargerName, 0, sizeof(DEFAULT_STR_SIZE));
+	memset(configurationStruct.chargerName, 0, DEFAULT_STR_SIZE);
 
 	configurationStruct.transmitInterval 			= DEFAULT_TRANSMIT_INTERVAL;
 	configurationStruct.transmitChangeLevel 		= 1.0;
@@ -140,9 +140,37 @@ void storage_Init_Configuration()
 	configurationStruct.networkTypeOverride			= 0;
 	configurationStruct.pulseInterval				= 60;
 
-	memset(configurationStruct.diagnosticsLog, 0, sizeof(DIAGNOSTICS_STRING_SIZE));
+	memset(configurationStruct.diagnosticsLog, 0, DIAGNOSTICS_STRING_SIZE);
+
+	storage_Initialize_ScheduleParameteres();
+
+	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 }
 
+
+void storage_Initialize_ScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "---");
+	strcpy(configurationStruct.timezone, "Etc/UTC");
+	strcpy(configurationStruct.timeSchedule, "");
+	configurationStruct.maxStartDelay = 600;
+}
+
+void storage_Initialize_UK_TestScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "GBR");
+	strcpy(configurationStruct.timezone, "Europe/London");
+	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+	configurationStruct.maxStartDelay = 600;
+}
+
+void storage_Initialize_NO_TestScheduleParameteres()
+{
+	strcpy(configurationStruct.location, "GBR");
+	strcpy(configurationStruct.timezone, "Europe/Oslo");
+	strcpy(configurationStruct.timeSchedule, "031:0800:1100;031:1600:2200");
+	configurationStruct.maxStartDelay = 600;
+}
 
 struct Configuration storage_GetConfigurationParameers()
 {
@@ -412,6 +440,62 @@ void storage_Clear_And_Save_DiagnosticsLog()
 	ESP_LOGW(TAG, "Cleared diagnosticslog");
 }
 
+
+
+void storage_Set_Location(char * newString)
+{
+	if(strlen(newString) == 3) //Shall always be 3 chars
+	{
+		strcpy(configurationStruct.location, newString);
+		ESP_LOGW(TAG, "Set location");
+		return;
+	}
+}
+
+void storage_Set_Timezone(char * newString)
+{
+	if(strlen(newString) < DEFAULT_STR_SIZE)
+	{
+		strcpy(configurationStruct.timezone, newString);
+		ESP_LOGW(TAG, "Set timezone");
+		return;
+	}
+}
+
+
+
+/*void storage_Set_DstUsage(uint8_t newValue)
+{
+	configurationStruct.dstUsage = newValue;
+}
+
+void storage_Set_UseSchedule(uint8_t newValue)
+{
+	configurationStruct.useSchedule = newValue;
+}*/
+
+
+void storage_Set_TimeSchedule(char * newString)
+{
+	if(strlen(newString) < SCHEDULE_SIZE)
+	{
+		strcpy(configurationStruct.timeSchedule, newString);
+		ESP_LOGW(TAG, "Set timeSchedule");
+		return;
+	}
+}
+
+
+void storage_Set_MaxStartDelay(uint32_t newValue)
+{
+	configurationStruct.maxStartDelay = newValue;
+}
+
+void storage_Set_cover_on_value(uint16_t newValue)
+{
+
+	configurationStruct.cover_on_value = newValue;
+}
 
 //****************************************************
 
@@ -691,6 +775,8 @@ uint8_t storage_Get_ocpp_max_charging_profiles_installed(){
 
 uint8_t storage_Get_CommunicationMode()
 {
+	///For dev only!
+	///return eCONNECTION_WIFI;
 	return configurationStruct.communicationMode;
 }
 
@@ -726,6 +812,10 @@ float storage_Get_MaxInstallationCurrentConfig()
 
 uint8_t storage_Get_PhaseRotation()
 {
+	//Set fixed to L1 on UK O-PEN hardware
+	if(IsUKOPENPowerBoardRevision())
+		return 1;
+
 	//For new chargers with no PhaseRotation = 0, set default if configured with switch
 	if(configurationStruct.phaseRotation == 0)
 	{
@@ -834,6 +924,34 @@ esp_err_t nvs_get_zdouble(nvs_handle_t handle, const char* key, double * outputV
 }
 
 
+char * storage_Get_Location()
+{
+	return configurationStruct.location;
+}
+
+char * storage_Get_Timezone()
+{
+	return configurationStruct.timezone;
+}
+
+char * storage_Get_TimeSchedule()
+{
+	return configurationStruct.timeSchedule;
+}
+
+uint32_t storage_Get_MaxStartDelay()
+{
+	return configurationStruct.maxStartDelay;
+}
+
+uint16_t storage_Get_cover_on_value()
+{
+
+	return configurationStruct.cover_on_value;
+}
+
+//************************************************
+
 esp_err_t storage_SaveConfiguration()
 {
 	volatile esp_err_t err;
@@ -913,6 +1031,13 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u32(configuration_handle, "PulseInterval", configurationStruct.pulseInterval);
 
 	err += nvs_set_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog);
+
+	err += nvs_set_str(configuration_handle, "Location", configurationStruct.location);
+	err += nvs_set_str(configuration_handle, "Timezone", configurationStruct.timezone);
+	err += nvs_set_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule);
+	err += nvs_set_u32(configuration_handle, "MaxStartDelay", configurationStruct.maxStartDelay);
+
+	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -1014,11 +1139,25 @@ esp_err_t storage_ReadConfiguration()
 	nvs_get_str(configuration_handle, "DiagnosticsLog", NULL, &readSize);
 	nvs_get_str(configuration_handle, "DiagnosticsLog", configurationStruct.diagnosticsLog, &readSize);
 
-	//ESP_LOGE(TAG, "TransmitInterval: 			%i", configurationStruct.transmitInterval);
-	//ESP_LOGE(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	nvs_get_str(configuration_handle, "Location", NULL, &readSize);
+	nvs_get_str(configuration_handle, "Location", configurationStruct.location, &readSize);
 
+	nvs_get_str(configuration_handle, "Timezone", NULL, &readSize);
+	nvs_get_str(configuration_handle, "Timezone", configurationStruct.timezone, &readSize);
 
-	//When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
+	nvs_get_str(configuration_handle, "TimeSchedule", NULL, &readSize);
+	nvs_get_str(configuration_handle, "TimeSchedule", configurationStruct.timeSchedule, &readSize);
+
+	int check = nvs_get_u32(configuration_handle, "MaxStartDelay", &configurationStruct.maxStartDelay);
+
+	///When updating chargers, set it to default value if not previously in NVS
+	if(check != ESP_OK)
+		configurationStruct.maxStartDelay = DEFAULT_MAX_CHARGE_DELAY;
+
+	if(nvs_get_u16(configuration_handle, "CoverOnValue", &configurationStruct.cover_on_value) != ESP_OK)
+		configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
+
+	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
 
@@ -1559,6 +1698,11 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 		tmp *= 4;
 		sprintf(PSK,"%d", tmp);
 		//strcpy(WifiPSK, "52718816");
+	#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+		strcpy(SSID, CONFIG_ZAPTEC_RUN_FACTORY_SSID);
+		strcpy(PSK, CONFIG_ZAPTEC_RUN_FACTORY_PSK);
+		ESP_LOGE(TAG, " Using dev-factory Wifi: SSID: %s PSK: ******** !!!", SSID);
+	#endif
 
 		return 0;
 	}

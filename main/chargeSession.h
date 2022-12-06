@@ -55,6 +55,7 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag);
 void chargeSession_SetStoppedReason(const char * reason);
 void chargeSession_SetEnergyForTesting(float e);
 void chargeSession_SetOCMF(char * OCMDString);
+void SetUUIDFlagAsCleared();
 void chargeSession_HoldUserUUID();
 char * sessionSession_GetHeldUserUUID();
 bool sessionSession_IsHoldingUserUUID();
@@ -71,7 +72,6 @@ bool chargeSession_HasSessionId();
 
 void SetCarConnectedState(bool connectedState);
 bool chargeSession_IsCarConnected();
-void chargeSession_SetReceivedStartChargingCommand();
 
 #ifdef __cplusplus
 }

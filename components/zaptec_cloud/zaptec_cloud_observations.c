@@ -22,8 +22,10 @@
 #include "../../main/certificate.h"
 #include "sessionHandler.h"
 #include "../components/adc/adc_control.h"
+#include "../components/ble/ble_service_wifi_config.h"
 #include "../../main/connectivity.h"
 #include "offlineHandler.h"
+#include "chargeController.h"
 #include "mqtt_client.h"
 #include <math.h>
 
@@ -267,6 +269,14 @@ int publish_debug_telemetry_observation_power(){
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
     add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
 
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, chargeSession_Get().Energy));
+
+    if(IsUKOPENPowerBoardRevision())
+    {
+    	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
+    }
+
     return publish_json(observations);
 }
 
@@ -383,6 +393,43 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults)
     return publish_json(observations);
 }
 
+int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
+{
+    ESP_LOGD(TAG, "sending GridTestResults");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamTamperCover, cover_state));
+
+    return publish_json(observations);
+}
+
+//TODO: consider changing event_name to id/enum value
+/**
+ * event_name may be truncated to a 16 character limit.
+ * event_description may be truncated to a 200 char limit.
+ */
+int publish_debug_telemetry_security_log(const char * event_name, const char * event_description){
+
+    ESP_LOGD(TAG, "sending security log");
+
+    cJSON *observations = create_observation_collection();
+
+    char log_entry[256];
+    time_t timestamp = time(NULL);
+    char timestamp_str[32];
+
+    if(strftime(timestamp_str, sizeof(timestamp_str), "%FT%T%z", localtime(&timestamp)) == 0){
+	    ESP_LOGE(TAG, "Unable to create security log timestamp");
+	    return -1;
+    }
+
+    sprintf(log_entry, "[%s] %-16.16s: %.200s", timestamp_str, event_name, event_description);
+
+    add_observation_to_collection(observations, create_observation(SecurityLog, log_entry));
+
+    return publish_json(observations);
+}
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics)
 {
@@ -439,9 +486,14 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
 	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
+#ifdef DEVELOPEMENT_URL
+    char sourceVersionString[38] = {0};
+    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_ota_get_app_description()->version);
+    add_observation_to_collection(observations, create_observation(SourceVersion, sourceVersionString));
+#else
     add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
+#endif
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
-
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
@@ -523,32 +575,67 @@ int publish_debug_telemetry_observation_LteParameters()
     return publish_json(observations);
 }
 
+/*
+ * Use bitmask to pick which observations are to be sedt
+ */
+int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask)
+{
+    ESP_LOGD(TAG, "sending Loc, TZ and Schedule");
+
+    cJSON *observations = create_observation_collection();
+
+    if(bitmask & 0x01)
+    	add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+
+    if(bitmask & 0x02)
+    	add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+
+    if(bitmask & 0x04)
+    	add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
+
+    return publish_json(observations);
+}
+
 
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
 {
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_uint32_t_observation(PulseInterval, pulseInterval));
-    //return publish_json(observations);
-    return publish_json_blocked(observations, 10000);
+    return publish_json(observations);
+    //return publish_json_blocked(observations, 10000);
 }
 
 static uint32_t txCnt = 0;
-
+static float OPENVoltage = 0.0;
 int publish_debug_telemetry_observation_all(double rssi){
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_double_observation(ParamInternalTemperature, I2CGetSHT30Temperature()));
     add_observation_to_collection(observations, create_double_observation(ParamHumidity, I2CGetSHT30Humidity()));
 
+    add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, MCU_GetPower()));
+
     //Only send temperatures periodically when charging is active
     if(MCU_GetChargeMode() == eCAR_CHARGING)
     {
+
+
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter, MCU_GetEmeterTemperature(0)));
-		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
-		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
+		if(IsUKOPENPowerBoardRevision() == false)
+		{
+			add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter2, MCU_GetEmeterTemperature(1)));
+			add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureEmeter3, MCU_GetEmeterTemperature(2)));
+		}
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT, MCU_GetTemperaturePowerBoard(0)));
 		add_observation_to_collection(observations, create_double_observation(ParamInternalTemperatureT2, MCU_GetTemperaturePowerBoard(1)));
     }
+
+    if(IsUKOPENPowerBoardRevision())
+    {
+    	OPENVoltage = MCU_GetOPENVoltage();
+    	add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, OPENVoltage));
+    }
+
 
 	add_observation_to_collection(observations, create_double_observation(CommunicationSignalStrength, rssi));
 	//add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
@@ -564,7 +651,14 @@ int publish_debug_telemetry_observation_all(double rssi){
 	txCnt++;
 	char buf[256];
 	GetTimeOnString(buf);
-	snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+	if(IsUKOPENPowerBoardRevision())
+	{
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+	}
+	else
+	{
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+	}
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
@@ -626,7 +720,10 @@ static uint32_t previousNumberOfTagsCount = 0;
 static uint8_t previousOverrideGridType = 0xff;
 static uint8_t previousIT3OptimizationEnabled = 0xff;
 static bool previousPingReplyState = 1;
-
+static uint32_t previousMaxStartDelay = 0;
+static int8_t sendUpdateInSeconds = 0;
+static bool sendPower = false;
+static float powerLimit = 0.0;
 
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
@@ -644,8 +741,11 @@ int publish_telemetry_observation_on_change(){
 		if (chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
-			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
-			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+			if(IsUKOPENPowerBoardRevision() == false)
+			{
+				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
+				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+			}
 		}
 
 		//If we have received command SetSessionId = null from cloud, fake car disconnect to clear session and user id in cloud
@@ -665,7 +765,6 @@ int publish_telemetry_observation_on_change(){
     int8_t chargeMode = MCU_GetChargeMode();
 	if ((previousChargeMode != chargeMode) && (chargeMode != 0) && (chargeMode != -1))
 	{
-		//if(!((chargeMode == 9) && (chargeOperatingMode == 3)))
 		add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)chargeMode));
 		previousChargeMode = chargeMode;
 		isChange = true;
@@ -700,6 +799,15 @@ int publish_telemetry_observation_on_change(){
     uint32_t warnings = MCU_GetWarnings();
     if(previousWarnings != warnings)
     {
+		if(IsUKOPENPowerBoardRevision())
+		{
+			if(((warnings & 0x400000) && !(previousWarnings & 0x400000)) || (!(warnings & 0x400000) && (previousWarnings & 0x400000)))
+			{
+				ESP_LOGI(TAG, "Sending O-PEN voltage on warning change: 0x%06X, 0x%06X", warnings, previousWarnings);
+				add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
+			}
+		}
+
     	add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, warnings));
     	previousWarnings = warnings;
     	isChange = true;
@@ -769,7 +877,7 @@ int publish_telemetry_observation_on_change(){
 		else
 		{
 			valueToSend = maxInstallationCurrentConfig;
-			ESP_LOGW(TAG, "Sending MCU value: %f", maxInstallationCurrentConfig);
+			ESP_LOGW(TAG, "Sending MCUs MaxInstCurrent: %f", maxInstallationCurrentConfig);
 		}
 
 		add_observation_to_collection(observations, create_double_observation(ChargeCurrentInstallationMaxLimit, valueToSend));
@@ -803,9 +911,41 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float power = MCU_GetPower();
-	//Send on change larger than 500 W, or if power changes from down to 0W.
-	if((power > previousPower + 500) || (power < (previousPower - 500)) || ((power == 0) && (previousPower > 0)))
+
+	/// In Watts
+	if (power > 7000.0)
+		powerLimit = 500.0;
+	else
+		powerLimit = 200.0;
+
+	/// Evaluate conditions for sending power, to avoid frequent transmission, but give good accuracy
+
+	if(((power > previousPower + powerLimit) || (power < (previousPower - powerLimit))) && (sendUpdateInSeconds == 0))
 	{
+		sendUpdateInSeconds = 5;
+	}
+
+	if((power == 0.0) && (previousPower > 0.0))
+	{
+		sendPower = true;
+	}
+
+	/// This delays sending the power value to let it stabilize. Avoids sending often during frequent change to save data/server load
+	if(sendUpdateInSeconds > 0)
+	{
+		sendUpdateInSeconds--;
+		ESP_LOGI(TAG, "Delay power: %i", sendUpdateInSeconds);
+		if(sendUpdateInSeconds == 0)
+		{
+			sendPower = true;
+		}
+	}
+
+	if(sendPower == true)
+	{
+		sendPower = false;
+		sendUpdateInSeconds = 0;
+
 		add_observation_to_collection(observations, create_double_observation(ParamTotalChargePower, power));
 
 		float currents[3] = {0};
@@ -842,9 +982,14 @@ int publish_telemetry_observation_on_change(){
 		{
 			//When power changes also update currents to be responsive
 			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase1, currents[0]));
-			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
-			add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
+			if(IsUKOPENPowerBoardRevision() == false)
+			{
+				add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase2, currents[1]));
+				add_observation_to_collection(observations, create_double_observation(ParamCurrentPhase3, currents[2]));
+			}
 		}
+
+		ESP_LOGI(TAG, "Sending power: %i: %4.2f W (%4.2f)", sendUpdateInSeconds, power, previousPower);
 
 		previousPower = power;
 		isChange = true;
@@ -878,8 +1023,11 @@ int publish_telemetry_observation_on_change(){
 		if ((energy >= 0.1) && (previousEnergy < 0.1))
 		{
 			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase1, MCU_GetVoltages(0)));
-			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
-			add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+			if(IsUKOPENPowerBoardRevision() == false)
+			{
+				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase2, MCU_GetVoltages(1)));
+				add_observation_to_collection(observations, create_double_observation(ParamVoltagePhase3, MCU_GetVoltages(2)));
+			}
 		}
 
 		previousEnergy = energy;
@@ -1005,6 +1153,44 @@ int publish_telemetry_observation_on_change(){
 			isChange = true;
 		}
 	}
+
+	if(chargeController_CheckForNewScheduleEvent())
+	{
+		add_observation_to_collection(observations, create_observation(NextScheduleEvent, chargeController_GetNextStartString()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewLocation())
+	{
+		add_observation_to_collection(observations, create_observation(Location, storage_Get_Location()));
+		isChange = true;
+	}
+
+
+	if(BLE_CheckForNewTimezone())
+	{
+		add_observation_to_collection(observations, create_observation(TimeZone, storage_Get_Timezone()));
+		isChange = true;
+	}
+
+	if(BLE_CheckForNewTimeSchedule())
+	{
+		add_observation_to_collection(observations, create_observation(TimeSchedule, storage_Get_TimeSchedule()));
+		isChange = true;
+	}
+
+	if(strncmp(storage_Get_Location(), "GBR", 3) == 0)
+	{
+		uint32_t maxStartDelay = storage_Get_MaxStartDelay();
+		if(previousMaxStartDelay != maxStartDelay)
+		{
+			add_observation_to_collection(observations, create_uint32_t_observation(MaxStartDelay, maxStartDelay));
+			previousMaxStartDelay = maxStartDelay;
+			isChange = true;
+		}
+	}
+
+
 	//Check ret and retry?
     int ret = 0;
 

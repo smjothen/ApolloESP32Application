@@ -181,9 +181,24 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		/// Update the rounded session energy
 		cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble = sessEnergy;
 
+		//ESP_LOGW(TAG, "CompletedSession B: %s", cJSON_PrintUnformatted(CompletedSessionObject));
+		//ESP_LOGW(TAG, "IsBool B: %i", cJSON_IsBool(cJSON_GetObjectItem(CompletedSessionObject,"ReliableClock")));
+
+		/// If Endtime is not set(disconnected while powered off), clear ReliableClock
+		int edtLength = strlen(cJSON_GetObjectItem(CompletedSessionObject,"EndDateTime")->valuestring);
+		if(edtLength < 27)
+		{
+			cJSON_ReplaceItemInObject(CompletedSessionObject, "ReliableClock", cJSON_CreateBool(false));
+			ESP_LOGW(TAG, "Cleared ReliableClock");
+			//ESP_LOGW(TAG, "IsBool E: %i", cJSON_IsBool(cJSON_GetObjectItem(CompletedSessionObject,"ReliableClock")));
+		}
+		//ESP_LOGW(TAG, "EndDateTime length: %i", edtLength);
+
 		cJSON_AddItemToObject(logRoot, "RD", logReaderArray);
 
 		char *buf = cJSON_PrintUnformatted(logRoot);
+
+		//ESP_LOGW(TAG, "CompletedSession E: %s", cJSON_PrintUnformatted(CompletedSessionObject));
 
 		strcpy(OCMFLogEntryString, "OCMF|");
 		strcpy(OCMFLogEntryString+strlen(OCMFLogEntryString), buf);

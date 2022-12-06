@@ -2,6 +2,8 @@
 #define PROTOCOL_TASK_H
 
 #include "zaptec_protocol_serialisation.h"
+#include "../../main/sessionHandler.h"
+#include "../../main/DeviceInfo.h"
 
 float GetFloat(uint8_t * input);
 
@@ -27,11 +29,12 @@ int MCURxGetStackWatermark();
 int MCUTxGetStackWatermark();
 
 char * MCU_GetSwVersionString();
-uint8_t MCU_ReadHwIdMCUSpeed();
-uint8_t MCU_GetHwIdMCUSpeed();
 
-uint8_t MCU_ReadHwIdMCUPower();
-uint8_t MCU_GetHwIdMCUPower();
+hw_speed_revision MCU_GetHwIdMCUSpeed();
+hw_power_revision MCU_GetHwIdMCUPower();
+bool IsUKOPENPowerBoardRevision();
+
+float MCU_GetOPENVoltage();
 
 char * MCU_GetGridTestString();
 uint8_t MCU_GetSwitchState();
@@ -48,8 +51,8 @@ void MCU_ClearMaximumEnergy();
 
 int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
-void SetTransitionOperatingModeState(bool newTransitionState);
-bool GetTransitionOperatingModeState();
+void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState);
+enum ChargerOperatingMode GetTransitionOperatingModeState();
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
@@ -68,12 +71,15 @@ uint16_t MCU_ProximityInst();
 float MCU_ChargeCurrentInstallationMaxLimit();
 float MCU_StandAloneCurrent();
 
-uint16_t MCU_GetServoCheckParameter(int parameterDefinition);
+int16_t MCU_GetServoCheckParameter(int parameterDefinition);
 bool MCU_ServoCheckRunning();
 void MCU_ServoCheckClear();
 void MCU_PerformServoCheck();
 float MCU_GetHWCurrentActiveLimit();
 float MCU_GetHWCurrentMaxLimit();
+
+void MCU_GetOPENSamples(char * samples);
+uint8_t MCU_GetRelayStates();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();

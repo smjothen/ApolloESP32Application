@@ -12,5 +12,6 @@ void ota_rollback();
 bool ota_rollback_to_factory();
 bool otaIsRunning();
 bool ota_CheckIfHasBeenUpdated();
+void ota_time_left();
 
 #endif /* APOLLO_OTA_H */

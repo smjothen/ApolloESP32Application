@@ -22,6 +22,7 @@
 #include "protocol_task.h"
 #include "audioBuzzer.h"
 #include "CLRC661.h"
+#include "SFH7776.h"
 #include "at_commands.h"
 #include "ppp_task.h"
 #include "protocol_task.h"
@@ -179,7 +180,7 @@ int prodtest_getNewId(bool validate_only)
 
 
 		//The string has fixed predefined format, only allow parsing if format is correct
-		if((buffer[0] == 'Z') && (buffer[1] == 'A') && (buffer[2] == 'P') &&
+		if(((strncmp(buffer, "ZAP", 3) == 0) || (strncmp(buffer, "ZGB", 3) == 0)) &&
 			(buffer[9] == '|') && (buffer[54] == '|') && (buffer[59] == '|'))
 		{
 			struct DeviceInfo prodDevInfo = {0};
@@ -246,21 +247,28 @@ enum test_state{
 };
 
 enum test_item{
-	TEST_ITEM_COMPONENT_BUZZER, 
-	TEST_ITEM_COMPONENT_RTC,
-	TEST_ITEM_COMPONENT_LED,
-	TEST_ITEM_COMPONENT_SWITCH,
+	TEST_ITEM_INFO,
 	TEST_ITEM_COMPONENT_BG,
+	TEST_ITEM_COMPONENT_LED,
+	TEST_ITEM_COMPONENT_BUZZER,
+	TEST_ITEM_COMPONENT_PROXIMITY,
+	TEST_ITEM_COMPONENT_OPEN_RELAY,
+	TEST_ITEM_COMPONENT_RTC,
+	TEST_ITEM_COMPONENT_SWITCH,
 	TEST_ITEM_COMPONENT_SERVO,
 	TEST_ITEM_COMPONENT_SPEED_HWID,
 	TEST_ITEM_COMPONENT_POWER_HWID,
-	TEST_ITEM_DEV_TEMP,
-	TEST_ITEM_CHARGE_CYCLE,
+	TEST_ITEM_COMPONENT_HW_TRIG,
+	TEST_ITEM_COMPONENT_GRID,
+	TEST_ITEM_COMPONENT_OPEN,
+	TEST_ITEM_CHARGE_CYCLE_START,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS,
 	TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2,
+	TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2,
+	TEST_ITEM_CHARGE_CYCLE_STOP,
 };
 
 static EventGroupHandle_t prodtest_eventgroup;
@@ -292,12 +300,20 @@ int prodtest_sock_send(char *payload)
 }
 
 int prodtest_send(enum test_state state, enum test_item item, char *message){
-	char payload [100];
+	char payload [100] = {0};
 	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
+
+	/// Debug for testing subset of factory tests without socket connection
+	ESP_LOGW(TAG, "%s", payload);
+	//return 0;
+
 	if(prodtest_sock_send(payload)<0){
-		ESP_LOGE(TAG, "PRODTEST COMMS ERROR...");
-		vTaskDelay(pdMS_TO_TICKS(10*1000));
-		esp_restart();
+		ESP_LOGE(TAG, "PRODTEST COMMS ERROR...RETRYING...");
+		if(prodtest_sock_send(payload)<0){
+			ESP_LOGE(TAG, "PRODTEST COMMS ERROR...");
+			vTaskDelay(pdMS_TO_TICKS(10*1000));
+			esp_restart();
+		}
 	}
 
 	return 0;
@@ -317,7 +333,7 @@ int await_prodtest_external_step_acceptance(char * acceptance_string, bool indic
 		if (len < 0) {
 			if(errno == 11){
 				//workaround, this error should never happen on a blocking socket
-				ESP_LOGW(TAG, "recv failed: errno %d", errno);
+				ESP_LOGW(TAG, "Waiting for answer: errno %d", errno);
 				continue;
 			}
 			ESP_LOGE(TAG, "recv failed: errno %d, aborting", errno);
@@ -379,6 +395,17 @@ char *host_from_rfid(){
 
 	ESP_LOGI(TAG, "using rfid tag: %s", latest_tag.idAsString);
 
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	//if(strcmp(latest_tag.idAsString, "nfc-5237AB3B")==0) // c365
+	if(strcmp(latest_tag.idAsString, "nfc-530796E7")==0) // c365
+		return "10.4.210.129";
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	if(strcmp(latest_tag.idAsString, CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_ID)==0)
+		return CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_IP;
+
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID */
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_TESTS */
+
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-D69E1A3B")==0) // c365
@@ -416,7 +443,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AAAC96DC")==0)
 		return "10.0.1.16";
 
-	//Wet future line
+	//Wet line 3
 	if(strcmp(latest_tag.idAsString, "nfc-AA0615EC")==0)
 		return "10.0.1.17";
 	if(strcmp(latest_tag.idAsString, "nfc-AA229EDC")==0)
@@ -424,7 +451,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA5180DC")==0)
 		return "10.0.1.17";
 
-	//Wet future line
+	//Wet line 4
 	if(strcmp(latest_tag.idAsString, "nfc-AA2EC4EC")==0)
 		return "10.0.1.18";
 	if(strcmp(latest_tag.idAsString, "nfc-AA4145EC")==0)
@@ -432,7 +459,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA87C2DC")==0)
 		return "10.0.1.18";
 
-	//Wet future line
+	//Wet line 5 (UK)
 	if(strcmp(latest_tag.idAsString, "nfc-AA47BCEC")==0)
 		return "10.0.1.19";
 	if(strcmp(latest_tag.idAsString, "nfc-AA0598DC")==0)
@@ -445,9 +472,9 @@ char *host_from_rfid(){
 	return "BAD RFID TAG";
 }
 
-int run_component_tests();
+
 int charge_cycle_test();
-int check_dspic_warnings();
+int check_dspic_warnings(enum test_item testItem);
 void socket_connect(void);
 
 static void socket_task(void *pvParameters){
@@ -464,8 +491,10 @@ static void socket_task(void *pvParameters){
 			}
 			xEventGroupSetBits(prodtest_eventgroup, SOCKET_DATA_SENDT);
 		}else{
+			char payload[50];
+			sprintf(payload, "%d|0|factory test running\r\n", TEST_ITEM_INFO);
 			// ping botch
-			char *payload = "5|0|factory test running\r\n";
+			//char *payload = "5|0|factory test running\r\n";
 			int err = send(sock, payload, strlen(payload), 0);
 			if (err < 0) {
 				ESP_LOGE(TAG, "Error sending ping to prodtest pc(%d)", errno);
@@ -474,6 +503,7 @@ static void socket_task(void *pvParameters){
 	}
 }
 
+static bool onePhaseTest = false;
 int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 {
 	prodtest_nfc_init();
@@ -496,13 +526,28 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	success = true;
 	goto cleanup;*/
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_DEV_TEMP, "Factory test");
+
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	onePhaseTest = true;
+#endif
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_INFO, "Factory test info");
 	
 	sprintf(payload, "Version (gitref): %s", esp_ota_get_app_description()->version);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
 
 	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
+
+	if(onePhaseTest)
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, "Running 1-phase test!!!");
+
+	if(check_dspic_warnings(TEST_ITEM_INFO)<0)
+	{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_INFO, "Factory test info");
+		goto cleanup;
+	}
+
 
 	MCU_SendCommandId(CommandEnterProductionMode);
 
@@ -510,7 +555,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 		int id_result = prodtest_getNewId(true);
 		if(id_result != 1){
 			sprintf(payload, "Scanned id does not match (%d)", id_result);
-	        prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, payload);
+	        prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
 			set_prodtest_led_state(TEST_STAGE_ERROR);
 			vTaskDelay(pdMS_TO_TICKS(1000)); // workaround??
 			goto cleanup;
@@ -533,11 +578,11 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 		eeprom_wp_disable_nfc_disable();
 		if(EEPROM_WriteFactoryStage(FactoryStagComponentsTested)!=ESP_OK){
 			ESP_LOGE(TAG, "Failed to mark component test pass on eeprom");
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, "EEPROM write failure");
 			eeprom_wp_enable_nfc_enable();
 			goto cleanup;
 		}else{
-			success = true;
+			//success = true;
 			eeprom_wp_enable_nfc_enable();
 		}
 	}
@@ -549,12 +594,10 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 		goto cleanup;
 	}
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_DEV_TEMP, "Factory test");
-
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark charge cycle test pass on eeprom");
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_DEV_TEMP, "EEPROM write failure");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, "EEPROM write failure");
 		eeprom_wp_enable_nfc_enable();
 		goto cleanup;
 	}else{
@@ -562,10 +605,15 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	}
 
 	eeprom_wp_enable_nfc_enable();
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test info");
+
 	sprintf(payload, "PASS\r\n");
 	prodtest_sock_send( payload);
 	set_prodtest_led_state(TEST_STAGE_PASS);
 	audio_play_nfc_card_accepted();
+
+
 
 	cleanup:
 	vTaskDelete(socket_task_handle);
@@ -640,15 +688,17 @@ int test_bg(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	char payload[128];
 
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem starting up");
+
 	if(configure_modem_for_prodtest(bg_log_cb)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup error");
 		goto err;
 	}
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup complete");
 
 	char version[40];
 	if(at_command_get_detailed_version(version, 40)){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem version read error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem version read error");
 		goto err;
 	}
 
@@ -667,15 +717,23 @@ int test_bg(){
 
 	char imei[20];
     if(at_command_get_imei(imei, 20)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem imei error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imei error");
 		goto err;
 	}
 	sprintf(payload, "IMEI: %s\r\n", imei);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	char imsi[20];
+	if(at_command_get_imsi(imsi, 20)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imsi error");
+		goto err;
+	}
+	sprintf(payload, "IMSI: %s\r\n", imsi);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
 	char ccid[30];
     if(at_command_get_ccid(ccid, 30)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem ccid error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem ccid error");
 		goto err;
 	}
 	sprintf(payload, "CCID: %s\r\n", ccid);
@@ -707,29 +765,34 @@ int test_bg(){
 
 	// deactivate incase there already is a context
 	int preventive_deactivate_result = at_command_deactivate_pdp_context();
-	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
+	sprintf(payload, "PDP cleanup result: %d\r\n", preventive_deactivate_result);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "waiting for BG95 REGISTER");
-	for(int i = 0; i<20; i++){
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Waiting for BG95 to REGISTER");
+	for(int i = 0; i <= 40; i++){
 		int registered = at_command_registered();
-		if(registered<0){
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "waiting for BG95 REGISTER check error");
-			goto err;
-		}else if (registered == 0){
-			ESP_LOGW(TAG, "BG not REGISTER yet");
-		}else{
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "BG REGISTERED");		
+		if((registered == 1) || (registered == 5)){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "BG REGISTERED");
 			break;
 		}
+		else if ((registered == 0) || (registered == 2)){
+			ESP_LOGW(TAG, "BG not REGISTER yet");
+			sprintf(payload, "BG waited %i seconds for network registration. Status: %i\r\n", i*5, registered);
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+		}
+		//Wait to see if state change or timeout
+		/*else{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Waiting for BG95 REGISTER check error");
+			goto err;
+		}*/
 
-		if(i>=10){
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "giving up on BG95 REGISTER");
+		if(i >= 40){
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Timing out on BG95 network registration");
 			bg_debug_log();
 			goto err;
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(10000));
+		vTaskDelay(pdMS_TO_TICKS(5000));
 	}
 
 	bg_debug_log();
@@ -779,7 +842,7 @@ int test_bg(){
 
 int test_leds(){
 	set_prodtest_led_state(TEST_STAGE_LED_DEMO);//todo rgbw
-	set_prodtest_led_state(TEST_STAGE_LED_DEMO);
+	//set_prodtest_led_state(TEST_STAGE_LED_DEMO);
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_LED, "LED");
 
@@ -797,33 +860,134 @@ int test_leds(){
 
 int test_buzzer(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_BUZZER, "Buzzer");
 
 
 	audio_play_nfc_card_accepted();
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_BUZZER, "buzzed?|yes|no");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_BUZZER, "Buzzed?|yes|no");
 
 	int result = await_prodtest_external_step_acceptance("yes", true);
 	if(result==0){
 		ESP_LOGI(TAG, "buzzer test accepted");
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_BUZZER, "Buzzer");
 		return 0;
 	}else{
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_BUZZER, "buzzer");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_BUZZER, "Buzzer");
 	}
 	return -1;
 }
 
+#define COVER_OFF_MIN 0x0010
+#define COVER_OFF_MAX 0x00a0
+
+int test_proximity(){
+	char payload[128];
+
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+
+	esp_err_t err = SFH7776_detect();
+
+	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
+		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+
+	}else if(!should_exist){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+		return 0;
+	}
+
+	if(SFH7776_set_mode_control(0b0100) != ESP_OK
+		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
+
+
+		sprintf(payload, "Unable to write sensor registers");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+	}
+
+	vTaskDelay(pdMS_TO_TICKS(500));
+
+	uint16_t proximity;
+	if(SFH7776_get_proximity(&proximity) != ESP_OK){
+
+		sprintf(payload, "Unable to read proximity value");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+	}
+
+	sprintf(payload, "Proximity value %#06x.", proximity);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+	//Expect cover to be off, with no clear obstruction.
+	if(proximity < COVER_OFF_MIN || proximity > COVER_OFF_MAX){ // TODO: should be calibrated
+		ESP_LOGE(TAG, "Proximity; %#06x", proximity);
+
+		sprintf(payload, "Value out of range, expected %#06x - %#06x", COVER_OFF_MIN, COVER_OFF_MAX);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		goto fail;
+	}
+
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return 0;
+
+fail:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return -1;
+}
+
+int test_OPEN_relay(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
+
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "Handle connected with switches OFF?|yes|no");
+	int result0 = await_prodtest_external_step_acceptance("yes", false);
+
+	MCU_SendCommandId(CommandOpenPENRelay);
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay open. Does multimeter show more than 10000 ohm?|yes|no");
+	int result1 = await_prodtest_external_step_acceptance("yes", false);
+
+	MCU_SendCommandId(CommandClosePENRelay);
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay closed. Does multimeter show less than 10 ohm?|yes|no");
+	int result2 = await_prodtest_external_step_acceptance("yes", false);
+
+	if((result0==0) && (result1==0) && (result2==0)){
+		ESP_LOGI(TAG, "OPEN relay test accepted");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
+	}
+	return -1;
+}
+
+
 int test_switch(){
+	char payload[128];
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 	int switch_state = MCU_GetSwitchState();
+
+	vTaskDelay(pdMS_TO_TICKS(1000));
 
     if(switch_state==0){
 		//the switch must be in pos 0 when it leaves the factory
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");
 		return 0;
 	}else{
+		sprintf(payload, "Switch position =  %d, should be 0", switch_state);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SWITCH, payload);
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SWITCH, "Rotary Switch");	
 	}
 
@@ -835,6 +999,21 @@ int test_servo(){
 	char payload[128];
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SERVO, "Servo");
+
+	/// Calibrate to Zero position
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SERVO, "Calibrating servo");
+	if(MsgCommandAck == MCU_SendCommandId(CommandServoClearCalibration))
+	{
+		ESP_LOGW(TAG, "Sent CommandStartServoCheck OK");
+		vTaskDelay(pdMS_TO_TICKS(10000));
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Sent CommandStartServoCheck FAILED");
+	}
+
+
+	/// Check range of movement
 	if(MsgCommandAck == MCU_SendCommandId(CommandStartServoCheck))
 		ESP_LOGW(TAG, "Sent CommandStartServoCheck OK");
 	else
@@ -843,31 +1022,209 @@ int test_servo(){
 	///Wait while the servo test is performed
 	vTaskDelay(pdMS_TO_TICKS(4000));
 
-	uint16_t servoCheckStartPosition = MCU_GetServoCheckParameter(ServoCheckStartPosition);
-	uint16_t servoCheckStartCurrent = MCU_GetServoCheckParameter(ServoCheckStartCurrent);
-	uint16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
-	uint16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
-
-	sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i. OK?|yes|no", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, (servoCheckStartPosition-servoCheckStopPosition));
+	int16_t servoCheckStartPosition = MCU_GetServoCheckParameter(ServoCheckStartPosition);
+	int16_t servoCheckStartCurrent = MCU_GetServoCheckParameter(ServoCheckStartCurrent);
+	int16_t servoCheckStopPosition = MCU_GetServoCheckParameter(ServoCheckStopPosition);
+	int16_t servoCheckStopCurrent = MCU_GetServoCheckParameter(ServoCheckStopCurrent);
+	int servoRange = (servoCheckStartPosition-servoCheckStopPosition);
+	sprintf(payload, "ServoCheck: %i, %i, %i, %i Range: %i", servoCheckStartPosition, servoCheckStartCurrent, servoCheckStopPosition, servoCheckStopCurrent, servoRange);
 	ESP_LOGI(TAG, "ServoCheckParams: %s", payload);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SERVO, payload);
 
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_SERVO, payload);
 
-	int result = await_prodtest_external_step_acceptance("yes", true);
-	if(result==0){
-		ESP_LOGI(TAG, "servo test accepted");
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SERVO, "Servo OK");
+
+	//int result = await_prodtest_external_step_acceptance("yes", true);
+	if(servoRange >= 110){
+		ESP_LOGI(TAG, "Servo test completed");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SERVO, "Servo range OK and calibrated");
 		return 0;
 	}else{
+		sprintf(payload, "Servo: NOT ENOUGH MOVEMENT");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SERVO, payload);
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SERVO, "Servo FAILED");
 	}
 
 	return -1;
 }
 
+/// Check for valid HW id measurement on Speed board
+int test_speed_hwid(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_SPEED_HWID, "Speed HW ID");
+	int speed_hw_id = MCU_GetHwIdMCUSpeed();
+
+	char id_string[100];
+	snprintf(id_string, 100, "Speed HW ID: %i\r\n", speed_hw_id);
+
+
+/*#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	speed_hw_id = 3;
+#endif*/
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
+
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4)){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
+	}
+
+	return -1;
+}
+
+/// Check for valid HW id measurement on Power board
+int test_power_hwid(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_POWER_HWID, "Power HW ID");
+	int power_hw_id = MCU_GetHwIdMCUPower();
+
+	char id_string[100];
+	snprintf(id_string, 100, "Power HW ID: %i\r\n", power_hw_id);
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
+
+    if((power_hw_id == 1) || (power_hw_id == 2) || (power_hw_id == 3) || (power_hw_id == 4) || (power_hw_id == 5)){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_POWER_HWID, id_string);
+	}
+
+	return -1;
+}
+
+int test_hw_trig(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_HW_TRIG, "HW Trig");
+	MCU_SendCommandId(CommandTestHWTrig);
+
+	int trigResult = 0;
+	int timeout = 0;
+	while(timeout < 15)
+	{
+		vTaskDelay(pdMS_TO_TICKS(1000));
+
+		ZapMessage rxMsgm = MCU_ReadParameter(FactoryHWTrigResult);
+		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
+		{
+			trigResult = rxMsgm.data[0];
+			if((trigResult == 7) || (trigResult > 0xF))
+			{
+				break;
+			}
+		}
+
+		timeout++;
+	}
+
+	char trig_string[100];
+	snprintf(trig_string, 100, "HW Trig: 0x%x (%i)\r\n", trigResult, timeout);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
+
+    if(trigResult == 7){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
+		return 0;
+	}else{
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
+	}
+
+	return -1;
+}
+
+
+
+int test_grid_open(){
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+
+	char result_string[100];
+
+	if(IsUKOPENPowerBoardRevision())
+	{
+		/// Test O-PEN voltage measurement on O-PEN power revision
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_OPEN, "O-PEN voltage");
+
+		float OPENVoltage = MCU_GetOPENVoltage();
+
+		snprintf(result_string, 100, "O-PEN Voltage: %f", OPENVoltage);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_OPEN, result_string );
+
+
+		if(OPENVoltage < 207.0 || OPENVoltage > 253.0){
+			//prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_OPEN, "O-PEN voltage");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_OPEN, "O-PEN voltage");
+			return -1;
+		}
+
+		else{
+			//prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_OPEN, "O-PEN voltage");
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_OPEN, "O-PEN voltage");
+			return 0;
+		}
+	}
+	else
+	{
+		/// Test Grid measurement on standard EU revisions
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_GRID, "Grid detect");
+
+		ZapMessage rxMsg = MCU_ReadParameter(GridTestResult);
+		if(rxMsg.length > 0){
+			char * gtr = (char *)calloc(rxMsg.length+1, 1);
+			memcpy(gtr, rxMsg.data, rxMsg.length);
+
+			int grid_type;
+			float volt_g; float volt_l12;
+			int sscanf_result = sscanf(gtr, "%d: VG:%f L12:%f", &grid_type, &volt_g, &volt_l12);
+			if(sscanf_result!=3){
+				return -2;
+			}
+
+			sprintf(result_string, "Grid detect: %s (%d, %f, %f)", gtr, grid_type, volt_g, volt_l12);
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_GRID, result_string );
+			free(gtr);
+
+			if(onePhaseTest)
+			{
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_GRID, "1-phase test (Override mode)");
+				prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_GRID, result_string);
+				return 0;
+			}
+
+			if(volt_g < -5.0 || volt_g > 5.0 || volt_l12 < 360.0 || volt_l12 > 440.0){
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_GRID, "grid detect voltages out of range");
+				prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_GRID, "Grid detect");
+				return -1;
+			}
+
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_GRID, result_string);
+			return 0;
+		}else{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_GRID, "Grid detect data not received");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_GRID, "Grid detect");
+			return -1;
+		}
+	}
+
+	return -1;
+}
+
+
+
 int run_component_tests(){
 	ESP_LOGI(TAG, "testing components");
-	
+
+	if(test_speed_hwid()<0){
+		goto err;
+	}
+
+	if(test_power_hwid()<0){
+		goto err;
+	}
+
+	if(test_switch()<0){
+		goto err;
+	}
+
 	if(test_bg()<0){
 		goto err;
 	}
@@ -880,25 +1237,32 @@ int run_component_tests(){
 		goto err;
 	}
 
+	if(test_proximity()<0){
+		goto err;
+	}
+
 	if(test_rtc()<0){
 		goto err;
 	}
-		
-	if(test_switch()<0){
-		goto err;
-	}
-	
+
 	if(test_servo()<0){
 		goto err;
 	}
-
-	/*if(test_speed_hwid()<0){
+		
+	if(test_hw_trig()<0){
 		goto err;
 	}
 
-	if(test_speed_hwid()<0){
+	if(test_grid_open()<0){
 		goto err;
-	}*/
+	}
+
+	if(IsUKOPENPowerBoardRevision())
+	{
+		if(test_OPEN_relay()<0){
+			goto err;
+		}
+	}
 
 	return 0;
 
@@ -906,14 +1270,12 @@ int run_component_tests(){
 		return -1;
 }
 
-static const uint8_t eCAR_DISCONNECTED = 12;
-static const uint8_t eCAR_CHARGING = 6;
 
 int charge_cycle_test(){
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+	//prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
 
-	if(check_dspic_warnings()<0){
+	if(check_dspic_warnings(TEST_ITEM_INFO)<0){
 		return -1;
 	}
 
@@ -926,54 +1288,107 @@ int charge_cycle_test(){
 	float emeter_currents[] = { MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2)};
 	float board_temps[] = {MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1)};
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
-	sprintf(payload, "Emeter temps: %f, %f, %f", emeter_temps[0], emeter_temps[1], emeter_temps[2]);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, payload );
-	float temperature_min = 1.0; 
-	float temperature_max = 99.0;
-	if(emeter_temps[0] < temperature_min || emeter_temps[1]  < temperature_min || emeter_temps[2] < temperature_min
-	|| emeter_temps[0] > temperature_max || emeter_temps[1] >  temperature_max || emeter_temps[2] > temperature_max){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
-		return -1;
-	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
-	}
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temperature");
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
-	sprintf(payload, "Emeter voltages: %f, %f, %f", emeter_voltages[0], emeter_voltages[1], emeter_voltages[2]);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, payload );
+	float temperature_min = 1.0; 
+	float temperature_max = 80.0;
+
 	float volt_min = -1.0; 
 	float volt_max = 50.0;
-	if(emeter_voltages[0] < volt_min || emeter_voltages[1]  < volt_min || emeter_voltages[2] < volt_min
-	|| emeter_voltages[0] > volt_max || emeter_voltages[1] >  volt_max || emeter_voltages[2] > volt_max){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
-		return -1;
-	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
+
+	float current_min = -1.0;
+	float current_max = 5.0;
+
+	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
+	{
+		/// Temperatures - 1 phase
+		sprintf(payload, "Emeter temp: %f", emeter_temps[0]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, payload );
+
+		if(emeter_temps[0] < temperature_min || emeter_temps[0] > temperature_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temperature");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temperature");
+		}
+
+		/// Voltages - 1 phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltage before charging");
+		sprintf(payload, "Emeter voltage before charging: %f", emeter_voltages[0]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, payload );
+
+		if(emeter_voltages[0] < volt_min || emeter_voltages[0] > volt_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltage before charging");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltage before charging");
+		}
+
+		/// Currents - 1 phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter current before charging");
+		sprintf(payload, "Emeter current: %f", emeter_currents[0]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, payload );
+
+		if(emeter_currents[0] < current_min	|| emeter_currents[0] > current_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter current before charging");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter current before charging");
+		}
+
+	}
+	else
+	{
+		/// Temperatures - 3 phase
+		sprintf(payload, "Emeter temps: %f, %f, %f", emeter_temps[0], emeter_temps[1], emeter_temps[2]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, payload );
+
+		if(emeter_temps[0] < temperature_min || emeter_temps[1]  < temperature_min || emeter_temps[2] < temperature_min
+		|| emeter_temps[0] > temperature_max || emeter_temps[1] >  temperature_max || emeter_temps[2] > temperature_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS, "eMeter temps");
+		}
+
+		/// Voltages - 3 phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages");
+		sprintf(payload, "Emeter voltages before charging: %f, %f, %f", emeter_voltages[0], emeter_voltages[1], emeter_voltages[2]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, payload );
+
+		if(emeter_voltages[0] < volt_min || emeter_voltages[1]  < volt_min || emeter_voltages[2] < volt_min
+		|| emeter_voltages[0] > volt_max || emeter_voltages[1] >  volt_max || emeter_voltages[2] > volt_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages before charging");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES, "eMeter voltages before charging");
+		}
+
+		/// Currents - 3 phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents before charging");
+		sprintf(payload, "Emeter currents before charging: %f, %f, %f", emeter_currents[0], emeter_currents[1], emeter_currents[2]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, payload );
+
+		if(emeter_currents[0] < current_min || emeter_currents[1]  < current_min || emeter_currents[2] < current_min
+		|| emeter_currents[0] > current_max || emeter_currents[1] >  current_max || emeter_currents[2] > current_max){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents before charging");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents before charging");
+		}
+
 	}
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
-	sprintf(payload, "Emeter currents: %f, %f, %f", emeter_currents[0], emeter_currents[1], emeter_currents[2]);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, payload );
-	float current_min = -1.0; 
-	float current_max = 40.0;
-	if(emeter_currents[0] < current_min || emeter_currents[1]  < current_min || emeter_currents[2] < current_min
-	|| emeter_currents[0] > current_max || emeter_currents[1] >  current_max || emeter_currents[2] > current_max){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
-		return -1;
-	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS, "eMeter currents");
-	}
 
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
-	sprintf(payload, "board temps: %f, %f", board_temps[0], board_temps[1]);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "Board temperatures");
+	sprintf(payload, "Board temperatures: %f, %f", board_temps[0], board_temps[1]);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, payload );
 	if(board_temps[0] < temperature_min || board_temps[1]  < temperature_min 
 	|| board_temps[0] > temperature_max || board_temps[1] >  temperature_max){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "Board temperatures");
 		return -1;
 	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "board temps");
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_OTHER_TEMPS, "Board temperatures");
 	}
 
 	ESP_LOGI(TAG, "Pre charging data:");
@@ -982,16 +1397,18 @@ int charge_cycle_test(){
 	ESP_LOGI(TAG, "\tCurrents: %f, %f, %f", MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2));
 	ESP_LOGI(TAG, "\tOther temps: %f, %f", MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1));
 
-	if(check_dspic_warnings()<0){
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_START, "Charge cycle start");
+
+	if(check_dspic_warnings(TEST_ITEM_CHARGE_CYCLE_START)<0){
 		return -1;
 	}
 
 	if(MCU_GetChargeMode()!=eCAR_DISCONNECTED){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Handle connected to early");
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Handle connected to early");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_START, "Charge cycle start");
 		return -1;
 	}
-	MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
+	/*MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
 	if(ret != MsgCommandAck){
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Calibration command send failed");
 		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
@@ -1004,37 +1421,13 @@ int charge_cycle_test(){
 		return -1;
 	}
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");*/
 
-	ZapMessage rxMsg = MCU_ReadParameter(GridTestResult);
-	if(rxMsg.length > 0){
-		char * gtr = (char *)calloc(rxMsg.length+1, 1);
-		memcpy(gtr, rxMsg.data, rxMsg.length);
+	if(IsUKOPENPowerBoardRevision())
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Start charging");
+	else
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Waiting for handle connect and charging start");
 
-		int grid_type;
-		float volt_g; float volt_l12;
-		int sscanf_result = sscanf(gtr, "%d: VG:%f L12:%f", &grid_type, &volt_g, &volt_l12);
-		if(sscanf_result!=3){
-			return -2;
-		}
-
-		sprintf(payload, "Grid detect: %s (%d, %f, %f)", gtr, grid_type, volt_g, volt_l12);
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload );
-		free(gtr);
-
-		if(volt_g < -5.0 || volt_g > 5.0 || volt_l12 < 360.0 || volt_l12 > 440.0){
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "grid detect voltages out of range");
-			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
-			return -1;
-		}
-
-	}else{
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "grid detect fail");
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
-		return -1;
-	}
-
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
 	while(MCU_GetChargeMode()!=eCAR_CHARGING){
@@ -1043,81 +1436,164 @@ int charge_cycle_test(){
 		vTaskDelay(pdMS_TO_TICKS(1500));
 	}
 
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE, "Handle locked?|Yes|No");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_CHARGE_CYCLE_START, "Handle locked?|Yes|No");
 	int locked_result = await_prodtest_external_step_acceptance("Yes", true);
 	if(locked_result != 0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator rejected lock");
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Operator rejected lock");
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_START, "Charge cycle start");
 		return -1;
 	}
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "operator accepted lock");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Operator accepted lock");
 
-	if(check_dspic_warnings()<0){
+	if(check_dspic_warnings(TEST_ITEM_CHARGE_CYCLE_START)<0){
 		return -1;
 	}
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_START, "Charge cycle start");
+
 
 	float emeter_voltages2[] = { MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2)};
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
-	sprintf(payload, "Emeter voltages2: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages while charging");
+
 	float volt_min2 = 200.0; 
 	float volt_max2 = 260.0;
-	if(
-		   (emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2)
-		|| (emeter_voltages2[1] < volt_min2 || emeter_voltages2[1] > volt_max2)
-		|| (emeter_voltages2[2] < volt_min2 || emeter_voltages2[2] > volt_max2)
-		 ){
-		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
-		return -1;
-	}else{
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages2");
-	}
+	
 
+
+	float eMCompareVoltage = 0.0;
+	float OpenCompareVoltage = 0.0;
 	
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "sampling charge cycle data" );
-	
-	for(int i = 0; i<10; i++){
-		if(MCU_GetChargeMode()!=eCAR_CHARGING){
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "stop in charge cycle");
-			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	current_min = -1.0;
+#endif
+
+	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
+	{
+		current_max = 9.5;
+		current_min = 7.0;
+
+		/// Voltages2 1-phase
+		sprintf(payload, "Emeter voltages while charging: %f", emeter_voltages2[0]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
+
+		if(emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages while charging");
 			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages while charging");
 		}
 
-		snprintf(payload, 100, "cycle currents[%d]: %f, %f, %f, %.2f",
-			 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), GetPowerMeas()
-		);
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+		/// Current 1-phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Sampling charge cycle data" );
 
-		float current_max = 8.0;
-		float current_min = 6.5;
-
-		if(i==5){
-			if(
-				(MCU_GetCurrents(0)<current_min || MCU_GetCurrents(0) > current_max)
-			 || (MCU_GetCurrents(1)<current_min || MCU_GetCurrents(1) > current_max)
-			 || (MCU_GetCurrents(2)<current_min || MCU_GetCurrents(2) > current_max)
-			){
-				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "current out of range");
-				prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+		for(int i = 0; i<10; i++){
+			if(MCU_GetChargeMode()!=eCAR_CHARGING){
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "stop in charge cycle");
+				prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
 				return -1;
 			}
+
+			snprintf(payload, 100, "Cycle currents[%d]: %f, %.2f", i, MCU_GetCurrents(0), GetPowerMeas());
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
+
+			if(i==5){
+				eMCompareVoltage = MCU_GetVoltages(0);
+				OpenCompareVoltage = MCU_GetOPENVoltage();
+
+				if(MCU_GetCurrents(0)<current_min || MCU_GetCurrents(0) > current_max){
+					prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "current out of range");
+					prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
+					return -1;
+				}
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(1000));
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		///Compare the eMeter L1 vs the O-PEN measurements, sampled in the middle of the load test
+		///Output the values and fail if not within limit.
+		float vDiff = eMCompareVoltage - OpenCompareVoltage;
+		if(vDiff < 0.0)
+			vDiff *= -1.0;
+
+		snprintf(payload, 100, "eM: %.2f V, O-PEN: %.2f V, Diff: %.2f V",  eMCompareVoltage, OpenCompareVoltage, vDiff);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
+	#ifndef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+		if(vDiff >= 3.0)
+		{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");
+			return -1;
+		}
+	#endif
+
+	}
+	else
+	{
+		current_max = 8.0;
+		current_min = 6.5;
+
+		/// Voltages2 3-phase
+		sprintf(payload, "Emeter voltages while charging: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, payload );
+
+		if(
+			   (emeter_voltages2[0] < volt_min2 || emeter_voltages2[0] > volt_max2)
+			|| (emeter_voltages2[1] < volt_min2 || emeter_voltages2[1] > volt_max2)
+			|| (emeter_voltages2[2] < volt_min2 || emeter_voltages2[2] > volt_max2)
+			 ){
+			prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages while charging");
+			return -1;
+		}else{
+			prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES2, "eMeter voltages while charging");
+		}
+
+		/// Current 3-phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Sampling charge currents" );
+
+		for(int i = 0; i<10; i++){
+			if(MCU_GetChargeMode()!=eCAR_CHARGING){
+				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Stop in charge cycle");
+				prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
+				return -1;
+			}
+
+			snprintf(payload, 100, "Cycle currents[%d]: %f, %f, %f, %.2f",
+				 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), GetPowerMeas()
+			);
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
+
+			if(i==5){
+				if(
+					(MCU_GetCurrents(0)<current_min || MCU_GetCurrents(0) > current_max)
+				 || (MCU_GetCurrents(1)<current_min || MCU_GetCurrents(1) > current_max)
+				 || (MCU_GetCurrents(2)<current_min || MCU_GetCurrents(2) > current_max)
+				){
+					prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Current out of range");
+					prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
+					return -1;
+				}
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(1000));
+		}
 	}
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Waiting for handle disconnect");
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Waiting for handle disconnect");
 
 	while(MCU_GetChargeMode()!=eCAR_DISCONNECTED){
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 
-	if(check_dspic_warnings()<0){
+	if(check_dspic_warnings(TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2)<0){
 		return -1;
 	}
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE, "Charge cycle");
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
 
 	return 0;
 }
@@ -1160,20 +1636,20 @@ const dspic_warning_name dspic_warning_names[] = {
 	{29, "WARNING_SERVO"},
 };
 
-int check_dspic_warnings()
+int check_dspic_warnings(enum test_item testItem)
 {                    
 
 	uint32_t warnings = MCU_GetWarnings();
 
 	if(warnings == 0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "no errors on dspic" );
+		//prodtest_send(TEST_STATE_MESSAGE, testItem, "No errors on dspic");
 		return 0;
 	}
 
 	char payload[100];
 
 	sprintf(payload, "warning mask: 0x%x", warnings);
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload );
+	prodtest_send(TEST_STATE_MESSAGE, testItem, payload );
 
 	uint8_t i = 0;
 	for(i = 0; i<32; i++) {
@@ -1182,14 +1658,14 @@ int check_dspic_warnings()
 			for(t = 0; t<(sizeof(dspic_warning_names) / sizeof(dspic_warning_names[0])); t++) {
 				if(i == dspic_warning_names[t].bit) {
 	                sprintf(payload, "dsPIC warning: %s (error code: %d <> %d)", dspic_warning_names[t].name, i, t);
-					prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+					prodtest_send(TEST_STATE_MESSAGE, testItem, payload);
 					break;
 				}
 			}
 			
 			if(t == (sizeof(dspic_warning_names) / sizeof(dspic_warning_names[0]))){
 				sprintf(payload, "dsPIC warning: NAME NOT DEFINED (error code: %d <> %d)", i, t);
-				prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, payload);
+				prodtest_send(TEST_STATE_MESSAGE, testItem, payload);
 			}
 			
 		}

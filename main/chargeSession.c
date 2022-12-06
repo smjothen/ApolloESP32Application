@@ -3,7 +3,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "chargeSession.h"
-//#include <time.h>
 #include <sys/time.h>
 #include "sntp.h"
 #include <string.h>
@@ -29,8 +28,6 @@ static char * basicOCMF = "OCMF|{}";
 static char sidOrigin[6] = {0};
 
 static bool isCarConnected = false;
-
-static bool hasReceivedStartChargingCommand = false;
 
 static void ChargeSession_Set_GUID()
 {
@@ -89,11 +86,18 @@ void chargeSession_ClearHasNewSession()
 	hasNewSessionIdFromCloud = false;
 }
 
+///When OCPP in cloud receives a RemoteStopTransaction, it leads to a user UUID reset and Session reset command being sent from cloud.
+///To avoid the user UUID being held in memory despite the first user UUID reset command, this flag should be set.
+static bool UUIDClearedFlag = false;
+void SetUUIDFlagAsCleared()
+{
+	UUIDClearedFlag = true;
+}
 
 static char holdAuthenticationCode[41] = {0};
 void chargeSession_HoldUserUUID()
 {
-	if(chargeSession.AuthenticationCode[0] != '\0')
+	if((chargeSession.AuthenticationCode[0] != '\0') && (UUIDClearedFlag == false))
 	{
 		ESP_LOGE(TAG,"Holding userUUID in mem");
 		strcpy(holdAuthenticationCode, chargeSession.AuthenticationCode);
@@ -191,11 +195,8 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 	{
 		ESP_LOGI(TAG, "SessionId already set");
 
-		//Only resend sessionId to cloud if we have never received a start command - like when waiting in eco-mode
-		if(hasReceivedStartChargingCommand == false)
-		{
-			hasNewSessionIdFromCloud = true;
-		}
+		//Ensure we reply the SessionId every time Cloud sends it to charger
+		hasNewSessionIdFromCloud = true;
 
 		return 1;
 	}
@@ -249,20 +250,6 @@ void chargeSession_CheckIfLastSessionIncomplete()
 static double startAcc = 0.0;
 void chargeSession_Start()
 {
-	/// First check for resetSession on Flash
-	/*esp_err_t readErr = chargeSession_ReadSessionResetInfo();
-
-	if (readErr != ESP_OK)
-	{
-		if(readErr == 4354)
-			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo(): No file found: %d. Cleaning session and returning", readErr);
-		else
-			ESP_LOGE(TAG, "chargeSession_ReadSessionResetInfo() failed: %d. Cleaning session and returning", readErr);
-
-		memset(&chargeSession, 0, sizeof(chargeSession));
-
-	}*/
-
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
@@ -293,32 +280,12 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
-		/// If the session is reset from Cloud, reuse the previous authentication, send to MCU?
-		/*if(holdAuthenticationCode[0] != '\0')
-		{
-			ESP_LOGE(TAG,"Reusing userUUID from mem");
-			strcpy(chargeSession.AuthenticationCode, holdAuthenticationCode);
-			/// Clear the holding Id
-			strcpy(holdAuthenticationCode, "");
-
-			MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU Granted command OK");
-			}
-			else
-			{
-				ESP_LOGI(TAG, "MCU Granted command FAILED");
-			}
-		}*/
 
 		chargeSession.SignedSession = basicOCMF;
-		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
-		//OCMF_NewOfflineSessionEntry();
 
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
-		//ESP_LOGE(TAG, "sessionDataLen: %d", strlen(sessionData));
+
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
 		free(sessionData);
 
@@ -331,14 +298,7 @@ void chargeSession_Start()
 
 	}
 
-	//Add for new and flash-read sessions
-	//strcpy(chargeSession.SignedSession,"OCMF|{}"); //TODO: Increase string length if changing content
-	//chargeSession.SignedSession[7]='\0';
-
-	///chargeSession.SignedSession = basicOCMF;
-	///OCMF_CreateNewOCMFLog();
 	startAcc = storage_update_accumulated_energy(0.0);
-
 }
 
 
@@ -403,20 +363,11 @@ void chargeSession_Finalize()
 
 void chargeSession_Clear()
 {
-	/*ESP_LOGI(TAG, "Clearing csResetSession file");
-	esp_err_t clearErr = storage_clearSessionResetInfo();
-
-	if (clearErr != ESP_OK)
-	{
-		ESP_LOGE(TAG, "storage_clearSessionResetInfo() failed: %d", clearErr);
-	}*/
-
 	ESP_LOGI(TAG, "Clearing chargeSession");
 	memset(&chargeSession, 0, sizeof(chargeSession));
 
 	strcpy(sidOrigin, "     ");
 	hasNewSessionIdFromCloud = false;
-	hasReceivedStartChargingCommand = false;
 
 	ESP_LOGI(TAG, "* FINALIZED AND CLEARED SESSION *");
 }
@@ -433,6 +384,9 @@ bool chargeSession_IsLocalSession()
 void chargeSession_SetAuthenticationCode(char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
+
+	/// Once a new auth string is registered, allow holding it during session reset from cloud
+	UUIDClearedFlag = false;
 }
 
 void chargeSession_SetParentId(const char * id_token){
@@ -572,11 +526,6 @@ bool chargeSession_IsAuthenticated()
 		return true;
 	else
 		return false;
-}
-
-void chargeSession_SetReceivedStartChargingCommand()
-{
-	hasReceivedStartChargingCommand = true;
 }
 
 bool chargeSession_HasSessionId()

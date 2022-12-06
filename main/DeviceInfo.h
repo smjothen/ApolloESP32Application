@@ -8,7 +8,12 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-//#define DISABLE_LOGGING
+#ifdef CONFIG_ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
+#define DEVELOPEMENT_URL
+#endif
+
+//#define RUN_FACTORY_ASSIGN_ID //default commented out /* Replaced by CONFIG_ZAPTEC_FACTORY_ASSIGN_ID, se Kconfig / Menuconfig */
+//#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -39,11 +44,30 @@ struct RFIDTokens{
 };
 
 
+
+typedef enum {
+    HW_SPEED_UNKNOWN = 0,
+    HW_SPEED_1       = 1,
+    HW_SPEED_3_UK    = 3,
+} hw_speed_revision;
+
+
+typedef enum {
+    HW_POWER_UNKNOWN 	= 0,
+    HW_POWER_1      	= 1,
+    HW_POWER_2      	= 2,
+    HW_POWER_3_UK   	= 3,
+    HW_POWER_4_X804  	= 4,
+    HW_POWER_5_UK_X804 	= 5,
+} hw_power_revision;
+
+
 #define MAX_CERTIFICATE_SIZE 		50000
 #define MAX_CERTIFICATE_BUNDLE_SIZE 51000
 
 #define DEFAULT_STR_SIZE 37//Must be at least 37 for GUID! This value is also used in sscanf function!
 #define PREFIX_GUID 41
+#define SCHEDULE_SIZE 196	//(14*14) -> ((14*13) + (13 + \0)) = 196
 #define DIAGNOSTICS_STRING_SIZE 100
 
 #define URL_OCPP_MAX_LENGTH 128
@@ -62,6 +86,9 @@ struct RFIDTokens{
 #define PULSE_SYSTEM_NOT_CHARGING 600
 #define PULSE_SYSTEM_CHARGING 180
 
+#define DEFAULT_MAX_CHARGE_DELAY 600
+
+#define DEFAULT_COVER_ON_VALUE 0xd0
 
 //Numbers should match Pro
 enum CommunicationMode
@@ -200,6 +227,15 @@ struct Configuration
 	uint8_t networkTypeOverride;
 
 	char diagnosticsLog[DIAGNOSTICS_STRING_SIZE];
+
+	char location[4];//3 letters + EOL
+	char timezone[DEFAULT_STR_SIZE];
+	//uint8_t dstUsage;
+	//uint8_t useSchedule;
+	char timeSchedule[SCHEDULE_SIZE];
+	uint32_t maxStartDelay;
+
+	uint16_t cover_on_value;
 };
 
 

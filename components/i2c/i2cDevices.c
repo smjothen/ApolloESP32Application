@@ -9,6 +9,7 @@
 #include "RTC.h"
 #include "EEPROM.h"
 #include "CLRC661.h"
+#include "SFH7776.h"
 #include "../audioBuzzer/audioBuzzer.h"
 
 #include "driver/ledc.h"
@@ -24,6 +25,7 @@
 #include "../../main/sessionHandler.h"
 #include "../ntp/zntp.h"
 #include "../zaptec_cloud/include/zaptec_cloud_listener.h"
+#include "../zaptec_cloud/include/zaptec_cloud_observations.h"
 
 static const char *TAG = "I2C_DEVICES    ";
 static const char *TAG_EEPROM = "EEPROM STATUS  ";
@@ -55,9 +57,42 @@ void i2c_ctrl_debug(int state)
 
 struct DeviceInfo i2cGetLoadedDeviceInfo()
 {
-	// This line is for debugging units with failed production test
-	//deviceInfo.factory_stage = FactoryStageFinnished;
+
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
+#endif
+
 	return deviceInfo;
+}
+
+bool i2cSerialIsZGB()
+{
+	if(strnstr(deviceInfo.serialNumber,"ZGB",3) != NULL)
+		return true;
+	else
+		return false;
+}
+
+/*
+ * Chargers below serial number ~ZAP000149 had a different partition table without the "files" partition.
+ * This function can be used to identify chargers that MAY have the partition.
+ */
+bool i2cCheckSerialForDiskPartition()
+{
+	if(strstr(deviceInfo.serialNumber,"ZAP") != NULL) 	///ZGB should always return false since it always has the new partition table
+	{
+		int serial = atoi(&deviceInfo.serialNumber[3]);
+		if(serial < 149)
+			return true;
+		else
+			return false;
+	}
+
+	return false;
 }
 
 void i2cSetDebugDeviceInfoToMemory(struct DeviceInfo debugDevInfo)
@@ -173,7 +208,7 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		int len = strlen(deviceInfo.serialNumber);
 
 		//Check for valid serial number
-		if((len == 9) && (deviceInfo.serialNumber[0] == 'Z') && (deviceInfo.serialNumber[1] == 'A') && (deviceInfo.serialNumber[2] == 'P'))
+		if((len == 9) && ((strncmp(deviceInfo.serialNumber, "ZAP", 3) == 0) || (strncmp(deviceInfo.serialNumber, "ZGB", 3) == 0)))
 		{
 			ESP_LOGI(TAG_EEPROM, "Serial number: %s", deviceInfo.serialNumber);
 
@@ -208,6 +243,14 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		}
 	}
 	deviceInfoLoaded = true;
+
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
+	deviceInfo.factory_stage = FactoryStageUnknown2;
+#endif
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ASSIGN_ID
+	deviceInfo.factory_stage = FactoryStageUnknown;
+	deviceInfo.EEPROMFormatVersion = 0xff;
+#endif
 
 	return deviceInfo;
 }
@@ -255,6 +298,189 @@ void i2cSetNFCTagPairing(bool pairingState)
 	isNfcTagPairing = pairingState;
 }
 
+enum tamper_status_id{
+	eTAMPER_STATUS_DISABLED,
+	eTAMPER_STATUS_ENABLED,
+	eTAMPER_STATUS_COVER_ON,
+	eTAMPER_STATUS_COVER_OFF,
+	eTAMPER_STATUS_SENSOR_FAULT
+};
+
+/**
+ * Consider changing the margin and proximity_cover_on_value.
+ *
+ * The expected difference in reading when cover is on and when cover is off, depend on the use of reflective surface and configuration.
+ *
+ * When configured to 200 mA:
+ * - cover on (reflective): around 0x062a
+ * - cover on (black): around 0x0140
+ * - cover off: around 0x0138
+ *
+ * When configured to 100 mA:
+ * - cover on (reflective): around 0x035d
+ * - cover on (black): around 0x00a9
+ * - cover off: around 0x00aa
+ *
+ * When configured to 50 mA:
+ * - cover on (reflective): around 0x01ae
+ * - cover on (black): around 0x005a
+ * - cover off: around 0x0050
+ *
+ * When configured to 25 mA:
+ * - cover on (reflective): around 0x00d0
+ * - cover on (black): around 0x0028
+ * - cover off: around 0x0028
+ */
+#define PROXIMITY_COVER_ON_MARGIN 0x30
+#define PROXIMITY_ON_OFF_DELAY 5 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
+
+static uint16_t proximity_cover_on_value = 0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
+
+enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
+
+bool tamper_has_new_value = false;
+time_t tamper_transition_end = 0; // Time when PROXIMITY_ON_OFF_DELAY expires after tamper_has_new_value
+uint8_t tamper_change_count = 0; // Times change has been detected since last delay was exceeded without change.
+
+static void tamper_isr_hander(void * args){
+	tamper_has_new_value = true;
+}
+
+esp_err_t tamper_interrupt_set_limits(uint16_t cover_on_value){
+
+	if(cover_on_value < PROXIMITY_COVER_ON_MARGIN){
+		ESP_LOGE(TAG, "Cover on value too low");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if(cover_on_value + PROXIMITY_COVER_ON_MARGIN > 0x0fff){ // SFH7776 uses 12 of the 16 bits, 0x0fff should be its theoretical limit
+		ESP_LOGE(TAG, "Cover on value too high");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if(SFH7776_set_proximity_interrupt_high_threshold(cover_on_value + PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	if(SFH7776_set_proximity_interrupt_low_threshold(cover_on_value - PROXIMITY_COVER_ON_MARGIN) != ESP_OK)
+		return ESP_FAIL;
+
+	return ESP_OK;
+}
+
+esp_err_t configure_tamper_protection(){
+
+	// Normal mode, ambient light in standby, proximity repetition time 400ms
+	if(SFH7776_set_mode_control(0b0100) != ESP_OK)
+		return ESP_FAIL;
+
+	// Proximity output 25 mA LED.
+	if(SFH7776_set_sensor_control(0b0100) != ESP_OK)
+		return ESP_FAIL;
+
+	// Interrupt is updated after each measurement
+	if(SFH7776_set_persistence_control(1) != ESP_OK)
+		return ESP_FAIL;
+
+	// Interrupt on proximity only, Interrupt when higher or lower than thresholds, stable if new value is same, no latch
+	if(SFH7776_set_interrupt_control(0b100101) != ESP_OK)
+		return ESP_FAIL;
+
+	proximity_cover_on_value = storage_Get_cover_on_value();
+
+	if(tamper_interrupt_set_limits(proximity_cover_on_value) != ESP_OK)
+		return ESP_FAIL;
+
+	gpio_install_isr_service(0);
+	if(SFH7776_configure_interrupt_pin(true, tamper_isr_hander) != ESP_OK)
+		return ESP_FAIL;
+
+	return ESP_OK;
+}
+
+esp_err_t I2CCalibrateCoverProximity(){
+	ESP_LOGI(TAG, "Calibrating cover proximity");
+
+	if(tamper_status == eTAMPER_STATUS_DISABLED){
+		ESP_LOGE(TAG, "Tamper disabled, unable to calibrate");
+		return ESP_ERR_NOT_SUPPORTED;
+	}
+
+	ESP_LOGI(TAG, "Tare starting...");
+	if(SFH7776_record_tare_proximity(2000) != ESP_OK){
+		ESP_LOGE(TAG, "Failed to calibrate");
+		return ESP_FAIL;
+	}
+	ESP_LOGI(TAG, "Tare finished");
+
+	uint16_t cover_on_value = SFH7776_get_tare_value();
+	ESP_LOGI(TAG, "New calibration value: %#06x", cover_on_value);
+
+	if(tamper_interrupt_set_limits(cover_on_value) != ESP_OK)
+		return ESP_FAIL;
+
+	storage_Set_cover_on_value(cover_on_value);
+	storage_SaveConfiguration();
+
+	proximity_cover_on_value = storage_Get_cover_on_value();
+
+	return ESP_OK;
+}
+
+void detect_tamper(){
+	enum tamper_status_id old_status = tamper_status;
+
+	if(tamper_has_new_value){
+		ESP_LOGW(TAG, "Proximity sensor registered change");
+		tamper_has_new_value = false;
+		tamper_transition_end = time(NULL) + PROXIMITY_ON_OFF_DELAY;
+		tamper_change_count++;
+
+		if(tamper_change_count > 3){
+			ESP_LOGW(TAG, "Rapid change in cover proximity detected.");
+
+			tamper_status = eTAMPER_STATUS_COVER_OFF;
+			tamper_change_count = 0;
+		}
+
+	}else if(tamper_transition_end != 0 && (time(NULL) > tamper_transition_end)){
+		tamper_change_count = 0;
+		tamper_transition_end = 0;
+
+		uint16_t proximity;
+		if(SFH7776_get_proximity(&proximity) != ESP_OK){
+
+			ESP_LOGE(TAG, "Error while reading proximity");
+			tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
+		} else {
+			ESP_LOGI(TAG, "Read proximity: %#06x", proximity);
+		}
+
+		if((proximity > (proximity_cover_on_value - PROXIMITY_COVER_ON_MARGIN))
+			&& (proximity < (proximity_cover_on_value + PROXIMITY_COVER_ON_MARGIN))){
+
+			tamper_status = eTAMPER_STATUS_COVER_ON;
+		} else {
+			tamper_status = eTAMPER_STATUS_COVER_OFF;
+		}
+	}
+
+	if(old_status != tamper_status){
+		ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
+		publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+
+		switch(tamper_status){
+		case eTAMPER_STATUS_COVER_ON:
+			publish_debug_telemetry_security_log("Cover status", "on");
+			break;
+		case eTAMPER_STATUS_COVER_OFF:
+			publish_debug_telemetry_security_log("Cover status", "off");
+			break;
+		default:
+			publish_debug_telemetry_security_log("Cover status", "unknown");
+		}
+	}
+}
+
 static void i2cDevice_task(void *pvParameters)
 {
 	RTCVerifyControlRegisters();
@@ -281,6 +507,22 @@ static void i2cDevice_task(void *pvParameters)
 
 
 	NFCInit();
+
+	esp_err_t test_result = SFH7776_detect();
+	if(test_result != ESP_OK){
+		ESP_LOGE(TAG, "Tamper protection chip not present");
+		tamper_status = eTAMPER_STATUS_DISABLED;
+	}else{
+		ESP_LOGI(TAG, "Tamper protection chip detected");
+		if(configure_tamper_protection() != ESP_OK){
+			ESP_LOGE(TAG, "Unable to configure tamper protection");
+			tamper_status = eTAMPER_STATUS_SENSOR_FAULT;
+		}else{
+			ESP_LOGI(TAG, "Tamper protection chip configured");
+			tamper_status = eTAMPER_STATUS_ENABLED;
+			tamper_transition_end = time(NULL) + PROXIMITY_ON_OFF_DELAY; // Start an initial read
+		}
+	}
 
 	while (true)
 	{
@@ -494,7 +736,9 @@ static void i2cDevice_task(void *pvParameters)
 			RTCHasNewTime = false;
 		}
 
-
+		if(tamper_status != eTAMPER_STATUS_DISABLED){
+			detect_tamper();
+		}
 
 		//Read from NFC at 2Hz for user to not notice delay
 		vTaskDelay(500 / portTICK_RATE_MS);
