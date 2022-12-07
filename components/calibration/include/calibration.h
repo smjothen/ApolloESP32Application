@@ -13,7 +13,8 @@
 #define WARNING_PILOT_NO_PROXIMITY  (1l << 23)
 
 // Comment out to disable simulated eMeter/calibration values
-//#define CALIBRATION_SIMULATION
+#define CALIBRATION_SIMULATION
+//#define CALIBRATION_SIMULATION_FAIL
 
 #define CALIBRATION_KEY "6ea2ac08d055bcf09ae52d570315f43e"
 
