@@ -212,6 +212,8 @@ typedef enum {
     CAL_FLAG_RELAY_CLOSED = (1 << 2),
     CAL_FLAG_IDLE         = (1 << 3), // Allow not to fail when we boot up in non-MID mode
     CAL_FLAG_DONE         = (1 << 4), // Set when we're sure MCU is in done state (out of MID mode, LED green or red, etc)
+    CAL_FLAG_UPLOAD_PAR   = (1 << 5), // Set when uploading calibration to production server to get calibration ID
+    CAL_FLAG_UPLOAD_VER   = (1 << 6), // Set when uploading calibration to production server to get calibration ID
 } CalibrationFlags;
 
 typedef struct {
@@ -219,6 +221,7 @@ typedef struct {
     int Seq;
     int LastSeq;
     int Count;
+    int Position;
 
     char *FailReason;
 
@@ -249,6 +252,8 @@ bool calibration_set_standalone(CalibrationCtx *ctx, int standalone);
 bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current);
 bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
+
+bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw);
 
 void calibration_task_start(void);
 void calibration_task_stop(void);

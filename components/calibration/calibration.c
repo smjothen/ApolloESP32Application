@@ -332,67 +332,80 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         return false;
     }
 
-    if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
+    CalibrationParameter *params[] = {
+        ctx->Params.CurrentGain,
+        ctx->Params.VoltageGain,
+        ctx->Params.CurrentOffset,
+        ctx->Params.VoltageOffset,
+    };
 
-        CalibrationParameter *params[] = {
-            ctx->Params.CurrentGain,
-            ctx->Params.VoltageGain,
-            ctx->Params.CurrentOffset,
-            ctx->Params.VoltageOffset,
-        };
+    CalibrationHeader header;
+    header.crc = 0;
+    header.calibration_id = ctx->Params.CalibrationId;
+    header.functional_relay_revision = 0;
 
-        // NOTE: Can ignore param 2 because current offset doesn't need to be calibrated!
-        for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
-            for (int phase = 0; phase < 3; phase++) {
-                if (!params[param][phase].assigned) {
-                    if (param != 2) {
-                        ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
-                        return false;
-                    }
+    CalibrationParameter *param = ctx->Params.CurrentGain;
+    header.i_gain[0] = floatToSn(param[0].value, 21);
+    header.i_gain[1] = floatToSn(param[1].value, 21);
+    header.i_gain[2] = floatToSn(param[2].value, 21);
+
+    param = ctx->Params.VoltageGain;
+    header.v_gain[0] = floatToSn(param[0].value, 21);
+    header.v_gain[1] = floatToSn(param[1].value, 21);
+    header.v_gain[2] = floatToSn(param[2].value, 21);
+
+    param = ctx->Params.VoltageOffset;
+    header.v_offset[0] = floatToSn(param[0].value, 23);
+    header.v_offset[1] = floatToSn(param[1].value, 23);
+    header.v_offset[2] = floatToSn(param[2].value, 23);
+
+    header.t_offs[0] = 0xA800;
+    header.t_offs[1] = 0xA800;
+    header.t_offs[2] = 0xA800;
+
+    const char *bytes = (const char *)&header;
+
+    const char *bytesAfterCrc = bytes + sizeof(header.crc);
+    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+    ZEncodeUint16(crc, (uint8_t *)bytes);
+
+    char *ptr = hexbuf;
+    for (size_t i = 0; i < sizeof (header); i++) {
+        ptr += sprintf(ptr, "%02X", (uint8_t)bytes[i]);
+    }
+    *ptr = 0;
+
+    // NOTE: Can ignore param 2 because current offset doesn't need to be calibrated!
+    for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
+        for (int phase = 0; phase < 3; phase++) {
+            if (!params[param][phase].assigned) {
+                if (param != 2) {
+                    calibration_error_append(ctx, "No calibration value assigned (%d, L%d)!", param, phase);
+                    ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
+                    CAL_CSTATE(ctx) = Failed;
+                    return false;
                 }
             }
         }
+    }
 
-        CalibrationHeader header;
-        header.crc = 0;
-        //header.calibration_id = 1;
-        header.calibration_id = 0;
-        header.functional_relay_revision = 0;
+    if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
+        if (calibration_https_upload_parameters(ctx, hexbuf)) {
 
-        CalibrationParameter *param = ctx->Params.CurrentGain;
-        header.i_gain[0] = floatToSn(param[0].value, 21);
-        header.i_gain[1] = floatToSn(param[1].value, 21);
-        header.i_gain[2] = floatToSn(param[2].value, 21);
+            // Recompute header bytes with given calibration ID
+            header.calibration_id = ctx->Params.CalibrationId;
+            const char *bytesAfterCrc = bytes + sizeof(header.crc);
+            uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+            ZEncodeUint16(crc, (uint8_t *)bytes);
 
-        param = ctx->Params.VoltageGain;
-        header.v_gain[0] = floatToSn(param[0].value, 21);
-        header.v_gain[1] = floatToSn(param[1].value, 21);
-        header.v_gain[2] = floatToSn(param[2].value, 21);
-
-        param = ctx->Params.VoltageOffset;
-        header.v_offset[0] = floatToSn(param[0].value, 23);
-        header.v_offset[1] = floatToSn(param[1].value, 23);
-        header.v_offset[2] = floatToSn(param[2].value, 23);
-
-        header.t_offs[0] = 0xA800;
-        header.t_offs[1] = 0xA800;
-        header.t_offs[2] = 0xA800;
-
-        const char *bytes = (const char *)&header;
-        const char *bytesAfterCrc = bytes + sizeof(header.crc);
-
-        uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
-        ZEncodeUint16(crc, (uint8_t *)bytes);
-
-        ESP_LOGI(TAG, "%s: Writing checksum: %04X", calibration_state_to_string(ctx), header.crc);
-
-        char *ptr = hexbuf;
-        for (size_t i = 0; i < sizeof (header); i++) {
-            ptr += sprintf(ptr, "%02X ", (uint8_t)bytes[i]);
+            ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
+        } else {
+            ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
+            return false;
         }
-        *ptr = 0;
+    }
 
-        ESP_LOGI(TAG, "%s: Writing bytes: %s", calibration_state_to_string(ctx), hexbuf);
+    if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
 
         // Let charger go into "idle" state where we don't fail if not in MID mode
         ctx->Flags |= CAL_FLAG_IDLE;
@@ -772,6 +785,7 @@ void calibration_reset(CalibrationCtx *ctx) {
     CalibrationServer server = ctx->Server;
     memset(ctx, 0, sizeof (*ctx));
     ctx->Server = server;
+    ctx->Position = -1;
     CAL_STATE(ctx) = Starting;
     CAL_CSTATE(ctx) = InProgress;
     CAL_STEP(ctx) = InitRelays;
@@ -789,11 +803,14 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
 
     if (isRun) {
         int doCalibRun = 0;
+        int testPos = -1;
 
         for (pb_size_t i = 0; i < msg->Run.SelectedSerials_count; i++) {
             char *serial = msg->Run.SelectedSerials[i];
             if (strcmp(serial, devInfo.serialNumber) == 0) {
                 doCalibRun = 1;
+                testPos = i;
+                break;
             }
         }
 
@@ -812,7 +829,8 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
         } else if (ctx->Run != msg->Run.Run) {
             calibration_reset(ctx);
             ctx->Run = msg->Run.Run;
-            ESP_LOGI(TAG, "Starting run %d", ctx->Run);
+            ctx->Position = testPos;
+            ESP_LOGI(TAG, "Starting run %d in position %d", ctx->Run, ctx->Position);
         }
     }
 

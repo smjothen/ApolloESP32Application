@@ -11,6 +11,7 @@ set(COMPONENT_SRCS
 	calibration_crc.c
 	calibration_util.c
 	calibration_emeter.c
+	calibration_https.c
 
 	calibration-message.pb.c
 	pb_common.c
