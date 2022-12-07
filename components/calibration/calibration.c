@@ -82,13 +82,15 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 
 int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
-    if (!calibration_set_led_blue(ctx)) {
+    if (!calibration_set_blinking(ctx, 1)) {
         return -5;
     }
 
+    /* Should be standalone already?
     if (!calibration_set_standalone(ctx, 1)) {
         return -1;
     }
+    */
 
     if (!calibration_set_simplified_max_current(ctx, 32.0)) {
         return -2;
@@ -404,14 +406,20 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         ctx->Ticks[WRITE_TICK] = 0;
 
         return false;
+
     } else {
+
+        // Turn off LED upon boot
+        if (!calibration_turn_led_off(ctx)) {
+            return false;
+        }
 
         if (!calibration_is_active(ctx)) {
             ESP_LOGI(TAG, "%s: Waiting to enter MID mode ...", calibration_state_to_string(ctx));
             return false;
         }
 
-        // Give MCU ~10 seconds to reboot and curren to stabilize, otherwise current transformers
+        // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
         // go into overload even after relays close, requiring a manual reset.
         if (!ctx->Ticks[WRITE_TICK]) {
             ctx->Ticks[WRITE_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(10000);
@@ -445,12 +453,11 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
                 return false;
             }
 
-            // Init stage sets some parameters which get stored to flash on MCU so we should
-            // do a factory reset...?
+            /* Don't send anything that gets stored in flash settings, so can remove!
             if (MCU_SendUint8Parameter(CommandFactoryReset, 0) != MsgWriteAck) {
-                // Should this command be a MsgCommand instead of MsgWrite?
                 return false;
             }
+            */
 
             // TODO: 
             // 1. Mark calibration parameters as verified
@@ -525,14 +532,28 @@ int calibration_send_state(CalibrationCtx *ctx) {
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
+    calibration_set_blinking(ctx, 0);
+
+    static int blinkDelay = 0;
+
+    if (blinkDelay % 3 == 0) {
+        // Indicate PASS/FAIL with by blinking green/red every tick
+        if (failed) {
+            calibration_blink_led_red(ctx);
+        } else {
+            calibration_blink_led_green(ctx);
+        }
+    }
+
+    blinkDelay++;
+
     if (!(ctx->Flags & CAL_FLAG_DONE)) {
+
         if (calibration_is_active(ctx)) {
             calibration_stop_mid_mode(ctx);
             if (failed) {
-                calibration_set_led_red(ctx);
                 ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
             } else {
-                calibration_set_led_green(ctx);
                 ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
             }
             return;

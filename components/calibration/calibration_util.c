@@ -321,16 +321,21 @@ bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
     return false;
 }
 
-bool calibration_set_led_blue(CalibrationCtx *ctx) {
-    return MCU_SendUint8Parameter(ParamLedOverride, LED_BLUE_PULSING) == MsgWriteAck;
+// Blocks other LED activity
+bool calibration_set_blinking(CalibrationCtx *ctx, int enabled) {
+    return MCU_SetMIDBlinkEnabled(enabled);
 }
 
-bool calibration_set_led_green(CalibrationCtx *ctx) {
-    return MCU_SendUint8Parameter(ParamLedOverride, LED_GREEN_CONTINUOUS) == MsgWriteAck;
+bool calibration_turn_led_off(CalibrationCtx *ctx) {
+    return MCU_SendUint8Parameter(ParamLedOverride, LED_STATE_OFF) == MsgWriteAck;
 }
 
-bool calibration_set_led_red(CalibrationCtx *ctx) {
-    return MCU_SendUint8Parameter(ParamLedOverride, LED_RED) == MsgWriteAck;
+bool calibration_blink_led_green(CalibrationCtx *ctx) {
+    return MCU_SendCommandId(CommandIndicateOk);
+}
+
+bool calibration_blink_led_red(CalibrationCtx *ctx) {
+    return MCU_SendCommandId(CommandAuthorizationDenied);
 }
 
 bool calibration_set_standalone(CalibrationCtx *ctx, int standalone) {
