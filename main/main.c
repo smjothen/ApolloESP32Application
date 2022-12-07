@@ -607,14 +607,11 @@ void app_main(void)
 			otaDelayCounter = 0;
 		}
 
-		uint8_t calModeNow = 0;
-
-		if (MCU_IsCalibrationHandle(&calModeNow)) {
-			if (calModeNow && !calibrationMode) {
-				ESP_LOGI(TAG_MAIN, "Starting calibration task!");
-				calibration_task_start();
-				calibrationMode = true;
-			}
+		// Allow starting calibration task once when the handle is plugged in
+		if (MCU_IsCalibrationHandle() && !calibrationMode) {
+			ESP_LOGI(TAG_MAIN, "Starting calibration task!");
+			calibration_task_start();
+			calibrationMode = true;
 		}
 
 	#ifdef useSimpleConsole

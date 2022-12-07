@@ -980,7 +980,7 @@ void calibration_task(void *pvParameters) {
     while (1) {
         if (!network_WifiIsConnected()) {
             ESP_LOGI(TAG, "Waiting for WiFi connection ...");
-            vTaskDelay(pdMS_TO_TICKS(3000));
+            vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
 

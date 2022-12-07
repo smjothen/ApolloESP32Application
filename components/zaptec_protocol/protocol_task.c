@@ -837,11 +837,10 @@ bool MCU_GetInterpolatedEnergyCounter(float *energy) {
     return false;
 }
 
-bool MCU_IsCalibrationHandle(uint8_t *isCalibrationHandle) {
+bool MCU_IsCalibrationHandle(void) {
     ZapMessage msg = MCU_ReadParameter(ParamIsCalibrationHandle);
     if (msg.length == 1 && msg.type == MsgReadAck && msg.identifier == ParamIsCalibrationHandle) {
-        *isCalibrationHandle = msg.data[0];
-        return true;
+        return msg.data[0];
     }
     return false;
 }

@@ -101,7 +101,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
                     float reference;
                     if (!calibration_get_ref_unit(ctx, unit, phase, &reference)) {
-                        ESP_LOGE(TAG, "%s: IGAIN reference current too old. Waiting ...", calibration_state_to_string(ctx));
+                        ESP_LOGI(TAG, "%s: IGAIN reference current too old. Waiting ...", calibration_state_to_string(ctx));
                         return false;
                     }
 

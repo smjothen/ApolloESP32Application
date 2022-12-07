@@ -105,7 +105,7 @@ bool MCU_IsReady();
 bool MCU_GetMidStoredCalibrationId(uint32_t *id);
 bool MCU_SetMIDBlinkEnabled(bool enabled);
 bool MCU_GetInterpolatedEnergyCounter(float *energy);
-bool MCU_IsCalibrationHandle(uint8_t *isCalibrationHandle);
+bool MCU_IsCalibrationHandle(void);
 
 bool MCU_GetMidStatus(uint32_t *id);
 
