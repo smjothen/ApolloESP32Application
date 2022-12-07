@@ -346,6 +346,16 @@ int publish_debug_telemetry_observation_local_settings()
     return publish_json(observations);
 }*/
 
+
+int publish_debug_telemetry_observation_Connectivity_None()
+{
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(CommunicationMode, "None"));
+
+    return publish_json(observations);
+}
+
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
 {
     ESP_LOGD(TAG, "sending NFC telemetry");
@@ -393,6 +403,43 @@ int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults)
     return publish_json(observations);
 }
 
+int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
+{
+    ESP_LOGD(TAG, "sending GridTestResults");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamTamperCover, cover_state));
+
+    return publish_json(observations);
+}
+
+//TODO: consider changing event_name to id/enum value
+/**
+ * event_name may be truncated to a 16 character limit.
+ * event_description may be truncated to a 200 char limit.
+ */
+int publish_debug_telemetry_security_log(const char * event_name, const char * event_description){
+
+    ESP_LOGD(TAG, "sending security log");
+
+    cJSON *observations = create_observation_collection();
+
+    char log_entry[256];
+    time_t timestamp = time(NULL);
+    char timestamp_str[32];
+
+    if(strftime(timestamp_str, sizeof(timestamp_str), "%FT%T%z", localtime(&timestamp)) == 0){
+	    ESP_LOGE(TAG, "Unable to create security log timestamp");
+	    return -1;
+    }
+
+    sprintf(log_entry, "[%s] %-16.16s: %.200s", timestamp_str, event_name, event_description);
+
+    add_observation_to_collection(observations, create_observation(SecurityLog, log_entry));
+
+    return publish_json(observations);
+}
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics)
 {
@@ -616,11 +663,11 @@ int publish_debug_telemetry_observation_all(double rssi){
 	GetTimeOnString(buf);
 	if(IsUKOPENPowerBoardRevision())
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 	else
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)

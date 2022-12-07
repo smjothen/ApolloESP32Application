@@ -52,6 +52,8 @@ void storage_Set_Timezone(char * newString);
 void storage_Set_TimeSchedule(char * newString);
 void storage_Set_MaxStartDelay(uint32_t newValue);
 
+void storage_Set_cover_on_value(uint16_t newValue);
+
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
 float storage_Get_CurrentInMaximum();
@@ -86,6 +88,8 @@ int storage_Get_DiagnosticsLogLength();
 char * storage_Get_Location();
 char * storage_Get_Timezone();
 char * storage_Get_TimeSchedule();
+
+uint16_t storage_Get_cover_on_value();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();

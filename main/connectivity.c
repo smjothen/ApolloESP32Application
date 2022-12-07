@@ -17,6 +17,7 @@
 #include "sessionHandler.h"
 #include "certificate.h"
 #include "protocol_task.h"
+#include "mqtt_client.h"
 
 static const char *TAG = "CONNECTIVITY   ";
 
@@ -64,6 +65,14 @@ static uint32_t mqttUnconnectedCounter = 0;
 static uint32_t carNotChargingCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
 static const uint32_t restartTimeLimit = 3900;
+static uint32_t nrOfConnectsFailsBeforeReinit = 2;
+static uint32_t nrOfLTEReconnects = 0;
+
+uint32_t connectivity_GetNrOfLTEReconnects()
+{
+	return nrOfLTEReconnects;
+}
+
 static void OneSecondTimer()
 {
 	//ESP_LOGW(TAG,"OneSec?");
@@ -74,6 +83,24 @@ static void OneSecondTimer()
 		if(isMqttConnected() == false)
 		{
 			mqttUnconnectedCounter++;
+
+			if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+			{
+				if(mqtt_GetTransportConnectFailures() == nrOfConnectsFailsBeforeReinit)
+				{
+					if(nrOfConnectsFailsBeforeReinit < 100)
+						nrOfConnectsFailsBeforeReinit += 5;
+
+					mqtt_ClearTransportConnectFailures();
+
+					nrOfLTEReconnects++;
+					ESP_LOGW(TAG, "***** TRYING TO RECOVER PPP CONNECTION (Attempts: %d/%d) ******", nrOfConnectsFailsBeforeReinit, nrOfLTEReconnects);
+					stop_cloud_listener_task();
+					ppp_task_start();
+					vTaskDelay(pdMS_TO_TICKS(3000));
+					start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+				}
+			}
 
 			if(mqttUnconnectedCounter % 10 == 0)
 			{

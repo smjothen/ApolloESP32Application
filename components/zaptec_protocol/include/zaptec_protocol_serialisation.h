@@ -52,6 +52,7 @@
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
+        ParamTamperCover = 280,
 
 		ParamLedOverride = 290,
 		ParamLedOverrideClear = 291,
@@ -169,6 +170,8 @@
 		UptimeMCU = 821,
 		DataUsage = 822,
 		CertificateVersion = 823,
+        //..
+        SecurityLog = 830,
         //..
         CarSessionLog = 850,
         CommunicationModeConfigurationInconsistency = 851,

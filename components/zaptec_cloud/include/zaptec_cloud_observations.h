@@ -37,6 +37,8 @@ int publish_debug_telemetry_observation_cloud_settings();
 
 int publish_debug_telemetry_observation_local_settings();
 
+int publish_debug_telemetry_observation_Connectivity_None();
+
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
 
 int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardString);
@@ -44,6 +46,10 @@ int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardStr
 int publish_debug_telemetry_observation_CompletedSession(char * CompletedSessionString);
 
 int publish_debug_telemetry_observation_GridTestResults(char * gridTestResults);
+
+int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state);
+
+int publish_debug_telemetry_security_log(const char * event_name, const char * event_description);
 
 int publish_debug_telemetry_observation_Diagnostics(char * diagnostics);
 

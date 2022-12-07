@@ -8,6 +8,7 @@
 #include "ota_log.h"
 #include "esp_log.h"
 #include "certificate.h"
+#include <math.h>
 
 static const char *TAG = "safe_ota";
 
@@ -39,7 +40,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
         break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        //ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         if(strcmp(evt->header_key, "X-Total-Content-Length")==0){
             sscanf(evt->header_value, "%d", &total_size);
         }
@@ -47,7 +48,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     case HTTP_EVENT_ON_DATA:
         memcpy(&blockBuffer[bufLength], evt->data, evt->data_len);
         bufLength += evt->data_len;
-        ESP_LOGI(TAG, "got ota data to buffered, %d bytes, %d tot", evt->data_len, bufLength);
+        //ESP_LOGI(TAG, "got ota data to buffered, %d bytes, %d tot", evt->data_len, bufLength);
         break;
     case HTTP_EVENT_ON_FINISH:
 
@@ -98,6 +99,7 @@ void do_safe_ota(char *image_location){
     if(!useCert)
     	ESP_LOGE(TAG, "CERTIFICATES NOT USED");
 
+    int bufferSize = 1536;
 
     esp_http_client_config_t config = {
         .url = image_location,
@@ -106,13 +108,15 @@ void do_safe_ota(char *image_location){
 		//.transport_type = HTTP_TRANSPORT_OVER_SSL,
         .event_handler = _http_event_handler,
 		.timeout_ms = 20000,
-		.buffer_size = 1536,
+		.buffer_size = bufferSize,
         .user_data = &flash_error,
     };
 
     blockBuffer = malloc(chunk_size);
     recvBlockCnt = 0;
     sentBlockCnt = 0;
+    int nrOfBlocks = 0;
+
 
     while(true){
         if((total_size > 0 )&&(read_start>total_size)){
@@ -125,6 +129,12 @@ void do_safe_ota(char *image_location){
 
         bufLength = 0;
         memset(blockBuffer, 0, chunk_size);
+
+        if((nrOfBlocks == 0) && (total_size > 0))
+        {
+        	nrOfBlocks = ceil(total_size/65536.0);
+        	ESP_LOGW(TAG, "nrOfBlocks: %d",nrOfBlocks);
+        }
 
         esp_http_client_handle_t client = esp_http_client_init(&config);
 
@@ -143,9 +153,25 @@ void do_safe_ota(char *image_location){
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
 
+            recvBlockCnt++;
 
-	    	recvBlockCnt++;
-	    	ESP_LOGW(TAG, "Received block #%d Start: %d", recvBlockCnt, read_start);
+            int expectedBlockLength = read_end - read_start +1;
+            ESP_LOGW(TAG, "expectedBlockLength = %d -> %d = %d(%d)", read_start, read_end, expectedBlockLength, bufLength);
+
+	    	if(((recvBlockCnt < nrOfBlocks) && (bufLength != expectedBlockLength)) || ((recvBlockCnt == nrOfBlocks) && (bufLength != (expectedBlockLength-1))))
+	    	{
+	    		//Go back on block
+	    		recvBlockCnt--;
+
+	    		/// Do not write anything - retry same block
+	    		ESP_LOGE(TAG, "Invalid block length #%d/%d length: %d", recvBlockCnt, nrOfBlocks, bufLength);
+				ota_log_chunk_http_error(err);
+				esp_http_client_cleanup(client);
+				vTaskDelay(pdMS_TO_TICKS(3000));
+				continue;
+	    	}
+
+	    	ESP_LOGW(TAG, "Received block #%d/%d Start: %d", recvBlockCnt, nrOfBlocks, read_start);
 
             esp_err_t errf = esp_ota_write(update_handle, blockBuffer, bufLength);
 			if(errf!=ESP_OK){

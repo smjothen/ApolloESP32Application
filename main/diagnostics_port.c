@@ -26,6 +26,7 @@
 #include "diagnostics_port.h"
 #include "../components/i2c/include/i2cDevices.h"
 #include "../components/i2c/include/CLRC661.h"
+#include "../components/i2c/include/SFH7776.h"
 #include "../components/wifi/include/network.h"
 
 //#include "mdns.h"
@@ -332,6 +333,12 @@ static void tcp_server_task(void *pvParameters)
 			cJSON_AddNumberToObject(jsonObject, "MCUrst", MCU_GetResetSource());
 			cJSON_AddNumberToObject(jsonObject, "ESPrst", (unsigned int)esp_reset_reason());
 
+			uint16_t proximity;
+			if(SFH7776_get_proximity(&proximity) != ESP_OK){
+				ESP_LOGE(TAG, "Unable to read proximity");
+				proximity = UINT16_MAX;
+			}
+			cJSON_AddNumberToObject(jsonObject, "CoverProximity", proximity);
 			//cJSON_AddNumberToObject(jsonObject, "TxP", power);
 
 			jsonString = cJSON_Print(jsonObject);

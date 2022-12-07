@@ -37,8 +37,8 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
-#ifdef useAdvancedConsole
-	//#include "apollo_console.h"
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
+	#include "apollo_console.h"
 #endif
 
 static const char *TAG_MAIN = "MAIN           ";
@@ -109,7 +109,29 @@ void HandleCommands()
 	{
 		ESP_LOGW(TAG_MAIN, "Command:> %s", commandBuffer);
 
-		if(strncmp("mcu", commandBuffer, 3) == 0)
+		if(strncmp("none", commandBuffer, 4) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_NONE);
+		}
+		else if(strncmp("lte", commandBuffer, 3) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_LTE);
+		}
+		else if(strncmp("pppoff", commandBuffer, 6) == 0)
+		{
+			//stop_cloud_listener_task();
+			ppp_disconnect();
+		}
+		else if(strncmp("pppon", commandBuffer, 5) == 0)
+		{
+			//ppp_configure_uart();
+			stop_cloud_listener_task();
+			ppp_task_start();
+			vTaskDelay(pdMS_TO_TICKS(3000));
+			start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+		}
+
+		else if(strncmp("mcu", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
 				protocol_task_ctrl_debug(0);
@@ -217,7 +239,7 @@ void HandleCommands()
 
 
 }
-//#define useSimpleConsole
+#define useSimpleConsole
 
 
 void GetTimeOnString(char * onTimeString)
@@ -276,11 +298,11 @@ void app_main(void)
 	//PROD url used
 #endif
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
 #endif
 
-#ifndef ENABLE_LOGGING
+#ifndef CONFIG_ZAPTEC_ENABLE_LOGGING
 	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
 #else
@@ -293,7 +315,7 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-#ifdef useAdvancedConsole
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	gpio_pullup_en(GPIO_NUM_3);
 	apollo_console_init();
 #endif

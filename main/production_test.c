@@ -22,6 +22,7 @@
 #include "protocol_task.h"
 #include "audioBuzzer.h"
 #include "CLRC661.h"
+#include "SFH7776.h"
 #include "at_commands.h"
 #include "ppp_task.h"
 #include "protocol_task.h"
@@ -249,7 +250,8 @@ enum test_item{
 	TEST_ITEM_INFO,
 	TEST_ITEM_COMPONENT_BG,
 	TEST_ITEM_COMPONENT_LED,
-	TEST_ITEM_COMPONENT_BUZZER, 
+	TEST_ITEM_COMPONENT_BUZZER,
+	TEST_ITEM_COMPONENT_PROXIMITY,
 	TEST_ITEM_COMPONENT_OPEN_RELAY,
 	TEST_ITEM_COMPONENT_RTC,
 	TEST_ITEM_COMPONENT_SWITCH,
@@ -393,11 +395,17 @@ char *host_from_rfid(){
 
 	ESP_LOGI(TAG, "using rfid tag: %s", latest_tag.idAsString);
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	//if(strcmp(latest_tag.idAsString, "nfc-5237AB3B")==0) // c365
 	if(strcmp(latest_tag.idAsString, "nfc-530796E7")==0) // c365
 		return "10.4.210.129";
-#endif
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	if(strcmp(latest_tag.idAsString, CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_ID)==0)
+		return CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_IP;
+
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID */
+#endif /* CONFIG_ZAPTEC_RUN_FACTORY_TESTS */
+
 	if(strcmp(latest_tag.idAsString, "nfc-BADBEEF2")==0)
 		return "example.com";
 	if(strcmp(latest_tag.idAsString, "nfc-D69E1A3B")==0) // c365
@@ -435,7 +443,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AAAC96DC")==0)
 		return "10.0.1.16";
 
-	//Wet future line
+	//Wet line 3
 	if(strcmp(latest_tag.idAsString, "nfc-AA0615EC")==0)
 		return "10.0.1.17";
 	if(strcmp(latest_tag.idAsString, "nfc-AA229EDC")==0)
@@ -443,7 +451,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA5180DC")==0)
 		return "10.0.1.17";
 
-	//Wet future line
+	//Wet line 4
 	if(strcmp(latest_tag.idAsString, "nfc-AA2EC4EC")==0)
 		return "10.0.1.18";
 	if(strcmp(latest_tag.idAsString, "nfc-AA4145EC")==0)
@@ -451,7 +459,7 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA87C2DC")==0)
 		return "10.0.1.18";
 
-	//Wet future line
+	//Wet line 5 (UK)
 	if(strcmp(latest_tag.idAsString, "nfc-AA47BCEC")==0)
 		return "10.0.1.19";
 	if(strcmp(latest_tag.idAsString, "nfc-AA0598DC")==0)
@@ -519,7 +527,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	goto cleanup;*/
 
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	onePhaseTest = true;
 #endif
 
@@ -586,8 +594,6 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 		goto cleanup;
 	}
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test");
-
 	eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(FactoryStageFinnished)!=ESP_OK){
 		ESP_LOGE(TAG, "Failed to mark charge cycle test pass on eeprom");
@@ -599,12 +605,15 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 	}
 
 	eeprom_wp_enable_nfc_enable();
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test info");
+
 	sprintf(payload, "PASS\r\n");
 	prodtest_sock_send( payload);
 	set_prodtest_led_state(TEST_STAGE_PASS);
 	audio_play_nfc_card_accepted();
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_INFO, "Factory test info");
+
 
 	cleanup:
 	vTaskDelete(socket_task_handle);
@@ -679,15 +688,17 @@ int test_bg(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 	char payload[128];
 
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem starting up");
+
 	if(configure_modem_for_prodtest(bg_log_cb)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup error");
 		goto err;
 	}
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem startup complete");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem startup complete");
 
 	char version[40];
 	if(at_command_get_detailed_version(version, 40)){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem version read error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem version read error");
 		goto err;
 	}
 
@@ -706,15 +717,23 @@ int test_bg(){
 
 	char imei[20];
     if(at_command_get_imei(imei, 20)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem imei error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imei error");
 		goto err;
 	}
 	sprintf(payload, "IMEI: %s\r\n", imei);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
+	char imsi[20];
+	if(at_command_get_imsi(imsi, 20)<0){
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem imsi error");
+		goto err;
+	}
+	sprintf(payload, "IMSI: %s\r\n", imsi);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+
 	char ccid[30];
     if(at_command_get_ccid(ccid, 30)<0){
-		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "modem ccid error");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Modem ccid error");
 		goto err;
 	}
 	sprintf(payload, "CCID: %s\r\n", ccid);
@@ -746,11 +765,11 @@ int test_bg(){
 
 	// deactivate incase there already is a context
 	int preventive_deactivate_result = at_command_deactivate_pdp_context();
-	sprintf(payload, "pdp cleanup result: %d\r\n", preventive_deactivate_result);
+	sprintf(payload, "PDP cleanup result: %d\r\n", preventive_deactivate_result);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Waiting for BG95 to REGISTER");
-	for(int i = 0; i <= 20; i++){
+	for(int i = 0; i <= 40; i++){
 		int registered = at_command_registered();
 		if((registered == 1) || (registered == 5)){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "BG REGISTERED");
@@ -758,7 +777,7 @@ int test_bg(){
 		}
 		else if ((registered == 0) || (registered == 2)){
 			ESP_LOGW(TAG, "BG not REGISTER yet");
-			sprintf(payload, "BG waited %i seconds for network registration. Status: %i\r\n", i*10, registered);
+			sprintf(payload, "BG waited %i seconds for network registration. Status: %i\r\n", i*5, registered);
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
 		}
 		//Wait to see if state change or timeout
@@ -767,13 +786,13 @@ int test_bg(){
 			goto err;
 		}*/
 
-		if(i >= 20){
+		if(i >= 40){
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, "Timing out on BG95 network registration");
 			bg_debug_log();
 			goto err;
 		}
 
-		vTaskDelay(pdMS_TO_TICKS(10000));
+		vTaskDelay(pdMS_TO_TICKS(5000));
 	}
 
 	bg_debug_log();
@@ -858,22 +877,92 @@ int test_buzzer(){
 	return -1;
 }
 
+#define COVER_OFF_MIN 0x0010
+#define COVER_OFF_MAX 0x00a0
 
+int test_proximity(){
+	char payload[128];
+
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+
+	esp_err_t err = SFH7776_detect();
+
+	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
+		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+
+	}else if(!should_exist){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+		return 0;
+	}
+
+	if(SFH7776_set_mode_control(0b0100) != ESP_OK
+		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
+
+
+		sprintf(payload, "Unable to write sensor registers");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+	}
+
+	vTaskDelay(pdMS_TO_TICKS(500));
+
+	uint16_t proximity;
+	if(SFH7776_get_proximity(&proximity) != ESP_OK){
+
+		sprintf(payload, "Unable to read proximity value");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		ESP_LOGE(TAG, "%s", payload);
+		goto fail;
+	}
+
+	sprintf(payload, "Proximity value %#06x.", proximity);
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+	//Expect cover to be off, with no clear obstruction.
+	if(proximity < COVER_OFF_MIN || proximity > COVER_OFF_MAX){ // TODO: should be calibrated
+		ESP_LOGE(TAG, "Proximity; %#06x", proximity);
+
+		sprintf(payload, "Value out of range, expected %#06x - %#06x", COVER_OFF_MIN, COVER_OFF_MAX);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+
+		goto fail;
+	}
+
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return 0;
+
+fail:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	return -1;
+}
 
 int test_OPEN_relay(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
 
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "Handle connected with switches OFF?|yes|no");
+	int result0 = await_prodtest_external_step_acceptance("yes", false);
+
 	MCU_SendCommandId(CommandOpenPENRelay);
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay open. Is resistance = open circuit?|yes|no");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay open. Does multimeter show more than 10000 ohm?|yes|no");
 	int result1 = await_prodtest_external_step_acceptance("yes", false);
 
 	MCU_SendCommandId(CommandClosePENRelay);
-	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay closed. Is resistance < 10 ohm?|yes|no");
+	prodtest_send(TEST_STATE_QUESTION, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay closed. Does multimeter show less than 10 ohm?|yes|no");
 	int result2 = await_prodtest_external_step_acceptance("yes", false);
 
-	if((result1==0) && (result2==0)){
+	if((result0==0) && (result1==0) && (result2==0)){
 		ESP_LOGI(TAG, "OPEN relay test accepted");
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_OPEN_RELAY, "O-PEN relay");
 		return 0;
@@ -968,7 +1057,7 @@ int test_speed_hwid(){
 	snprintf(id_string, 100, "Speed HW ID: %i\r\n", speed_hw_id);
 
 
-/*#ifdef RUN_FACTORY_TESTS
+/*#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	speed_hw_id = 3;
 #endif*/
 
@@ -1148,27 +1237,31 @@ int run_component_tests(){
 		goto err;
 	}
 
-	if(IsUKOPENPowerBoardRevision())
-	{
-		if(test_OPEN_relay()<0){
-			goto err;
-		}
+	if(test_proximity()<0){
+		goto err;
 	}
 
 	if(test_rtc()<0){
 		goto err;
 	}
-		
+
 	if(test_servo()<0){
 		goto err;
 	}
-
+		
 	if(test_hw_trig()<0){
 		goto err;
 	}
 
 	if(test_grid_open()<0){
 		goto err;
+	}
+
+	if(IsUKOPENPowerBoardRevision())
+	{
+		if(test_OPEN_relay()<0){
+			goto err;
+		}
 	}
 
 	return 0;
@@ -1330,8 +1423,11 @@ int charge_cycle_test(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE, "Servo calibrated");*/
 
+	if(IsUKOPENPowerBoardRevision())
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Start charging");
+	else
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Waiting for handle connect and charging start");
 
-	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_START, "Waiting for handle connect and charging start");
 	ESP_LOGI(TAG, "waiting for charging start");
 	set_prodtest_led_state(TEST_STAGE_WAITING_ANWER);
 	while(MCU_GetChargeMode()!=eCAR_CHARGING){
@@ -1368,14 +1464,14 @@ int charge_cycle_test(){
 	float eMCompareVoltage = 0.0;
 	float OpenCompareVoltage = 0.0;
 	
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	current_min = -1.0;
 #endif
 
 	if(IsUKOPENPowerBoardRevision() || onePhaseTest)
 	{
-		current_max = 9.0;
-		current_min = 4.0;
+		current_max = 9.5;
+		current_min = 7.0;
 
 		/// Voltages2 1-phase
 		sprintf(payload, "Emeter voltages while charging: %f", emeter_voltages2[0]);
@@ -1424,7 +1520,7 @@ int charge_cycle_test(){
 
 		snprintf(payload, 100, "eM: %.2f V, O-PEN: %.2f V, Diff: %.2f V",  eMCompareVoltage, OpenCompareVoltage, vDiff);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
-	#ifndef RUN_FACTORY_TESTS
+	#ifndef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 		if(vDiff >= 3.0)
 		{
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Too high voltage difference");
@@ -1455,6 +1551,7 @@ int charge_cycle_test(){
 		}
 
 		/// Current 3-phase
+		prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Charge currents while charging");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, "Sampling charge currents" );
 
 		for(int i = 0; i<10; i++){

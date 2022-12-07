@@ -22,6 +22,7 @@
 #include "../../main/sessionHandler.h"
 #include "apollo_ota.h"
 #include "segmented_ota.h"
+#include "safe_ota.h"
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
@@ -42,9 +43,9 @@
 #define TAG "CLOUD LISTENER "
 
 #ifdef DEVELOPEMENT_URL
-	#define MQTT_HOST "zap-d-iothub.azure-devices.net" //FOR DEVELOPEMENT
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT //FOR DEVELOPEMENT
 #else
-	#define MQTT_HOST "zapcloud.azure-devices.net"
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_MAIN_MQTT
 #endif
 
 #define MQTT_PORT 8883
@@ -1906,7 +1907,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						newNetworkType = NETWORK_3P4W;
 
 					//Sanity check
-					if((4 >= newNetworkType) && (newNetworkType >= 0))
+					if(IsUKOPENPowerBoardRevision())
+					{
+						responseStatus = 400;
+					}
+					else if((4 >= newNetworkType) && (newNetworkType >= 0))
 					{
 						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
 
@@ -2444,6 +2449,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"AbortOTA") != NULL)
 				{
 					do_segment_ota_abort();
+					do_safe_ota_abort();
 					responseStatus = 200;
 				}
 				else if(strstr(commandString,"GetRelayStates") != NULL)
@@ -2452,7 +2458,22 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 
+				else if(strstr(commandString, "CalibrateCoverProximity"))
+				{
+					esp_err_t err = I2CCalibrateCoverProximity();
 
+					switch(err){
+					case ESP_OK:
+						responseStatus = 200;
+						break;
+					case ESP_FAIL:
+						responseStatus = 500;
+						break;
+					case ESP_ERR_NOT_SUPPORTED:
+						responseStatus = 501; // TODO: See if more appropriate status code exist. (405?)
+						break;
+					}
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
@@ -2785,7 +2806,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	resetCounter++;
 
     	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: #%d, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
-
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{

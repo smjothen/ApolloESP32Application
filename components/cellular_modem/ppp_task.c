@@ -378,6 +378,47 @@ int GetNumberAsString(char * inputString, char * outputString, int maxLength)
 	return 0;
 }
 
+
+void EnsureBandAndLTEMOnBoot()
+{
+	 //Check if correct Band setting
+	char response[100] = {0};
+	at_command_get_LTE_band(response, 100);
+	if(response != NULL)
+	{
+		ESP_LOGI(TAG, "LTE Band: %s", response);
+
+		char * bandSet = strstr(response, ",0x8080084,");
+		if(bandSet == NULL)
+		{
+			ESP_LOGI(TAG, "Band not set, writing and soft restarting");
+
+			int lteOK = at_command_set_LTE_M_only_at_boot();
+			if(lteOK == 0)
+				ESP_LOGI(TAG, "Set to LTE-M only");
+			else
+				ESP_LOGE(TAG, "Failed to set LTE-M only");
+
+
+			int lteBandOK = at_command_set_LTE_band_at_boot();
+			if(lteBandOK == 0)
+				ESP_LOGI(TAG, "Set to LTE-M band");
+			else
+				ESP_LOGE(TAG, "Failed to set LTE-M band");
+
+			ESP_LOGW(TAG, "Soft restarting BG");
+			at_command_soft_restart();
+
+			/// Give BG time to soft restart.
+			/// Can probably be reduced to 7.5 sec, but longer times her gives less time to wait for network registration later
+			vTaskDelay(pdMS_TO_TICKS(15000));
+		}
+	}
+}
+
+
+
+
 static uint8_t powerOnCount = 0;
 int configure_modem_for_ppp(void){
 
@@ -481,37 +522,9 @@ int configure_modem_for_ppp(void){
     	ESP_LOGW(TAG, "Flow control on cellular UART enabled");
     }
 
-    //Check if correct Band setting
-    char response[100] = {0};
-    at_command_get_LTE_band(response, 100);
-    if(response != NULL)
-    {
-    	ESP_LOGI(TAG, "LTE Band: %s", response);
-
-    	char * bandSet = strstr(response, ",0x8080084,");
-    	if(bandSet == NULL)
-    	{
-    		ESP_LOGI(TAG, "Band not set, writing and soft restarting");
-
-    	    int lteOK = at_command_set_LTE_M_only_at_boot();
-    	    if(lteOK == 0)
-    	    	ESP_LOGI(TAG, "Set to LTE-M only");
-    	    else
-    	    	ESP_LOGE(TAG, "Failed to set LTE-M only");
-
-
-    	    int lteBandOK = at_command_set_LTE_band_at_boot();
-    		if(lteBandOK == 0)
-    			ESP_LOGI(TAG, "Set to LTE-M band");
-    		else
-    			ESP_LOGE(TAG, "Failed to set LTE-M band");
-
-    		ESP_LOGW(TAG, "Soft restarting BG");
-    		at_command_soft_restart();
-
-    		vTaskDelay(pdMS_TO_TICKS(15000));
-    	}
-    }
+    /// Applies when upgrading old chargers below v2.0.0.0.
+    /// On chargers above v2.0.0.0 this is set during factory test and just verified here on later bootups.
+    EnsureBandAndLTEMOnBoot();
 
 
     //Checking both CREG and Operator is redundant. Now just checking operator as before.
@@ -800,6 +813,11 @@ esp_netif_driver_base_t *base_driver;
 esp_event_handler_instance_t start_reg;
 
 void ppp_task_start(void){
+
+	ESP_LOGI(TAG, "before ppp_disconnect()");
+	ppp_disconnect();
+	ESP_LOGI(TAG, "after ppp_disconnect()");
+
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
     xEventGroupSetBits(event_group, UART_TO_LINES);
@@ -815,13 +833,19 @@ void ppp_task_start(void){
 
     int connectionStatus = configure_modem_for_ppp(); // TODO rename
 
-    esp_netif_init();
+    esp_netif_init(); // TODO: ensure compliance with "This function should be called exactly once from application code, when the application starts up."
     esp_event_loop_create_default();
 
     // Init netif object
-    esp_netif_config_t cfg = ESP_NETIF_DEFAULT_PPP();
-    ppp_netif = esp_netif_new(&cfg);
-    assert(ppp_netif);
+    /*if(ppp_netif != NULL)
+    {
+    	esp_netif_destroy(ppp_netif);
+    }*/
+
+	esp_netif_config_t cfg = ESP_NETIF_DEFAULT_PPP();
+	ppp_netif = esp_netif_new(&cfg);
+	assert(ppp_netif);
+
 
     esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, ppp_netif);
     esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, ppp_netif);
@@ -921,7 +945,7 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         if(bg_started)
             break;
 
-        log_cb("turning on BG95");
+        log_cb("Turning on BG95");
         cellularPinsOn();
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
@@ -960,7 +984,6 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
 
     ESP_LOGI(TAG, "BG started");
 
-
     int at_result = at_command_at();
 
     while(at_result < 0){
@@ -968,6 +991,11 @@ int configure_modem_for_prodtest(void (log_cb)(char *)){
         vTaskDelay(pdMS_TO_TICKS(1000));
         at_result = at_command_at();
     }
+
+    //Set band and LTE-M only mode at start of production test.
+    EnsureBandAndLTEMOnBoot();
+
+    clear_lines();
 
     ESP_LOGI(TAG, "[BG] Go for prodtest");
     return 0;
@@ -983,7 +1011,11 @@ int ppp_disconnect()
 
 	//vTaskDelay(pdMS_TO_TICKS(500));
 	//esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
-	esp_netif_destroy(ppp_netif);
+	//if(ppp_netif != NULL)
+	if(esp_netif_get_nr_of_ifs() == 1)
+	{
+		esp_netif_destroy(ppp_netif);
+	}
 
 	return 0;
 }
