@@ -75,6 +75,12 @@ void do_safe_ota_abort()
 }
 
 
+static int chunk_size = 65536;
+void ota_set_chunk_size(int newSize)
+{
+	chunk_size = newSize;
+	ESP_LOGW(TAG, "New chuck size: %d", chunk_size);
+}
 
 void do_safe_ota(char *image_location){
     ESP_LOGW(TAG, "running experimental safe ota");
@@ -89,7 +95,7 @@ void do_safe_ota(char *image_location){
     }
 
     int read_start=0;
-    int chunk_size = 65536;
+    //int chunk_size = 65536;
     int read_end = read_start + chunk_size -1; // inclusive read end
     
     int flash_error = 0;
@@ -132,7 +138,7 @@ void do_safe_ota(char *image_location){
 
         if((nrOfBlocks == 0) && (total_size > 0))
         {
-        	nrOfBlocks = ceil(total_size/65536.0);
+        	nrOfBlocks = ceil(total_size/(chunk_size * 1.0));
         	ESP_LOGW(TAG, "nrOfBlocks: %d",nrOfBlocks);
         }
 
@@ -142,7 +148,7 @@ void do_safe_ota(char *image_location){
         snprintf(range_header_value, 64, "bytes=%d-%d", read_start, read_end);
         esp_http_client_set_header(client, "Range", range_header_value);
 
-        ESP_LOGI(TAG, "fetching [%s]", range_header_value);
+        ESP_LOGI(TAG, "fetching [%s] (blksize %d)", range_header_value, chunk_size);
 
         //sentBlockCnt++;
         //ESP_LOGW(TAG, "Sending block #%d", sentBlockCnt);

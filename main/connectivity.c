@@ -96,9 +96,10 @@ static void OneSecondTimer()
 					nrOfLTEReconnects++;
 					ESP_LOGW(TAG, "***** TRYING TO RECOVER PPP CONNECTION (Attempts: %d/%d) ******", nrOfConnectsFailsBeforeReinit, nrOfLTEReconnects);
 					stop_cloud_listener_task();
+					mqttInitialized = false;
 					ppp_task_start();
-					vTaskDelay(pdMS_TO_TICKS(3000));
-					start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+					//vTaskDelay(pdMS_TO_TICKS(3000));
+					//start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				}
 			}
 
@@ -147,6 +148,7 @@ static void OneSecondTimer()
 		else
 		{
 			mqttUnconnectedCounter = 0;
+			nrOfConnectsFailsBeforeReinit = 2;
 		}
 	}
 }

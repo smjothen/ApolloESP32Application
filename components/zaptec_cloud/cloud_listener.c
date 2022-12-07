@@ -1622,7 +1622,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					//start_segmented_ota();
 					start_ota();
-				}else if(strstr(commandString, "multisegmentota") != NULL){
+				}else if(strstr(commandString, "multiblockota") != NULL){
 
 					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
 					if(ret == MsgCommandAck)
@@ -2487,6 +2487,17 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString, "pppoff"))
 				{
 					ppp_disconnect();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"SetOTAChunkSize ") != NULL)
+				{
+					int newSize = 0;
+					sscanf(&commandString[18], "%d", &newSize);
+					if((newSize > 64) && (newSize <= (65536*2)))
+					{
+						ota_set_chunk_size(newSize);
+					}
+
 					responseStatus = 200;
 				}
 			}
