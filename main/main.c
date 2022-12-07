@@ -239,7 +239,7 @@ void HandleCommands()
 
 
 }
-#define useSimpleConsole
+//#define useSimpleConsole
 
 
 void GetTimeOnString(char * onTimeString)
