@@ -11,6 +11,7 @@
 #include <lwip/netdb.h>
 
 #define WARNING_PILOT_NO_PROXIMITY  (1l << 23)
+#define WARNING_NO_SWITCH_POW_DEF   (1l << 9)
 
 // Comment out to disable simulated eMeter/calibration values
 #define CALIBRATION_SIMULATION

@@ -617,9 +617,11 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     
     uint32_t warnings;
     if (calibration_read_warnings(&warnings)) {
-        if (warnings && warnings != WARNING_PILOT_NO_PROXIMITY) {
+        warnings &= ~WARNING_PILOT_NO_PROXIMITY;
+        warnings &= ~WARNING_NO_SWITCH_POW_DEF;
+        if (warnings) {
             // Warning set so relays probably can't be controlled anyway, so fail
-            ESP_LOGE(TAG, "%s: Warning 0x%08X on charger!", calibration_state_to_string(ctx), warnings);
+            ESP_LOGE(TAG, "%s: Unexpected warning 0x%08X on charger!", calibration_state_to_string(ctx), warnings);
             calibration_error_append(ctx, "Unexpected warning %08X", warnings);
             CAL_CSTATE(ctx) = Failed;
             return;
