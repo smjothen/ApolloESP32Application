@@ -539,20 +539,39 @@ int calibration_send_state(CalibrationCtx *ctx) {
     devInfo = i2cGetLoadedDeviceInfo();
 
     ChargerStateUdpMessage reply = ChargerStateUdpMessage_init_zero;
+
     reply.Serial = devInfo.serialNumber;
     reply.State = CAL_CSTATE(ctx);
     reply.StateAck = CAL_STATE(ctx);
     reply.SequenceAck = ctx->Seq;
     reply.RunAck = ctx->Run;
     reply.OverloadedPhases = ctx->Overloaded;
+    reply.has_Status = ctx->FailReason != NULL;
+    reply.Status.Status = (char *)ctx->FailReason;
 
-    if (ctx->FailReason) {
-        reply.has_Status = 1;
-        reply.Status.Status = (char *)ctx->FailReason;
-        // Do we need to use Type/Id fields?
+    if (CAL_STATE(ctx) == Starting) {
+        reply.Init.ClientProtocol = 2;
+        reply.Init.FirmwareVersion = GetSoftwareVersion();
+        reply.Init.Uptime = 0;
+
+        // TODO: Based on version and/or hardware revision?
+        reply.Init.NeedsMIDCalibration = true;
+
+        reply.Init.HasProductionTestPassed = devInfo.factory_stage == FactoryStageFinnished;
+
+        uint32_t midStatus;
+        MCU_GetMidStatus(&midStatus);
+
+        uint32_t calId;
+        MCU_GetMidStoredCalibrationId(&calId);
+
+        reply.Init.IsCalibrated = calId != 0;
+        reply.Init.IsVerified = (calId != 0) && !(midStatus & MID_STATUS_NOT_VERIFIED);
+
+        reply.Init.Has4G = true;
+        reply.Init.Is4GVerified = true;
     }
 
-    // TODO: Init reply.Init?
     pb_ostream_t strm = pb_ostream_from_buffer((uint8_t *)buf, sizeof (buf));
 
     if (!pb_encode(&strm, ChargerStateUdpMessage_fields, &reply)) {
