@@ -10,8 +10,14 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
-#define WARNING_PILOT_NO_PROXIMITY  (1l << 23)
-#define WARNING_NO_SWITCH_POW_DEF   (1l << 9)
+#define WARNING_PILOT_NO_PROXIMITY  (1 << 23)
+#define WARNING_NO_SWITCH_POW_DEF   (1 << 9)
+#define WARNING_RCD_6MA             (1 << 12)
+#define WARNING_RCD_30MA            (1 << 13)
+#define WARNING_RCD_TEST_6MA        (1 << 16)
+#define WARNING_RCD_TEST_30MA       (1 << 17)
+#define WARNING_RCD_FAILURE         (1 << 18)
+#define WARNING_RCD                 (WARNING_RCD_6MA | WARNING_RCD_30MA | WARNING_RCD_TEST_6MA | WARNING_RCD_TEST_30MA | WARNING_RCD_FAILURE)
 
 // Comment out to disable simulated eMeter/calibration values
 #define CALIBRATION_SIMULATION
@@ -214,7 +220,8 @@ typedef enum {
     CAL_FLAG_IDLE         = (1 << 3), // Allow not to fail when we boot up in non-MID mode
     CAL_FLAG_DONE         = (1 << 4), // Set when we're sure MCU is in done state (out of MID mode, LED green or red, etc)
     CAL_FLAG_UPLOAD_PAR   = (1 << 5), // Set when uploading calibration to production server to get calibration ID
-    CAL_FLAG_UPLOAD_VER   = (1 << 6), // Set when uploading calibration to production server to get calibration ID
+    CAL_FLAG_UPLOAD_VER   = (1 << 6), // Set when uploading final verification info to production server
+    CAL_FLAG_SKIP_CAL     = (1 << 7), // Have calibration ID, so skip calibration/upload steps
 } CalibrationFlags;
 
 typedef struct {
@@ -223,6 +230,7 @@ typedef struct {
     int LastSeq;
     int Count;
     int Position;
+    int Retries;
 
     char *FailReason;
 

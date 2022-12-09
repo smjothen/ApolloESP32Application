@@ -63,6 +63,11 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress:
+            if (ctx->Flags & CAL_FLAG_SKIP_CAL) {
+                CAL_CSTATE(ctx) = Complete;
+                return true;
+            }
+
             if (CAL_STATE(ctx) == CalibrateCurrentOffset) {
                 calibration_step_calibrate_current_offset(ctx);
             } else if (CAL_STATE(ctx) == CalibrateCurrentGain) {
@@ -103,6 +108,12 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
         return -4;
+    }
+
+    if (ctx->Params.CalibrationId != 0) {
+        ESP_LOGI(TAG, "Calibration ID (%d) already set! Skipping calibration!", ctx->Params.CalibrationId);
+        ctx->Flags |= CAL_FLAG_SKIP_CAL;
+        ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
     }
 
     return 0;
@@ -376,18 +387,22 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     }
     *ptr = 0;
 
-    // NOTE: Can ignore param 2 because current offset doesn't need to be calibrated!
-    for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
-        for (int phase = 0; phase < 3; phase++) {
-            if (!params[param][phase].assigned) {
-                if (param != 2) {
-                    calibration_error_append(ctx, "No calibration value assigned (%d, L%d)!", param, phase);
-                    ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
-                    CAL_CSTATE(ctx) = Failed;
-                    return false;
+    if (!(ctx->Flags & CAL_FLAG_SKIP_CAL)) {
+
+        // NOTE: Can ignore param 2 because current offset doesn't need to be calibrated!
+        for (size_t param = 0; param < sizeof (params) / sizeof (params[0]); param++) {
+            for (int phase = 0; phase < 3; phase++) {
+                if (!params[param][phase].assigned) {
+                    if (param != 2) {
+                        calibration_error_append(ctx, "No calibration value assigned (%d, L%d)!", param, phase);
+                        ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
+                        CAL_CSTATE(ctx) = Failed;
+                        return false;
+                    }
                 }
             }
         }
+
     }
 
     if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
@@ -401,19 +416,35 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
 
             ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
         } else {
-            ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
+            if (ctx->Retries < 5) {
+                ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
+                ctx->Retries++;
+            } else {
+                calibration_error_append(ctx, "Couldn't upload calibration data to production server!");
+                ESP_LOGE(TAG, "%s: Failure to upload parameters, giving up!", calibration_state_to_string(ctx));
+                CAL_CSTATE(ctx) = Failed;
+            }
             return false;
         }
     }
+
+    ctx->Retries = 0;
 
     if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
 
         // Let charger go into "idle" state where we don't fail if not in MID mode
         ctx->Flags |= CAL_FLAG_IDLE;
 
-        if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
-            ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
-            return false;
+        if (ctx->Flags & CAL_FLAG_SKIP_CAL) {
+            if (MCU_SendCommandId(CommandReset) != MsgCommandAck) {
+                ESP_LOGE(TAG, "%s: Failed to reboot MCU!", calibration_state_to_string(ctx));
+                return false;
+            }
+        } else {
+            if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+                ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
+                return false;
+            }
         }
 
         ctx->Flags |= CAL_FLAG_WROTE_PARAMS;
@@ -611,7 +642,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
 
         if (status) {
             ESP_LOGE(TAG, "%s: MID status 0x%08X on charger!", calibration_state_to_string(ctx), status);
-            calibration_error_append(ctx, "Unexpected MID status %08X", status);
+            calibration_error_append(ctx, "Unexpected MID status 0x%08X", status);
             CAL_CSTATE(ctx) = Failed;
         }
     }
@@ -620,10 +651,12 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     if (calibration_read_warnings(&warnings)) {
         warnings &= ~WARNING_PILOT_NO_PROXIMITY;
         warnings &= ~WARNING_NO_SWITCH_POW_DEF;
+        // RCD triggers on boot sometimes?
+        warnings &= ~WARNING_RCD;
         if (warnings) {
             // Warning set so relays probably can't be controlled anyway, so fail
             ESP_LOGE(TAG, "%s: Unexpected warning 0x%08X on charger!", calibration_state_to_string(ctx), warnings);
-            calibration_error_append(ctx, "Unexpected warning %08X", warnings);
+            calibration_error_append(ctx, "Unexpected MCU warning 0x%08X", warnings);
             CAL_CSTATE(ctx) = Failed;
             return;
         }
