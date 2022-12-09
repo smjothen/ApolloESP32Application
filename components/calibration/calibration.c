@@ -19,6 +19,7 @@
 #include "../../main/DeviceInfo.h"
 #include "i2cDevices.h"
 #include "protocol_task.h"
+#include "connectivity.h"
 #include "sessionHandler.h"
 #include "zaptec_protocol_serialisation.h"
 
@@ -998,6 +999,13 @@ void calibration_task(void *pvParameters) {
     devInfo = i2cGetLoadedDeviceInfo();
 
     while (1) {
+        if (connectivity_GetActivateInterface() != eCONNECTION_WIFI) {
+            ESP_LOGI(TAG, "Activating WiFi interface ...");
+            connectivity_ActivateInterface(eCONNECTION_WIFI);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
         if (!network_WifiIsConnected()) {
             ESP_LOGI(TAG, "Waiting for WiFi connection ...");
             vTaskDelay(pdMS_TO_TICKS(1000));
