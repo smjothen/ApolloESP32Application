@@ -596,21 +596,6 @@ int calibration_send_state(CalibrationCtx *ctx) {
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
-    calibration_set_blinking(ctx, 0);
-
-    static int blinkDelay = 0;
-
-    if (blinkDelay % 3 == 0) {
-        // Indicate PASS/FAIL with by blinking green/red every tick
-        if (failed) {
-            calibration_blink_led_red(ctx);
-        } else {
-            calibration_blink_led_green(ctx);
-        }
-    }
-
-    blinkDelay++;
-
     if (!(ctx->Flags & CAL_FLAG_DONE)) {
 
         if (calibration_is_active(ctx)) {
@@ -626,9 +611,27 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
         ctx->Flags |= CAL_FLAG_DONE;
     }
 
+    if (!calibration_open_relays(ctx)) {
+        return;
+    }
+
+    calibration_set_blinking(ctx, 0);
+
+    static int blinkDelay = 0;
+
+    if (blinkDelay % 3 == 0) {
+        // Indicate PASS/FAIL with by blinking green/red every tick
+        if (failed) {
+            calibration_blink_led_red(ctx);
+        } else {
+            calibration_blink_led_green(ctx);
+        }
+    }
+
+    blinkDelay++;
+
     calibration_send_state(ctx);
 }
-
 
 void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
