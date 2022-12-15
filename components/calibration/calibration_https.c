@@ -30,8 +30,11 @@ extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 
 // Uploads parameters and sets the calibration ID received from the production
 // server
-bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw) {
+bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
     char *url = "https://devices.zaptec.com/production/mid/calibration";
+		if (verification) {
+    	url = "https://devices.zaptec.com/production/mid/verification";
+		}
 
 		esp_http_client_config_t config = {
 			.url = url,
@@ -47,25 +50,19 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw) {
 
     struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
-		cJSON *test = cJSON_CreateObject();
-		cJSON_AddNumberToObject(test, "Station", ctx->Position);
-		cJSON_AddNumberToObject(test, "Run", ctx->Run);
-#ifdef CALIBRATION_SIMULATION
-		cJSON_AddBoolToObject(test, "IsSimulated", true);
-#else
-		cJSON_AddBoolToObject(test, "IsSimulated", false);
-#endif
+		size_t data_len = 0;
+		char *data_str = NULL;
 
 		cJSON *calibration = cJSON_CreateObject();
 
-    CalibrationParameter *params[] = {
-        ctx->Params.CurrentGain,
-        ctx->Params.VoltageGain,
-        ctx->Params.CurrentOffset,
-        ctx->Params.VoltageOffset,
-    };
+		CalibrationParameter *params[] = {
+				ctx->Params.CurrentGain,
+				ctx->Params.VoltageGain,
+				ctx->Params.CurrentOffset,
+				ctx->Params.VoltageOffset,
+		};
 
-		for (int i = 0; i < 4; i++) {
+		for (size_t i = 0; i < sizeof (params) / sizeof (params[0]); i++) {
 			bool hasParam = true;
 			for (int j = 0; j < 3; j++) {
 				if (!params[i][j].assigned) {
@@ -88,25 +85,89 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw) {
 			}
 		}
 
+		cJSON *verifications = cJSON_CreateObject();
+
+		CalibrationParameter *verifs[] = {
+			&ctx->Verifs.Verification[I_tr_3_phase_PF1],
+			&ctx->Verifs.Verification[I_max],
+		};
+
+		for (size_t i = 0; i < sizeof (verifs) / sizeof (verifs[0]); i++) {
+			bool hasParam = verifs[i]->assigned;
+
+			const char *key = i == 0 ? "I_tr_3_phase_PF1" : "I_max";
+
+			if (hasParam) {
+				cJSON_AddNumberToObject(verifications, key, verifs[i]->value);
+			}
+		}
+
+			/*
+						FullCalibrationUploadData calibrationData = new FullCalibrationUploadData {
+							serial = startup.Serial,
+							parametersAndVerifications = results.SerializeResults(),
+							runInfo = JsonConvert.SerializeObject(run.GetRunInfo()),
+							pass = internalPass,
+						};
+			*/
+
+		cJSON *test = cJSON_CreateObject();
+		cJSON_AddNumberToObject(test, "Station", ctx->Position);
+		cJSON_AddNumberToObject(test, "Run", ctx->Run);
+#ifdef CALIBRATION_SIMULATION
+		cJSON_AddBoolToObject(test, "IsSimulated", true);
+#else
+		cJSON_AddBoolToObject(test, "IsSimulated", false);
+#endif
+
+		if (verification) {
+			cJSON_AddNumberToObject(test, "CalibrationId", ctx->Params.CalibrationId);
+		}
+
 		cJSON *parameters = cJSON_CreateObject();
 		cJSON_AddItemToObject(parameters, "Calibration", calibration);
+
+		if (verification) {
+			cJSON_AddItemToObject(parameters, "Verifications", verifications);
+		}
+
 		cJSON_AddItemToObject(parameters, "Test", test);
 
 		cJSON *data = cJSON_CreateObject();
 		cJSON_AddStringToObject(data, "serial", devInfo.serialNumber);
-		cJSON_AddStringToObject(data, "raw", raw);
 
-		const char *param_str = cJSON_PrintUnformatted(parameters);
-		cJSON_AddStringToObject(data, "parameters", param_str);
+		if (!verification) {
+			cJSON_AddStringToObject(data, "raw", raw);
+		}
 
-		const char *data_str = cJSON_PrintUnformatted(data);
-		size_t data_len = strlen(data_str);
+		if (verification) {
+			// If we'ves gotten this far into Done state, we should've passed?
+			cJSON_AddBoolToObject(data, "pass", true);
+
+			// TODO: Add more??
+			cJSON *runInfo = cJSON_CreateObject();
+			cJSON_AddStringToObject(runInfo, "FirmwareVersion", GetSoftwareVersion());
+
+			char *run_str = cJSON_PrintUnformatted(runInfo);
+			cJSON_AddStringToObject(data, "runInfo", run_str);
+
+			cJSON_Delete(runInfo);
+		}
+
+		char *param_str = cJSON_PrintUnformatted(parameters);
+
+		cJSON_AddStringToObject(data,
+				verification ? "parametersAndVerifications" : "parameters",
+				param_str);
+
+		data_str = cJSON_PrintUnformatted(data);
+		data_len = strlen(data_str);
+
+		cJSON_Delete(parameters);
+		cJSON_Delete(data);
+		free(param_str);
 
 		ESP_LOGI(TAG, "Uploading: %s", data_str);
-
-		// TODO: Build me with cJSON
-    // char *data = "{\"serial\": \"ZAP000000\", \"parameters\": \"\", \"raw\": \"\"}";
-    // size_t data_len = strlen(data);
 
 		esp_http_client_set_method(client, HTTP_METHOD_POST);
 		esp_http_client_set_header(client, "Content-Type", "application/json");
@@ -123,6 +184,9 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw) {
 		}
 
 		err = esp_http_client_write(client, data_str, data_len);
+
+		free(data_str);
+
 		if (err == ESP_FAIL) {
 			ESP_LOGE(TAG, "Error uploading parameters: %s", esp_err_to_name(err));
 
@@ -146,26 +210,51 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw) {
 
 		ESP_LOGI(TAG, "Got response from production server: %s", buf);
 
-		cJSON *body = cJSON_Parse(buf);
-		if (!body) {
-			ESP_LOGE(TAG, "Invalid calibration response!");
-			return false;
-		}
-		
-		if (!cJSON_HasObjectItem(body, "CalibrationId")) {
-			ESP_LOGE(TAG, "No calibration ID in response!");
+		if (verification) {
+			cJSON *body = cJSON_Parse(buf);
+			if (!body) {
+				ESP_LOGE(TAG, "Invalid verification response!");
+				return false;
+			}
+	
+			if (!cJSON_HasObjectItem(body, "pass")) {
+				ESP_LOGE(TAG, "No calibration pass value in response!");
+
+				cJSON_Delete(body);
+				body = NULL;
+
+				return false;
+			}
+
+			bool pass = cJSON_GetObjectItem(body, "pass")->valueint;
+			if (!pass) {
+				ESP_LOGE(TAG, "Server pass failed!");
+			}
 
 			cJSON_Delete(body);
-			body = NULL;
 
-			return false;
+			return pass;
+		} else {
+			cJSON *body = cJSON_Parse(buf);
+			if (!body) {
+				ESP_LOGE(TAG, "Invalid calibration response!");
+				return false;
+			}
+			
+			if (!cJSON_HasObjectItem(body, "CalibrationId")) {
+				ESP_LOGE(TAG, "No calibration ID in response!");
+
+				cJSON_Delete(body);
+				body = NULL;
+
+				return false;
+			}
+
+			ctx->Params.CalibrationId = cJSON_GetObjectItem(body, "CalibrationId")->valueint;
+			ESP_LOGI(TAG, "Got calibration ID %d!", ctx->Params.CalibrationId);
+
+			cJSON_Delete(body);
 		}
-
-		ctx->Params.CalibrationId = cJSON_GetObjectItem(body, "CalibrationId")->valueint;
-		ESP_LOGI(TAG, "Got calibration ID %d!", ctx->Params.CalibrationId);
-
-		cJSON_Delete(body);
-		body = NULL;
 
     return true;
 }

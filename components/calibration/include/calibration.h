@@ -125,6 +125,11 @@ typedef enum {
     I_tr_L3 = 10,
 } CalibrationVerificationTest;
 
+#define CALIBRATION_TOTAL_VERIFICATIONS 11
+
+// Go should run two verifications: I_tr_3_phase_PF1, I_max
+#define CALIBRATION_EXP_VERIFICATIONS 2
+
 typedef enum {
     CALIBRATION_TYPE_NONE = 0,
     CALIBRATION_TYPE_VOLTAGE_OFFSET = 1,
@@ -189,6 +194,10 @@ typedef struct {
 } CalibrationParameters;
 
 typedef struct {
+    CalibrationParameter Verification[CALIBRATION_TOTAL_VERIFICATIONS];
+} CalibrationVerifications;
+
+typedef struct {
     float I[3];
     float V[3];
     float E;
@@ -242,6 +251,7 @@ typedef struct {
     CalibrationFlags Flags;
     CalibrationReference Ref;
     CalibrationParameters Params;
+    CalibrationVerifications Verifs;
     CalibrationOverload Overloaded;
 
     TickType_t Ticks[LAST_TICK];
@@ -262,7 +272,7 @@ bool calibration_set_simplified_max_current(CalibrationCtx *ctx, float current);
 bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
 
-bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw);
+bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification);
 
 void calibration_task_start(void);
 void calibration_task_stop(void);

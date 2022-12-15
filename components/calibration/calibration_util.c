@@ -86,15 +86,6 @@ double calibration_inv_scale_emeter(CalibrationUnit unit, float raw) {
     }
 }
 
-/*
-static void calibration_set_sim_vals(float *iv, float *vv, float i, float v) {
-    for (int phase = 0; phase < 3; phase++) {
-        iv[phase] = i;
-        vv[phase] = v;
-    }
-}
-*/
-
 bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv) {
     MessageType ret;
 

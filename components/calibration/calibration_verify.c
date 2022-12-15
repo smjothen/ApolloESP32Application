@@ -183,7 +183,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
         }
 
         int id = ctx->VerTest;
-        
+       
         if (ctx->VerTest == NoLoad) {
             if (energy > 0.1) {
                 ESP_LOGE(TAG, "%s: %d FAIL %.3fWh > 0.1Wh with no load!", calibration_state_to_string(ctx), id, energy);
@@ -207,6 +207,11 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             }
         }
 
+        if (id >= 0 && id < CALIBRATION_TOTAL_VERIFICATIONS) {
+            ctx->Verifs.Verification[id].assigned = true;
+            ctx->Verifs.Verification[id].value = error;
+        }
+ 
         ctx->Ref.CE[0] = 0.0;
         ctx->Ref.RE[0] = 0.0;
         ctx->Ref.CE[1] = 0.0;

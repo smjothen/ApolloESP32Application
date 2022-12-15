@@ -406,7 +406,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     }
 
     if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
-        if (calibration_https_upload_parameters(ctx, hexbuf)) {
+        if (calibration_https_upload_parameters(ctx, hexbuf, false)) {
 
             // Recompute header bytes with given calibration ID
             header.calibration_id = ctx->Params.CalibrationId;
@@ -504,9 +504,40 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             }
             */
 
-            // TODO: 
-            // 1. Mark calibration parameters as verified
-            // 2. Exit MID mode
+            if (!(ctx->Flags & CAL_FLAG_UPLOAD_VER)) {
+                // Upload parameters
+                if (!calibration_https_upload_parameters(ctx, NULL, true)) {
+                    return false;
+                } else {
+                    ctx->Flags |= CAL_FLAG_UPLOAD_VER;
+                }
+
+
+            } else {
+                ESP_LOGI(TAG, "Already uploaded verification data, skipping!");
+            }
+
+            uint32_t calId = ctx->Params.CalibrationId;
+
+            uint8_t idBytes[4];
+            idBytes[0] = (uint8_t)(calId & 0xFF);
+            idBytes[1] = (uint8_t)((calId >> 8) & 0xFF);
+            idBytes[2] = (uint8_t)((calId >> 16) & 0xFF);
+            idBytes[3] = (uint8_t)((calId >> 24) & 0xFF);
+
+            uint16_t crc = CRC16(0x2917, idBytes, sizeof (idBytes));
+
+            uint8_t crcBytes[2];
+            ZEncodeUint16(crc, crcBytes);
+
+            ESP_LOGI(TAG, "Marking calibration as verified ID %d CRC 0x%04X", calId, crc);
+
+            if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes)) != MsgCommandAck) {
+                ESP_LOGI(TAG, "Failed to mark calibration as verified!");
+                calibration_error_append(ctx, "Failed to mark calibration as verified!");
+                CAL_CSTATE(ctx) = Failed;
+                return false;
+            }
 
             CAL_CSTATE(ctx) = Complete;
             break;
@@ -550,6 +581,8 @@ int calibration_send_state(CalibrationCtx *ctx) {
     reply.Status.Status = (char *)ctx->FailReason;
 
     if (CAL_STATE(ctx) == Starting) {
+        reply.has_Init = true;
+
         reply.Init.ClientProtocol = 2;
         reply.Init.FirmwareVersion = GetSoftwareVersion();
         reply.Init.Uptime = 0;
@@ -585,17 +618,12 @@ int calibration_send_state(CalibrationCtx *ctx) {
         return 0;
     }
 
-    /* ESP_LOGI(TAG, */
-    /*         "State { %d, %s, %s, %s }", */
-    /*         reply.SequenceAck, */
-    /*         calibration_state_to_string(ctx), */
-    /*         calibration_step_to_string(CAL_STEP(ctx)), */
-    /*         charger_state_to_string(CAL_CSTATE(ctx))); */
-
     return ctx->Seq++;
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
+    calibration_update_charger_state(ctx);
+
     if (!(ctx->Flags & CAL_FLAG_DONE)) {
 
         if (calibration_is_active(ctx)) {
@@ -684,8 +712,9 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         }
     }
 
+    bool midModeActive = calibration_refresh(ctx);
+
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
-        bool midModeActive = calibration_refresh(ctx);
         bool calibrationActive = calibration_is_active(ctx);
 
         if (!midModeActive || !calibrationActive) {
