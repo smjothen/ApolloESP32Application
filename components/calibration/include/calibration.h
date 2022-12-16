@@ -92,6 +92,12 @@ typedef enum {
 } CalibrationChargerState;
 
 typedef enum {
+    Idle = 0,
+    Open = 1,
+    Closed = 2,
+} CalibrationMode;
+
+typedef enum {
     UnitVoltage = 0,
     UnitCurrent,
 } CalibrationUnit;
@@ -252,10 +258,16 @@ typedef struct {
     CalibrationReference Ref;
     CalibrationParameters Params;
     CalibrationVerifications Verifs;
+
+    CalibrationMode Mode;
+    CalibrationMode ReqMode;
+
     CalibrationOverload Overloaded;
 
     TickType_t Ticks[LAST_TICK];
 } CalibrationCtx;
+
+bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode);
 
 void calibration_task(void *pvParameters);
 

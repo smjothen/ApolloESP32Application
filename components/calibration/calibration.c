@@ -46,7 +46,7 @@ TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
 char raddr_name[32] = { 0 };
-char buf[128] = { 0 };
+char buf[256] = { 0 };
 char recvbuf[128] = { 0 };
 char hexbuf[256] = { 0 };
 
@@ -57,6 +57,15 @@ CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
 fd_set fds = { 0 };
 
 struct DeviceInfo devInfo;
+
+bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode) {
+    if (mode == ctx->Mode) {
+        return true;
+    }
+
+    ctx->ReqMode = mode;
+    return false;
+}
 
 bool calibration_tick_calibrate(CalibrationCtx *ctx) {
     CalibrationChargerState state = CAL_CSTATE(ctx);
@@ -111,9 +120,17 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
     }
 
     if (ctx->Params.CalibrationId != 0) {
-        ESP_LOGI(TAG, "Calibration ID (%d) already set! Skipping calibration!", ctx->Params.CalibrationId);
+        if (CAL_STATE(ctx) == Starting) {
+            ESP_LOGI(TAG, "Calibration already done (ID = %d)!", ctx->Params.CalibrationId);
+        }
         ctx->Flags |= CAL_FLAG_SKIP_CAL;
         ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
+
+        uint32_t midStatus;
+        if (MCU_GetMidStatus(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
+            ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
+            ctx->Flags |= CAL_FLAG_UPLOAD_VER;
+        }
     }
 
     return 0;
@@ -133,12 +150,10 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
                 ctx->Flags |= CAL_FLAG_INIT;
             } else {
 
-                if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
+                if (calibration_set_mode(ctx, Closed)) {
                     CAL_CSTATE(ctx) = Complete;
-                } else {
-                    calibration_close_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
                 }
+
             }
 
             break;
@@ -172,17 +187,8 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress: {
-            if (!(ctx->Flags & CAL_FLAG_INIT)) {
-                calibration_close_relays(ctx);
-                ctx->Flags |= CAL_FLAG_INIT;
-            } else {
-
-                if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
-                    CAL_CSTATE(ctx) = Complete;
-                } else {
-                    calibration_close_relays(ctx);
-                    ESP_LOGI(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx));
-                }
+            if (calibration_set_mode(ctx, Closed)) {
+                CAL_CSTATE(ctx) = Complete;
             }
             break;
         }
@@ -218,8 +224,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float voltage[3];
             float current[3];
 
-            if (!calibration_close_relays(ctx)) {
-                ESP_LOGI(TAG, "%s: Waiting for relays to close!", calibration_state_to_string(ctx));
+            if (!calibration_set_mode(ctx, Closed)) {
                 return false;
             }
 
@@ -302,8 +307,7 @@ bool calibration_tick_warmup_steady_state_temp(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress: {
-            if (!calibration_close_relays(ctx)) {
-                ESP_LOGI(TAG, "%s: Waiting for relays to close!", calibration_state_to_string(ctx));
+            if (!calibration_set_mode(ctx, Closed)) {
                 return false;
             }
 
@@ -433,7 +437,9 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
 
         // Let charger go into "idle" state where we don't fail if not in MID mode
-        ctx->Flags |= CAL_FLAG_IDLE;
+        if (!calibration_set_mode(ctx, Idle)) {
+            return false;
+        }
 
         if (ctx->Flags & CAL_FLAG_SKIP_CAL) {
             if (MCU_SendCommandId(CommandReset) != MsgCommandAck) {
@@ -459,25 +465,31 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
+        /*
         if (!calibration_is_active(ctx)) {
             ESP_LOGI(TAG, "%s: Waiting to enter MID mode ...", calibration_state_to_string(ctx));
             return false;
         }
+        */
 
         // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
         // go into overload even after relays close, requiring a manual reset.
         if (!ctx->Ticks[WRITE_TICK]) {
+            ESP_LOGI(TAG, "%s: Delaying completion ...", calibration_state_to_string(ctx));
             ctx->Ticks[WRITE_TICK] = xTaskGetTickCount() + pdMS_TO_TICKS(10000);
             return false;
         }
 
         if (xTaskGetTickCount() < ctx->Ticks[WRITE_TICK]) {
-            ESP_LOGI(TAG, "%s: Delaying completion ...", calibration_state_to_string(ctx));
             return false;
         }
 
         // Out of idle state, must be in MID mode!
-        ctx->Flags &= ~CAL_FLAG_IDLE;
+        //ctx->Flags &= ~CAL_FLAG_IDLE;
+
+        if (!calibration_set_mode(ctx, Closed)) {
+            return false;
+        }
 
         // Rebooted, set standalone current, etc again
         calibration_tick_starting_init(ctx);
@@ -494,7 +506,7 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress:
-            if (!calibration_open_relays(ctx)) {
+            if (!calibration_set_mode(ctx, Idle)) {
                 return false;
             }
 
@@ -550,6 +562,95 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 }
 
 void calibration_update_charger_state(CalibrationCtx *ctx) {
+    uint8_t isClosed = MCU_GetRelayStates() & 1;
+    uint8_t isOpen = !isClosed;
+
+    static TickType_t lastRefresh, midModeStart;
+
+    if (ctx->Mode == Idle) {
+       if (ctx->ReqMode != Idle) {
+            // Enter MID Mode
+            bool midModeActive = calibration_refresh(ctx);
+            bool calibrationActive = calibration_is_active(ctx);
+
+            if (!midModeActive || !calibrationActive) {
+                ESP_LOGI(TAG, "%s: Trying to enter MID mode!", calibration_state_to_string(ctx));
+                calibration_start_mid_mode(ctx);
+                lastRefresh = midModeStart = xTaskGetTickCount();
+                return;
+            } else {
+                ESP_LOGI(TAG, "%s: Entered MID mode!", calibration_state_to_string(ctx));
+            }
+       } else {
+           // Idle mode, stop any charging
+           calibration_open_relays(ctx);
+           return;
+       }
+    }
+
+    bool midModeActive = calibration_refresh(ctx);
+    TickType_t refreshTime = xTaskGetTickCount();
+
+    uint32_t msSinceRefresh = pdTICKS_TO_MS(refreshTime - lastRefresh);
+    uint32_t msSinceStart = pdTICKS_TO_MS(refreshTime - midModeStart);
+    
+    if (msSinceRefresh > 3000) {
+        ESP_LOGI(TAG, "%s: MID mode refresh near threshold (%dms, %dms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
+    }
+
+    if (!midModeActive) {
+        ESP_LOGE(TAG, "%s: Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
+        calibration_error_append(ctx, "Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", msSinceRefresh, msSinceStart);
+        CAL_CSTATE(ctx) = Failed;
+    }
+
+    lastRefresh = refreshTime;
+
+    if (ctx->Mode == ctx->ReqMode) {
+
+        if (ctx->Mode == Open) {
+            if (isClosed) {
+                ESP_LOGE(TAG, "%s: Relay closed, but in open state!", calibration_state_to_string(ctx));
+                calibration_error_append(ctx, "Relay closed when it should be open!");
+                CAL_CSTATE(ctx) = Failed;
+            }
+        } else {
+            if (isOpen) {
+                ESP_LOGE(TAG, "%s: Relay open, but in closed state!", calibration_state_to_string(ctx));
+                calibration_error_append(ctx, "Relay open when it should be closed!");
+                CAL_CSTATE(ctx) = Failed;
+            }
+        }
+
+    } else {
+
+        if (ctx->ReqMode == Open || ctx->ReqMode == Idle) {
+            if (isOpen) {
+                ESP_LOGI(TAG, "%s: Relay opened...", calibration_state_to_string(ctx));
+                ctx->Mode = ctx->ReqMode;
+            } else {
+                ESP_LOGI(TAG, "%s: Requesting relay open...", calibration_state_to_string(ctx));
+                calibration_open_relays(ctx);
+            }
+        } else {
+
+            if (isClosed) {
+                ESP_LOGI(TAG, "%s: Relay closed...", calibration_state_to_string(ctx));
+                ctx->Mode = ctx->ReqMode;
+            } else {
+                ESP_LOGI(TAG, "%s: Requesting relay closed...", calibration_state_to_string(ctx));
+
+                if (MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_PAUSED) {
+                    ESP_LOGI(TAG, "%s: Was in paused mode, final stop!", calibration_state_to_string(ctx));
+                    calibration_open_relays(ctx);
+                }
+
+                calibration_close_relays(ctx);
+            }
+        }
+    }
+
+    /*
     switch (MCU_GetChargeOperatingMode()) {
         case CHARGE_OPERATION_STATE_CHARGING:
             if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
@@ -563,6 +664,34 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
             }
             ctx->Flags &= ~CAL_FLAG_RELAY_CLOSED;
             break;
+    }
+    */
+}
+
+void calibration_mode_test(CalibrationCtx *ctx) {
+    while (true) {
+        uint32_t i = esp_random() % 3;
+
+        if (i == ctx->Mode) {
+            continue;
+        }
+
+        char *fromState = ctx->Mode == 0 ? "Idle" : ctx->Mode == 1 ? "Open" : "Closed";
+        char *toState = i == 0 ? "Idle" : i == 1 ? "Open" : "Closed";
+        ESP_LOGI(TAG, "Testing %s -> %s", fromState, toState);
+
+        while (!calibration_set_mode(ctx, i)) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            calibration_update_charger_state(ctx);
+        }
+
+        int times = 10;
+
+        ESP_LOGI(TAG, "In %s, waiting for %d sec", toState, times / 2);
+        for (int i = 0; i < times; i++) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            calibration_update_charger_state(ctx);
+        }
     }
 }
 
@@ -622,32 +751,25 @@ int calibration_send_state(CalibrationCtx *ctx) {
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
-    calibration_update_charger_state(ctx);
-
     if (!(ctx->Flags & CAL_FLAG_DONE)) {
 
-        if (calibration_is_active(ctx)) {
-            calibration_stop_mid_mode(ctx);
+        if (calibration_set_mode(ctx, Idle)) {
             if (failed) {
                 ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
             } else {
                 ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
             }
-            return;
+
+            ctx->Flags |= CAL_FLAG_DONE;
         }
-
-        ctx->Flags |= CAL_FLAG_DONE;
-    }
-
-    if (!calibration_open_relays(ctx)) {
-        return;
     }
 
     calibration_set_blinking(ctx, 0);
+    calibration_turn_led_off(ctx);
 
     static int blinkDelay = 0;
 
-    if (blinkDelay % 3 == 0) {
+    if (blinkDelay % 5 == 0) {
         // Indicate PASS/FAIL with by blinking green/red every tick
         if (failed) {
             calibration_blink_led_red(ctx);
@@ -663,6 +785,8 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
 
 void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
+
+    calibration_update_charger_state(ctx);
 
     // No tick within states if done or failed, but allow above to execute so we send
     // state back to the app
@@ -712,19 +836,20 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         }
     }
 
-    bool midModeActive = calibration_refresh(ctx);
+    //bool midModeActive = calibration_refresh(ctx);
 
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
-        bool calibrationActive = calibration_is_active(ctx);
+        //bool calibrationActive = calibration_is_active(ctx);
 
+        /*
         if (!midModeActive || !calibrationActive) {
             ESP_LOGI(TAG, "%s: Trying to enter MID mode!", calibration_state_to_string(ctx));
             calibration_start_mid_mode(ctx);
             return;
         }
+        */
 
         calibration_send_state(ctx);
-        calibration_update_charger_state(ctx);
 
         ctx->Ticks[STATE_TICK] = curTick;
     }
@@ -733,14 +858,16 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
-    bool midMode = calibration_refresh(ctx);
+    //bool midMode = calibration_refresh(ctx);
 
+    /*
     if (!midMode && !(ctx->Flags & CAL_FLAG_IDLE)) {
         ESP_LOGE(TAG, "%s: Charger exited MID mode!", calibration_state_to_string(ctx));
         calibration_error_append(ctx, "Exited MID mode unexpectedly");
         CAL_CSTATE(ctx) = Failed;
         return;
     }
+    */
 
     bool updated = false;
 
@@ -1081,6 +1208,8 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
 
 void calibration_task(void *pvParameters) {
     devInfo = i2cGetLoadedDeviceInfo();
+
+    //calibration_mode_test(&ctx);
 
     while (1) {
         if (connectivity_GetActivateInterface() != eCONNECTION_WIFI) {

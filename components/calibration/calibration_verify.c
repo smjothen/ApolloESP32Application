@@ -59,8 +59,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
     }
 
     // Relays should be closed anyway, but ...
-    if (!calibration_close_relays(ctx)) {
-        ESP_LOGE(TAG, "%s: Waiting for relays to close ...", calibration_state_to_string(ctx));
+    if (!calibration_set_mode(ctx, Closed)) {
         return false;
     }
 

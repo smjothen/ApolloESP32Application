@@ -28,8 +28,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
     switch (CAL_STEP(ctx)) {
         case InitRelays:
-            if (!calibration_close_relays(ctx)) {
-                ESP_LOGI(TAG, "%s: Waiting for relays to close...", calibration_state_to_string(ctx));
+            if (!calibration_set_mode(ctx, Closed)) {
                 return false;
             }
 

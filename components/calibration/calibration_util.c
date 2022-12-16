@@ -386,35 +386,29 @@ bool calibration_get_energy_counter(float *energy) {
     return false;
 }
 
-static void _calibration_error_append(CalibrationCtx *ctx, char *error) {
-    if (ctx->FailReason) {
-        char *ptr = NULL;
-        if (asprintf(&ptr, "%s\n%s", ctx->FailReason, error) > 0) {
-            free(ctx->FailReason);
-            ctx->FailReason = ptr;
-        }
-    } else {
-        ctx->FailReason = error;
-    }
-}
-
-int calibration_error_append(CalibrationCtx *ctx, const char *format, ...) {
+char *_calibration_error_append(const char *format, va_list args) {
     int ret;
     char *ptr = NULL;
 
-    va_list ap;
-
-    va_start(ap, format);
-
-    ret = vasprintf(&ptr, format, ap);
+    ret = vasprintf(&ptr, format, args);
 
     if (ret < 0) {
-        return ret;
+        return NULL;
     }
 
-    _calibration_error_append(ctx, ptr);
+    return ptr;
+}
+
+void calibration_error_append(CalibrationCtx *ctx, const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+
+    if (ctx->FailReason) {
+        free(ctx->FailReason);
+        ctx->FailReason = NULL;
+    }
+
+    ctx->FailReason = _calibration_error_append(format, ap);
 
     va_end(ap);
-
-    return ret;
 }
