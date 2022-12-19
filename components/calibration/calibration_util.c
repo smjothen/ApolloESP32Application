@@ -386,7 +386,7 @@ bool calibration_get_energy_counter(float *energy) {
     return false;
 }
 
-char *_calibration_error_append(const char *format, va_list args) {
+char *_calibration_fail(const char *format, va_list args) {
     int ret;
     char *ptr = NULL;
 
@@ -399,7 +399,7 @@ char *_calibration_error_append(const char *format, va_list args) {
     return ptr;
 }
 
-void calibration_error_append(CalibrationCtx *ctx, const char *format, ...) {
+void calibration_fail(CalibrationCtx *ctx, const char *format, ...) {
     va_list ap;
     va_start(ap, format);
 
@@ -408,7 +408,9 @@ void calibration_error_append(CalibrationCtx *ctx, const char *format, ...) {
         ctx->FailReason = NULL;
     }
 
-    ctx->FailReason = _calibration_error_append(format, ap);
+    ctx->FailReason = _calibration_fail(format, ap);
+    ESP_LOGE(TAG, "%s: %s", calibration_state_to_string(ctx), ctx->FailReason);
+    CAL_CSTATE(ctx) = Failed;
 
     va_end(ap);
 }

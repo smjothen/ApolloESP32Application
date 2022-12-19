@@ -39,9 +39,6 @@ static const char *TAG = "CALIBRATION    ";
 
 #define CALIBRATION_STACK_SIZE 8192
 
-StaticTask_t task_buffer;
-//StackType_t *stack = NULL;
-//StackType_t stack[CALIBRATION_STACK_SIZE];
 TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
@@ -277,15 +274,11 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 if (ctx->Ticks[WARMUP_WAIT_TICK] == 0) {
                     ctx->Ticks[WARMUP_WAIT_TICK] = xTaskGetTickCount();
                 } else if (xTaskGetTickCount() - ctx->Ticks[WARMUP_WAIT_TICK] > maxWait) {
-                    ESP_LOGE(TAG, "Warm up current/voltage out of range too long!");
-
-                    calibration_error_append(ctx, 
+                    calibration_fail(ctx, 
                             "Warm up current/voltage outside of %1.fV / %.1fA ranges!"
                             " %1.f / %.1f / %.1f V --- %.1f / %.1f / %.1f A",
                             expectedVoltage, expectedCurrent, voltage[0], voltage[1], voltage[2],
                             current[0], current[1], current[2]);
-
-                    CAL_CSTATE(ctx) = Failed;
                     break;
                 }
 
@@ -398,9 +391,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             for (int phase = 0; phase < 3; phase++) {
                 if (!params[param][phase].assigned) {
                     if (param != 2) {
-                        calibration_error_append(ctx, "No calibration value assigned (%d, L%d)!", param, phase);
-                        ESP_LOGE(TAG, "%s: Didn't get a calibrated value (%d, L%d)!", calibration_state_to_string(ctx), param, phase);
-                        CAL_CSTATE(ctx) = Failed;
+                        calibration_fail(ctx, "No calibration value assigned (%d, L%d)!", param, phase);
                         return false;
                     }
                 }
@@ -424,9 +415,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
                 ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
                 ctx->Retries++;
             } else {
-                calibration_error_append(ctx, "Couldn't upload calibration data to production server!");
-                ESP_LOGE(TAG, "%s: Failure to upload parameters, giving up!", calibration_state_to_string(ctx));
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Couldn't upload calibration data to production server!");
             }
             return false;
         }
@@ -465,13 +454,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
-        /*
-        if (!calibration_is_active(ctx)) {
-            ESP_LOGI(TAG, "%s: Waiting to enter MID mode ...", calibration_state_to_string(ctx));
-            return false;
-        }
-        */
-
         // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
         // go into overload even after relays close, requiring a manual reset.
         if (!ctx->Ticks[WRITE_TICK]) {
@@ -483,9 +465,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         if (xTaskGetTickCount() < ctx->Ticks[WRITE_TICK]) {
             return false;
         }
-
-        // Out of idle state, must be in MID mode!
-        //ctx->Flags &= ~CAL_FLAG_IDLE;
 
         if (!calibration_set_mode(ctx, Closed)) {
             return false;
@@ -509,12 +488,6 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             if (!calibration_set_mode(ctx, Idle)) {
                 return false;
             }
-
-            /* Don't send anything that gets stored in flash settings, so can remove!
-            if (MCU_SendUint8Parameter(CommandFactoryReset, 0) != MsgWriteAck) {
-                return false;
-            }
-            */
 
             if (!(ctx->Flags & CAL_FLAG_UPLOAD_VER)) {
                 // Upload parameters
@@ -545,9 +518,7 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             ESP_LOGI(TAG, "Marking calibration as verified ID %d CRC 0x%04X", calId, crc);
 
             if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes)) != MsgCommandAck) {
-                ESP_LOGI(TAG, "Failed to mark calibration as verified!");
-                calibration_error_append(ctx, "Failed to mark calibration as verified!");
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Failed to mark calibration as verified!");
                 return false;
             }
 
@@ -599,9 +570,7 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
     }
 
     if (!midModeActive) {
-        ESP_LOGE(TAG, "%s: Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
-        calibration_error_append(ctx, "Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", msSinceRefresh, msSinceStart);
-        CAL_CSTATE(ctx) = Failed;
+        calibration_fail(ctx, "Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", msSinceRefresh, msSinceStart);
     }
 
     lastRefresh = refreshTime;
@@ -610,15 +579,11 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
 
         if (ctx->Mode == Open) {
             if (isClosed) {
-                ESP_LOGE(TAG, "%s: Relay closed, but in open state!", calibration_state_to_string(ctx));
-                calibration_error_append(ctx, "Relay closed when it should be open!");
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Relay closed when it should be open!");
             }
         } else {
             if (isOpen) {
-                ESP_LOGE(TAG, "%s: Relay open, but in closed state!", calibration_state_to_string(ctx));
-                calibration_error_append(ctx, "Relay open when it should be closed!");
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Relay open when it should be closed!");
             }
         }
 
@@ -649,23 +614,6 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
             }
         }
     }
-
-    /*
-    switch (MCU_GetChargeOperatingMode()) {
-        case CHARGE_OPERATION_STATE_CHARGING:
-            if (!(ctx->Flags & CAL_FLAG_RELAY_CLOSED)) {
-                ESP_LOGI(TAG, "%s: Relays closed!", calibration_state_to_string(ctx));
-            }
-            ctx->Flags |= CAL_FLAG_RELAY_CLOSED;
-            break;
-        default:
-            if (ctx->Flags & CAL_FLAG_RELAY_CLOSED) {
-                ESP_LOGI(TAG, "%s: Relays open!", calibration_state_to_string(ctx));
-            }
-            ctx->Flags &= ~CAL_FLAG_RELAY_CLOSED;
-            break;
-    }
-    */
 }
 
 void calibration_mode_test(CalibrationCtx *ctx) {
@@ -802,9 +750,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
 
     // Need to have received message from server in last 20 seconds, otherwise fail
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[ALIVE_TICK]) > 20000) {
-        ESP_LOGE(TAG, "No message from server in 20s, fail!");
-        calibration_error_append(ctx, "No message from server in last 20 seconds");
-        CAL_CSTATE(ctx) = Failed;
+        calibration_fail(ctx, "No message from server in last 20 seconds");
         return;
     }
 
@@ -815,9 +761,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         status &= ~MID_STATUS_NOT_VERIFIED;
 
         if (status) {
-            ESP_LOGE(TAG, "%s: MID status 0x%08X on charger!", calibration_state_to_string(ctx), status);
-            calibration_error_append(ctx, "Unexpected MID status 0x%08X", status);
-            CAL_CSTATE(ctx) = Failed;
+            calibration_fail(ctx, "Unexpected MID status 0x%08X", status);
         }
     }
     
@@ -829,45 +773,19 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         warnings &= ~WARNING_RCD;
         if (warnings) {
             // Warning set so relays probably can't be controlled anyway, so fail
-            ESP_LOGE(TAG, "%s: Unexpected warning 0x%08X on charger!", calibration_state_to_string(ctx), warnings);
-            calibration_error_append(ctx, "Unexpected MCU warning 0x%08X", warnings);
-            CAL_CSTATE(ctx) = Failed;
+            calibration_fail(ctx, "Unexpected MCU warning 0x%08X", warnings);
             return;
         }
     }
 
-    //bool midModeActive = calibration_refresh(ctx);
-
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
-        //bool calibrationActive = calibration_is_active(ctx);
-
-        /*
-        if (!midModeActive || !calibrationActive) {
-            ESP_LOGI(TAG, "%s: Trying to enter MID mode!", calibration_state_to_string(ctx));
-            calibration_start_mid_mode(ctx);
-            return;
-        }
-        */
-
         calibration_send_state(ctx);
-
         ctx->Ticks[STATE_TICK] = curTick;
     }
 
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < CALIBRATION_TIMEOUT) {
         return;
     }
-
-    //bool midMode = calibration_refresh(ctx);
-
-    /*
-    if (!midMode && !(ctx->Flags & CAL_FLAG_IDLE)) {
-        ESP_LOGE(TAG, "%s: Charger exited MID mode!", calibration_state_to_string(ctx));
-        calibration_error_append(ctx, "Exited MID mode unexpectedly");
-        CAL_CSTATE(ctx) = Failed;
-        return;
-    }
-    */
 
     bool updated = false;
 
@@ -886,9 +804,6 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // 10. VerificationStart
     // 11. VerificationRunning
     // 12. VerificationDone
-    //
-    // TODO: Some of these may be able to be skipped for the Go? Lots of verification and
-    //       warming up.
     //
 
     switch(CAL_STATE(ctx)) {
@@ -1006,8 +921,6 @@ void calibration_reset(CalibrationCtx *ctx) {
 }
 
 void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMessage *msg) {
-    //ESP_LOGD(TAG, "State { State = %d, Sequence = %d }", msg->State, msg->Sequence);
-
     bool isRun = msg->State == Starting && msg->has_Run;
 
     // If failed, allow starting a new run
@@ -1343,9 +1256,6 @@ void calibration_task_start(void) {
         ESP_LOGE(TAG, "Calibration task already started!");
         return;
     }
-
-    //handle = xTaskCreateStatic(calibration_task, "calibration_task", CALIBRATION_STACK_SIZE,
-    //       NULL, 5, stack, &task_buffer);
 
     xTaskCreate(calibration_task, "calibration_task", 1024 * 5, NULL, 8, &handle);
 }

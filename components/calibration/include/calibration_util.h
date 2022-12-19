@@ -44,6 +44,6 @@ bool calibration_blink_led_red(CalibrationCtx *ctx);
 bool calibration_read_warnings(uint32_t *warnings);
 bool calibration_read_mid_status(uint32_t *status);
 
-void calibration_error_append(CalibrationCtx *ctx, const char *format, ...);
+void calibration_fail(CalibrationCtx *ctx, const char *format, ...);
 
 #endif

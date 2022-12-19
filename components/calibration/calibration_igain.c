@@ -109,9 +109,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                     if (error < max_error) {
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: IGAIN(%d) = %f >= %f", calibration_state_to_string(ctx), phase, error, max_error);
-                        calibration_error_append(ctx, "Current gain too large for L%d: %f >= %f", phase + 1, average, max_error);
-                        CAL_CSTATE(ctx) = Failed;
+                        calibration_fail(ctx, "Current gain too large for L%d: %f >= %f", phase + 1, average, max_error);
                         return false;
                     }
                 }
@@ -129,8 +127,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
         }
         case VerifyRMS:
             // No RMS verification for gains
-            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
+            calibration_fail(ctx, "Shouldn't be here!");
             break;
         case CalibrationDone:
             // Reset

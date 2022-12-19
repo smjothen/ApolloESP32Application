@@ -108,9 +108,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
                 if (fabsf(offset) < max_error) {
                     ESP_LOGI(TAG, "%s: VOFFS(%d) = %f  < %f", calibration_state_to_string(ctx), phase, fabsf(offset), max_error);
                 } else {
-                    ESP_LOGE(TAG, "%s: VOFFS(%d) = %f >= %f", calibration_state_to_string(ctx), phase, fabsf(offset), max_error);
-                    calibration_error_append(ctx, "Voltage offset too large for L%d: %f >= %f", phase + 1, fabsf(offset), max_error);
-                    CAL_CSTATE(ctx) = Failed;
+                    calibration_fail(ctx, "Voltage offset too large for L%d: %f >= %f", phase + 1, fabsf(offset), max_error);
                     return false;
                 }
             }
@@ -119,8 +117,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
             break;
         }
         case VerifyRMS:
-            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
+            calibration_fail(ctx, "Shouldn't be here!");
             break;
         case CalibrationDone:
             // Reset

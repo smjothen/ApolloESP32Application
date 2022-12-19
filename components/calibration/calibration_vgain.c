@@ -108,9 +108,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     if (error < max_error) {
                         ESP_LOGI(TAG, "%s: VGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
-                        ESP_LOGE(TAG, "%s: VGAIN(%d) = %f >= %f", calibration_state_to_string(ctx), phase, error, max_error);
-                        calibration_error_append(ctx, "Voltage gain too large for L%d: %f >= %f", phase + 1, error, max_error);
-                        CAL_CSTATE(ctx) = Failed;
+                        calibration_fail(ctx, "Voltage gain too large for L%d: %f >= %f", phase + 1, error, max_error);
                         return false;
                     }
                 }
@@ -127,8 +125,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
         }
         case VerifyRMS:
             // No RMS verification for gains
-            ESP_LOGE(TAG, "%s: Shouldn't be here!", calibration_state_to_string(ctx));
-            CAL_CSTATE(ctx) = Failed;
+            calibration_fail(ctx, "Shouldn't be here!");
             break;
         case CalibrationDone:
             // Reset

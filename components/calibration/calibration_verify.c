@@ -185,9 +185,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
        
         if (ctx->VerTest == NoLoad) {
             if (energy > 0.1) {
-                ESP_LOGE(TAG, "%s: %d FAIL %.3fWh > 0.1Wh with no load!", calibration_state_to_string(ctx), id, energy);
-                calibration_error_append(ctx, "Verification with no load failed, registered %.1fWh", energy);
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Verification with no load failed, registered %.1fWh", energy);
             } else {
                 ESP_LOGI(TAG, "%s: %d PASS %.3fWh < 0.1Wh with no load!", calibration_state_to_string(ctx), id, energy);
                 CAL_CSTATE(ctx) = Complete;
@@ -197,9 +195,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             CAL_CSTATE(ctx) = Complete;
         } else {
             if (error > max_error) {
-                ESP_LOGE(TAG, "%s: %d FAIL %.3fWh vs. %.3fWh, Err = %.3f%% >  %.3f%%", calibration_state_to_string(ctx), id, energy, ref_energy, error * 100.0, max_error * 100.0);
-                calibration_error_append(ctx, "Verification %d failed, %.3f vs %.3f, error too high (%.3f%% > %.3f%%)", id, energy, ref_energy, error * 100.0, max_error * 100.0);
-                CAL_CSTATE(ctx) = Failed;
+                calibration_fail(ctx, "Verification %d failed, %.3f vs %.3f, error too high (%.3f%% > %.3f%%)", id, energy, ref_energy, error * 100.0, max_error * 100.0);
             } else {
                 ESP_LOGI(TAG, "%s: %d PASS %.3fWh vs. %.3fWh, Err = %.3f%% <= %.3f%%", calibration_state_to_string(ctx), id, energy, ref_energy, error * 100.0, max_error * 100.0);
                 CAL_CSTATE(ctx) = Complete;
