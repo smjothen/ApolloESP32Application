@@ -31,6 +31,12 @@ extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 // Uploads parameters and sets the calibration ID received from the production
 // server
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
+
+#ifdef CALIBRATION_SIMULATION_PROD_SERV
+		ESP_LOGI(TAG, "Simulating production server data transfer!");
+		return true;
+#endif
+
     char *url = "https://devices.zaptec.com/production/mid/calibration";
 		if (verification) {
     	url = "https://devices.zaptec.com/production/mid/verification";
