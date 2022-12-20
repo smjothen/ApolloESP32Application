@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.1.1";
+char softwareVersion[] = "2.0.0.342";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -264,6 +264,69 @@ void SetOnlineWatchdog()
 	onlineWatchdog = true;
 }
 
+void log_efuse_block(unsigned char * block, bool write_disabled, bool read_disabled)
+{
+	if(!read_disabled){
+
+		ESP_LOGI(TAG_MAIN, "   = %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %c/%c",
+			block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7], block[8], block[9], block[10], block[11],
+			block[12], block[13], block[14], block[15], block[16], block[17], block[18], block[19], block[20], block[21],
+			block[22], block[23], block[24], block[25], block[26], block[27], block[28], block[29], block[30], block[31],
+			read_disabled ? '-' : 'R', write_disabled ? '-' : 'R');
+	}else{
+		ESP_LOGI(TAG_MAIN, "   = ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? %c/%c", read_disabled ? '-' : 'R', write_disabled ? '-' : 'R');
+	}
+
+
+}
+
+void log_security_efuses()
+{
+	struct EfuseInfo efuses = {0};
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		ESP_LOGE(TAG_MAIN, "Unable to read efuses");
+		return;
+	}
+
+	ESP_LOGI(TAG_MAIN, "Security fuses:");
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CNT (BLOCK0):                Flash encryption mode counter                     = %d ?/%c (%#04x)",
+		efuses.flash_crypt_cnt, efuses.write_disabled_flash_crypt_cnt ? '-' : 'R', efuses.flash_crypt_cnt);
+
+	ESP_LOGI(TAG_MAIN, "UART_DOWNLOAD_DIS (BLOCK0):              Disable UART download mode (ESP32 rev3 only)       = %s",
+	        efuses.disabled_uart_download ? "True ?/? (0b1)" : "False ?/? (0b0)");
+
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CONFIG (BLOCK0):             Flash encryption config (key tweak bits)           = %d ?/? (%#03x)",
+		efuses.encrypt_config,  efuses.encrypt_config);
+
+	ESP_LOGI(TAG_MAIN, "CONSOLE_DEBUG_DISABLE (BLOCK0):          Disable ROM BASIC interpreter fallback             = %s",
+		efuses.disabled_console_debug ? "True ?/? (0b1)" : "False ?/? (0b0)");
+
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_0 (BLOCK0):                     Secure boot V1 is enabled for bootloader image     = %s",
+		efuses.enabled_secure_boot_v1 ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_1 (BLOCK0):                     Secure boot V2 is enabled for bootloader image     = %s",
+		efuses.enabled_secure_boot_v2 ? "True ?/? (0b1)" : "False ?/? (0b0)");
+
+	ESP_LOGI(TAG_MAIN, "JTAG_DISABLE (BLOCK0):                   Disable JTAG                                       = %s",
+		efuses.disabled_jtag ? "True ?/? (0b1)" : "False ?/? (0b0)");
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_ENCRYPT (BLOCK0):             Disable flash encryption in UART bootloader        = %s",
+		efuses.disabled_dl_encrypt ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_DECRYPT (BLOCK0):             Disable flash decryption in UART bootloader        = %s",
+		efuses.disabled_dl_decrypt ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_CACHE (BLOCK0):               Disable flash cache in UART bootloader             = %s",
+		efuses.disabled_dl_cache ? "True ?/? (0b1)" : "False ?/? (0b0)");
+
+	ESP_LOGI(TAG_MAIN, "BLOCK1 (BLOCK1):                         Flash encryption key");
+	log_efuse_block(efuses.block1, efuses.block1_write_disabled, efuses.block1_read_disabled);
+
+	ESP_LOGI(TAG_MAIN, "BLOCK2 (BLOCK2):                         Secure boot key");
+	log_efuse_block(efuses.block2, efuses.block2_write_disabled, efuses.block2_read_disabled);
+
+	ESP_LOGI(TAG_MAIN, "BLOCK3 (BLOCK3):                         Variable Block 3");
+	log_efuse_block(efuses.block3, efuses.block3_write_disabled, efuses.block3_read_disabled);
+
+	ESP_LOGI(TAG_MAIN, "");
+}
 
 
 void app_main(void)
@@ -286,6 +349,8 @@ void app_main(void)
 #else
 	//Logging enabled
 #endif
+
+	log_security_efuses();
 
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
