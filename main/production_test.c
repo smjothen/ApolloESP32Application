@@ -516,7 +516,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	bool success = false;
 
-	char payload[100];
+	char payload[130];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
 	prodtest_sock_send(payload);
 	await_prodtest_external_step_acceptance("ACCEPTED", false);
@@ -538,6 +538,15 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
+
+
+	if(IsProgrammableFPGAUsed() == true)
+	{
+		MCU_GetFPGAInfo(payload, 130);
+		ESP_LOGI(TAG, "%s", payload);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
+	}
+
 
 	if(onePhaseTest)
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, "Running 1-phase test!!!");

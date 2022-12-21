@@ -524,6 +524,9 @@ static void i2cDevice_task(void *pvParameters)
 		}
 	}
 
+	//Temporary for TUV-SUD
+	tamper_status = eTAMPER_STATUS_DISABLED;
+
 	while (true)
 	{
 		// Continuously read NFC in custom modes

@@ -2445,7 +2445,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"GetMCUSettings") != NULL)
 				{
-					SessionHandler_SendMCUSettings();
+					sessionHandler_SendMCUSettings();
 					responseStatus = 200;
 				}
 
@@ -2464,7 +2464,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"GetRelayStates") != NULL)
 				{
-					SesionHandler_SendRelayStates();
+					sessionHandler_SendRelayStates();
 					responseStatus = 200;
 				}
 
@@ -2498,6 +2498,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						ota_set_chunk_size(newSize);
 					}
 
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "GetFPGAInfo"))
+				{
+					sessionHandler_SendFPGAInfo();
 					responseStatus = 200;
 				}
 			}

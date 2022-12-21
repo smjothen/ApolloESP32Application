@@ -199,8 +199,8 @@
 		ParamSmartComputerFwLoaderVersion = 912,
 		ParamSmartComputerImageVersion = 913,
 
-		//ParamSmartFpgaVersion = 914,
-		//ParamSmartFpgaVersionAndHash = 915,
+		ParamSmartFpgaVersion = 914,
+		ParamSmartFpgaVersionAndHash = 915,
 
 		SourceVersion = 916,
 

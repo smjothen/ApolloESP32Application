@@ -612,7 +612,7 @@ void uartSendTask(void *pvParameters){
 
         if(printCount >= 24 * 5)//15)
         {
-        	//ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
         	printCount = 0;
         }
 
@@ -865,6 +865,16 @@ bool IsUKOPENPowerBoardRevision()
 	else
 		return false;
 }
+
+bool IsProgrammableFPGAUsed()
+{
+	//if((HwIdPower == HW_POWER_4_X804) || (HwIdPower == HW_POWER_5_UK_X804))
+	if((HwIdPower == HW_POWER_5_UK_X804))
+		return true;
+	else
+		return false;
+}
+
 
 float MCU_GetOPENVoltage()
 {
@@ -1283,6 +1293,16 @@ uint8_t MCU_GetRelayStates()
 	if((rxMsg.length == 1) && (rxMsg.identifier == RelayStates))
 		relayStates = rxMsg.data[0];
 	return relayStates;
+}
+
+void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
+{
+	ZapMessage rxMsg = MCU_ReadParameter(ParamSmartFpgaVersionAndHash);
+	if((rxMsg.length > 0) && (rxMsg.length < maxTotalLen))
+	{
+		strncpy(stringBuf, (char*)rxMsg.data, rxMsg.length);
+		ESP_LOGI(TAG, "%s", stringBuf);
+	}
 }
 
 void SetEspNotification(uint16_t notification)
