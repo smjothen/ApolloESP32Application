@@ -31,15 +31,19 @@ struct DeviceInfo
 struct EfuseInfo{
 	/* Caibration fuses */
 	/* Efuse fuses */
+	uint16_t write_protect; // 16 bit
+	uint8_t read_protect; // 4 bit
+	uint8_t coding_scheme; // 2 bit
+	bool key_status;
+
 	/* Identity fuses */
 	/* Security fuses */
 	/* Caibration fuses */
 	/* Identity fuses */
 	/* Security fuses */
-	unsigned char flash_crypt_cnt; // 7 bit field
-	bool write_disabled_flash_crypt_cnt;
+	uint8_t flash_crypt_cnt; // 7 bit
 	bool disabled_uart_download;
-	unsigned char encrypt_config; // 4 bit field
+	uint8_t encrypt_config; // 4 bit
 	bool disabled_console_debug;
 	bool enabled_secure_boot_v1;
 	bool enabled_secure_boot_v2;
@@ -48,14 +52,8 @@ struct EfuseInfo{
 	bool disabled_dl_decrypt;
 	bool disabled_dl_cache;
 	unsigned char block1[32];
-	bool block1_write_disabled;
-	bool block1_read_disabled;
 	unsigned char block2[32];
-	bool block2_write_disabled;
-	bool block2_read_disabled;
 	unsigned char block3[33];
-	bool block3_write_disabled;
-	bool block3_read_disabled;
 };
 
 uint8_t GetEEPROMFormatVersion();

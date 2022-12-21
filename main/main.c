@@ -280,7 +280,7 @@ void log_efuse_block(unsigned char * block, bool write_disabled, bool read_disab
 
 }
 
-void log_security_efuses()
+void log_efuse_info()
 {
 	struct EfuseInfo efuses = {0};
 	if(GetEfuseInfo(&efuses) != ESP_OK){
@@ -288,42 +288,104 @@ void log_security_efuses()
 		return;
 	}
 
+	ESP_LOGI(TAG_MAIN, "Efuse fuses:");
+	ESP_LOGI(TAG_MAIN, "WR_DIS (BLOCK0):                         Efuse write disable mask                           = %d R/%c (%#06x)",
+		efuses.write_protect,
+		(efuses.write_protect & 1<<1) ? '-' : 'W',
+		efuses.write_protect);
+
+	ESP_LOGI(TAG_MAIN, "RD_DIS (BLOCK0):                         Efuse read disable mask                            = %d R/%c (%#03x)",
+		efuses.read_protect,
+		(efuses.write_protect & 1<<0) ? '-' : 'W',
+		efuses.read_protect);
+
+	char scheme_description[32];
+	switch(efuses.coding_scheme){
+	case 0b00:
+	case 0b11:
+		sprintf(scheme_description, "NONE (BLK1-2 len=256 bits)");
+		break;
+	case 0b01:
+		sprintf(scheme_description, "3/4 (BLK1-2 len=192 bits)");
+		break;
+	case 0b10:
+		sprintf(scheme_description, "Repeat (BLK1-2 len=128 bits)");
+		break;
+	}
+
+	ESP_LOGI(TAG_MAIN, "CODING_SCHEME (BLOCK0):                  Efuse variable block length scheme\n\t\t = %s %c/%c (%#3x)",
+		scheme_description,
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.coding_scheme);
+
+	ESP_LOGI(TAG_MAIN, "KEY_STATUS (BLOCK0):                     Usage of efuse block 3 (reserved)                  = %s %c/%c (0b%d)",
+		efuses.key_status ? "True" : "False",
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.key_status);
+
+	ESP_LOGI(TAG_MAIN, "");
 	ESP_LOGI(TAG_MAIN, "Security fuses:");
-	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CNT (BLOCK0):                Flash encryption mode counter                     = %d ?/%c (%#04x)",
-		efuses.flash_crypt_cnt, efuses.write_disabled_flash_crypt_cnt ? '-' : 'R', efuses.flash_crypt_cnt);
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CNT (BLOCK0):                Flash encryption mode counter                      = %d R/%c (%#04x)",
+		efuses.flash_crypt_cnt,
+		(efuses.write_protect & 1<<2) ? '-' : 'W',
+		efuses.flash_crypt_cnt);
 
-	ESP_LOGI(TAG_MAIN, "UART_DOWNLOAD_DIS (BLOCK0):              Disable UART download mode (ESP32 rev3 only)       = %s",
-	        efuses.disabled_uart_download ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "UART_DOWNLOAD_DIS (BLOCK0):              Disable UART download mode (ESP32 rev3 only)       = %s R/%c (0b%d)",
+	        efuses.disabled_uart_download ? "True" : "False",
+		(efuses.write_protect & 1<<2) ? '-' : 'W',
+		efuses.disabled_uart_download);
 
-	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CONFIG (BLOCK0):             Flash encryption config (key tweak bits)           = %d ?/? (%#03x)",
-		efuses.encrypt_config,  efuses.encrypt_config);
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CONFIG (BLOCK0):             Flash encryption config (key tweak bits)           = %d %c/%c (%#03x)",
+		efuses.encrypt_config,
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.encrypt_config);
 
-	ESP_LOGI(TAG_MAIN, "CONSOLE_DEBUG_DISABLE (BLOCK0):          Disable ROM BASIC interpreter fallback             = %s",
-		efuses.disabled_console_debug ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "CONSOLE_DEBUG_DISABLE (BLOCK0):          Disable ROMn BASIC interpreter fallback            = %s R/%c (0b%d)",
+		efuses.disabled_console_debug ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '-' : 'W',
+		efuses.disabled_console_debug);
 
-	ESP_LOGI(TAG_MAIN, "ABS_DONE_0 (BLOCK0):                     Secure boot V1 is enabled for bootloader image     = %s",
-		efuses.enabled_secure_boot_v1 ? "True ?/? (0b1)" : "False ?/? (0b0)");
-	ESP_LOGI(TAG_MAIN, "ABS_DONE_1 (BLOCK0):                     Secure boot V2 is enabled for bootloader image     = %s",
-		efuses.enabled_secure_boot_v2 ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_0 (BLOCK0):                     Secure boot V1 is enabled for bootloader image     = %s R/%c (0b%d)",
+		efuses.enabled_secure_boot_v1 ? "True" : "False",
+		(efuses.write_protect & 1<<12) ? '_' : 'W',
+		efuses.enabled_secure_boot_v1);
 
-	ESP_LOGI(TAG_MAIN, "JTAG_DISABLE (BLOCK0):                   Disable JTAG                                       = %s",
-		efuses.disabled_jtag ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_1 (BLOCK0):                     Secure boot V2 is enabled for bootloader image     = %s R/%c (0b%d)",
+		efuses.enabled_secure_boot_v2 ? "True" : "False",
+		(efuses.write_protect & 1<<13) ? '_' : 'W',
+		efuses.enabled_secure_boot_v2);
 
-	ESP_LOGI(TAG_MAIN, "DISABLE_DL_ENCRYPT (BLOCK0):             Disable flash encryption in UART bootloader        = %s",
-		efuses.disabled_dl_encrypt ? "True ?/? (0b1)" : "False ?/? (0b0)");
-	ESP_LOGI(TAG_MAIN, "DISABLE_DL_DECRYPT (BLOCK0):             Disable flash decryption in UART bootloader        = %s",
-		efuses.disabled_dl_decrypt ? "True ?/? (0b1)" : "False ?/? (0b0)");
-	ESP_LOGI(TAG_MAIN, "DISABLE_DL_CACHE (BLOCK0):               Disable flash cache in UART bootloader             = %s",
-		efuses.disabled_dl_cache ? "True ?/? (0b1)" : "False ?/? (0b0)");
+	ESP_LOGI(TAG_MAIN, "JTAG_DISABLE (BLOCK0):                   Disable JTAG                                       = %s R/%c (0b%d)",
+		efuses.disabled_jtag ? "True" : "False",
+		(efuses.write_protect & 1<<14) ? '_' : 'W',
+		efuses.disabled_jtag);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_ENCRYPT (BLOCK0):             Disable flash encryption in UART bootloader        = %s R/%c (0b%d)",
+		efuses.disabled_dl_encrypt ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_encrypt);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_DECRYPT (BLOCK0):             Disable flash decryption in UART bootloader        = %s R/%c (0b%d)",
+		efuses.disabled_dl_decrypt ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_decrypt);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_CACHE (BLOCK0):               Disable flash cache in UART bootloader             = %s R/%c (0b%d)",
+		efuses.disabled_dl_cache ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_cache);
 
 	ESP_LOGI(TAG_MAIN, "BLOCK1 (BLOCK1):                         Flash encryption key");
-	log_efuse_block(efuses.block1, efuses.block1_write_disabled, efuses.block1_read_disabled);
+	log_efuse_block(efuses.block1, efuses.write_protect & 7, efuses.read_protect & 1<<0);
 
 	ESP_LOGI(TAG_MAIN, "BLOCK2 (BLOCK2):                         Secure boot key");
-	log_efuse_block(efuses.block2, efuses.block2_write_disabled, efuses.block2_read_disabled);
+	log_efuse_block(efuses.block2, efuses.write_protect & 8, efuses.read_protect & 1<<1);
 
 	ESP_LOGI(TAG_MAIN, "BLOCK3 (BLOCK3):                         Variable Block 3");
-	log_efuse_block(efuses.block3, efuses.block3_write_disabled, efuses.block3_read_disabled);
+	log_efuse_block(efuses.block3, efuses.write_protect & 9, efuses.read_protect & 1<<2);
 
 	ESP_LOGI(TAG_MAIN, "");
 }
@@ -350,7 +412,7 @@ void app_main(void)
 	//Logging enabled
 #endif
 
-	log_security_efuses();
+	log_efuse_info();
 
 	//First check hardware revision in order to configure io accordingly
 	adc_init();

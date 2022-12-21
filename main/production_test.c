@@ -965,14 +965,14 @@ int test_efuses(){
 	}
 
 	sprintf(payload, "Encryption counter: %#04x, Encryption configuration: %#04x. %s",
-		efuses.flash_crypt_cnt, efuses.encrypt_config, efuses.write_disabled_flash_crypt_cnt ? "Write protected" : "Not write protected");
+		efuses.flash_crypt_cnt, efuses.encrypt_config, (efuses.write_protect & 1<<2) ? "Write protected" : "Not write protected");
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
 
 	uint set_count = __builtin_parity(efuses.flash_crypt_cnt);
 	ESP_LOGI(TAG, "Encryption cnt: %#04x, Parity: %d", efuses.flash_crypt_cnt, set_count);
 
-	if(!efuses.write_disabled_flash_crypt_cnt || efuses.encrypt_config != 0xf || set_count % 2 != 1)
+	if((efuses.write_protect & 1<<2) == 0 || efuses.encrypt_config != 0xf || set_count % 2 != 1)
 		goto fail;
 
 

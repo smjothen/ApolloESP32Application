@@ -1,14 +1,23 @@
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
+#include "soc/efuse_reg.h"
 
 #include "DeviceInfo.h"
 
+
 esp_err_t GetEfuseInfo(struct EfuseInfo * info){
+
+	uint32_t reg =  esp_efuse_read_reg(EFUSE_BLK0, 0);
+
+	info->write_protect = (uint16_t)(reg & 0xffff);
+	info->read_protect = (uint8_t)((reg>>16) & 0xf);
+
+	reg = esp_efuse_read_reg(EFUSE_BLK0, 6);
+	info->coding_scheme = reg & 0b11;
+	info->key_status = reg & 1<<10;
 
 	if(esp_efuse_read_field_blob(ESP_EFUSE_FLASH_CRYPT_CNT, &info->flash_crypt_cnt, 7) != ESP_OK)
 		return ESP_FAIL;
-
-	info->write_disabled_flash_crypt_cnt =  esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_FLASH_CRYPT_CNT);
 
 	info->disabled_uart_download = esp_efuse_read_field_bit(ESP_EFUSE_UART_DOWNLOAD_DIS);
 
@@ -33,16 +42,8 @@ esp_err_t GetEfuseInfo(struct EfuseInfo * info){
 	info->disabled_dl_decrypt = esp_efuse_read_field_bit(ESP_EFUSE_DISABLE_DL_DECRYPT);
 	info->disabled_dl_cache = esp_efuse_read_field_bit(ESP_EFUSE_DISABLE_DL_CACHE);
 
-	info->block1_read_disabled = esp_efuse_read_field_bit(ESP_EFUSE_RD_DIS_BLK1);
-	info->block1_write_disabled = esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_BLK1);
 	esp_efuse_read_block(EFUSE_BLK1, info->block1, 0, 256);
-
-	info->block2_read_disabled = esp_efuse_read_field_bit(ESP_EFUSE_RD_DIS_BLK2);
-	info->block2_write_disabled = esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_BLK2);
 	esp_efuse_read_block(EFUSE_BLK2, info->block2, 0, 256);
-
-	info->block3_read_disabled = esp_efuse_read_field_bit(ESP_EFUSE_RD_DIS_BLK3);
-	info->block3_write_disabled = esp_efuse_read_field_bit(ESP_EFUSE_WR_DIS_BLK3);
 	esp_efuse_read_block(EFUSE_BLK3, info->block3, 0, 256);
 
 	return ESP_OK;
