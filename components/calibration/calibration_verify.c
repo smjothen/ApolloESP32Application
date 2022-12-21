@@ -142,8 +142,6 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             error = (energy / ref_energy) - 1.0;
         }
 
-        error = fabs(error);
-
 #ifdef CALIBRATION_SIMULATION
 
 #ifdef CALIBRATION_SIMULATION_FAIL
@@ -194,7 +192,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             // I_min_pre not really for verification, so don't fail
             CAL_CSTATE(ctx) = Complete;
         } else {
-            if (error > max_error) {
+            if (fabs(error) > max_error) {
                 calibration_fail(ctx, "Verification %d failed, %.3f vs %.3f, error too high (%.3f%% > %.3f%%)", id, energy, ref_energy, error * 100.0, max_error * 100.0);
             } else {
                 ESP_LOGI(TAG, "%s: %d PASS %.3fWh vs. %.3fWh, Err = %.3f%% <= %.3f%%", calibration_state_to_string(ctx), id, energy, ref_energy, error * 100.0, max_error * 100.0);

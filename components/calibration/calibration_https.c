@@ -33,7 +33,8 @@ extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
 
 #ifdef CALIBRATION_SIMULATION_PROD_SERV
-		ESP_LOGI(TAG, "Simulating production server data transfer!");
+		ESP_LOGI(TAG, "Simulating production server data transfer, using calibration ID 1337!");
+		ctx->Params.CalibrationId = 1337;
 		return true;
 #endif
 

@@ -476,7 +476,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         CAL_CSTATE(ctx) = Complete;
 
         return CAL_CSTATE(ctx) != state;
-
     }
 }
 
