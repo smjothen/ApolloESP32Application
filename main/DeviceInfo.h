@@ -13,7 +13,7 @@
 //#define RUN_FACTORY_ASSIGN_ID //default commented out
 //#define RUN_FACTORY_TESTS //default commented out
 
-#define MCU_APP_ONLY
+//#define MCU_APP_ONLY
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
