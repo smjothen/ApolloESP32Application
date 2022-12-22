@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.0.342";
+char softwareVersion[] = "2.0.2.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -109,7 +109,29 @@ void HandleCommands()
 	{
 		ESP_LOGW(TAG_MAIN, "Command:> %s", commandBuffer);
 
-		if(strncmp("mcu", commandBuffer, 3) == 0)
+		if(strncmp("none", commandBuffer, 4) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_NONE);
+		}
+		else if(strncmp("lte", commandBuffer, 3) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_LTE);
+		}
+		else if(strncmp("pppoff", commandBuffer, 6) == 0)
+		{
+			//stop_cloud_listener_task();
+			ppp_disconnect();
+		}
+		else if(strncmp("pppon", commandBuffer, 5) == 0)
+		{
+			//ppp_configure_uart();
+			stop_cloud_listener_task();
+			ppp_task_start();
+			vTaskDelay(pdMS_TO_TICKS(3000));
+			start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+		}
+
+		else if(strncmp("mcu", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
 				protocol_task_ctrl_debug(0);

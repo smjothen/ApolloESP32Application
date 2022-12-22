@@ -170,6 +170,8 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
 
     fgets(readCertificateBundle, MAX_CERTIFICATE_BUNDLE_SIZE, f);
     fclose(f);
+
+    //ESP_LOGW(TAG, "Read cert: %d: %s ", strlen(readCertificateBundle), readCertificateBundle);
 }
 
 void fat_DeleteCertificateBundle()

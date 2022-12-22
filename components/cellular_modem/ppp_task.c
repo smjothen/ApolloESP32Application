@@ -813,6 +813,11 @@ esp_netif_driver_base_t *base_driver;
 esp_event_handler_instance_t start_reg;
 
 void ppp_task_start(void){
+
+	ESP_LOGI(TAG, "before ppp_disconnect()");
+	ppp_disconnect();
+	ESP_LOGI(TAG, "after ppp_disconnect()");
+
     event_group = xEventGroupCreate();
     ESP_LOGI(TAG, "Configuring BG9x");
     xEventGroupSetBits(event_group, UART_TO_LINES);
@@ -832,9 +837,15 @@ void ppp_task_start(void){
     esp_event_loop_create_default();
 
     // Init netif object
-    esp_netif_config_t cfg = ESP_NETIF_DEFAULT_PPP();
-    ppp_netif = esp_netif_new(&cfg);
-    assert(ppp_netif);
+    /*if(ppp_netif != NULL)
+    {
+    	esp_netif_destroy(ppp_netif);
+    }*/
+
+	esp_netif_config_t cfg = ESP_NETIF_DEFAULT_PPP();
+	ppp_netif = esp_netif_new(&cfg);
+	assert(ppp_netif);
+
 
     esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, ppp_netif);
     esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, ppp_netif);
@@ -1000,7 +1011,11 @@ int ppp_disconnect()
 
 	//vTaskDelay(pdMS_TO_TICKS(500));
 	//esp_netif_action_stop(ppp_netif, (void *)base_driver, ESP_MODEM_EVENT_PPP_STOP, &start_reg);//?
-	esp_netif_destroy(ppp_netif);
+	//if(ppp_netif != NULL)
+	if(esp_netif_get_nr_of_ifs() == 1)
+	{
+		esp_netif_destroy(ppp_netif);
+	}
 
 	return 0;
 }

@@ -346,6 +346,16 @@ int publish_debug_telemetry_observation_local_settings()
     return publish_json(observations);
 }*/
 
+
+int publish_debug_telemetry_observation_Connectivity_None()
+{
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(CommunicationMode, "None"));
+
+    return publish_json(observations);
+}
+
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString)
 {
     ESP_LOGD(TAG, "sending NFC telemetry");
@@ -653,11 +663,11 @@ int publish_debug_telemetry_observation_all(double rssi){
 	GetTimeOnString(buf);
 	if(IsUKOPENPowerBoardRevision())
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 	else
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)

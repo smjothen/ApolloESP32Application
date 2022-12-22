@@ -528,6 +528,7 @@ static void i2cDevice_task(void *pvParameters)
 		}
 	}
 
+
 	while (true)
 	{
 		// Continuously read NFC in custom modes

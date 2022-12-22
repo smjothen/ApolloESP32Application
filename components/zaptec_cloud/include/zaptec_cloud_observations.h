@@ -37,6 +37,8 @@ int publish_debug_telemetry_observation_cloud_settings();
 
 int publish_debug_telemetry_observation_local_settings();
 
+int publish_debug_telemetry_observation_Connectivity_None();
+
 int publish_debug_telemetry_observation_NFC_tag_id(char * NFCHexString);
 
 int publish_debug_telemetry_observation_AddNewChargeCard(char * NewChargeCardString);
