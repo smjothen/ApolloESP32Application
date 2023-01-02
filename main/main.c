@@ -492,7 +492,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
-#ifndef MCU_APP_ONLY
+#ifdef CONFIG_ZAPTEC_MCU_HAS_BOOTLOADER
 
     validate_booted_image();
 

@@ -384,9 +384,13 @@ static void sessionHandler_task()
     enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
     enum CommunicationMode networkInterface = eCONNECTION_NONE;
 
+#ifdef CONFIG_ZAPTEC_MCU_HAS_BOOTLOADER
+
     uint32_t mcuDebugCounter = 0;
     uint32_t previousDebugCounter = 0;
     uint32_t mcuDebugErrorCount = 0;
+
+#endif
 
     // Offline parameters
     uint32_t offlineTime = 0;
@@ -509,7 +513,7 @@ static void sessionHandler_task()
 
 		networkInterface = connectivity_GetActivateInterface();
 
-#ifndef MCU_APP_ONLY
+#ifdef CONFIG_ZAPTEC_MCU_HAS_BOOTLOADER
 
 		// Check for MCU communication fault and restart with conditions:
 	 	// Not instantly, let mcu upgrade and start
