@@ -1,14 +1,60 @@
 # put here your custom config value
-menu "Example Configuration"
-config ESP_WIFI_SSID
-    string "WiFi SSID"
-    default "myssid"
-    help
-	SSID (network name) for the example to connect to.
+menu "Zaptec"
+     choice  ZAPTEC_BUILD_TYPE
+     	     bool "Build type"
+     	     default ZAPTEC_BUILD_TYPE_DEVELOPMENT
+     	     help
+		Specify the purpose of the build.
+		In order to choose production build, secure boot and encryption must be enabled (flash and nvs).
+		Development build indicates to component which default values should be used. See ZAPTEC_CLOUD_URL_TYPE as an example.
 
-config ESP_WIFI_PASSWORD
-    string "WiFi Password"
-    default "mypassword"
-    help
-	WiFi password (WPA or WPA2) for the example to use.
+	     config ZAPTEC_BUILD_TYPE_DEVELOPMENT
+	     	    bool "Development"
+
+	     config ZAPTEC_BUILD_TYPE_PRODUCTION
+	     	    bool "Production"
+		    depends on SECURE_BOOT && SECURE_FLASH_ENCRYPTION_MODE_RELEASE && NVS_ENCRYPTION && !SECURE_BOOT_INSECURE && !ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
+     endchoice
+
+     config ZAPTEC_BUILD_TYPE
+     	    int
+	    default 0 if ZAPTEC_BUILD_TYPE_DEVELOPMENT
+	    default 1 if ZAPTEC_BUILD_TYPE_PRODUCTION
+
+     config ZAPTEC_USE_ADVANCED_CONSOLE
+     	    bool "Use console with command input"
+
+     config ZAPTEC_ENABLE_LOGGING
+     	    bool "Enable logging"
+
+     config ZAPTEC_RUN_FACTORY_TESTS
+     	    bool "Runs production test even if already passed"
+
+     config ZAPTEC_RUN_FACTORY_SSID
+     	    string "Wifi ssid to use with ZAPTEC_RUN_FACTORY_TESTS"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+	    default "ZapWan"
+
+     config ZAPTEC_RUN_FACTORY_PSK
+     	    string "Wifi psk to use with ZAPTEC_RUN_FACTORY_TESTS"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+	    default "52718816"
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+     	    bool "Use an extra RFID to start production test"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_ID
+     	    string "RFID tag to add"
+	    depends on ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	    default "nfc-530796E7"
+
+     config ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID_IP
+     	    string "IP serving ZaptecProgram"
+	    depends on ZAPTEC_RUN_FACTORY_ADDITIONAL_RFID
+	    default "10.4.210.129"
+
+     config ZAPTEC_RUN_FACTORY_ASSIGN_ID
+     	    bool "Requests the serial number even if already assigned"
+	    depends on ZAPTEC_RUN_FACTORY_TESTS
 endmenu

@@ -4,14 +4,17 @@
  *  Created on: 17. aug. 2020
  *      Author: vv
  */
+#include "esp_system.h"
 
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define ENABLE_LOGGING	//default commented out
-//#define DEVELOPEMENT_URL	//default commented out
-//#define RUN_FACTORY_ASSIGN_ID //default commented out
-//#define RUN_FACTORY_TESTS //default commented out
+#ifdef CONFIG_ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
+#define DEVELOPEMENT_URL
+#endif
+
+//#define RUN_FACTORY_ASSIGN_ID //default commented out /* Replaced by CONFIG_ZAPTEC_FACTORY_ASSIGN_ID, se Kconfig / Menuconfig */
+//#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
 
 //#define MCU_APP_ONLY
 
@@ -26,10 +29,39 @@ struct DeviceInfo
 	char Pin[5];
 };
 
+struct EfuseInfo{
+	/* Caibration fuses */
+	/* Efuse fuses */
+	uint16_t write_protect; // 16 bit
+	uint8_t read_protect; // 4 bit
+	uint8_t coding_scheme; // 2 bit
+	bool key_status;
+
+	/* Identity fuses */
+	/* Security fuses */
+	/* Caibration fuses */
+	/* Identity fuses */
+	/* Security fuses */
+	uint8_t flash_crypt_cnt; // 7 bit
+	bool disabled_uart_download;
+	uint8_t encrypt_config; // 4 bit
+	bool disabled_console_debug;
+	bool enabled_secure_boot_v1;
+	bool enabled_secure_boot_v2;
+	bool disabled_jtag;
+	bool disabled_dl_encrypt;
+	bool disabled_dl_decrypt;
+	bool disabled_dl_cache;
+	unsigned char block1[32];
+	unsigned char block2[32];
+	unsigned char block3[33];
+};
+
 uint8_t GetEEPROMFormatVersion();
 char * GetSoftwareVersion();
 char * GetSoftwareVersionBLE();
 
+esp_err_t GetEfuseInfo(struct EfuseInfo * efuse_info);
 
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"
@@ -83,6 +115,8 @@ typedef enum {
 #define PULSE_SYSTEM_CHARGING 180
 
 #define DEFAULT_MAX_CHARGE_DELAY 600
+
+#define DEFAULT_COVER_ON_VALUE 0xd0
 
 //Numbers should match Pro
 enum CommunicationMode
@@ -160,6 +194,8 @@ struct Configuration
 	//uint8_t useSchedule;
 	char timeSchedule[SCHEDULE_SIZE];
 	uint32_t maxStartDelay;
+
+	uint16_t cover_on_value;
 };
 
 

@@ -926,6 +926,16 @@ bool IsUKOPENPowerBoardRevision()
 		return false;
 }
 
+bool IsProgrammableFPGAUsed()
+{
+	//if((HwIdPower == HW_POWER_4_X804) || (HwIdPower == HW_POWER_5_UK_X804))
+	if((HwIdPower == HW_POWER_5_UK_X804))
+		return true;
+	else
+		return false;
+}
+
+
 float MCU_GetOPENVoltage()
 {
 	ZapMessage rxMsgm = MCU_ReadParameter(ParamOPENVoltage);
@@ -1377,6 +1387,16 @@ uint8_t MCU_GetRelayStates()
 	if((rxMsg.length == 1) && (rxMsg.identifier == RelayStates))
 		relayStates = rxMsg.data[0];
 	return relayStates;
+}
+
+void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
+{
+	ZapMessage rxMsg = MCU_ReadParameter(ParamSmartFpgaVersionAndHash);
+	if((rxMsg.length > 0) && (rxMsg.length < maxTotalLen))
+	{
+		strncpy(stringBuf, (char*)rxMsg.data, rxMsg.length);
+		ESP_LOGI(TAG, "%s", stringBuf);
+	}
 }
 
 void SetEspNotification(uint16_t notification)

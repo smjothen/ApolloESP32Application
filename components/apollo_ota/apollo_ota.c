@@ -9,6 +9,7 @@
 #include "apollo_ota.h"
 #include "ota_location.h"
 #include "segmented_ota.h"
+#include "safe_ota.h"
 #include "pic_update.h"
 #include "ota_log.h"
 #include "DeviceInfo.h"
@@ -26,9 +27,10 @@
 static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
+static const int SAFE_OTA_UNBLOCKED = BIT2;
 static bool updateOnlyIfNewVersion = false;
 
-const uint OTA_TIMEOUT_MINUTES = 12;
+const uint OTA_TIMEOUT_MINUTES = 30;
 const uint OTA_GLOBAL_TIMEOUT_MINUTES = 60;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
@@ -130,6 +132,7 @@ static void StopOTA(TimerHandle_t timer)
 
 	xEventGroupClearBits(event_group,OTA_UNBLOCKED);
 	xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
+	xEventGroupClearBits(event_group,SAFE_OTA_UNBLOCKED);
 }
 
 static TimerHandle_t timeout_timer;
@@ -157,11 +160,11 @@ static void ota_task(void *pvParameters){
     {
     	size_t free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
-		ESP_LOGE(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
+		ESP_LOGI(TAG, "MEM1: DRAM: %i Lo: %i", free_dram, low_dram);
 
         ESP_LOGI(TAG, "waiting for ota event");
         EventBits_t ota_selection_field = xEventGroupWaitBits(
-            event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED, 
+            event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED | SAFE_OTA_UNBLOCKED,
             pdFALSE, pdFALSE, portMAX_DELAY
         );
 
@@ -255,7 +258,7 @@ static void ota_task(void *pvParameters){
 
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
-		ESP_LOGE(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
+		ESP_LOGI(TAG, "MEM2: DRAM: %i Lo: %i", free_dram, low_dram);
 
         if((ota_selection_field & OTA_UNBLOCKED) != 0 ){
             _do_sdk_ota(image_location);
@@ -267,6 +270,11 @@ static void ota_task(void *pvParameters){
 
             StopOTA(timeout_timer);
 
+        }else if((ota_selection_field & SAFE_OTA_UNBLOCKED) != 0){
+
+        	do_safe_ota(image_location);
+
+        	StopOTA(timeout_timer);
         }else{
             ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }
@@ -338,7 +346,7 @@ void start_ota_task(void){
     event_group = xEventGroupCreate();
     xEventGroupClearBits(event_group,OTA_UNBLOCKED);
     xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
-    
+    xEventGroupClearBits(event_group,SAFE_OTA_UNBLOCKED);
 
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t taskHandle = NULL;
@@ -360,9 +368,15 @@ int start_segmented_ota(void){
     return 0;
 }
 
+int start_safe_ota(void){
+    xEventGroupSetBits(event_group, SAFE_OTA_UNBLOCKED);
+    return 0;
+}
+
+
 int start_segmented_ota_if_new_version(void){
 	updateOnlyIfNewVersion = true;
-    xEventGroupSetBits(event_group, SEGMENTED_OTA_UNBLOCKED);
+    xEventGroupSetBits(event_group, SAFE_OTA_UNBLOCKED);
     return 0;
 }
 

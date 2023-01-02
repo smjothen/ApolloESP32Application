@@ -37,6 +37,7 @@ char * MCU_GetSwVersionString();
 hw_speed_revision MCU_GetHwIdMCUSpeed();
 hw_power_revision MCU_GetHwIdMCUPower();
 bool IsUKOPENPowerBoardRevision();
+bool IsProgrammableFPGAUsed();
 
 float MCU_GetOPENVoltage();
 
@@ -86,6 +87,7 @@ float MCU_GetHWCurrentMaxLimit();
 
 void MCU_GetOPENSamples(char * samples);
 uint8_t MCU_GetRelayStates();
+void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen);
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();

@@ -25,6 +25,8 @@ bool i2cRTCChecked();
 float I2CGetSHT30Temperature();
 float I2CGetSHT30Humidity();
 
+esp_err_t I2CCalibrateCoverProximity();
+
 int I2CGetStackWatermark();
 void I2CDevicesStartTask();
 

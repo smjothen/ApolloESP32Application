@@ -65,6 +65,7 @@
 
         ParamInternalTemperatureLimit = 241,
         ParamHumidity = 270,
+        ParamTamperCover = 280,
 
         ParamLedOverride = 290,
         ParamLedOverrideClear = 291,
@@ -188,6 +189,8 @@
 		DataUsage = 822,
 		CertificateVersion = 823,
         //..
+        SecurityLog = 830,
+        //..
         CarSessionLog = 850,
         CommunicationModeConfigurationInconsistency = 851,
         RawPilotMonitor = 852,
@@ -214,8 +217,8 @@
         ParamSmartComputerFwLoaderVersion = 912,
         ParamSmartComputerImageVersion = 913,
 
-        //ParamSmartFpgaVersion = 914,
-        //ParamSmartFpgaVersionAndHash = 915,
+		ParamSmartFpgaVersion = 914,
+		ParamSmartFpgaVersionAndHash = 915,
 
         SourceVersion = 916,
 

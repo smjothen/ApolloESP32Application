@@ -53,7 +53,7 @@ static utz_t ctx = {0};
 
 void chargeController_Init()
 {
-	ESP_LOGE(TAG, "SETTING TIMER");
+	ESP_LOGI(TAG, "SETTING TIMER");
 	//Create timer to control chargetime countdown
 	TickType_t startChargeTimer = pdMS_TO_TICKS(1000); //1 second
 	TimerHandle_t startTimerHandle = xTimerCreate( "StartChargeTimer", startChargeTimer, pdTRUE, NULL, RunStartChargeTimer);

@@ -1125,6 +1125,8 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 
 
+				sessionHandler_SendFPGAInfo();
+
 				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)
 				{
@@ -1520,7 +1522,7 @@ void sessionHandler_StopAndResetChargeSession()
 }
 
 
-void SessionHandler_SendMCUSettings()
+void sessionHandler_SendMCUSettings()
 {
 	char mcuPayload[100];
 
@@ -1544,7 +1546,7 @@ void SessionHandler_SendMCUSettings()
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }
 
-void SesionHandler_SendRelayStates()
+void sessionHandler_SendRelayStates()
 {
 	char mcuPayload[100];
 
@@ -1553,6 +1555,16 @@ void SesionHandler_SendRelayStates()
 	snprintf(mcuPayload, sizeof(mcuPayload), "RelayStates: %i - PEN: %i, L1: %i", states, ((states >> 1) & 0x01), (states & 0x01));
 	ESP_LOGI(TAG, "%s", mcuPayload);
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+}
+
+void sessionHandler_SendFPGAInfo()
+{
+	char mcuPayload[130] = {0};
+
+	MCU_GetFPGAInfo(mcuPayload, 130);
+
+	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
+
 }
 
 

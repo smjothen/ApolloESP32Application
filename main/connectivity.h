@@ -11,6 +11,7 @@ bool connectivity_GetSNTPInitialized();
 bool connectivity_GetMQTTInitialized();
 enum CommunicationMode connectivity_GetActivateInterface();
 enum CommunicationMode connectivity_GetPreviousInterface();
+uint32_t connectivity_GetNrOfLTEReconnects();
 void connectivity_init();
 void connectivity_ActivateInterface(enum CommunicationMode selectedInterface);
 int connectivity_GetStackWatermark();

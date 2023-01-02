@@ -38,8 +38,8 @@
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
 #include "calibration.h"
-#ifdef useAdvancedConsole
-	//#include "apollo_console.h"
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
+	#include "apollo_console.h"
 #endif
 
 static const char *TAG_MAIN = "MAIN           ";
@@ -110,7 +110,29 @@ void HandleCommands()
 	{
 		ESP_LOGW(TAG_MAIN, "Command:> %s", commandBuffer);
 
-		if(strncmp("mcu", commandBuffer, 3) == 0)
+		if(strncmp("none", commandBuffer, 4) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_NONE);
+		}
+		else if(strncmp("lte", commandBuffer, 3) == 0)
+		{
+			connectivity_ActivateInterface(eCONNECTION_LTE);
+		}
+		else if(strncmp("pppoff", commandBuffer, 6) == 0)
+		{
+			//stop_cloud_listener_task();
+			ppp_disconnect();
+		}
+		else if(strncmp("pppon", commandBuffer, 5) == 0)
+		{
+			//ppp_configure_uart();
+			stop_cloud_listener_task();
+			ppp_task_start();
+			vTaskDelay(pdMS_TO_TICKS(3000));
+			start_cloud_listener_task(i2cGetLoadedDeviceInfo());
+		}
+
+		else if(strncmp("mcu", commandBuffer, 3) == 0)
 		{
 			if(strchr(commandBuffer, '0') != NULL)
 				protocol_task_ctrl_debug(0);
@@ -265,6 +287,131 @@ void SetOnlineWatchdog()
 	onlineWatchdog = true;
 }
 
+void log_efuse_block(unsigned char * block, bool write_disabled, bool read_disabled)
+{
+	if(!read_disabled){
+
+		ESP_LOGI(TAG_MAIN, "   = %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %c/%c",
+			block[0], block[1], block[2], block[3], block[4], block[5], block[6], block[7], block[8], block[9], block[10], block[11],
+			block[12], block[13], block[14], block[15], block[16], block[17], block[18], block[19], block[20], block[21],
+			block[22], block[23], block[24], block[25], block[26], block[27], block[28], block[29], block[30], block[31],
+			read_disabled ? '-' : 'R', write_disabled ? '-' : 'R');
+	}else{
+		ESP_LOGI(TAG_MAIN, "   = ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? %c/%c", read_disabled ? '-' : 'R', write_disabled ? '-' : 'R');
+	}
+
+
+}
+
+void log_efuse_info()
+{
+	struct EfuseInfo efuses = {0};
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		ESP_LOGE(TAG_MAIN, "Unable to read efuses");
+		return;
+	}
+
+	ESP_LOGI(TAG_MAIN, "Efuse fuses:");
+	ESP_LOGI(TAG_MAIN, "WR_DIS (BLOCK0):                         Efuse write disable mask                           = %d R/%c (%#06x)",
+		efuses.write_protect,
+		(efuses.write_protect & 1<<1) ? '-' : 'W',
+		efuses.write_protect);
+
+	ESP_LOGI(TAG_MAIN, "RD_DIS (BLOCK0):                         Efuse read disable mask                            = %d R/%c (%#03x)",
+		efuses.read_protect,
+		(efuses.write_protect & 1<<0) ? '-' : 'W',
+		efuses.read_protect);
+
+	char scheme_description[32];
+	switch(efuses.coding_scheme){
+	case 0b00:
+	case 0b11:
+		sprintf(scheme_description, "NONE (BLK1-2 len=256 bits)");
+		break;
+	case 0b01:
+		sprintf(scheme_description, "3/4 (BLK1-2 len=192 bits)");
+		break;
+	case 0b10:
+		sprintf(scheme_description, "Repeat (BLK1-2 len=128 bits)");
+		break;
+	}
+
+	ESP_LOGI(TAG_MAIN, "CODING_SCHEME (BLOCK0):                  Efuse variable block length scheme\n\t\t = %s %c/%c (%#3x)",
+		scheme_description,
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.coding_scheme);
+
+	ESP_LOGI(TAG_MAIN, "KEY_STATUS (BLOCK0):                     Usage of efuse block 3 (reserved)                  = %s %c/%c (0b%d)",
+		efuses.key_status ? "True" : "False",
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.key_status);
+
+	ESP_LOGI(TAG_MAIN, "");
+	ESP_LOGI(TAG_MAIN, "Security fuses:");
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CNT (BLOCK0):                Flash encryption mode counter                      = %d R/%c (%#04x)",
+		efuses.flash_crypt_cnt,
+		(efuses.write_protect & 1<<2) ? '-' : 'W',
+		efuses.flash_crypt_cnt);
+
+	ESP_LOGI(TAG_MAIN, "UART_DOWNLOAD_DIS (BLOCK0):              Disable UART download mode (ESP32 rev3 only)       = %s R/%c (0b%d)",
+	        efuses.disabled_uart_download ? "True" : "False",
+		(efuses.write_protect & 1<<2) ? '-' : 'W',
+		efuses.disabled_uart_download);
+
+	ESP_LOGI(TAG_MAIN, "FLASH_CRYPT_CONFIG (BLOCK0):             Flash encryption config (key tweak bits)           = %d %c/%c (%#03x)",
+		efuses.encrypt_config,
+		(efuses.read_protect & 1<<3) ? '-' : 'R',
+		(efuses.write_protect & 1<<10) ? '-' : 'W',
+		efuses.encrypt_config);
+
+	ESP_LOGI(TAG_MAIN, "CONSOLE_DEBUG_DISABLE (BLOCK0):          Disable ROMn BASIC interpreter fallback            = %s R/%c (0b%d)",
+		efuses.disabled_console_debug ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '-' : 'W',
+		efuses.disabled_console_debug);
+
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_0 (BLOCK0):                     Secure boot V1 is enabled for bootloader image     = %s R/%c (0b%d)",
+		efuses.enabled_secure_boot_v1 ? "True" : "False",
+		(efuses.write_protect & 1<<12) ? '_' : 'W',
+		efuses.enabled_secure_boot_v1);
+
+	ESP_LOGI(TAG_MAIN, "ABS_DONE_1 (BLOCK0):                     Secure boot V2 is enabled for bootloader image     = %s R/%c (0b%d)",
+		efuses.enabled_secure_boot_v2 ? "True" : "False",
+		(efuses.write_protect & 1<<13) ? '_' : 'W',
+		efuses.enabled_secure_boot_v2);
+
+	ESP_LOGI(TAG_MAIN, "JTAG_DISABLE (BLOCK0):                   Disable JTAG                                       = %s R/%c (0b%d)",
+		efuses.disabled_jtag ? "True" : "False",
+		(efuses.write_protect & 1<<14) ? '_' : 'W',
+		efuses.disabled_jtag);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_ENCRYPT (BLOCK0):             Disable flash encryption in UART bootloader        = %s R/%c (0b%d)",
+		efuses.disabled_dl_encrypt ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_encrypt);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_DECRYPT (BLOCK0):             Disable flash decryption in UART bootloader        = %s R/%c (0b%d)",
+		efuses.disabled_dl_decrypt ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_decrypt);
+
+	ESP_LOGI(TAG_MAIN, "DISABLE_DL_CACHE (BLOCK0):               Disable flash cache in UART bootloader             = %s R/%c (0b%d)",
+		efuses.disabled_dl_cache ? "True" : "False",
+		(efuses.write_protect & 1<<15) ? '_' : 'W',
+		efuses.disabled_dl_cache);
+
+	ESP_LOGI(TAG_MAIN, "BLOCK1 (BLOCK1):                         Flash encryption key");
+	log_efuse_block(efuses.block1, efuses.write_protect & 7, efuses.read_protect & 1<<0);
+
+	ESP_LOGI(TAG_MAIN, "BLOCK2 (BLOCK2):                         Secure boot key");
+	log_efuse_block(efuses.block2, efuses.write_protect & 8, efuses.read_protect & 1<<1);
+
+	ESP_LOGI(TAG_MAIN, "BLOCK3 (BLOCK3):                         Variable Block 3");
+	log_efuse_block(efuses.block3, efuses.write_protect & 9, efuses.read_protect & 1<<2);
+
+	ESP_LOGI(TAG_MAIN, "");
+}
 
 
 void app_main(void)
@@ -277,16 +424,18 @@ void app_main(void)
 	//PROD url used
 #endif
 
-#ifdef RUN_FACTORY_TESTS
+#ifdef CONFIG_ZAPTEC_RUN_FACTORY_TESTS
 	ESP_LOGE(TAG_MAIN, "####### FACTORY TEST MODE ACTIVE!!! ##########");
 #endif
 
-#ifndef ENABLE_LOGGING
+#ifndef CONFIG_ZAPTEC_ENABLE_LOGGING
 	//Logging disabled
 	esp_log_level_set("*", ESP_LOG_NONE);
 #else
 	//Logging enabled
 #endif
+
+	log_efuse_info();
 
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
@@ -294,7 +443,7 @@ void app_main(void)
 	eeprom_wp_pint_init();
 	cellularPinsInit();
 
-#ifdef useAdvancedConsole
+#ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	gpio_pullup_en(GPIO_NUM_3);
 	apollo_console_init();
 #endif
