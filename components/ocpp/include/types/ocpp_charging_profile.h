@@ -85,11 +85,17 @@ struct ocpp_charging_profile{
 	struct ocpp_charging_schedule charging_schedule;
 };
 
+struct ocpp_charging_schedule_period_list * ocpp_extend_period_list(struct ocpp_charging_schedule_period_list * period_list, struct ocpp_charging_schedule_period * period);
 enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int max_stack_level, const char * allowed_charging_rate_units,
 					int max_periods, struct ocpp_charging_profile * charging_profile_out,
 					char * error_description_out, size_t error_description_length);
 
-void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule);
+/**
+ * @param charging_schedule The schedule to delete
+ * @param with_reference If false it will only free the references within the schedule and not the schedule pointer itself.
+ * The function should only be used with statically allocated schedules if with_reference is false;
+ */
+void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule, bool with_reference);
 void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile);
 struct ocpp_charging_profile * ocpp_get_default_charging_profile(enum ocpp_charging_profile_purpose purpose);
 

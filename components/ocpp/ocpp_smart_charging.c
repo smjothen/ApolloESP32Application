@@ -371,7 +371,7 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 
 	char * base64_str = malloc(sizeof(char) * out_length);
 	if(base64_str == NULL){
-		ESP_LOGE(TAG, "Unable to allocate memory for base64 string of profile");
+		ESP_LOGE(TAG, "Unable to allocate memory for base64 string of profile (length %d)", out_length);
 		goto error;
 	}
 
@@ -469,11 +469,13 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 		size_t periods_count;
 		if(fread(&periods_count, sizeof(size_t), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read periods count");
+			goto error;
 		}
 
 		size_t out_length;
 		if(fread(&out_length, sizeof(size_t), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read lenght of the base64 periods string");
+			goto error;
 		}
 
 		char * base64_periods = malloc(sizeof(char) * out_length);
@@ -521,6 +523,7 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 			*entry = malloc(sizeof(struct ocpp_charging_schedule_period_list));
 			if(entry == NULL){
 				ESP_LOGE(TAG, "Unable to allcate memory for new period entry");
+				goto error;
 			}else{
 				(*entry)->next = NULL;
 			}
@@ -533,7 +536,7 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 	fclose(fp);
 	xSemaphoreGive(file_lock);
 
-	ESP_LOGI(TAG, "Next charge profile aquired");
+	ESP_LOGI(TAG, "Charge profile read: %s", profile_path);
 	return profile;
 
 error:
@@ -562,7 +565,10 @@ error:
 	ocpp_free_charging_profile(profile);
 	fclose(fp);
 	ESP_LOGE(TAG, "Removing '%s' schedule due to read error", profile_path);
-	remove(profile_path);
+	errno = 0;
+	if(remove(profile_path) != 0){
+		ESP_LOGE(TAG, "Unable to remove '%s': %s", profile_path, strerror(errno));
+	}
 	xSemaphoreGive(file_lock);
 
 	return NULL;
@@ -767,7 +773,6 @@ struct ocpp_charging_profile * next_charge_profile_from_file(struct ocpp_chargin
 	struct dirent * dp = readdir(dir);
 	while(dp != NULL){
 		if(dp->d_type == DT_REG){
-			ESP_LOGI(TAG, "Found file: %s", dp->d_name);
 			if(strstr(dp->d_name, name_prefix) == dp->d_name){
 
 				errno = 0;
@@ -799,8 +804,6 @@ struct ocpp_charging_profile * next_charge_profile_from_file(struct ocpp_chargin
 
 	char profile_path[32];
 	sprintf(profile_path, "%s/%s%d.bin", base_path, name_prefix, best_candidate);
-
-	ESP_LOGI(TAG, "Attempting to get best charging profile: %s", profile_path);
 
 	struct ocpp_charging_profile * result = read_profile_from_file(profile_path);
 
@@ -1077,121 +1080,352 @@ void clear_active_transaction_id(){
 	xTaskNotify(ocpp_smart_task_handle, eTRANSACTION_ID_CHANGED, eSetBits);
 }
 
-static time_t get_absolute_start_time(time_t relative_start, const struct ocpp_charging_profile * profile){
+/**
+ * @brief Gets absolute start time of a schedule and time since it last started.
+ *
+ * @param relative_start Time when charging started or GetCompositeSchedule.req was received.
+ * @param sec_since_start Time since relative_start
+ * @param profile Profile containing relevant schedule
+ * @param absolute_start_out Output parameter for when the schedule last started.
+ * @param schedule_offset_out Output parameter for current time since last start
+ *
+ * @return ESP_OK on success. ESP_ERR_INVALID_ARG if invalid profile is detected. ESP_ERR_INVALID_STATE if requested time is outside valid_from -> valid_to range or start_schedule.
+ */
+esp_err_t get_normalized_time(time_t relative_start, int time_since_start, const struct ocpp_charging_profile * profile, time_t * absolute_start_out, int * schedule_offset_out){
 
-	//used to calculate time if recurring
-	time_t tmp_time;
+	if(profile == NULL){
+		ESP_LOGE(TAG, "No profile provided");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	time_t when = relative_start + time_since_start;
+
+	if(when < profile->valid_from
+		|| when > profile->valid_to)
+		return ESP_ERR_INVALID_STATE;
+
+	uint recurrency_interval;
 
 	switch(profile->profile_kind){
 	case eOCPP_CHARGING_PROFILE_KIND_ABSOLUTE:
-		return *profile->charging_schedule.start_schedule;
+
+		if(profile->charging_schedule.start_schedule == NULL)
+			return ESP_ERR_INVALID_ARG;
+
+		if(when < *profile->charging_schedule.start_schedule)
+			return ESP_ERR_INVALID_STATE;
+
+		if(absolute_start_out != NULL)
+			*absolute_start_out = *profile->charging_schedule.start_schedule;
+
+		if(schedule_offset_out != NULL)
+			*schedule_offset_out = when - *profile->charging_schedule.start_schedule;
+
+		break;
 
 	case eOCPP_CHARGING_PROFILE_KIND_RECURRING:
-		// Time since first start
-		tmp_time = relative_start - *profile->charging_schedule.start_schedule;
+
+		if(profile->charging_schedule.start_schedule == NULL || profile->recurrency_kind == NULL)
+			return ESP_ERR_INVALID_ARG;
+
+		if(when < *profile->charging_schedule.start_schedule)
+			return ESP_ERR_INVALID_STATE;
 
 		switch(*profile->recurrency_kind){
 		case eOCPP_RECURRENCY_KIND_DAILY:
-			tmp_time %= 86400; // 86400 = 1 day; Result should be seconds since last reccurence
-			return relative_start - tmp_time; // last recurrence
+			recurrency_interval = 86400; // 86400 = 1 day in second
+			break;
 
 		case eOCPP_RECURRENCY_KIND_WEEKLY:
-			tmp_time %= 604800; // 604800 = 1 week; Result should be seconds since last reccurence
-			return relative_start - tmp_time; // last recurrence
+			recurrency_interval = 604800; // 604800 = 1 week in seconds
+			break;
+
+		default:
+			ESP_LOGE(TAG, "Invalid recurrency kind");
+			return ESP_ERR_INVALID_ARG;
 		}
+
+		if(absolute_start_out != NULL)
+			*absolute_start_out =  when - ((when - *profile->charging_schedule.start_schedule) % recurrency_interval);
+
+		if(schedule_offset_out != NULL)
+			*schedule_offset_out = (when - *profile->charging_schedule.start_schedule) % recurrency_interval;
 		break;
 
 	case eOCPP_CHARGING_PROFILE_KIND_RELATIVE:
-		return relative_start;
+
+		if(absolute_start_out != NULL)
+			*absolute_start_out = relative_start;
+
+		if(schedule_offset_out != NULL)
+			*schedule_offset_out = time_since_start;
+		break;
 	}
 
-	ESP_LOGE(TAG, "Requested absolute start time from invalid profile");
-	return relative_start;
+	return ESP_OK;
+}
+
+/**
+ * @brief returns the time when it will become valid starting at relative_start + relative_offset.
+ */
+static time_t get_when_schedule_is_active(time_t relative_start, int relative_offset, struct ocpp_charging_profile * profile, int * transaction_id){
+	if(profile->transaction_id != NULL && (transaction_id == NULL || transaction_id != profile->transaction_id)) // Invalid due to transaction id mismatch
+		return LONG_MAX;
+
+	// Find the earliest time it can be active from
+
+	time_t active_from = profile->valid_from;
+
+	if(profile->charging_schedule.start_schedule != NULL && *profile->charging_schedule.start_schedule > active_from)
+		active_from = *profile->charging_schedule.start_schedule;
+
+	// Earliest relevant time is after the transaction start or composite shcedule was requested
+	if(relative_start + relative_offset > active_from)
+		active_from = relative_start + relative_offset;
+
+	int absolute_offset;
+	time_t absolute_start;
+	if(get_normalized_time(relative_start, relative_offset, profile, &absolute_start, &absolute_offset) != ESP_OK)
+		return LONG_MAX;
+
+	if(profile->charging_schedule.duration != NULL && absolute_offset >= *profile->charging_schedule.duration){
+		if(profile->profile_kind != eOCPP_CHARGING_PROFILE_KIND_RECURRING || profile->recurrency_kind == NULL)
+			return LONG_MAX; // Will not become valid since it is not recurring schedule
+
+		switch(*profile->recurrency_kind){
+		case eOCPP_RECURRENCY_KIND_DAILY:
+			active_from = absolute_start + 86400;
+			break;
+
+		case eOCPP_RECURRENCY_KIND_WEEKLY:
+			active_from = absolute_start + 604800;
+			break;
+
+		default: // invalid
+			return LONG_MAX;
+		}
+	}
+
+	// Check if it is still valid
+	return (profile->valid_to > active_from) ? active_from : LONG_MAX;
+}
+
+/**
+ * @brief copy the period list from a profile at an offset into a new list with a relative offset.
+ *
+ * @param start time Relative start time.
+ * @param offset The initial offset from relative start in the profils period list from witch to start copying.
+ * @param end The last time at witch a period may be copied from.
+ * @param profile Profile to copy from.
+ * @param max_copies Maximum number of period list items in output. Must be a value greater than 0.
+ * @param period_out Period list to extend. Will overwrite its value amd potentially its next pointer.
+ * @param offset_end_out Output parameter to indicate when output list may not be valid.
+ * @param copy_count_out Output parameter with number of elemets copied.
+ *
+ * @return pointer to last period.
+ */
+struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int offset, time_t end, struct ocpp_charging_profile * profile, size_t max_copies,
+							struct ocpp_charging_schedule_period_list * period_out, int * offset_end_out, int * copy_count_out){
+
+	struct ocpp_charging_schedule_period_list * period = &profile->charging_schedule.schedule_period;
+	struct ocpp_charging_schedule_period_list * period_last = NULL;
+
+	time_t abs_start;
+	int abs_offset;
+
+	if(get_normalized_time(start, offset, profile, &abs_start, &abs_offset) != ESP_OK){
+		ESP_LOGE(TAG, "Unable to get normalized time for copying periods");
+		return NULL;
+	}
+
+	int offset_diff = offset - abs_offset;
+	while(period != NULL && period->value.start_period < abs_offset){ // Move period pointer to first within requested range
+		period_last = period;
+		period = period->next;
+	}
+
+	// TODO: make sure the last entry in the period_out is merged with the first added one if they are the same
+	if(period != NULL && period->value.start_period == abs_offset){
+		ESP_LOGI(TAG, "Offset on start_period");
+
+		period_out->value.start_period = offset;
+		period_out->value.limit = period->value.limit;
+		period_out->value.number_phases = period->value.number_phases;
+
+		period_last = period;
+		period = period->next;
+
+	} else { // requested offset is part of previous list entry
+		ESP_LOGI(TAG, "Offset on start_period");
+
+		period_out->value.start_period = offset;
+		period_out->value.limit = period_last->value.limit;
+		period_out->value.number_phases = period_last->value.number_phases;
+	}
+
+	(*copy_count_out)++;
+
+	*offset_end_out = end - start;
+	if(profile->charging_schedule.duration != NULL
+		&& *offset_end_out > (abs_start + *profile->charging_schedule.duration) - start)
+		*offset_end_out = (abs_start + *profile->charging_schedule.duration) - start;
+
+	if(*offset_end_out + start > profile->valid_to)
+		*offset_end_out = profile->valid_to - start;
+
+	while(period != NULL && *copy_count_out < max_copies // Copy while input exist and output not exceeded,
+		&& period->value.start_period < *offset_end_out + offset_diff){ // Valid offset not exceeded
+
+		struct ocpp_charging_schedule_period_list * new_period = ocpp_extend_period_list(period_out, &period->value);
+
+		if(new_period == NULL){
+			ESP_LOGE(TAG, "Unable to copy period");
+			break;
+		}else{
+			new_period->value.start_period = period->value.start_period + offset_diff;
+			period_out = new_period;
+
+			(*copy_count_out)++;
+
+			period_last = period;
+			period = period->next;
+		}
+	}
+
+
+	if(period != NULL && period->value.start_period + offset_diff < *offset_end_out)
+		*offset_end_out = period->value.start_period + offset_diff;
+
+	return period_out;
+}
+
+/**
+ * @brief creates a period list for a given range from transaction start with offset to a given end time.
+ *
+ * @todo Consider caching profiles instead of rereading when same profile is used to compute multiple separate sections.
+ */
+void compute_range(time_t start, int offset, time_t end, int * transaction_id,
+		struct ocpp_charging_profile * (*next_profile)(struct ocpp_charging_profile *),
+		int max_periods, struct ocpp_charging_schedule_period_list * period_list_out){
+
+	size_t index = 0;
+	struct ocpp_charging_profile * current_profile = next_profile(NULL);
+
+	struct ocpp_charging_profile ** profile_stack = calloc(sizeof(struct ocpp_charging_profile), conf_max_stack_level);
+	time_t * range_stack = calloc(sizeof(time_t), 2 * conf_max_stack_level);
+
+	if(profile_stack == NULL || range_stack == NULL){
+		ESP_LOGE(TAG, "Unable to allocate memory for profile stack or range info");
+		goto cleanup;
+	}
+
+	bool empty = true;
+
+	while(max_periods > 0 && (start + offset < end)){
+		time_t active_from = get_when_schedule_is_active(start, offset, current_profile, transaction_id);
+
+		if(active_from != start + offset){ // If current profile is inactive
+			if(active_from < end // If it will be active later in the range
+				&& (index == 0 || active_from < range_stack[(index -1) * 2])){ // And is not superseeded by another profile active at the same time.
+
+				// save the profile with active_from and end, where end is when a higher priority profile will be active or range is complete.
+				profile_stack[index] = current_profile;
+				range_stack[index * 2] = active_from;
+				range_stack[(index * 2) +1] = end;
+
+				end = active_from;
+
+				index++;
+			}
+
+			// Set current profile lower priority profile.
+			current_profile = next_profile(current_profile);
+
+		}else{ // If current profile is active
+
+			if(empty == false){
+				period_list_out->next = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
+				if(period_list_out->next == NULL){
+					ESP_LOGE(TAG, "Unable to allocate period list");
+					goto cleanup;
+				}
+				period_list_out = period_list_out->next;
+			}
+
+			int copy_count = 0;
+			period_list_out = copy_period_at(start, offset,  end, current_profile, max_periods,
+							period_list_out, &offset, &copy_count);
+			max_periods -= copy_count;
+			empty = false;
+		}
+
+		while(start + offset >= end && index > 0){ // End for current profile and higher priority profile exist
+			// Clear current profile
+			ocpp_free_charging_profile(current_profile);
+
+			// Replace it with the higher priority profile
+			current_profile = profile_stack[--index];
+			end = range_stack[(index *2)+1];
+
+			profile_stack[index] = NULL;
+			range_stack[(index *2)] = 0;
+			range_stack[(index *2) +1] = 0;
+		}
+	}
+
+	ESP_LOGI(TAG,  "Range computed: %ld -> %ld offset: %d", start, end, offset);
+
+cleanup:
+	while(index > 0)
+		ocpp_free_charging_profile(profile_stack[--index]);
+
+	ocpp_free_charging_profile(current_profile);
+
+	free(profile_stack);
+	free(range_stack);
 }
 
 // Assumes that all profiles are relevant for expected connector id, i.e expect charger to only have 1 connector and profiles to be valid for this charger.
-static void get_active_profiles(time_t when, time_t relative_start, int * transaction_id, struct ocpp_charging_profile ** profile_out, struct ocpp_charging_profile * (*next_profile)(struct ocpp_charging_profile *), time_t * renewal_time_out){
+static void get_active_profile(time_t relative_start, int sec_since_start, int * transaction_id, struct ocpp_charging_profile ** profile_out, struct ocpp_charging_profile * (*next_profile)(struct ocpp_charging_profile *), time_t * renewal_time_out){
 
-	*profile_out = next_profile(NULL);
 	*renewal_time_out = LONG_MAX;
+	time_t when = relative_start + sec_since_start;
 
-	while((*profile_out)->stack_level != -1){ // stack_level -1 is used to indicate default profile if no other exists or active
+	while(true){ // stack_level -1 is used to indicate default profile if no other exists or active
 
-		/*
-		 * NOTE: A "Valid" profile here is as specified in 3.13.2:
-		 * "the prevailing charging profile SHALL be the charging profile with the highest stackLevel among the profiles that
-		 * are valid at that point in time, as determined by their validFrom and validTo parameters"
-		 *
-		 * As hinted in a note in the same section, a "prevailing charging profile" may not be the one that ends up being used:
-		 * "If you use Stacking without a duration, on the highest stack level, the Charge Point will never fall back
-		 * to a lower stack level profile"
-		 *
-		 * "Fall back" explanation is expanded in a note in section 5.16.4:
-		 * "When recurrencyKind is used in combination with a chargingSchedule duration shorter than the recurrencyKind period,
-		 * the Charge Point SHALL fall back to default behaviour after the chargingSchedule duration ends. This fall back means
-		 * that the Charge Point SHALL use a ChargingProfile with a lower stackLevel if available."
-		 */
+		struct ocpp_charging_profile * tmp_profile = *profile_out;
+		*profile_out = next_profile(tmp_profile);
+		ocpp_free_charging_profile(tmp_profile);
 
 		// Find "the prevailing charging profile"
-		if((*profile_out)->valid_from < when && (*profile_out)->valid_to > when){
+		time_t valid_from = get_when_schedule_is_active(relative_start, sec_since_start, *profile_out, transaction_id);
 
-			// "the transactionId MAY be used to match the profile to a specific transaction."
-			if((*profile_out)->transaction_id == NULL || *transaction_id == *(*profile_out)->transaction_id){
-
-				//Fall through if "when" is not within duration
-				time_t last_start = get_absolute_start_time(relative_start, *profile_out);
-				if((*profile_out)->charging_schedule.duration != NULL
-					&& (when - last_start > *(*profile_out)->charging_schedule.duration)){
-
-					//If the Fall through would not happen later, we update time when profile should be renewed
-					if((*profile_out)->profile_kind == eOCPP_CHARGING_PROFILE_KIND_RECURRING){
-						time_t next_start;
-						if(*(*profile_out)->recurrency_kind == eOCPP_RECURRENCY_KIND_DAILY){
-							next_start = last_start + 86400;
-						}else{
-							next_start = last_start + 604800;
-						}
-						if(*renewal_time_out > next_start)
-							*renewal_time_out = next_start;
-					}
-
-					ocpp_free_charging_profile(*profile_out);
-					*profile_out = next_profile(*profile_out);
-					continue;
-				}
+		if(valid_from == when){
+			break;
+		}else if(valid_from == LONG_MAX){ // If it will never be active in this context
+			if((*profile_out)->valid_to < time(NULL)){ // Check if it can be removed
+				remove_profile(*profile_out, false);
 			}
-
-			break; // No Fall through; profile is active.
-		}else{
-			// If it is not valid now, we check  if it may be valid later or if it can be removed
-			if((*profile_out)->valid_to < time(NULL)){
-				remove_profile(*profile_out, false); // Remove old profiles that can never be valid
-
-				ocpp_free_charging_profile(*profile_out);
-				*profile_out = next_profile(*profile_out);
-				continue;
-
-			}else{ // If it may be valid later
-				// We store when it may become the "prevailing profile" i.e takes pecedence over active profile. If it is the next to become valid.
-				if((*profile_out)->valid_from < *renewal_time_out){
-					*renewal_time_out = (*profile_out)->valid_from;
-				}
+		}else{ // If it may be valid later
+			if(*renewal_time_out > valid_from){
+				*renewal_time_out = valid_from;
 			}
 		}
-
-		ocpp_free_charging_profile(*profile_out);
-		*profile_out = next_profile(*profile_out);
 	}
 
-	// When we have selected a profile, we check if it will become invalid due to valid_to or fall through due to duration before it
-	// would otherwise be renewed by a higher priority profile
+	// When we have selected a profile, we check if it will become invalid and need to be renewed due to valid_to
 	if(*renewal_time_out > (*profile_out)->valid_to)
 		*renewal_time_out = (*profile_out)->valid_to;
 
-	time_t profile_start = get_absolute_start_time(relative_start, *profile_out);
+	//We also check if it will need to be renewed due to  duration
+	if((*profile_out)->charging_schedule.duration != NULL){
+		time_t profile_start;
+		if(get_normalized_time(relative_start, sec_since_start, *profile_out, &profile_start, NULL) == ESP_OK){
 
-	if((*profile_out)->charging_schedule.duration != NULL && *renewal_time_out > *(*profile_out)->charging_schedule.duration + profile_start)
-		*renewal_time_out = *(*profile_out)->charging_schedule.duration + profile_start;
+			if(*renewal_time_out > *(*profile_out)->charging_schedule.duration + profile_start)
+				*renewal_time_out = *(*profile_out)->charging_schedule.duration + profile_start;
+		}
+	}
 }
 
 /*
@@ -1205,12 +1439,13 @@ const struct ocpp_charging_schedule_period local_schedule_period_max = {
 };
 const float default_minimum = 6.0f;
 
-bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint time_since_start, enum ocpp_recurrency_kind * recurrency_kind, struct ocpp_charging_schedule_period * period_out, uint32_t * time_to_next_period){
+bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint time_since_start, enum ocpp_recurrency_kind * recurrency_kind, struct ocpp_charging_schedule_period * period_out, float * min_charging_rate_out, uint32_t * time_to_next_period){
 
-	ESP_LOGI(TAG, "Getting period from schedule at %d", time_since_start);
+	ESP_LOGI(TAG, "Getting period from schedule at %u", time_since_start);
 	struct ocpp_charging_schedule_period_list * current_period = &schedule->schedule_period;
 	struct ocpp_charging_schedule_period_list * last_period = NULL;
 
+	*min_charging_rate_out = schedule->min_charging_rate;
 	/*
 	 * We set time_since_start relative to last recurrence. We also set a next period default value to
 	 * the next recurrency or UINT32_MAX to indicate that no next period exists in schedule, or next period
@@ -1230,11 +1465,6 @@ bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint tim
 		*time_to_next_period = UINT32_MAX;
 	}
 
-	/*
-	 * TODO:
-	 * "[When not within duration], the Charge SHALL fall back to [...] use a ChargingProfile with a lower stackLevel if available.
-	 * If no other ChargingProfile is available, theCharge Point SHALL allow charging as if no ChargingProfile is installed"
-	 */
 	if(schedule->duration != NULL && time_since_start > *schedule->duration){
 		ESP_LOGE(TAG, "Schedule is invalid at requested offset from start");
 		return false;
@@ -1272,155 +1502,156 @@ bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint tim
 	}
 }
 
-static esp_err_t extend_composite_schedule(time_t when, time_t relative_start, uint32_t wanted_duration, size_t max_periods,
-					struct ocpp_charging_profile * profile_tx, struct ocpp_charging_profile * profile_max,
-					struct ocpp_charging_schedule_period_list * period_list_out, int old_duration, int * new_duration_out){
+/**
+ * @brief Combines two schedules. It assumes that both schedules have the same schedule_start.
+ */
+void combine_schedules(struct ocpp_charging_schedule * schedule1, struct ocpp_charging_schedule * schedule2, struct ocpp_charging_schedule * schedule_out){
+	ESP_LOGI(TAG, "Combining schedules");
 
-	ESP_LOGI(TAG, "Extending composite schedule");
+	int duration = INT_MAX;
 
-	uint8_t created_periods = 0;
-	uint time_since_start_tx = when - get_absolute_start_time(relative_start, profile_tx);
-	uint time_since_start_max = when - get_absolute_start_time(relative_start, profile_max);
-
-	uint duration_created = 0;
-
-	struct ocpp_charging_schedule_period period_tx;
-	uint32_t next_period_tx = 0;
-
-	struct ocpp_charging_schedule_period period_max;
-	uint32_t next_period_max = 0;
-
-	struct ocpp_charging_schedule_period_list * period_list = period_list_out;
-	struct ocpp_charging_schedule_period_list * last_period = NULL;
-
-	while(duration_created < wanted_duration && created_periods < max_periods){
-
-		if(duration_created >= next_period_tx){
-			uint32_t next_period_offset;
-			if(!get_period_from_schedule(&profile_tx->charging_schedule, time_since_start_tx + duration_created,
-							profile_tx->recurrency_kind, &period_tx, &next_period_offset)){
-
-				ESP_LOGE(TAG, "Period invalid for tx profile, using default");
-				period_tx = local_schedule_period_max;
-			}
-
-			if(next_period_offset >= wanted_duration){
-				next_period_tx = wanted_duration;
-			}else{
-				next_period_tx += next_period_offset;
-			}
+	// Limit the outputs duration to the shortest duration of the inputs
+	if(schedule1->duration != NULL || schedule2->duration != NULL){
+		schedule_out->duration = malloc(sizeof(int));
+		if(schedule_out->duration == NULL){
+			ESP_LOGE(TAG, "Unable to allocate duration for composite schedule");
+			return;
 		}
 
-		if(duration_created >= next_period_max){
-			uint32_t next_period_offset;
-			if(!get_period_from_schedule(&profile_max->charging_schedule, time_since_start_max + duration_created,
-							profile_max->recurrency_kind, &period_max, &next_period_offset)){
+		*schedule_out->duration = INT_MAX;
 
-				ESP_LOGE(TAG, "Period invalid for max profile, using default");
-				period_max = local_schedule_period_max;
-			}
+		if(schedule1->duration != NULL)
+			*schedule_out->duration = *schedule1->duration;
 
-			if(next_period_offset >= wanted_duration){
-				next_period_max = wanted_duration;
-			}else{
-				next_period_max += next_period_offset;
-			}
-		}
+		if(schedule2->duration != NULL && *schedule2->duration < *schedule_out->duration)
+			*schedule_out->duration = *schedule2->duration;
 
-		if(period_list == NULL){
-			period_list = malloc(sizeof(struct ocpp_charging_schedule_period_list));
-			if(period_list == NULL){
-				ESP_LOGE(TAG, "Unable to allocate memory for next schedule period");
-				return ESP_ERR_NO_MEM;
-			}
-			period_list->next = NULL;
-		}
-
-		period_list->value.limit = (period_tx.limit < period_max.limit) ? period_tx.limit : period_max.limit;
-		period_list->value.number_phases = (period_tx.number_phases < period_max.number_phases) ? period_tx.number_phases : period_max.number_phases;
-
-		period_list->value.start_period = duration_created + old_duration;
-		duration_created = (next_period_tx < next_period_max) ? next_period_tx : next_period_max;
-
-		created_periods++;
-
-		if(last_period != NULL)
-			last_period->next = period_list;
-
-		last_period = period_list;
-		period_list = period_list->next;
+		duration = *schedule_out->duration;
 	}
-	*new_duration_out = when + duration_created;
 
-	if(duration_created >= wanted_duration){
-		return ESP_OK;
-	}else if(created_periods < max_periods){
-		return ESP_ERR_INVALID_SIZE;
-	}else{
-		return ESP_FAIL;
+	schedule_out->start_schedule = malloc(sizeof(time_t));
+	if(schedule_out->start_schedule == NULL){
+		ESP_LOGE(TAG, "Unable to start schedule for composite schedule");
+		return;
+	}
+	*schedule_out->start_schedule = *schedule1->start_schedule;
+
+	schedule_out->charge_rate_unit = eOCPP_CHARGING_RATE_A;
+	// TODO: Check if the combined schedule should have the lowest or highest minChargingRate
+	schedule_out->min_charging_rate = (schedule1->min_charging_rate > schedule2->min_charging_rate) ? schedule1->min_charging_rate : schedule2->min_charging_rate;
+
+	struct ocpp_charging_schedule_period_list * list1 = &schedule1->schedule_period;
+	struct ocpp_charging_schedule_period_list * list2 = &schedule2->schedule_period;
+
+	bool empty = true;
+
+	while(true){
+
+		struct ocpp_charging_schedule_period new_period;
+
+		if(list1->value.start_period > list2->value.start_period){ // set start_period out to last latest active start_period
+			new_period.start_period = list1->value.start_period;
+		}else{
+			new_period.start_period = list2->value.start_period;
+		}
+
+		if(new_period.start_period > duration) // End if schedule would no longer be valid
+			return;
+
+		if(list1->value.limit < list2->value.limit){ // Set limit to the minimum of the schedules to combine
+			new_period.limit = list1->value.limit;
+		}else{
+			new_period.limit = list2->value.limit;
+		}
+
+		if(list1->value.number_phases < list2->value.number_phases){ // Set number_phase to minimum
+			new_period.number_phases = list1->value.number_phases;
+		}else{
+			new_period.number_phases = list2->value.number_phases;
+		}
+
+		if(empty){
+			schedule_out->schedule_period.value.start_period = new_period.start_period;
+			schedule_out->schedule_period.value.limit = new_period.limit;
+			schedule_out->schedule_period.value.number_phases = new_period.number_phases;
+
+			empty = false;
+		}else{
+			ocpp_extend_period_list(&schedule_out->schedule_period, &new_period);
+		}
+
+		if(list1->next != NULL && list2->next != NULL){
+			if(list1->next->value.start_period == list2->next->value.start_period){
+				list1 = list1->next;
+				list2 = list2->next;
+
+			}else if(list1->next->value.start_period < list2->next->value.start_period){
+				list1 = list1->next;
+
+			}else{
+				list2 = list2->next;
+			}
+
+		}else if(list1->next == NULL && list2->next == NULL){
+			break;
+		}else{
+			if(list1->next != NULL){
+				list1 = list1->next;
+			}else{
+				list2 = list2->next;
+			}
+		}
 	}
 }
 
-static esp_err_t create_composite_schedule(time_t when, time_t relative_start,
-					uint32_t wanted_duration, enum ocpp_charging_rate_unit charge_rate_unit,
+//Assumes that the profiles are valid at relative_start + sec_since_start
+static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_start,
 					struct ocpp_charging_profile * profile_tx, struct ocpp_charging_profile * profile_max,
 					struct ocpp_charging_schedule * schedule_out){
 
 	ESP_LOGI(TAG, "Creating composite schedule");
 
-	if(charge_rate_unit != eOCPP_CHARGING_RATE_A){
-		ESP_LOGE(TAG, "Unsupported charging rate unit");
+	struct ocpp_charging_schedule tx_schedule = {0};
+	struct ocpp_charging_schedule max_schedule = {0};
 
-		schedule_out->schedule_period.value = local_schedule_period_max;
-		return ESP_ERR_NOT_SUPPORTED;
-	}
-	schedule_out->charge_rate_unit = charge_rate_unit;
+	int offset_tx = 0;
+	int offset_max = 0;
 
-	if(!(profile_tx->valid_from < relative_start && profile_max->valid_from < relative_start
-			&& profile_tx->valid_to > relative_start && profile_max->valid_to > relative_start)){
+	int copy_count = 0;
+	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_tx, conf_max_periods, &tx_schedule.schedule_period, &offset_tx, &copy_count);
+	copy_count = 0;
+	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, conf_max_periods, &max_schedule.schedule_period, &offset_max, &copy_count);
 
-		ESP_LOGE(TAG, "Requested composit schedule is not valid at requested start time");
+	tx_schedule.start_schedule = malloc(sizeof(time_t));
+	max_schedule.start_schedule = malloc(sizeof(time_t));
 
-		schedule_out->schedule_period.value = local_schedule_period_max;
-		return ESP_ERR_INVALID_ARG;
-	}
-
-	schedule_out->start_schedule = malloc(sizeof(time_t));
-	if(schedule_out->start_schedule == NULL){
-		ESP_LOGE(TAG, "Unable to allocate memory for composite schedule start time");
-
-		schedule_out->schedule_period.value = local_schedule_period_max;
+	if(tx_schedule.start_schedule == NULL || max_schedule.start_schedule == NULL){
+		ESP_LOGE(TAG, "Unable to allocate start schedule for tx of max schedule during creation schedule");
 		return ESP_ERR_NO_MEM;
 	}
-	*schedule_out->start_schedule = when;
 
-	schedule_out->duration = malloc(sizeof(int));
-	if(schedule_out->duration == NULL){
-		ESP_LOGE(TAG, "Unable to allocate space for schedule duration");
-		free(schedule_out->start_schedule);
+	*tx_schedule.start_schedule = relative_start + sec_since_start;
+	*max_schedule.start_schedule = relative_start + sec_since_start;
 
-		schedule_out->schedule_period.value = local_schedule_period_max;
-		return ESP_ERR_NO_MEM;
-	}
-	*schedule_out->duration = 0;
 
-	schedule_out->min_charging_rate = 6.0f;
-	if(schedule_out->min_charging_rate < profile_tx->charging_schedule.min_charging_rate){
-		schedule_out->min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
-	}
+	tx_schedule.min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
+	max_schedule.min_charging_rate = profile_max->charging_schedule.min_charging_rate;
 
-	if(schedule_out->min_charging_rate < profile_max->charging_schedule.min_charging_rate){
-		schedule_out->min_charging_rate = profile_max->charging_schedule.min_charging_rate;
-	}
+	combine_schedules(&tx_schedule, &max_schedule, schedule_out);
 
-	return extend_composite_schedule(when, relative_start, wanted_duration, conf_max_periods,
-					profile_tx, profile_max, &schedule_out->schedule_period, 0, schedule_out->duration);
+	ocpp_free_charging_schedule(&tx_schedule, false);
+	ocpp_free_charging_schedule(&max_schedule, false);
+
+	return ESP_OK;
 }
 
 void get_composite_schedule_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Received request for get composite schedule");
 
 	char err_str[124] = {0};
+
+	struct ocpp_charging_schedule tx_schedule = {0};
+	struct ocpp_charging_schedule max_schedule = {0};
 
 	int connector_id;
 	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", true, &connector_id, err_str, sizeof(err_str));
@@ -1437,12 +1668,11 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 	}
 
 	char * charging_rate_unit = NULL;
-	enum ocpp_charging_rate_unit unit_id = eOCPP_CHARGING_RATE_A;
 
 	err = ocppj_get_string_field(payload, "chargingRateUnit", false, &charging_rate_unit, err_str, sizeof(err_str));
 	if(err != eOCPPJ_NO_VALUE){
 
-		if(err == eOCPPJ_NO_ERROR){
+		if(err != eOCPPJ_NO_ERROR){
 			ESP_LOGW(TAG, "Invalid chargingRateUnit in request: '%s'", err_str);
 			goto error;
 		}
@@ -1462,100 +1692,48 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 			strcpy(err_str, "'Requested chargingRateUnit' is not supported");
 			goto error;
 		}
-
-		unit_id = ocpp_charging_rate_unit_to_id(charging_rate_unit);
 	}
 
-	struct ocpp_charging_profile * profile_tx = NULL; // tx or txDefault profile
-	struct ocpp_charging_profile * profile_max = NULL;
-	struct ocpp_charging_schedule * schedule = NULL;
+	tx_schedule.duration = malloc(sizeof(int));
+	max_schedule.duration = malloc(sizeof(int));
+
+	if(tx_schedule.duration == NULL || max_schedule.duration == NULL){
+		ESP_LOGE(TAG, "Unable to allocate duration for requested composite schedule");
+		goto error;
+	}
+
+	tx_schedule.start_schedule = malloc(sizeof(time_t));
+	max_schedule.start_schedule = malloc(sizeof(time_t));
+
+	if(tx_schedule.start_schedule == NULL || max_schedule.start_schedule == NULL){
+		ESP_LOGE(TAG, "Unable to allocate start schedule for requested composite schedule");
+		goto error;
+	}
 
 	time_t start_time = time(NULL);
 
-	time_t renewal_time_tx = 0;
-	time_t renewal_time_max = 0;
+	*tx_schedule.start_schedule = start_time;
+	*max_schedule.start_schedule = start_time;
 
-	int duration_created = 0;
-	int segment_duration_created;
+	compute_range(start_time, 0, start_time+duration, NULL,
+		next_tx_or_tx_default_profile, conf_max_periods, &tx_schedule.schedule_period);
 
-	while(duration > duration_created){
-		segment_duration_created = 0;
-		time_t creation_time = start_time + duration_created;
+	compute_range(start_time, 0, start_time+duration, NULL,
+		next_max_profile, conf_max_periods, &max_schedule.schedule_period);
 
-		if(creation_time >= renewal_time_tx){
-			ocpp_free_charging_profile(profile_tx);
+	//TODO: Duration should be limited if max periods exceeded.
+	*tx_schedule.duration = duration;
+	*max_schedule.duration = duration;
 
-			get_active_profiles(creation_time, start_time, active_transaction_id,
-					&profile_tx, next_tx_or_tx_default_profile, &renewal_time_tx);
-		}
-
-		if(creation_time >= renewal_time_max){
-			ocpp_free_charging_profile(profile_max);
-
-			get_active_profiles(creation_time, start_time, active_transaction_id,
-					&profile_max, next_max_profile, &renewal_time_max);
-		}
-
-		uint segment_duration;
-		if(renewal_time_max < renewal_time_tx){
-			segment_duration = renewal_time_max - creation_time;
-		}else{
-			segment_duration = renewal_time_tx - creation_time;
-		}
-
-		if(segment_duration < 1){
-			ESP_LOGE(TAG, "Expected segment duration is insufficient");
-			segment_duration = 1;
-		}
-
-		struct ocpp_charging_schedule_period_list * period_list = &schedule->schedule_period;
-		size_t period_count = 0;
-
-		esp_err_t schedule_error = ESP_OK;
-		if(schedule == NULL){
-			schedule_error = create_composite_schedule(creation_time, start_time, segment_duration, unit_id,
-							profile_tx, profile_max, schedule);
-			if(schedule->duration != NULL){
-				segment_duration_created = *schedule->duration;
-			}else{
-				ESP_LOGE(TAG, "Unable to determin duration of composite schedule");
-				goto error;
-			}
-		}else{
-			schedule_error = extend_composite_schedule(creation_time, start_time, segment_duration, conf_max_periods - period_count,
-								profile_tx, profile_max, period_list->next, duration_created, &segment_duration_created);
-
-			*schedule->duration += segment_duration_created;
-		}
-
-		if(schedule_error != ESP_OK){
-			if(err == ESP_ERR_INVALID_SIZE){
-				ESP_LOGW(TAG, "Unable to fill requested duration; would exceed max periods");
-				break;
-			}else{
-				ESP_LOGE(TAG, "Unable to create composite schedule: %s", esp_err_to_name(err));
-				err = eOCPPJ_ERROR_INTERNAL;
-				sprintf(err_str, "Error occured while attempting to create composite schedule");
-				goto error;
-			}
-		}
-
-		while(period_list != NULL){
-			period_count++;
-			period_list = period_list->next;
-		}
-
-		if(segment_duration_created == 0){
-			ESP_LOGE(TAG, "Unable to continue schdule creation");
-			break;
-		}else{
-			duration_created += segment_duration_created;
-		}
-	}
+	struct ocpp_charging_schedule composite_schedule = {0};
+	combine_schedules(&tx_schedule, &max_schedule, &composite_schedule);
 
 	cJSON * reply = ocpp_create_get_composite_schedule_confirmation(unique_id, OCPP_GET_COMPOSITE_SCHEDULE_STATUS_ACCEPTED,
-									&connector_id, &start_time, schedule);
-	ocpp_free_charging_schedule(schedule);
+									&connector_id, &start_time, &composite_schedule);
+
+	ocpp_free_charging_schedule(&tx_schedule, false);
+	ocpp_free_charging_schedule(&max_schedule, false);
+	ocpp_free_charging_schedule(&composite_schedule, false);
 
 	if(reply != NULL){
 		send_call_reply(reply);
@@ -1567,11 +1745,16 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 		goto error;
 	}
 
+	return;
+
 error:
 	if(err == eOCPPJ_NO_ERROR){
 		ESP_LOGE(TAG, "Unknown error occured during get composite schedule");
 		err = eOCPPJ_ERROR_INTERNAL;
 	}
+
+	ocpp_free_charging_schedule(&tx_schedule, false);
+	ocpp_free_charging_schedule(&max_schedule, false);
 
 	cJSON * error_reply = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
 	if(error_reply == NULL){
@@ -1600,7 +1783,6 @@ static void ocpp_smart_task(){
 	// When data related to charging variables may change.
 	time_t renewal_time_tx = LONG_MAX;
 	time_t renewal_time_max = LONG_MAX;
-	time_t renewal_time_schedule = LONG_MAX;
 	time_t renewal_time_period = LONG_MAX;
 
 	// Time until next predicted change event
@@ -1675,11 +1857,6 @@ static void ocpp_smart_task(){
 				data |= eACTIVE_PROFILE_MAX_CHANGE;
 			}
 
-			if(schedule == NULL || renewal_time_schedule < current_time){
-				ESP_LOGI(TAG, "Current schedule timed out");
-				data |= eSCHEDULE_CHANGE;
-			}
-
 			if(renewal_time_period < current_time){
 				ESP_LOGI(TAG, "Current period timed out");
 				data |= eACTIVE_PERIOD_CHANGE;
@@ -1700,7 +1877,7 @@ static void ocpp_smart_task(){
 
 				profile_tx = NULL;
 
-				get_active_profiles(current_time, transaction_start_time, active_transaction_id,
+				get_active_profile(transaction_start_time, current_time - transaction_start_time, active_transaction_id,
 						&profile_tx, next_tx_or_tx_default_profile, &renewal_time_tx);
 
 				//Update schedule if needed
@@ -1722,7 +1899,8 @@ static void ocpp_smart_task(){
 				ocpp_free_charging_profile(profile_max);
 				profile_max = NULL;
 
-				get_active_profiles(current_time, transaction_start_time, active_transaction_id,
+
+				get_active_profile(transaction_start_time, current_time - transaction_start_time, active_transaction_id,
 						&profile_max, next_max_profile, &renewal_time_max);
 
 				if(data & eNEW_PROFILE_MAX
@@ -1740,7 +1918,7 @@ static void ocpp_smart_task(){
 				ESP_LOGI(TAG, "Updating composite schedule");
 
 				// Re-allocate the structure to free all optional values. TODO: Change to only re-allocate when needed
-				ocpp_free_charging_schedule(schedule);
+				ocpp_free_charging_schedule(schedule, true);
 				schedule = calloc(sizeof(struct ocpp_charging_schedule), 1);
 				if(schedule == NULL){
 					ESP_LOGE(TAG, "Unable to allocate memory for composite schedule");
@@ -1758,16 +1936,9 @@ static void ocpp_smart_task(){
 					tmp_schedule_dt = 1; // Create schedule for at least 1 second
 				}
 
-				create_composite_schedule(current_time, transaction_start_time,
-							(tmp_schedule_dt < UINT32_MAX) ? tmp_schedule_dt: UINT32_MAX, eOCPP_CHARGING_RATE_A,
-							profile_tx, profile_max, schedule);
+				create_composite_schedule(current_time, current_time - transaction_start_time, profile_tx, profile_max, schedule);
 
 				current_min = schedule->min_charging_rate;
-				if(schedule->duration == NULL){
-					renewal_time_schedule = LONG_MAX;
-				}else{
-					renewal_time_schedule = current_time + *schedule->duration;
-				}
 				data |= eACTIVE_PERIOD_CHANGE;
 			}
 
@@ -1775,7 +1946,7 @@ static void ocpp_smart_task(){
 				ESP_LOGI(TAG, "Updating period");
 				uint32_t renewal_delay_period;
 				if(!get_period_from_schedule(schedule, current_time - *schedule->start_schedule, NULL,
-				 				&current_period, &renewal_delay_period)){
+				 				&current_period, &current_min, &renewal_delay_period)){
 
 					ESP_LOGE(TAG, "Failed to get period from composite schedule; setting default");
 
@@ -1829,7 +2000,7 @@ error:
 	ESP_LOGE(TAG, "Smart charging exited with error");
 	ocpp_free_charging_profile(profile_tx); // tx or txDefault profile
 	ocpp_free_charging_profile(profile_max);
-	ocpp_free_charging_schedule(schedule);
+	ocpp_free_charging_schedule(schedule, true);
 }
 
 esp_err_t ocpp_smart_charging_init(size_t connector_count, int max_stack_level,

@@ -14,6 +14,27 @@
 
 static const char * TAG = "OCPP CHARGING";
 
+struct ocpp_charging_schedule_period_list * ocpp_extend_period_list(struct ocpp_charging_schedule_period_list * period_list, struct ocpp_charging_schedule_period * period){
+	while(period_list->next != NULL)
+		period_list = period_list->next;
+
+	if(period_list->value.limit == period->limit && period_list->value.number_phases){ // period can be merged with last period in list
+		return period_list;
+	}
+
+	period_list->next = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
+
+	period_list = period_list->next;
+
+	if(period_list != NULL){
+		period_list->value.start_period = period->start_period;
+		period_list->value.limit = period->limit;
+		period_list->value.number_phases = period->number_phases;
+	}
+
+	return period_list;
+}
+
 enum ocppj_err_t charging_schedule_period_from_json(cJSON * chargingSchedulePeriod, struct ocpp_charging_schedule_period * period_out,
 						char * error_description_out, size_t error_description_length){
 
@@ -350,7 +371,7 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 	}
 }
 
-static void ocpp_free_charging_schedule_with_given(struct ocpp_charging_schedule * charging_schedule, bool with_given){
+void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule, bool with_reference){
 	if(charging_schedule == NULL)
 		return;
 
@@ -364,19 +385,15 @@ static void ocpp_free_charging_schedule_with_given(struct ocpp_charging_schedule
 	free(charging_schedule->start_schedule);
 	free(charging_schedule->duration);
 
-	if(with_given)
+	if(with_reference)
 		free(charging_schedule);
-}
-
-void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule){
-	ocpp_free_charging_schedule_with_given(charging_schedule, true);
 }
 
 void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile){
 	if(charging_profile == NULL || charging_profile->stack_level == -1) // Only delete if it exists and is not default profile
 		return;
 
-	ocpp_free_charging_schedule_with_given(&charging_profile->charging_schedule, false);
+	ocpp_free_charging_schedule(&charging_profile->charging_schedule, false);
 
 	free(charging_profile->recurrency_kind);
 	free(charging_profile->transaction_id);
@@ -518,7 +535,7 @@ static cJSON * ocpp_create_charging_schedule_period_list_json(struct ocpp_chargi
 		if(cJSON_AddNumberToObject(period, "limit", schedule_period->value.limit) == NULL)
 			goto error;
 
-		if(cJSON_AddNumberToObject(period, "number_phases", schedule_period->value.number_phases) == NULL)
+		if(cJSON_AddNumberToObject(period, "numberPhases", schedule_period->value.number_phases) == NULL)
 			goto error;
 
 		cJSON_AddItemToArray(payload, period);
