@@ -252,6 +252,7 @@ enum test_item{
 	TEST_ITEM_COMPONENT_LED,
 	TEST_ITEM_COMPONENT_BUZZER,
 	TEST_ITEM_COMPONENT_PROXIMITY,
+	TEST_ITEM_COMPONENT_EFUSES,
 	TEST_ITEM_COMPONENT_OPEN_RELAY,
 	TEST_ITEM_COMPONENT_RTC,
 	TEST_ITEM_COMPONENT_SWITCH,
@@ -516,7 +517,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	bool success = false;
 
-	char payload[100];
+	char payload[130];
 	sprintf(payload, "Serial: %s\r\n", device_info.serialNumber);
 	prodtest_sock_send(payload);
 	await_prodtest_external_step_acceptance("ACCEPTED", false);
@@ -538,6 +539,15 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
+
+
+	if(IsProgrammableFPGAUsed() == true)
+	{
+		MCU_GetFPGAInfo(payload, 130);
+		ESP_LOGI(TAG, "%s", payload);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
+	}
+
 
 	if(onePhaseTest)
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, "Running 1-phase test!!!");
@@ -946,6 +956,61 @@ fail:
 	return -1;
 }
 
+#ifdef CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION
+int test_efuses(){
+	char payload[128];
+
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+
+	struct EfuseInfo efuses = {0};
+
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		sprintf(payload, "Unable to read efuses");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+
+	}
+
+	sprintf(payload, "Encryption counter: %#04x, Encryption configuration: %#04x.",
+		efuses.flash_crypt_cnt, efuses.encrypt_config);
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	uint set_count = __builtin_parity(efuses.flash_crypt_cnt);
+	ESP_LOGI(TAG, "Encryption cnt: %#04x, Parity: %d", efuses.flash_crypt_cnt, set_count);
+
+	if(efuses.encrypt_config != 0xf || set_count % 2 != 1)
+		goto fail;
+
+
+	sprintf(payload, "Secure boot %s", efuses.enabled_secure_boot_v2 ? "enabled" : "disabled");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(!efuses.enabled_secure_boot_v2)
+		goto fail;
+
+	sprintf(payload, "UART download %s, ROM BASIC fallback %s, JTAG %s, DL encrypt %s, DL decrypt %s, DL cache %s",
+		efuses.disabled_uart_download ? "Off" : "on", efuses.disabled_console_debug ? "Off" : "on",
+		efuses.disabled_jtag ? "Off" : "on", efuses.disabled_dl_encrypt ? "Off" : "on",
+		efuses.disabled_dl_decrypt ? "Off" : "on", efuses.disabled_dl_cache ? "Off" : "on");
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(!(efuses.disabled_uart_download && efuses.disabled_console_debug && efuses.disabled_jtag && efuses.disabled_dl_encrypt
+			&& efuses.disabled_dl_decrypt && efuses.disabled_dl_cache))
+		goto fail;
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+	return 0;
+
+fail:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+	return -1;
+}
+#endif /* CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION */
+
 int test_OPEN_relay(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
 
@@ -1241,6 +1306,12 @@ int run_component_tests(){
 		goto err;
 	}
 
+#ifdef CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION
+	if(test_efuses()<0){ // Will fail if security features are off
+		goto err;
+	}
+#endif /* CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION */
+
 	if(test_rtc()<0){
 		goto err;
 	}
@@ -1248,7 +1319,7 @@ int run_component_tests(){
 	if(test_servo()<0){
 		goto err;
 	}
-		
+
 	if(test_hw_trig()<0){
 		goto err;
 	}

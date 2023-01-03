@@ -1369,6 +1369,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		{
 			interface = eCONNECTION_NONE;
 			ESP_LOGI(TAG, "Set None");
+			if(isMqttConnected())
+			{
+				publish_debug_telemetry_observation_Connectivity_None(eCONNECTION_NONE);
+			}
 		}
 
 		previousInterface = storage_Get_CommunicationMode();

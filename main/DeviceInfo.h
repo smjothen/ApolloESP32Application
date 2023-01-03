@@ -4,6 +4,7 @@
  *  Created on: 17. aug. 2020
  *      Author: vv
  */
+#include "esp_system.h"
 
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
@@ -26,10 +27,39 @@ struct DeviceInfo
 	char Pin[5];
 };
 
+struct EfuseInfo{
+	/* Caibration fuses */
+	/* Efuse fuses */
+	uint16_t write_protect; // 16 bit
+	uint8_t read_protect; // 4 bit
+	uint8_t coding_scheme; // 2 bit
+	bool key_status;
+
+	/* Identity fuses */
+	/* Security fuses */
+	/* Caibration fuses */
+	/* Identity fuses */
+	/* Security fuses */
+	uint8_t flash_crypt_cnt; // 7 bit
+	bool disabled_uart_download;
+	uint8_t encrypt_config; // 4 bit
+	bool disabled_console_debug;
+	bool enabled_secure_boot_v1;
+	bool enabled_secure_boot_v2;
+	bool disabled_jtag;
+	bool disabled_dl_encrypt;
+	bool disabled_dl_decrypt;
+	bool disabled_dl_cache;
+	unsigned char block1[32];
+	unsigned char block2[32];
+	unsigned char block3[33];
+};
+
 uint8_t GetEEPROMFormatVersion();
 char * GetSoftwareVersion();
 char * GetSoftwareVersionBLE();
 
+esp_err_t GetEfuseInfo(struct EfuseInfo * efuse_info);
 
 #define ROUTING_ID "default"
 #define INSTALLATION_ID "00000000-0000-0000-0000-000000000000"

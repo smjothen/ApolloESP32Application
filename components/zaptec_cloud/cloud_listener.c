@@ -22,6 +22,7 @@
 #include "../../main/sessionHandler.h"
 #include "apollo_ota.h"
 #include "segmented_ota.h"
+#include "safe_ota.h"
 #include "ble_interface.h"
 #include "../cellular_modem/include/ppp_task.h"
 #include "../wifi/include/network.h"
@@ -1046,7 +1047,8 @@ int InitiateOTASequence()
 		ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
 
 		//Only start ota if MCU has ack'ed the stop command
-		start_segmented_ota();
+		//start_segmented_ota();
+		start_safe_ota();
 		//start_ota();
 	}
 	else
@@ -1621,6 +1623,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					//start_segmented_ota();
 					start_ota();
+				}else if(strstr(commandString, "multiblockota") != NULL){
+
+					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+					if(ret == MsgCommandAck)
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+					else
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+
+					start_segmented_ota();
 				}
 
 
@@ -2576,7 +2587,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString,"GetMCUSettings") != NULL)
 				{
-					SessionHandler_SendMCUSettings();
+					sessionHandler_SendMCUSettings();
 					responseStatus = 200;
 				}
 
@@ -2590,11 +2601,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"AbortOTA") != NULL)
 				{
 					do_segment_ota_abort();
+					do_safe_ota_abort();
 					responseStatus = 200;
 				}
 				else if(strstr(commandString,"GetRelayStates") != NULL)
 				{
-					SesionHandler_SendRelayStates();
+					sessionHandler_SendRelayStates();
 					responseStatus = 200;
 				}
 
@@ -2613,6 +2625,27 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 501; // TODO: See if more appropriate status code exist. (405?)
 						break;
 					}
+				}
+				else if(strstr(commandString, "pppoff"))
+				{
+					ppp_disconnect();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString,"SetOTAChunkSize ") != NULL)
+				{
+					int newSize = 0;
+					sscanf(&commandString[18], "%d", &newSize);
+					if((newSize > 64) && (newSize <= (65536*2)))
+					{
+						ota_set_chunk_size(newSize);
+					}
+
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "GetFPGAInfo"))
+				{
+					sessionHandler_SendFPGAInfo();
+					responseStatus = 200;
 				}
 			}
 	}
@@ -2946,7 +2979,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     	resetCounter++;
 
     	ESP_LOGI(TAG, "MQTT_EVENT_ERROR: #%d, Error: %d %X", resetCounter, event->error_handle->esp_tls_stack_err, event->error_handle->esp_tls_stack_err);
-
 
     	if((network_WifiIsConnected() == true) || (LteIsConnected() == true))
     	{
