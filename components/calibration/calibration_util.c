@@ -106,7 +106,7 @@ bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv) {
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *iv, float *vv) {
     MessageType ret;
 
-#ifdef CALIBRATION_SIMULATION
+#ifdef CONFIG_CAL_SIMULATION
 
     iv[0] = iv[1] = iv[2] = 5.0;
     vv[0] = vv[1] = vv[2] = 230.0;
@@ -166,7 +166,7 @@ uint16_t calibration_read_samples(void) {
 bool calibration_read_average(CalibrationType type, int phase, float *average) {
     (void)type;
 
-#ifdef CALIBRATION_SIMULATION
+#ifdef CONFIG_CAL_SIMULATION
 
     float currentOffset = 0.001234;
     float voltageOffset = 0.001234;
@@ -298,10 +298,10 @@ bool calibration_read_mid_status(uint32_t *status) {
 
 bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
-#ifdef CALIBRATION_SIMULATION
-                ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx));
-                *val = 25.0f;
-                return true;
+#ifdef CONFIG_CAL_SIMULATION
+    ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx));
+    *val = 25.0f;
+    return true;
 #endif
 
     ZapMessage msg = MCU_ReadParameter(ParamTotalChargePower);

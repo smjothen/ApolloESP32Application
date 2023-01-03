@@ -37,8 +37,6 @@
 
 static const char *TAG = "CALIBRATION    ";
 
-#define CALIBRATION_STACK_SIZE 8192
-
 TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
@@ -198,7 +196,7 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-#ifdef CALIBRATION_SIMULATION
+#ifdef CONFIG_CAL_SIMULATION
     return 3;
 #endif
     float min = nominal * (1.0 - range);
@@ -777,12 +775,12 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         }
     }
 
-    if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CALIBRATION_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[STATE_TICK]) > CONFIG_CAL_TIMEOUT) {
         calibration_send_state(ctx);
         ctx->Ticks[STATE_TICK] = curTick;
     }
 
-    if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < CALIBRATION_TIMEOUT) {
+    if (pdTICKS_TO_MS(curTick - ctx->Ticks[TICK]) < CONFIG_CAL_TIMEOUT) {
         return;
     }
 
@@ -944,7 +942,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
             ESP_LOGE(TAG, "Invalid serial!");
         }
 
-        if (strcmp(msg->Run.Key, CALIBRATION_KEY) != 0) {
+        if (strcmp(msg->Run.Key, CONFIG_CAL_KEY) != 0) {
             ESP_LOGE(TAG, "Invalid key!");
             doCalibRun = 0;
         }
@@ -1001,16 +999,16 @@ static int socket_add_ipv4_multicast_group(int sock, bool assign_source_if) {
     inet_addr_from_ip4addr(&iaddr, &ip_info.ip);
 #endif // LISTEN_ALL_IF
     // Configure multicast address to listen to
-    err = inet_aton(CALIBRATION_SERVER_IP, &imreq.imr_multiaddr.s_addr);
+    err = inet_aton(CONFIG_CAL_SERVER_IP, &imreq.imr_multiaddr.s_addr);
     if (err != 1) {
-        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", CALIBRATION_SERVER_IP);
+        ESP_LOGE(TAG, "Configured IPV4 multicast address '%s' is invalid.", CONFIG_CAL_SERVER_IP);
         // Errors in the return value have to be negative
         err = -1;
         goto err;
     }
     ESP_LOGI(TAG, "Configured IPV4 Multicast address %s", inet_ntoa(imreq.imr_multiaddr.s_addr));
     if (!IP_MULTICAST(ntohl(imreq.imr_multiaddr.s_addr))) {
-        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", CALIBRATION_SERVER_IP);
+        ESP_LOGW(TAG, "Configured IPV4 multicast address '%s' is not a valid multicast address. This will probably not work.", CONFIG_CAL_SERVER_IP);
     }
 
     if (assign_source_if) {
@@ -1048,7 +1046,7 @@ static int create_multicast_ipv4_socket(void) {
 
     // Bind the socket to any address
     saddr.sin_family = PF_INET;
-    saddr.sin_port = htons(CALIBRATION_SERVER_PORT);
+    saddr.sin_port = htons(CONFIG_CAL_SERVER_PORT);
     saddr.sin_addr.s_addr = htonl(INADDR_ANY);
     err = bind(sock, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
     if (err < 0) {
@@ -1157,10 +1155,10 @@ void calibration_task(void *pvParameters) {
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,
-            .sin_port = htons(CALIBRATION_SERVER_PORT),
+            .sin_port = htons(CONFIG_CAL_SERVER_PORT),
         };
 
-        inet_aton(CALIBRATION_SERVER_IP, &sdestv4.sin_addr.s_addr);
+        inet_aton(CONFIG_CAL_SERVER_IP, &sdestv4.sin_addr.s_addr);
 
         int err = 1;
         while (err > 0) {

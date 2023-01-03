@@ -1,0 +1,45 @@
+menu "MID Calibration"
+
+	config CAL_SIMULATION
+		bool "Simulate correct eMeter registers/verification steps"
+		default N
+	
+	config CAL_SIMULATION_FAIL
+		bool "Force simulation to fail in verification stage"
+		default N
+		depends on CAL_SIMULATION
+
+	config CAL_SIMULATION_PROD_SERV
+		bool "Simulate transfer of calibration data to production server"
+		default N
+		depends on CAL_SIMULATION
+
+	config CAL_SSID
+		string "Network SSID for simulation"
+		depends on CAL_SIMULATION
+
+	config CAL_PSK
+		string "Network PSK for simulation"
+		depends on CAL_SIMULATION
+
+	config CAL_KEY
+		string "Secret calibration key for communication with app"
+		default "6ea2ac08d055bcf09ae52d570315f43e"
+
+	config CAL_VERIFY_TIMES
+		int "How many times to run each verification"
+		default 1
+	
+	config CAL_SERVER_IP
+		string "Multicast IP of calibration server"
+		default "232.10.11.12"
+
+	config CAL_SERVER_PORT
+		int "Port of calibration server"
+		default 3333
+
+	config CAL_TIMEOUT
+		int "Timeout for sending state data to server (ms)"
+		default 1000
+		
+endmenu

@@ -1262,10 +1262,10 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()){
-#ifdef CALIBRATION_SIMULATION
+#ifdef CONFIG_CAL_SIMULATION
 		ESP_LOGI(TAG, "Using calibration SSID and PSK!");
-		strcpy(SSID, CALIBRATION_SSID);
-		strcpy(PSK, CALIBRATION_PSK);
+		strcpy(SSID, CONFIG_CAL_SSID);
+		strcpy(PSK, CONFIG_CAL_PSK);
 		return 0;
 #endif
 

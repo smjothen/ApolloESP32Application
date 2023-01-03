@@ -32,7 +32,7 @@ extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 // server
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
 
-#ifdef CALIBRATION_SIMULATION_PROD_SERV
+#ifdef CONFIG_CAL_SIMULATION_PROD_SERV
 		ESP_LOGI(TAG, "Simulating production server data transfer, using calibration ID 1337!");
 		ctx->Params.CalibrationId = 1337;
 		return true;
@@ -121,7 +121,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 		cJSON *test = cJSON_CreateObject();
 		cJSON_AddNumberToObject(test, "Station", ctx->Position);
 		cJSON_AddNumberToObject(test, "Run", ctx->Run);
-#ifdef CALIBRATION_SIMULATION
+#ifdef CONFIG_CAL_SIMULATION
 		cJSON_AddBoolToObject(test, "IsSimulated", true);
 #else
 		cJSON_AddBoolToObject(test, "IsSimulated", false);

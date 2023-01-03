@@ -113,7 +113,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
+                if (ctx->Count++ >= CONFIG_CAL_VERIFY_TIMES) {
                     ctx->Count = 0;
                     CAL_STEP(ctx) = CalibrationDone;
                 } else {

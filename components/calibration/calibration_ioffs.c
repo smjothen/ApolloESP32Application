@@ -109,7 +109,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     ESP_LOGI(TAG, "%s: IOFFS(%d) Verification = %f (%f)", calibration_state_to_string(ctx), phase, average, avg[phase]);
                 }
 
-                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
+                if (ctx->Count++ >= CONFIG_CAL_VERIFY_TIMES) {
                     ctx->Count = 0;
 
                     if (calibration_start_calibration_run(extra_type)) {
@@ -140,7 +140,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
                     }
                 }
 
-                if (ctx->Count++ >= CALIBRATION_VERIFY_TIMES) {
+                if (ctx->Count++ >= CONFIG_CAL_VERIFY_TIMES) {
                     ctx->Count = 0;
                     CAL_STEP(ctx) = CalibrationDone;
                 } else {
