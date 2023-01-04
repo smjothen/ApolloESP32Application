@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.2.0";
+char softwareVersion[] = "2.0.2.1";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -434,8 +434,6 @@ void app_main(void)
 	//Logging enabled
 #endif
 
-	log_efuse_info();
-
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 
@@ -474,6 +472,8 @@ void app_main(void)
 		certificate_SetUsage(false);
 		ESP_LOGE(TAG_MAIN, "Certificates disabled");
 	}
+
+	log_efuse_info();
 
 	//Ensure previous versions not supporting RFID requires authentication if set incorrectly
 	storage_Verify_AuthenticationSetting();
