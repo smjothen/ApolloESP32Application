@@ -10,6 +10,7 @@
 //#include "https_client.h"
 #include "production_test.h"
 #include "DeviceInfo.h"
+#include "DeviceInfo.h"
 #include "i2cDevices.h"
 #include "EEPROM.h"
 #include "RTC.h"
@@ -27,6 +28,7 @@
 #include "ppp_task.h"
 #include "protocol_task.h"
 #include "adc_control.h"
+#include "efuse.h"
 
 //#include "adc_control.h"
 
@@ -998,9 +1000,16 @@ int test_efuses(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
 
-	if(!(efuses.disabled_uart_download && efuses.disabled_console_debug && efuses.disabled_jtag && efuses.disabled_dl_encrypt
+	if(!(!efuses.disabled_uart_download && efuses.disabled_console_debug && efuses.disabled_jtag && !efuses.disabled_dl_encrypt
 			&& efuses.disabled_dl_decrypt && efuses.disabled_dl_cache))
 		goto fail;
+
+	if(lock_encryption_on_if_enabled() != ESP_OK){
+		sprintf(payload, "Unable to lock encryption cnt");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+	}
 
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_EFUSES, "efuses");
 	return 0;
