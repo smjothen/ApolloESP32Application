@@ -368,7 +368,6 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 		goto error;
 	}
 
-
 	char * base64_str = malloc(sizeof(char) * out_length);
 	if(base64_str == NULL){
 		ESP_LOGE(TAG, "Unable to allocate memory for base64 string of profile (length %d)", out_length);
@@ -1472,10 +1471,14 @@ bool get_period_from_schedule(struct ocpp_charging_schedule * schedule, uint tim
 
 	while(true){
 		if(current_period == NULL || current_period->value.start_period > time_since_start){
-
-			period_out->start_period = last_period->value.start_period;
-			period_out->limit = last_period->value.limit;
-			period_out->number_phases = last_period->value.number_phases;
+			if(last_period != NULL){
+				period_out->start_period = last_period->value.start_period;
+				period_out->limit = last_period->value.limit;
+				period_out->number_phases = last_period->value.number_phases;
+			}else{
+				ESP_LOGE(TAG, "Invalid schedule start or time offset (%u)", time_since_start);
+				return false;
+			}
 
 			if(current_period != NULL){
 				*time_to_next_period = current_period->value.start_period - time_since_start;
@@ -1638,6 +1641,8 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 	max_schedule.min_charging_rate = profile_max->charging_schedule.min_charging_rate;
 
 	combine_schedules(&tx_schedule, &max_schedule, schedule_out);
+
+	schedule_out->schedule_period.value.start_period = 0; // Ensures valid schedule from 0 if sec_since_start > 0
 
 	ocpp_free_charging_schedule(&tx_schedule, false);
 	ocpp_free_charging_schedule(&max_schedule, false);
@@ -1846,7 +1851,7 @@ static void ocpp_smart_task(){
 		}
 
 		if(transaction_is_active){
-			ESP_LOGI(TAG, "Handling active transaction");
+			ESP_LOGI(TAG, "Handling active transaction. start: %ld, offset %ld", transaction_start_time, current_time - transaction_start_time);
 			if(profile_tx == NULL || renewal_time_tx < current_time){
 				ESP_LOGI(TAG, "Current tx profile timed out");
 				data |= eACTIVE_PROFILE_TX_CHANGE;
@@ -1936,7 +1941,7 @@ static void ocpp_smart_task(){
 					tmp_schedule_dt = 1; // Create schedule for at least 1 second
 				}
 
-				create_composite_schedule(current_time, current_time - transaction_start_time, profile_tx, profile_max, schedule);
+				create_composite_schedule(transaction_start_time, current_time - transaction_start_time, profile_tx, profile_max, schedule);
 
 				current_min = schedule->min_charging_rate;
 				data |= eACTIVE_PERIOD_CHANGE;
