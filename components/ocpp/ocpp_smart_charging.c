@@ -961,7 +961,7 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 
 			connector_id = connector_id_json->valueint;
 
-			if(connector_id < 0 || connector_id > 1){ // TODO: replace 1 with number of connectors from config
+			if(connector_id < 0 || connector_id > conf_connector_count){
 				ESP_LOGW(TAG, "Recieved invalid 'connectorId'");
 				reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'connectorId' does not name a valid connector", NULL);
 				goto error;
@@ -1274,8 +1274,10 @@ struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int off
  * @brief creates a period list for a given range from transaction start with offset to a given end time.
  *
  * @todo Consider caching profiles instead of rereading when same profile is used to compute multiple separate sections.
+ *
+ * @return duration of the created period list.
  */
-void compute_range(time_t start, int offset, time_t end, int * transaction_id,
+int compute_range(time_t start, int offset, time_t end, int * transaction_id,
 		struct ocpp_charging_profile * (*next_profile)(struct ocpp_charging_profile *),
 		int max_periods, struct ocpp_charging_schedule_period_list * period_list_out){
 
@@ -1354,6 +1356,8 @@ cleanup:
 
 	free(profile_stack);
 	free(range_stack);
+
+	return offset;
 }
 
 // Assumes that all profiles are relevant for expected connector id, i.e expect charger to only have 1 connector and profiles to be valid for this charger.
@@ -1692,15 +1696,13 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 	*tx_schedule.start_schedule = start_time;
 	*max_schedule.start_schedule = start_time;
 
-	compute_range(start_time, 0, start_time+duration, NULL,
-		next_tx_or_tx_default_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &tx_schedule.schedule_period);
+	*tx_schedule.duration = compute_range(start_time, 0, start_time+duration, NULL,
+					next_tx_or_tx_default_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &tx_schedule.schedule_period);
 
-	compute_range(start_time, 0, start_time+duration, NULL,
-		next_max_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period);
+	*max_schedule.duration = compute_range(start_time, 0, start_time+duration, NULL,
+					next_max_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period);
 
 	//TODO: Duration should be limited if max periods exceeded.
-	*tx_schedule.duration = duration;
-	*max_schedule.duration = duration;
 
 	struct ocpp_charging_schedule composite_schedule = {0};
 	combine_schedules(&tx_schedule, &max_schedule, &composite_schedule);
