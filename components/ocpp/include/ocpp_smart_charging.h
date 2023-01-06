@@ -11,8 +11,7 @@
  * notified about new transaction or transactionid. NOTE: it might be possible to
  * implement using timer istead of thread. Currently thread is being used due to "direct to task notifications"
  */
-esp_err_t ocpp_smart_charging_init(size_t connector_count, int max_stack_level,
-				const char * allowed_charging_rate_unit, int max_periods, int max_charging_profiles);
+esp_err_t ocpp_smart_charging_init(size_t connector_count);
 
 void ocpp_set_active_transaction_id(int * transaction_id);
 void ocpp_set_transaction_is_active(bool active);

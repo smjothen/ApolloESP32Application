@@ -22,9 +22,7 @@
 #include "../components/ocpp/include/types/ocpp_reason.h"
 #include "../components/ocpp/include/types/ocpp_meter_value.h"
 
-static const char *tmp_path = "/offs";
-
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static char * tmp_path = "/files";
 
 static const int max_offline_session_files = 100;
 static const int max_offline_signed_values = 100;
@@ -64,68 +62,46 @@ static SemaphoreHandle_t offs_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
 
 static bool offlineSessionOpen = false;
-static bool mounted = false;
 
 static int activeFileNumber = -1;
 static char activePathString[22] = {0};
-static char readingPath_ocpp[19] = {0};
+static char readingPath_ocpp[20] = {0};
 static long readingOffset_ocpp = LONG_MAX;
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
+
+bool offlineSession_select_folder()
+{
+	struct stat st;
+	if(stat("/files", &st) == 0){
+		if(tmp_path[1] != 'f')
+			sprintf(tmp_path, "/files");
+
+		ESP_LOGI(TAG, "'%s' already mounted", tmp_path);
+		return true;
+	}
+
+	//If failing to mount, try using partition for chargers numbers below ~ZAP000150
+	if((errno == ENOENT && errno == ENODEV) && (i2cCheckSerialForDiskPartition() == true)){
+		if(stat("/disk", &st) == 0){
+			if(tmp_path[1] != 'd')
+				sprintf(tmp_path, "/disk");
+
+			ESP_LOGI(TAG, "'%s' already mounted", tmp_path);
+			return true;
+		}
+	}
+
+	return false;
+}
 
 void offlineSession_Init()
 {
 	offs_lock = xSemaphoreCreateMutex();
 	xSemaphoreGive(offs_lock);
 
-	offlineSession_mount_folder();
+	offlineSession_select_folder();
 }
-
-
-bool offlineSession_mount_folder()
-{
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "/offs already mounted");
-		return mounted;
-	}
-
-    ESP_LOGI(TAG, "Mounting /offs");
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = max_offline_session_files + max_offline_ocpp_txn_files,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-
-		//If failing to mount, try using partition for chargers numbers below ~ZAP000150
-		if((err == ESP_ERR_NOT_FOUND) && (i2cCheckSerialForDiskPartition() == true))
-		{
-			err = esp_vfs_fat_spiflash_mount(tmp_path, "disk", &mount_config, &s_wl_handle);
-			if (err != ESP_OK) {
-				ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-
-				return mounted;
-			}
-
-		}
-		else
-		{
-			return mounted;
-		}
-	}
-
-	mounted = true;
-
-	ESP_LOGI(TAG, "offs mounted");
-
-	return mounted;
-}
-
-
 
 //int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
 //    struct LogHeader head_in_file = {0};
@@ -168,7 +144,8 @@ bool offlineSession_mount_folder()
  */
 int offlineSession_FindNewFileNumber()
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	int fileNo = 0;
@@ -180,7 +157,7 @@ int offlineSession_FindNewFileNumber()
 	//for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
 	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo--)
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -214,16 +191,17 @@ int offlineSession_FindNewFileNumber()
  */
 int offlineSession_FindOldestFile()
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	int fileNo = 0;
 	FILE *file;
-	char buf[22] = {0};
+	char buf[32] = {0};
 
 	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++ )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -240,14 +218,15 @@ int offlineSession_FindOldestFile()
 
 long offlineSession_FindOldestFile_ocpp()
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return LONG_MAX;
 
 	ESP_LOGI(TAG, "Attempting to find oldest file (ocpp)");
 
-	DIR * dir = opendir("/offs/");
+	DIR * dir = opendir(tmp_path);
 	if(dir == NULL){
-		ESP_LOGE(TAG, "Unable to open directory");
+		ESP_LOGE(TAG, "Unable to open directory (%s) to find oledst file", tmp_path);
 		return -1;
 	}
 
@@ -277,17 +256,18 @@ long offlineSession_FindOldestFile_ocpp()
 
 int offlineSession_FindNrOfFiles()
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	int fileNo = 0;
 	FILE *file;
-	char buf[22] = {0};
+	char buf[32] = {0};
 	int fileCount = 0;
 
 	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++ )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -308,13 +288,14 @@ int offlineSession_FindNrOfFiles()
 
 int offlineSession_FindNrOfFiles_ocpp()
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	ESP_LOGI(TAG, "Attemting to find nr of files (ocpp)");
 	int fileCount = 0;
 
-	DIR * dir = opendir("/offs");
+	DIR * dir = opendir(tmp_path);
 	if(dir == NULL){
 		return 0;
 	}
@@ -348,7 +329,8 @@ int offlineSession_GetMaxSessionCount()
 
 int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incompleteSession)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	int fileNo = 0;
@@ -356,7 +338,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 	char buf[22] = {0};
 
 	/// First check file 0 to see if there are any offlineSession files
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	lastUsedFile = fopen(buf, "r");
 	if(lastUsedFile == NULL)
 	{
@@ -373,7 +355,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 	/// Then perform search from top to see if there are later files
 	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo-- )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		lastUsedFile = fopen(buf, "r");
 		if(lastUsedFile != NULL)
@@ -429,7 +411,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 					/// Must set activeFileNumber, path and offlineSessionOpen to allow new SignedValues entries
 					activeFileNumber = fileNo;
-					sprintf(activePathString,"/offs/%d.bin", activeFileNumber);
+					sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 					offlineSessionOpen = true;
 				}
 			}
@@ -471,7 +453,8 @@ void offlineSession_DeleteLastUsedFile()
 
 void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return;
 
 	if(activeFileNumber < 0)
@@ -598,7 +581,8 @@ time_t peeked_timestamp = LONG_MAX;
  */
 static esp_err_t offlineSession_UpdateSessionOnFile_Ocpp(const unsigned char * sessionData, size_t data_length, int transaction_id, time_t start_transaction_timestamp, long offset, int whence, bool append)
 {
-	if(mounted == false || start_transaction_timestamp < OCPP_MIN_TIMESTAMP)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0 || start_transaction_timestamp < OCPP_MIN_TIMESTAMP)
 		return ESP_FAIL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -700,7 +684,8 @@ error:
 
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return -1;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -710,7 +695,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	}
 
 	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	sessionFile = fopen(buf, "r");
 
 	if(sessionFile == NULL)
@@ -851,7 +836,8 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return NULL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -861,7 +847,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	}
 
 	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	sessionFile = fopen(buf, "r");
 
 	if(sessionFile == NULL)
@@ -919,7 +905,8 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 }
 
 time_t offlineSession_PeekNextMessageTimestamp_ocpp(){
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return LONG_MAX;
 
 	if(!peek_tainted)
@@ -946,7 +933,7 @@ time_t offlineSession_PeekNextMessageTimestamp_ocpp(){
 			return peeked_timestamp;
 		}
 
-		snprintf(tmp_reading_path, sizeof(tmp_reading_path), "/offs/%.8lx.bin", timestamp_oldest);
+		snprintf(tmp_reading_path, sizeof(tmp_reading_path), "%s/%.8lx.bin", tmp_path, timestamp_oldest);
 		tmp_offset = FILE_TXN_ADDR_START;
 	}
 
@@ -1127,7 +1114,8 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 	FILE * fp = NULL;
 	bool should_delete = false;
 
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return NULL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -1146,7 +1134,7 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 			goto error;
 		}
 
-		snprintf(readingPath_ocpp, sizeof(readingPath_ocpp), "/offs/%.8lx.bin", timestamp_oldest);
+		snprintf(readingPath_ocpp, sizeof(readingPath_ocpp), "%s/%.8lx.bin", tmp_path, timestamp_oldest);
 	}
 
 	errno = 0;
@@ -1205,7 +1193,7 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 		}
 		else{
 			time_t start_transaction_timestamp = LONG_MAX;
-			sscanf(readingPath_ocpp, "/offs/%lx.bin", &start_transaction_timestamp);
+			sscanf(readingPath_ocpp, "%s/%lx.bin", tmp_path, &start_transaction_timestamp);
 			message = ocpp_create_start_transaction_request(connector_id, id_tag, meter_start,
 									(valid_reservation) ? &reservation_id : NULL,
 									start_transaction_timestamp);
@@ -1427,7 +1415,8 @@ double GetEnergySigned()
 
 cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return NULL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -1563,7 +1552,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 {
 	int ret = 0;
 
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_select_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return ret;
 	}
@@ -1575,7 +1564,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 		return ESP_FAIL;
 	}
 
-	sprintf(activePathString,"/offs/%d.bin", activeFileNumber);
+	sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 
 	//Save the session structure to the file including the start 'B' message
 	offlineSession_UpdateSessionOnFile(sessionData, true);
@@ -1586,7 +1575,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, int connector_id,
 						const char * id_tag, int meter_start, int * reservation_id)
 {
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_select_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL; //NOTE: The Save*_ocppx functions return ESP_FAIL when unable to mount SaveSession returns 0 (ESP_OK)
 	}
@@ -1619,7 +1608,7 @@ esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t tr
 esp_err_t offlineSession_SaveStopTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, const char * id_tag,
 						int meter_stop, time_t timestamp, const char * reason)
 {
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_select_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL;
 	}
@@ -1648,7 +1637,7 @@ esp_err_t offlineSession_SaveStopTransaction_ocpp(int transaction_id, time_t tra
 
 esp_err_t offlineSession_SaveNewMeterValue_ocpp(int transaction_id, time_t transaction_start_timestamp, const unsigned char * meter_data, size_t buffer_length)
 {
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_select_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL;
 	}
@@ -1658,7 +1647,8 @@ esp_err_t offlineSession_SaveNewMeterValue_ocpp(int transaction_id, time_t trans
 }
 
 esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int new_transaction_id){
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return ESP_FAIL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -1667,9 +1657,9 @@ esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int ne
 		return ESP_FAIL;
 	}
 
-	DIR * dir = opendir("/offs/");
+	DIR * dir = opendir(tmp_path);
 	if(dir == NULL){
-		ESP_LOGE(TAG, "Unable to open directory");
+		ESP_LOGE(TAG, "Unable to open directory (%s) to update transaction id", tmp_path);
 		xSemaphoreGive(offs_lock);
 		return -1;
 	}
@@ -1682,7 +1672,7 @@ esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int ne
 		if(dp->d_type == DT_REG){
 			long timestamp = strtol(dp->d_name, NULL, 16); // filename for ocpp transactions are based on unix time IN hexadecimal
 			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
-				int written_length = snprintf(file_path, sizeof(file_path), "/offs/%s", dp->d_name);
+				int written_length = snprintf(file_path, sizeof(file_path), "%s/%s", tmp_path, dp->d_name);
 
 				if(written_length > 0 && written_length < sizeof(file_path)){
 					FILE * fp = fopen(file_path, "rb+");
@@ -1733,7 +1723,8 @@ esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int ne
 
 void offlineSession_append_energy(char label, int timestamp, double energy)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat(tmp_path, &st) != 0)
 		return;
 
 	if(activeFileNumber < 0)
@@ -1950,9 +1941,9 @@ int offlineSession_DeleteAllFiles_ocpp()
 {
 	ESP_LOGW(TAG, "Deleting all files (ocpp)");
 
-	char full_path[19];
+	char full_path[20];
 	int nr_of_unsuccessfull_removals = 0;
-	DIR * dir = opendir("/offs/");
+	DIR * dir = opendir(tmp_path);
 
 	struct dirent * dp = readdir(dir);
 
@@ -1961,7 +1952,7 @@ int offlineSession_DeleteAllFiles_ocpp()
 			long timestamp = strtol(dp->d_name, NULL, 16);
 			if(timestamp > OCPP_MIN_TIMESTAMP && timestamp != LONG_MAX){
 				if(strnlen(dp->d_name, 13) == 12){
-					snprintf(full_path, sizeof(full_path), "/offs/%.12s", dp->d_name);
+					snprintf(full_path, sizeof(full_path), "%s/%.12s", tmp_path, dp->d_name);
 				}else{
 					ESP_LOGE(TAG, "Unexpected file length, '%s' not a 8.3 filename", dp->d_name);
 					dp = readdir(dir);
@@ -1988,7 +1979,7 @@ int offlineSession_delete_session(int fileNo)
 {
 	int ret = 0;
 
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_select_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return ret;
 	}
@@ -2000,7 +1991,7 @@ int offlineSession_delete_session(int fileNo)
 	}
 
 	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 	FILE *fp = fopen(buf, "r");
 	if(fp==NULL)

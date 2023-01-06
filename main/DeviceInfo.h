@@ -225,13 +225,6 @@ struct Configuration
 	// ocpp reservation profile settings
 	bool ocpp_reserve_connector_zero_supported;
 
-	// ocpp smart charging profile
-	uint8_t ocpp_charge_profile_max_stack_level;
-	char ocpp_charging_schedule_allowed_charging_rate_unit[4];
-	uint8_t ocpp_charging_schedule_max_periods;
-	bool ocpp_connector_switch_3_to_1_phase_supported;
-	uint8_t ocpp_max_charging_profiles_installed;
-
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];

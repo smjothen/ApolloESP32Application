@@ -124,11 +124,6 @@ bool storage_Get_ocpp_local_auth_list_enabled();
 uint16_t storage_Get_ocpp_local_auth_list_max_length();
 uint8_t storage_Get_ocpp_send_local_list_max_length();
 bool storage_Get_reserve_connector_zero_supported();
-uint8_t storage_Get_ocpp_charge_profile_max_stack_level();
-const char * storage_Get_ocpp_charging_schedule_allowed_charging_rate_unit();
-uint8_t storage_Get_ocpp_charging_schedule_max_periods();
-bool storage_Get_ocpp_connector_switch_3_to_1_phase_supported();
-uint8_t storage_Get_ocpp_max_charging_profiles_installed();
 
 //Get Local settings
 enum session_controller storage_Get_session_controller();

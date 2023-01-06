@@ -460,7 +460,8 @@ void certificate_init()
 {
 	certificate = calloc(MAX_CERTIFICATE_SIZE,1); //This is used for global ca buffer - do not need to free it.
 
-	if(fatIsMounted())
+	struct stat st;
+	if(stat("/disk", &st) == 0)
 	{
 		certificate_bundle = calloc(MAX_CERTIFICATE_BUNDLE_SIZE,1); //Must be free'ed
 

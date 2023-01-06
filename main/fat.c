@@ -27,8 +27,6 @@ static const char *TAG = "FAT            ";
 // Handle of the wear levelling library instance
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
-// Mount path for the partition
-const char *base_path = "/spiflash";
 /* For testing
 void fat_make()
 {
@@ -89,48 +87,47 @@ void fat_make()
     ESP_LOGI(TAG, "Done");
 }*/
 
-
-
-static bool mounted = false;
-bool fat_static_mount()
+void fat_static_mount()
 {
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "FAT filesystem is already mounted");
-		return mounted;
+
+	const char * base_paths[2] = {"/disk","/files"}; // partition label with '/' prefix
+	const int max_files[2] = {256, 256};
+
+	esp_vfs_fat_mount_config_t mount_config = {
+		.max_files = 0,
+		.format_if_mount_failed = true,
+		.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
+	};
+
+	ESP_LOGI(TAG, "Mounting FAT partitions");
+	ESP_LOGI(TAG, "=======================");
+
+	for(size_t i = 0; i < 2; i++){
+		ESP_LOGI(TAG, "%s partition:", base_paths[i]+1); // skip path prefix ('/')
+
+		if(stat(base_paths[i], NULL) == 0){
+			ESP_LOGW(TAG, "\tAlready mounted");
+			break;
+		}
+
+		if(errno != ENOENT && errno != ENODEV){
+			ESP_LOGE(TAG, "\tUnexpected stat error: %s", strerror(errno));
+		}
+		mount_config.max_files = max_files[i];
+
+		esp_err_t err = esp_vfs_fat_spiflash_mount(base_paths[i], base_paths[i]+1, &mount_config, &s_wl_handle);
+		if (err != ESP_OK) {
+			ESP_LOGE(TAG, "\tMount failed: (%s)", esp_err_to_name(err));
+		}else{
+			ESP_LOGI(TAG, "\tMount success");
+		}
 	}
-
-    ESP_LOGI(TAG, "Mounting FAT filesystem");
-    // To mount device we need name of device partition, define base_path
-    // and allow format partition in case if it is new one and was not formated before
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = 4,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "disk", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
-	}
-
-	mounted = true;
-
-	ESP_LOGI(TAG, "Mounted");
-
-	return mounted;
 }
-
-bool fatIsMounted()
-{
-	return mounted;
-}
-
 
 void fat_WriteCertificateBundle(char * newCertificateBundle)
 {
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
@@ -138,7 +135,7 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
 
 
     ESP_LOGI(TAG, "Opening file");
-    FILE *f = fopen("/spiflash/cert.txt", "wb");
+    FILE *f = fopen("/disk/cert.txt", "wb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
@@ -156,7 +153,8 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
 void fat_ReadCertificateBundle(char * readCertificateBundle)
 {
 
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for reading");
 		return;
@@ -164,7 +162,7 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
 
     // Open file for reading
     ESP_LOGI(TAG, "Reading file");
-    FILE *f = fopen("/spiflash/cert.txt", "rb");
+    FILE *f = fopen("/disk/cert.txt", "rb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
@@ -179,7 +177,8 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
 void fat_DeleteCertificateBundle()
 {
 
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for reading");
 		return;
@@ -187,7 +186,7 @@ void fat_DeleteCertificateBundle()
 
     // Open file for reading
     ESP_LOGI(TAG, "Reading file");
-    int ret = remove("/spiflash/cert.txt");
+    int ret = remove("/disk/cert.txt");
 
     ESP_LOGI(TAG, "Removed cert file returned: %d", ret);
 }
@@ -206,7 +205,8 @@ int fat_replace_file(const char * new_file, const char * old_file){
 }
 
 int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_list, size_t list_length){
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return -1;
@@ -214,7 +214,7 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 
 	ESP_LOGI(TAG, "Creating temporary file for update auth list (Full)");
 	errno = 0;
-	FILE *f = fopen("/spiflash/authlist.tmp", "wb");
+	FILE *f = fopen("/disk/authlist.tmp", "wb");
 	if (f == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for writing %s", strerror(errno));
 		return -1;
@@ -222,7 +222,7 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 
 	if(fprintf(f, "%d\n", version) < 0){
 		fclose(f);
-		remove("/spiflash/authlist.tmp");
+		remove("/disk/authlist.tmp");
 		return -1;
 	}
 
@@ -231,7 +231,7 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 		if(written_items == 0){
 			fclose(f);
 			ESP_LOGI(TAG, "Error when writing full auth list. Changes not saved");
-			remove("/spiflash/authlist.tmp");
+			remove("/disk/authlist.tmp");
 			return -1;
 		}
 	}
@@ -239,24 +239,25 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 	fclose(f);
 
 	ESP_LOGI(TAG, "Auth list update complete with %d entries, replacing old file", list_length);
-	return fat_replace_file("/spiflash/authlist.tmp", "/spiflash/authlist.txt");
+	return fat_replace_file("/disk/authlist.tmp", "/disk/authlist.txt");
 }
 
 int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data ** auth_list, size_t list_length){
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return -1;
 	}
 
 	ESP_LOGI(TAG, "Creating temporary file for update auth list (Differential)");
-	FILE *f_w = fopen("/spiflash/authlist.tmp", "wb");
+	FILE *f_w = fopen("/disk/authlist.tmp", "wb");
 	if (f_w == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for writing");
 		return -1;
 	}
 
-	FILE *f_r = fopen("/spiflash/authlist.txt", "rb");
+	FILE *f_r = fopen("/disk/authlist.txt", "rb");
 	if (f_r == NULL) {
 		fclose(f_w);
 		ESP_LOGE(TAG, "Failed to open old auth list");
@@ -321,7 +322,7 @@ int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data *
 	free(auth_list_item_is_written);
 
 	ESP_LOGI(TAG, "Auth list update complete, replacing old file");
-	return fat_replace_file("/spiflash/authlist.tmp", "/spiflash/authlist.txt");
+	return fat_replace_file("/disk/authlist.tmp", "/disk/authlist.txt");
 error:
 
 	ESP_LOGE(TAG, "Error while writing auth list");
@@ -332,14 +333,15 @@ error:
 }
 
 bool fat_ReadAuthData(const char * id_tag, struct ocpp_authorization_data * auth_data_out){ // TODO: Test
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return false;
 	}
 
 	ESP_LOGI(TAG, "Getting auth data from file given tag");
-	FILE *f = fopen("/spiflash/authlist.txt", "rb");
+	FILE *f = fopen("/disk/authlist.txt", "rb");
 	if (f == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for reading");
 		return false;
@@ -371,13 +373,14 @@ bool fat_ReadAuthData(const char * id_tag, struct ocpp_authorization_data * auth
 }
 
 int fat_ReadAuthListVersion(){
-	if(mounted == false)
+	struct stat st;
+	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return -1;
 	}
 
-        FILE *f = fopen("/spiflash/authlist.txt", "rb");
+        FILE *f = fopen("/disk/authlist.txt", "rb");
 	if (f == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for reading version");
 		return -1;
@@ -392,16 +395,5 @@ int fat_ReadAuthListVersion(){
 	fclose(f);
 
 	return version;
-}
-
-
-void fat_static_unmount()
-{
-	// Unmount FATFSq
-	ESP_LOGI(TAG, "Unmounting FAT filesystem");
-	ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
-
-	mounted = false;
-	ESP_LOGI(TAG, "Done unmounting");
 }
 

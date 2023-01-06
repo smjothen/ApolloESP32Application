@@ -117,13 +117,6 @@ void storage_Init_Configuration()
 	// ocpp reservation profile settings
 	configurationStruct.ocpp_reserve_connector_zero_supported = true;
 
-	// ocpp smart charging profile settings
-	configurationStruct.ocpp_charge_profile_max_stack_level = 8;
-	strcpy(configurationStruct.ocpp_charging_schedule_allowed_charging_rate_unit, "A"); // TODO: Add support for "A,W"
-	configurationStruct.ocpp_charging_schedule_max_periods = 32;
-	configurationStruct.ocpp_connector_switch_3_to_1_phase_supported = false;
-	configurationStruct.ocpp_max_charging_profiles_installed = 24;
-
 	//Local settings
 
 	configurationStruct.communicationMode 			= eCONNECTION_LTE;
@@ -744,31 +737,6 @@ uint8_t storage_Get_ocpp_send_local_list_max_length()
 
 bool storage_Get_reserve_connector_zero_supported(){
 	return true;
-}
-
-uint8_t storage_Get_ocpp_charge_profile_max_stack_level(){
-	return 8;
-	//	return configurationStruct.ocpp_charge_profile_max_stack_level;
-}
-
-const char * storage_Get_ocpp_charging_schedule_allowed_charging_rate_unit(){
-	return "A";
-	//	return configurationStruct.ocpp_charging_schedule_allowed_charging_rate_unit;
-}
-
-uint8_t storage_Get_ocpp_charging_schedule_max_periods(){
-	return 32;
-	//	return configurationStruct.ocpp_charging_schedule_max_periods;
-}
-
-bool storage_Get_ocpp_connector_switch_3_to_1_phase_supported(){
-	return false;
-	//	return configurationStruct.ocpp_connector_switch_3_to_1_phase_supported;
-}
-
-uint8_t storage_Get_ocpp_max_charging_profiles_installed(){
-	return 24;
-	//	return configurationStruct.ocpp_max_charging_profiles_installed;
 }
 
 //Local settings

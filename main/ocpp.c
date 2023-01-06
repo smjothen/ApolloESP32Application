@@ -2751,12 +2751,7 @@ static void ocpp_task(){
 		start_ocpp_heartbeat();
 
 		ocpp_set_on_new_period_cb(sessionHandler_OcppSetChargingVariables);
-		if(ocpp_smart_charging_init(storage_Get_ocpp_number_of_connectors(),
-						storage_Get_ocpp_charge_profile_max_stack_level(),
-						storage_Get_ocpp_charging_schedule_allowed_charging_rate_unit(),
-						storage_Get_ocpp_charging_schedule_max_periods(),
-						storage_Get_ocpp_max_charging_profiles_installed()) != ESP_OK){
-
+		if(ocpp_smart_charging_init(storage_Get_ocpp_number_of_connectors()) != ESP_OK){
 			ESP_LOGE(TAG, "Unable to initiate smart charging");
 		}
 

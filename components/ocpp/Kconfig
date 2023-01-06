@@ -1,0 +1,26 @@
+menu "OCPP"
+	config OCPP_SMART_PATH
+	       string "Base path where ocpp smart charging will store charging profiles"
+	       default "/files"
+
+	config OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL
+	       int "Max StackLevel of a ChargingProfile. The number defined also indicates the max allowed number of installed charging schedules per Charging Profile Purposes."
+	       default 8
+
+	config OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT
+	       string "A list of supported quantities for use in a ChargingSchedule. Allowed values: 'Current' and 'Power'"
+	       default "A"
+
+	config OCPP_CHARGING_SCHEDULE_MAX_PERIODS
+	       int "Maximum number of periods that may be defined per ChargingSchedule."
+	       default 32
+
+	config OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
+	       bool "If defined and true, this Charge Point support switching from 3 to 1 phase during a Transaction."
+	       default N
+
+	config OCPP_MAX_CHARGING_PROFILES_INSTALLED
+	       int "Maximum number of Charging profiles installed at a time"
+	       default 24
+
+endmenu

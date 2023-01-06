@@ -26,19 +26,11 @@
 #include "wpa_supplicant/base64.h"
 
 static const char * TAG = "OCPP SMART     ";
-static const char * base_path = "/ocpp"; // TODO: check if too long
-
-static bool mounted = false;
-
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static const char * base_path = CONFIG_OCPP_SMART_PATH;
 
 static SemaphoreHandle_t file_lock = NULL;
 
 static size_t conf_connector_count;
-static int conf_max_stack_level;
-static char conf_allowed_charging_rate_unit[4];
-static int conf_max_periods;
-static int conf_max_charging_profiles;
 
 static TaskHandle_t ocpp_smart_task_handle;
 
@@ -78,7 +70,8 @@ struct ocpp_charging_profile ** tx_profiles = NULL;
 esp_err_t update_charging_profile(struct ocpp_charging_profile * profile){
 	ESP_LOGI(TAG, "Updating charging profile");
 
-	if(!mounted){
+	struct stat st;
+	if(stat(base_path, &st) != 0){
 		ESP_LOGE(TAG, "Update failed: Not mounted");
 		ocpp_free_charging_profile(profile);
 		return ESP_ERR_INVALID_STATE;
@@ -311,7 +304,7 @@ int remove_profile_from_memory(int * id, int * stack_level, bool imediate){
 		return 1;
 
 	}else if(id != NULL){
-		for(size_t i = 0; i < conf_max_stack_level+1; i++){
+		for(size_t i = 0; i < CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL+1; i++){
 			if(tx_profiles[i] != NULL && tx_profiles[i]->profile_id == *id){
 				if(imediate){
 					ocpp_free_charging_profile(tx_profiles[i]);
@@ -326,7 +319,7 @@ int remove_profile_from_memory(int * id, int * stack_level, bool imediate){
 
 	}else{
 		int removed_count = 0;
-		for(size_t i = 0; i < conf_max_stack_level +1; i++){
+		for(size_t i = 0; i < CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL+1; i++){
 			if(tx_profiles[i] != NULL){
 				if(imediate){
 					ocpp_free_charging_profile(tx_profiles[i]);
@@ -724,7 +717,7 @@ struct ocpp_charging_profile * next_tx_profile(struct ocpp_charging_profile * cu
 		return NULL;
 	}
 
-	int requested_stack_level = (current_profile != NULL) ? current_profile->stack_level-1 : conf_max_stack_level;
+	int requested_stack_level = (current_profile != NULL) ? current_profile->stack_level-1 : CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL;
 
 	for(; requested_stack_level >= 0; requested_stack_level--){
 		if(tx_profiles[requested_stack_level] != NULL){
@@ -746,7 +739,8 @@ struct ocpp_charging_profile * next_charge_profile_from_file(struct ocpp_chargin
 		return NULL;
 	}
 
-	if(mounted == false){
+	struct stat st;
+	if(stat(base_path, &st) != 0){
 		ESP_LOGE(TAG, "Unable to read profile: not mounted");
 		return NULL;
 	}
@@ -986,9 +980,10 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 	if(cJSON_HasObjectItem(payload, "csChargingProfiles")){
 
 		cJSON * charging_profile_json = cJSON_GetObjectItem(payload, "csChargingProfiles");
-		enum ocppj_err_t err =  ocpp_charging_profile_from_json(charging_profile_json, conf_max_stack_level,
-								conf_allowed_charging_rate_unit, conf_max_periods,
-								charging_profile, err_str, sizeof(err_str));
+		enum ocppj_err_t err =  ocpp_charging_profile_from_json(charging_profile_json, CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL,
+									CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT,
+									CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS,
+									charging_profile, err_str, sizeof(err_str));
 
 		if(err != eOCPPJ_NO_ERROR){
 			ESP_LOGW(TAG, "Invalid charging profile: %s", err_str);
@@ -1031,29 +1026,6 @@ error:
 	}
 
 	ocpp_free_charging_profile(charging_profile);
-}
-
-esp_err_t mount_partition(){
-	if(mounted){
-		ESP_LOGE(TAG, "Request to mount while mounted");
-		return ESP_ERR_INVALID_STATE;
-	}
-
-	ESP_LOGI(TAG, "Mounting %s", base_path);
-	const esp_vfs_fat_mount_config_t mount_config = {
-		.max_files = (conf_max_stack_level +1) * 2,
-		.format_if_mount_failed = true,
-		.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-	};
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "files", &mount_config, &s_wl_handle);
-	if(err != ESP_OK){
-		ESP_LOGE(TAG, "Failed to mount: %s", esp_err_to_name(err));
-	}else{
-		mounted = true;
-	}
-
-	return err;
 }
 
 int * active_transaction_id = NULL;
@@ -1310,8 +1282,8 @@ void compute_range(time_t start, int offset, time_t end, int * transaction_id,
 	size_t index = 0;
 	struct ocpp_charging_profile * current_profile = next_profile(NULL);
 
-	struct ocpp_charging_profile ** profile_stack = calloc(sizeof(struct ocpp_charging_profile), conf_max_stack_level);
-	time_t * range_stack = calloc(sizeof(time_t), 2 * conf_max_stack_level);
+	struct ocpp_charging_profile ** profile_stack = calloc(sizeof(struct ocpp_charging_profile), CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL);
+	time_t * range_stack = calloc(sizeof(time_t), 2 * CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL);
 
 	if(profile_stack == NULL || range_stack == NULL){
 		ESP_LOGE(TAG, "Unable to allocate memory for profile stack or range info");
@@ -1621,9 +1593,9 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 	int offset_max = 0;
 
 	int copy_count = 0;
-	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_tx, conf_max_periods, &tx_schedule.schedule_period, &offset_tx, &copy_count);
+	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_tx, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &tx_schedule.schedule_period, &offset_tx, &copy_count);
 	copy_count = 0;
-	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, conf_max_periods, &max_schedule.schedule_period, &offset_max, &copy_count);
+	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period, &offset_max, &copy_count);
 
 	tx_schedule.start_schedule = malloc(sizeof(time_t));
 	max_schedule.start_schedule = malloc(sizeof(time_t));
@@ -1692,7 +1664,7 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 
 		}
 
-		if(!ocpp_csl_contains(conf_allowed_charging_rate_unit, charging_rate_unit)){
+		if(!ocpp_csl_contains(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, charging_rate_unit)){
 			err = eOCPPJ_ERROR_NOT_SUPPORTED;
 			strcpy(err_str, "'Requested chargingRateUnit' is not supported");
 			goto error;
@@ -1721,10 +1693,10 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 	*max_schedule.start_schedule = start_time;
 
 	compute_range(start_time, 0, start_time+duration, NULL,
-		next_tx_or_tx_default_profile, conf_max_periods, &tx_schedule.schedule_period);
+		next_tx_or_tx_default_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &tx_schedule.schedule_period);
 
 	compute_range(start_time, 0, start_time+duration, NULL,
-		next_max_profile, conf_max_periods, &max_schedule.schedule_period);
+		next_max_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period);
 
 	//TODO: Duration should be limited if max periods exceeded.
 	*tx_schedule.duration = duration;
@@ -2008,20 +1980,16 @@ error:
 	ocpp_free_charging_schedule(schedule, true);
 }
 
-esp_err_t ocpp_smart_charging_init(size_t connector_count, int max_stack_level,
-				const char * allowed_charging_rate_unit, int max_periods, int max_charging_profiles){
+esp_err_t ocpp_smart_charging_init(size_t connector_count){
 	ESP_LOGI(TAG, "Initializing smart charging");
 
-	if(strcmp(allowed_charging_rate_unit, "A") != 0){
-		ESP_LOGE(TAG, "Currently only supports charge rate unit A");
+	if(strcmp(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, "A") != 0){
+		ESP_LOGE(TAG, "Configuration is set to unsupported charge rate unit '%s'",
+			CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT);
 		return ESP_ERR_NOT_SUPPORTED;
 	}
 
 	conf_connector_count = connector_count;
-	conf_max_stack_level = max_stack_level;
-	strcpy(conf_allowed_charging_rate_unit, allowed_charging_rate_unit);
-	conf_max_periods = max_periods;
-	conf_max_charging_profiles = max_charging_profiles;
 
 	file_lock = xSemaphoreCreateMutex();
 	if(file_lock == NULL){
@@ -2029,13 +1997,14 @@ esp_err_t ocpp_smart_charging_init(size_t connector_count, int max_stack_level,
 		return ESP_ERR_NO_MEM;
 	}
 
-	esp_err_t err = mount_partition();
-	if(err != ESP_OK){
+	struct stat st;
+	if(stat(base_path, &st) != 0){
+		ESP_LOGE(TAG, "'%s' not mounted", base_path);
 		xSemaphoreGive(file_lock);
-		return err;
+		return ESP_ERR_INVALID_STATE;
 	}
 
-	tx_profiles = calloc(sizeof(struct ocpp_charging_profile *), conf_max_stack_level+1);
+	tx_profiles = calloc(sizeof(struct ocpp_charging_profile *), CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL+1);
 	if(tx_profiles == NULL){
 		ESP_LOGE(TAG, "Unable to allocate space for tx profiles");
 

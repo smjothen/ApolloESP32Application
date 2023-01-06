@@ -417,6 +417,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 
 	ocpp_requested_phases = number_phases;
 
+#ifdef OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
 	if(ocpp_requested_phases != ocpp_active_phases &&
 		(!sessionHandler_OcppTransactionIsActive(1) || storage_Get_ocpp_connector_switch_3_to_1_phase_supported())){
 
@@ -424,6 +425,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 
 		ocpp_active_phases = ocpp_requested_phases;
 	}
+#endif
 }
 
 void sessionHandler_OcppStopTransaction(const char * reason){

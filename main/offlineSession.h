@@ -8,7 +8,6 @@
 #include "chargeSession.h"
 
 void offlineSession_Init();
-bool offlineSession_mount_folder();
 
 int offlineSession_FindNewFileNumber();
 int offlineSession_FindOldestFile();

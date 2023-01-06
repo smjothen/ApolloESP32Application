@@ -11,9 +11,8 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 
-static const char *tmp_path = "/tmp";
-static const char *log_path = "/tmp/log554.bin";
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static const char *tmp_path = "/files";
+static const char *log_path = "/files/log554.bin";
 
 static const int max_log_items = 1000;
 
@@ -30,36 +29,6 @@ struct LogLine {
     double energy;
     uint32_t crc;
 };
-
-bool mount_tmp()
-{
-    static bool mounted = false;
-
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "/tmp already mounted");
-		return mounted;
-	}
-
-    ESP_LOGI(TAG, "Mounting /tmp");
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = 4,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
-	}
-
-	mounted = true;
-
-	ESP_LOGI(TAG, "Mounted");
-
-	return mounted;
-}
 
 int update_header(FILE *fp, int start, int end){
     struct LogHeader new_header = {.start=start, .end=end, .crc=0};
@@ -115,12 +84,11 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
 }
 
 FILE * init_log(int *start, int *end){
-    bool mounted = mount_tmp();
-
-    if(!mounted){
-        ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
-        return NULL;
-    }
+	struct stat st;
+	if(stat(tmp_path, &st) != 0){
+		ESP_LOGE(TAG, "'%s' not mounted, offline log will not work", tmp_path);
+		return NULL;
+	}
 
     FILE *fp = fopen(log_path, "wb+");
     if(fp==NULL){
@@ -268,8 +236,9 @@ int deleteOfflineLog()
 {
 	int ret = 0;
 
-	if(!mount_tmp()){
-		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
+	struct stat st;
+	if(stat(tmp_path, &st) != 0){
+		ESP_LOGE(TAG, "'%s' not mounted. Unable to delete offline log", tmp_path);
 		return ret;
 	}
 
