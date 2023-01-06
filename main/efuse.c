@@ -62,6 +62,11 @@ esp_err_t lock_encryption_on_if_enabled(){
 		return ESP_OK;
 	}
 
+	if(cnt == 7){
+		ESP_LOGW(TAG, "Encryption already enabled");
+		return ESP_OK;
+	}
+
 	ESP_LOGI(TAG, "Locking encryption to 'enabled'");
 	return esp_efuse_write_field_cnt(ESP_EFUSE_FLASH_CRYPT_CNT, 7-cnt);
 }

@@ -740,7 +740,8 @@ static void i2cDevice_task(void *pvParameters)
 			RTCHasNewTime = false;
 		}
 
-		if(tamper_status != eTAMPER_STATUS_DISABLED){
+		/// Do not read tamper if not used or before serial is written to EEPROM during factory setup
+		if((tamper_status != eTAMPER_STATUS_DISABLED) || (i2cGetLoadedDeviceInfo().EEPROMFormatVersion != 0xFF)){
 			detect_tamper();
 		}
 

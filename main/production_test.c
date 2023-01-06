@@ -545,6 +545,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	if(IsProgrammableFPGAUsed() == true)
 	{
+		memset(payload, 0, 130);
 		MCU_GetFPGAInfo(payload, 130);
 		ESP_LOGI(TAG, "%s", payload);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
@@ -896,26 +897,27 @@ int test_proximity(){
 	char payload[128];
 
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 
 	esp_err_t err = SFH7776_detect();
 
 	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
-		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "present" : "missing");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
 
 		ESP_LOGE(TAG, "%s", payload);
 		goto fail;
 
 	}else if(!should_exist){
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+		sprintf(payload, "Proximity sensor not applicable");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 		return 0;
 	}
 
 	if(SFH7776_set_mode_control(0b0100) != ESP_OK
 		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
-
 
 		sprintf(payload, "Unable to write sensor registers");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
@@ -950,11 +952,11 @@ int test_proximity(){
 	}
 
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 	return 0;
 
 fail:
-	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 	return -1;
 }
 
