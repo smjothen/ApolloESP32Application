@@ -53,6 +53,46 @@ fd_set fds = { 0 };
 
 struct DeviceInfo devInfo;
 
+bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
+    CalibrationHeader header = { 0 };
+
+    header.i_gain[0] = floatToSn(1., 21);
+    header.i_gain[1] = floatToSn(1., 21);
+    header.i_gain[2] = floatToSn(1., 21);
+
+    header.v_gain[0] = floatToSn(1., 21);
+    header.v_gain[1] = floatToSn(1., 21);
+    header.v_gain[2] = floatToSn(1., 21);
+
+    header.v_offset[0] = floatToSn(0., 23);
+    header.v_offset[1] = floatToSn(0., 23);
+    header.v_offset[2] = floatToSn(0., 23);
+
+    header.t_offs[0] = 0xA800;
+    header.t_offs[1] = 0xA800;
+    header.t_offs[2] = 0xA800;
+
+    const char *bytes = (const char *)&header;
+
+    const char *bytesAfterCrc = bytes + sizeof(header.crc);
+    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+    ZEncodeUint16(crc, (uint8_t *)bytes);
+
+    char *ptr = hexbuf;
+    for (size_t i = 0; i < sizeof (header); i++) {
+        ptr += sprintf(ptr, "%02X", (uint8_t)bytes[i]);
+    }
+    *ptr = 0;
+
+    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+        ESP_LOGE(TAG, "%s: Writing default calibration to MCU failed!", calibration_state_to_string(ctx));
+        return false;
+    }
+
+    ESP_LOGI(TAG, "%s: Wrote default calibration!", calibration_state_to_string(ctx));
+    return true;
+}
+
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode) {
     if (mode == ctx->Mode) {
         return true;
@@ -91,6 +131,31 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 }
 
 int calibration_tick_starting_init(CalibrationCtx *ctx) {
+    uint32_t midStatus;
+    /*
+    if (MCU_GetMidStatus(&midStatus) && (midStatus & MID_STATUS_ALL_PAGES_EMPTY)) {
+        calibration_write_default_calibration_params(ctx);
+        return -6;
+    }
+    */
+
+    if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
+        return -4;
+    }
+
+    if (ctx->Params.CalibrationId != 0) {
+        if (CAL_STATE(ctx) == Starting) {
+            ESP_LOGI(TAG, "Calibration already done (ID = %d)!", ctx->Params.CalibrationId);
+        }
+
+        ctx->Flags |= CAL_FLAG_SKIP_CAL;
+        ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
+
+        if (MCU_GetMidStatus(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
+            ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
+            ctx->Flags |= CAL_FLAG_UPLOAD_VER;
+        }
+    }
 
     if (!calibration_set_blinking(ctx, 1)) {
         return -5;
@@ -110,24 +175,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
         return -3;
     }
 
-    if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
-        return -4;
-    }
-
-    if (ctx->Params.CalibrationId != 0) {
-        if (CAL_STATE(ctx) == Starting) {
-            ESP_LOGI(TAG, "Calibration already done (ID = %d)!", ctx->Params.CalibrationId);
-        }
-        ctx->Flags |= CAL_FLAG_SKIP_CAL;
-        ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
-
-        uint32_t midStatus;
-        if (MCU_GetMidStatus(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
-            ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
-            ctx->Flags |= CAL_FLAG_UPLOAD_VER;
-        }
-    }
-
     return 0;
 }
 
@@ -136,8 +183,8 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress: {
-
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
+
                 if (calibration_tick_starting_init(ctx) < 0) {
                     return false;
                 }
@@ -759,6 +806,9 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         status &= ~MID_STATUS_ALL_PAGES_EMPTY;
         status &= ~MID_STATUS_NOT_CALIBRATED;
         status &= ~MID_STATUS_NOT_VERIFIED;
+        // These can occur if we MIDInit when starting calibration
+        status &= ~MID_STATUS_NOT_INITIALIZED;
+        status &= ~MID_STATUS_TICK_TIMEOUT;
 
         if (status) {
             calibration_fail(ctx, "Unexpected MID status 0x%08X", status);
