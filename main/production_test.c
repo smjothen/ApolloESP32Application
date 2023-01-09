@@ -977,7 +977,7 @@ int test_efuses(){
 
 	}
 
-	sprintf(payload, "Encryption counter: %#04x, Encryption configuration: %#04x.",
+	sprintf(payload, "Encryption counter before: %#04x, Encryption configuration: %#04x.",
 		efuses.flash_crypt_cnt, efuses.encrypt_config);
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
@@ -1012,6 +1012,27 @@ int test_efuses(){
 
 		goto fail;
 	}
+
+	///Read back efuse value after flash_crypt_cnt has been updated
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		sprintf(payload, "Unable to read efuses");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+	}
+
+	sprintf(payload, "Encryption counter after: %#04x, Encryption configuration: %#04x.",
+		efuses.flash_crypt_cnt, efuses.encrypt_config);
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(efuses.flash_crypt_cnt != 0x7F)
+	{
+		sprintf(payload, "Unable to lock encryption cnt %#04x != 0x7F", efuses.flash_crypt_cnt);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+		goto fail;
+	}
+
 
 	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_EFUSES, "efuses");
 	return 0;
