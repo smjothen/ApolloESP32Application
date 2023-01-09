@@ -399,6 +399,9 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     }
 
     if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
+        // Upload to cloud as observation
+        calibration_https_upload_to_cloud(ctx, hexbuf);
+
         if (calibration_https_upload_parameters(ctx, hexbuf, false)) {
 
             // Recompute header bytes with given calibration ID

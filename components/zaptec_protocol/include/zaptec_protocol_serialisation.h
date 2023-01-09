@@ -235,6 +235,8 @@
 
         FactoryTestStage = 970,
         FactoryHWTrigResult = 971,
+
+        MIDCalibration = 980,
     } ParamNo;
 
 

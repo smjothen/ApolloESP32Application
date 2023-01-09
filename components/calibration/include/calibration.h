@@ -272,6 +272,7 @@ bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock);
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id);
 
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification);
+bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw);
 
 void calibration_task_start(void);
 void calibration_task_stop(void);

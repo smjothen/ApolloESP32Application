@@ -16,6 +16,7 @@
 #include "esp_crt_bundle.h"
 #include "DeviceInfo.h"
 #include "protocol_task.h"
+#include "zaptec_cloud_observations.h"
 
 #include "mbedtls/sha256.h"
 
@@ -28,9 +29,62 @@ static char buf[1024];
 extern const uint8_t zap_cert_pem_start[] asm("_binary_zaptec_ca_cer_start");
 extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 
+bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw) {
+
+		memset(buf, 0, sizeof (buf));
+
+		cJSON *calibration = cJSON_CreateObject();
+
+		CalibrationParameter *params[] = {
+				ctx->Params.CurrentGain,
+				ctx->Params.VoltageGain,
+				ctx->Params.CurrentOffset,
+				ctx->Params.VoltageOffset,
+		};
+
+		for (size_t i = 0; i < sizeof (params) / sizeof (params[0]); i++) {
+			bool hasParam = true;
+			for (int j = 0; j < 3; j++) {
+				if (!params[i][j].assigned) {
+					hasParam = false;
+				}
+			}
+
+			const char *key = i == 0 ? "CurrentGain" :
+				i == 1 ? "VoltageGain" :
+				i == 2 ? "CurrentOffset" : "VoltageOffset";
+
+			if (hasParam) {
+				cJSON *param = cJSON_CreateObject();
+				for (int j = 0; j < 3; j++) {
+					cJSON_AddNumberToObject(param, 
+							j == 0 ? "0" : j == 1 ? "1" : "2",
+							params[i][j].value);
+				}
+				cJSON_AddItemToObject(calibration, key, param);
+			}
+		}
+
+		cJSON *data = cJSON_CreateObject();
+
+		cJSON_AddItemToObject(data, "Calibration", calibration);
+		cJSON_AddStringToObject(data, "Raw", raw);
+
+		if (!cJSON_PrintPreallocated(data, buf, sizeof (buf), true)) {
+			ESP_LOGE(TAG, "Unable to publish JSON calibration data");
+		} else {
+			ESP_LOGI(TAG, "Publishing JSON calibration data");
+			publish_debug_telemetry_observation_Calibration(buf);
+		}
+
+		return true;
+}
+
 // Uploads parameters and sets the calibration ID received from the production
 // server
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
+
+		memset(buf, 0, sizeof (buf));
 
 #ifdef CONFIG_CAL_SIMULATION_PROD_SERV
 		ESP_LOGI(TAG, "Simulating production server data transfer, using calibration ID 1337!");
@@ -108,15 +162,6 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 				cJSON_AddNumberToObject(verifications, key, verifs[i]->value);
 			}
 		}
-
-			/*
-						FullCalibrationUploadData calibrationData = new FullCalibrationUploadData {
-							serial = startup.Serial,
-							parametersAndVerifications = results.SerializeResults(),
-							runInfo = JsonConvert.SerializeObject(run.GetRunInfo()),
-							pass = internalPass,
-						};
-			*/
 
 		cJSON *test = cJSON_CreateObject();
 		cJSON_AddNumberToObject(test, "Station", ctx->Position);

@@ -73,6 +73,8 @@ int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask);
 
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
 
+int publish_debug_telemetry_observation_Calibration(char *calibrationJSON);
+
 void SetClearSessionFlag();
 
 int publish_telemetry_observation_on_change();
