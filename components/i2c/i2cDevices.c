@@ -426,6 +426,7 @@ esp_err_t I2CCalibrateCoverProximity(){
 	return ESP_OK;
 }
 
+static bool sentOnBoot = false;
 void detect_tamper(){
 	enum tamper_status_id old_status = tamper_status;
 
@@ -464,12 +465,15 @@ void detect_tamper(){
 		}
 	}
 
-	if(old_status != tamper_status){
-		ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
+	if((old_status != tamper_status) || (sentOnBoot == false)){
+
+		if(old_status != tamper_status)
+			ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
 
 		if(isMqttConnected()){
 			ESP_LOGI(TAG, "Syncing tamper status with cloud");
 			publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+			sentOnBoot = true;
 
 			switch(tamper_status){
 			case eTAMPER_STATUS_COVER_ON:
