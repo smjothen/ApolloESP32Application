@@ -49,11 +49,18 @@ static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
 
 static bool offlineSessionOpen = false;
 static bool mounted = false;
+static bool disableMounting = false;
 
 static int activeFileNumber = -1;
 static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
+
+void offlineSession_disable(void) {
+	// For calibration, don't store energy in offline session
+	mounted = false;
+	disableMounting = true;
+}
 
 void offlineSession_Init()
 {
@@ -66,6 +73,10 @@ void offlineSession_Init()
 
 bool offlineSession_mount_folder()
 {
+	if (disableMounting) {
+		return false;
+	}
+
 	if(mounted)
 	{
 		ESP_LOGI(TAG, "/offs already mounted");

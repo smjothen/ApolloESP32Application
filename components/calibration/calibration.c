@@ -22,6 +22,8 @@
 #include "connectivity.h"
 #include "sessionHandler.h"
 #include "zaptec_protocol_serialisation.h"
+#include "zaptec_cloud_observations.h"
+#include "offlineSession.h"
 
 #include "calibration_crc.h"
 #include "calibration_util.h"
@@ -132,12 +134,11 @@ bool calibration_tick_calibrate(CalibrationCtx *ctx) {
 
 int calibration_tick_starting_init(CalibrationCtx *ctx) {
     uint32_t midStatus;
-    /*
-    if (MCU_GetMidStatus(&midStatus) && (midStatus & MID_STATUS_ALL_PAGES_EMPTY)) {
-        calibration_write_default_calibration_params(ctx);
-        return -6;
-    }
-    */
+
+    // Disable cloud communication (exception for uploading calibration data)
+    cloud_observations_disable(true);
+    // Disable offline sessions as well, chargers should be online during calibration but just in case...
+    offlineSession_disable();
 
     if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
         return -4;

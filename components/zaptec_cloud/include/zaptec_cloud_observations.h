@@ -15,6 +15,8 @@ struct MqttDataDiagnostics
 	uint32_t nrOfTxMessages;
 };
 
+void cloud_observations_disable(bool disable);
+
 void MqttSetRxDiagnostics(uint32_t bytes, uint32_t metabytes);
 
 struct MqttDataDiagnostics MqttGetDiagnostics();

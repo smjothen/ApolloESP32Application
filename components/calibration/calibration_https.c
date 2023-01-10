@@ -74,7 +74,11 @@ bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw) {
 			ESP_LOGE(TAG, "Unable to publish JSON calibration data");
 		} else {
 			ESP_LOGI(TAG, "Publishing JSON calibration data");
+
+			// Quickly enable cloud observations for uploading calibration data
+			cloud_observations_disable(false);
 			publish_debug_telemetry_observation_Calibration(buf);
+			cloud_observations_disable(true);
 		}
 
 		return true;
