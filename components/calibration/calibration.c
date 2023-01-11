@@ -822,6 +822,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         warnings &= ~WARNING_NO_SWITCH_POW_DEF;
         // RCD triggers on boot sometimes?
         warnings &= ~WARNING_RCD;
+        warnings &= ~WARNING_MID;
         if (warnings) {
             // Warning set so relays probably can't be controlled anyway, so fail
             calibration_fail(ctx, "Unexpected MCU warning 0x%08X", warnings);

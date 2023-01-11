@@ -18,6 +18,7 @@
 #define WARNING_RCD_TEST_30MA       (1 << 17)
 #define WARNING_RCD_FAILURE         (1 << 18)
 #define WARNING_RCD                 (WARNING_RCD_6MA | WARNING_RCD_30MA | WARNING_RCD_TEST_6MA | WARNING_RCD_TEST_30MA | WARNING_RCD_FAILURE)
+#define WARNING_MID                 (1 << 30)
 
 // TODO: Check these are reasonable?
 #define CALIBRATION_IOFF_MAX_ERROR 0.002
