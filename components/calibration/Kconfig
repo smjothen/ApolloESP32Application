@@ -12,7 +12,6 @@ menu "MID Calibration"
 	config CAL_SIMULATION_PROD_SERV
 		bool "Simulate transfer of calibration data to production server"
 		default N
-		depends on CAL_SIMULATION
 
 	config CAL_SSID
 		string "Network SSID for simulation"
