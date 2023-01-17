@@ -83,7 +83,17 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
 		if(sent_bytes<length){
 			ESP_LOGE(TAG, "Failed to send all bytes (%d/%d)", sent_bytes, length);
 		}
-		ESP_ERROR_CHECK(uart_wait_tx_done(uart_num, RX_TIMEOUT)); // tx flush. portMAX_DELAY causes the system to hang indefinitely, use a 2s timeout as  workaround. https://github.com/espressif/esp-idf/issues/5156
+
+
+    esp_err_t err = uart_wait_tx_done(uart_num, RX_TIMEOUT);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "UART timeout! %d / %d : %d %d %d", sent_bytes, length, encodedTxBuf[0], ZDecodeUint16(&encodedTxBuf[1]), ZDecodeUint16(&encodedTxBuf[3]));
+        for (int i = 0; i < length; i++) {
+            printf("0x%02X ", encodedTxBuf[i]);
+        }
+        printf("\n");
+
+    }
 
         ZapMessage rxMsg = {0};
         if( xQueueReceive( 
@@ -604,7 +614,7 @@ void uartSendTask(void *pvParameters){
         {
         	mcuComErrorCount++;
 
-       		ESP_LOGE(TAG, "mcuComErrorCount: %i",mcuComErrorCount);
+       		ESP_LOGE(TAG, "mcuComErrorCount: %" PRIu32 "",mcuComErrorCount);
 
         	//Delay before retrying on the same parameter identifier
         	vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -612,7 +622,7 @@ void uartSendTask(void *pvParameters){
 
         if(printCount >= 24 * 5)//15)
         {
-        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %" PRIi32 ", Off: %" PRId32 ", - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
         	printCount = 0;
         }
 
@@ -869,7 +879,7 @@ bool IsUKOPENPowerBoardRevision()
 bool IsProgrammableFPGAUsed()
 {
 	//if((HwIdPower == HW_POWER_4_X804) || (HwIdPower == HW_POWER_5_UK_X804))
-	if((HwIdPower == HW_POWER_5_UK_X804))
+	if(HwIdPower == HW_POWER_5_UK_X804)
 		return true;
 	else
 		return false;

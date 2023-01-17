@@ -13,7 +13,11 @@
 #include "DeviceInfo.h"
 #include "i2cDevices.h"
 #include "EEPROM.h"
-#include "RTC.h"
+
+// NB: RTC.h exists in Espressif's codebase as well so use include/RTC.h to
+// force it to use ours.
+#include "include/RTC.h"
+
 //#include "storage.h"
 #include "network.h"
 #include "eeprom_wp.h"
@@ -94,6 +98,9 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             break;
         case HTTP_EVENT_DISCONNECTED:
             ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+            break;
+        case HTTP_EVENT_REDIRECT:
+            ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
             break;
     }
     return ESP_OK;
@@ -221,7 +228,7 @@ int prodtest_getNewId(bool validate_only)
 		return -5;
 	}
 
-	ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %d",
+	ESP_LOGI(TAG, "HTTP Stream reader Status = %d, content_length = %" PRId64 "",
 					esp_http_client_get_status_code(client),
 					esp_http_client_get_content_length(client));
 	esp_http_client_close(client);
@@ -536,7 +543,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_INFO, "Factory test info");
 	
-	sprintf(payload, "Version (gitref): %s", esp_ota_get_app_description()->version);
+	sprintf(payload, "Version (gitref): %s", esp_app_get_description()->version);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
 
 	sprintf(payload, "Location tag %s, location host %s", latest_tag.idAsString, host_from_rfid());
@@ -1751,7 +1758,7 @@ int check_dspic_warnings(enum test_item testItem)
 
 	char payload[100];
 
-	sprintf(payload, "warning mask: 0x%x", warnings);
+	sprintf(payload, "warning mask: 0x%" PRIx32 "", warnings);
 	prodtest_send(TEST_STATE_MESSAGE, testItem, payload );
 
 	uint8_t i = 0;

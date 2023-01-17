@@ -1,6 +1,8 @@
 #ifndef APOLLO_OTA_H
 #define APOLLO_OTA_H
 
+#include <stdbool.h>
+
 void start_ota_task(void);
 int start_ota(void);
 int start_segmented_ota(void);

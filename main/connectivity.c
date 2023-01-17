@@ -68,10 +68,22 @@ static const uint32_t restartTimeLimit = 3900;
 static uint32_t nrOfConnectsFailsBeforeReinit = 2;
 static uint32_t nrOfLTEReconnects = 0;
 
+uint32_t mqtt_GetTransportConnectFailures() {
+	ESP_LOGE(TAG, "FIXME");
+	return 0;
+}
+
+uint32_t mqtt_ClearTransportConnectFailures() {
+	ESP_LOGE(TAG, "FIXME");
+	return 0;
+}
+
+
 uint32_t connectivity_GetNrOfLTEReconnects()
 {
 	return nrOfLTEReconnects;
 }
+
 
 static void OneSecondTimer()
 {
@@ -94,7 +106,7 @@ static void OneSecondTimer()
 					mqtt_ClearTransportConnectFailures();
 
 					nrOfLTEReconnects++;
-					ESP_LOGW(TAG, "***** TRYING TO RECOVER PPP CONNECTION (Attempts: %d/%d) ******", nrOfConnectsFailsBeforeReinit, nrOfLTEReconnects);
+					ESP_LOGW(TAG, "***** TRYING TO RECOVER PPP CONNECTION (Attempts: %" PRId32 "/%" PRId32 ") ******", nrOfConnectsFailsBeforeReinit, nrOfLTEReconnects);
 					stop_cloud_listener_task();
 					mqttInitialized = false;
 					ppp_task_start();
@@ -105,7 +117,7 @@ static void OneSecondTimer()
 
 			if(mqttUnconnectedCounter % 10 == 0)
 			{
-				ESP_LOGE(TAG, "MQTT_unconnected restart (%d/%d && (disc:%d/3900 || noc:%d/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
+				ESP_LOGE(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900 || noc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
 			}
 
 			enum ChargerOperatingMode chOpMode = sessionHandler_GetCurrentChargeOperatingMode();
@@ -138,7 +150,7 @@ static void OneSecondTimer()
 				if(((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900)) || (carNotChargingCounter >= 3900))
 				{
 					char buf[100]={0};
-					snprintf(buf, sizeof(buf), "#2 mqttUncon:%d disc:%d noc:%d op:%d", mqttUnconnectedCounter, carDisconnectedCounter, carNotChargingCounter, chOpMode);
+					snprintf(buf, sizeof(buf), "#2 mqttUncon:%" PRId32 " disc:%" PRId32 " noc:%" PRId32 " op:%d", mqttUnconnectedCounter, carDisconnectedCounter, carNotChargingCounter, chOpMode);
 					storage_Set_And_Save_DiagnosticsLog(buf);
 					ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
 					esp_restart();

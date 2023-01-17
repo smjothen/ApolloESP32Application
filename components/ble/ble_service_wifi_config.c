@@ -4,11 +4,13 @@
 
 #include "esp_gatts_api.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 
 #include "ble_common.h"
 
 #include "cJSON.h"
 #include <string.h>
+#include <inttypes.h>
 
 #include "../../main/storage.h"
 #include "../../components/wifi/include/network.h"
@@ -43,6 +45,7 @@ uint16_t apNr = 0;
 uint16_t maxAp = 15;
 wifi_ap_record_t ap_records[15];
 
+uint16_t wifi_handle_table[WIFI_NB];
 
 #define USE_PIN
 ///////////////////
@@ -951,7 +954,7 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
   		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
 
   		volatile uint32_t warning = MCU_GetWarnings();
-  		ESP_LOGI(TAG, "Read Warning 0x%x ", warning);
+  		ESP_LOGI(TAG, "Read Warning 0x%" PRIx32 "", warning);
 
   		// Each bit in the warning value is transferred separate bytes
   		// 0x00000003 -> 0x02 0x01

@@ -40,7 +40,7 @@ static void ChargeSession_Set_GUID()
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[1]);
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
 	
-	sprintf(chargeSession.SessionId, "%08x-%04x-%04x-%04x-%04x%08x", GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
+	sprintf(chargeSession.SessionId, "%08" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "%08" PRIx32, GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
 	//hasNewSessionIdFromCloud = true;
 	strcpy(sidOrigin, "local");
 	ESP_LOGI(TAG, "GUID: %s (%s)", chargeSession.SessionId, sidOrigin);
@@ -176,7 +176,7 @@ static void ChargeSession_Set_StartTime()
 		ESP_LOGW(TAG, "Made startTime in SESSION for use in REQUESTING: %s", chargeSession.StartDateTime);
 
 	}
-	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
+	ESP_LOGI(TAG, "Start time is: %s (%" PRId32 ".%" PRId32 ")", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
 }
 
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
@@ -331,7 +331,7 @@ void chargeSession_Finalize()
 	chargeSession_UpdateEnergy();
 	GetUTCTimeString(chargeSession.EndDateTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
 
-	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
+	ESP_LOGI(TAG, "End time is: %s (%" PRId32 ".%" PRId32 ")", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
 
 
 	/// Create the 'E' message

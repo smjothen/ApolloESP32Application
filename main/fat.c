@@ -107,7 +107,7 @@ bool fat_static_mount()
             .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
     };
 
-	esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "disk", &mount_config, &s_wl_handle);
+	esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, "disk", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
 		return mounted;
@@ -195,7 +195,7 @@ void fat_static_unmount()
 {
 	// Unmount FATFS
 	ESP_LOGI(TAG, "Unmounting FAT filesystem");
-	ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
+	ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount_rw_wl(base_path, s_wl_handle));
 
 	mounted = false;
 	ESP_LOGI(TAG, "Done unmounting");

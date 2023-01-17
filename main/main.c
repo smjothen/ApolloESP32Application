@@ -10,6 +10,7 @@
 #include "esp_attr.h"
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
+#include "driver/gpio.h"
 
 #include "main.h"
 #include "esp_websocket_client.h"
@@ -63,7 +64,7 @@ char * GetSoftwareVersion()
 void InitGPIOs()
 {
     gpio_config_t output_conf;
-	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	output_conf.intr_type = GPIO_INTR_DISABLE;
 	output_conf.mode = GPIO_MODE_OUTPUT;
 	output_conf.pin_bit_mask = GPIO_OUTPUT_DEBUG_PIN_SEL;
 	output_conf.pull_down_en = 0;
@@ -415,7 +416,7 @@ void log_efuse_info()
 
 void app_main(void)
 {
-	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
+	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_app_get_description()->version);
 
 #ifdef DEVELOPEMENT_URL
 	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
@@ -651,7 +652,7 @@ void app_main(void)
 			size_t low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 			size_t blk_dram = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    		ESP_LOGI(TAG_MAIN, "%d: %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
+    		ESP_LOGI(TAG_MAIN, "%" PRId32 ": %s %s , rst: %d, Heaps: %i %i DRAM: %i Lo: %i, Blk: %i, Sw: %i", onTimeCounter, onTimeString, softwareVersion, esp_reset_reason(), free_heap_size_start, free_heap_size, free_dram, low_dram, blk_dram, MCU_GetSwitchState());
     	}
 
 
@@ -686,7 +687,7 @@ void app_main(void)
     		if(isMqttConnected() == false)
     		{
     			onlineWatchdogCounter++;
-    			ESP_LOGI(TAG_MAIN, "OnlineWatchdogCounter : %d", onlineWatchdogCounter);
+    			ESP_LOGI(TAG_MAIN, "OnlineWatchdogCounter : %" PRId32 "", onlineWatchdogCounter);
     		}
     		if(onlineWatchdogCounter == 300)
     		{

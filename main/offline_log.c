@@ -48,7 +48,7 @@ bool mount_tmp()
             .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
     };
 
-	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
+	esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(tmp_path, "files", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
 		return mounted;
@@ -69,7 +69,7 @@ int update_header(FILE *fp, int start, int end){
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     int write_result = fwrite(&new_header, 1,  sizeof(new_header), fp);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-    ESP_LOGI(TAG, "writing header %d %d %u (s:%d, res:%d)    <<<<   ", 
+    ESP_LOGI(TAG, "writing header %d %d %" PRIu32 " (s:%d, res:%d)    <<<<   ", 
         new_header.start, new_header.end, new_header.crc, sizeof(new_header), write_result
     );
 
@@ -85,7 +85,7 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     fseek(fp, 0, SEEK_SET);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     int read_result = fread(&head_in_file, 1,sizeof(head_in_file),  fp);
-    ESP_LOGI(TAG, "header on disk %d %d %u (s:%d, res:%d)    <<<   ", 
+    ESP_LOGI(TAG, "header on disk %d %d %" PRIu32 " (s:%d, res:%d)    <<<   ", 
     head_in_file.start, head_in_file.end, head_in_file.crc, sizeof(head_in_file), read_result);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     perror("read perror: ");
@@ -178,7 +178,7 @@ void append_offline_energy(int timestamp, double energy){
     uint32_t crc = crc32_normal(0, &line, sizeof(struct LogLine));
     line.crc = crc;
 
-    ESP_LOGI(TAG, "writing to file with crc=%u", line.crc);
+    ESP_LOGI(TAG, "writing to file with crc=%" PRIu32 "", line.crc);
 
     int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_end);
     fseek(fp, start_of_line, SEEK_SET);
@@ -220,7 +220,7 @@ int attempt_log_send(void){
         uint32_t calculated_crc = crc32_normal(0, &line, sizeof(line));
 
 
-        ESP_LOGI(TAG, "LogLine@%d>%d: E=%f, t=%d, crc=%d, valid=%d, read=%d", 
+        ESP_LOGI(TAG, "LogLine@%d>%d: E=%f, t=%d, crc=%" PRId32 ", valid=%d, read=%d", 
             log_start, start_of_line,
             line.energy, line.timestamp,
             crc_on_file, crc_on_file==calculated_crc, read_result

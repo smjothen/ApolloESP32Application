@@ -1,4 +1,5 @@
 build
+build.clang
 sdkconfig.old
 
 .vscode
@@ -13,3 +14,8 @@ secure_boot_signing_ec.pem
 flash_encryption_key.bin
 *.pem
 .cache
+
+compile_commands.json
+.vim
+
+managed_components

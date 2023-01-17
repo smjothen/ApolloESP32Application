@@ -1,6 +1,9 @@
 #ifndef AT_COMMANDS_H
 #define AT_COMMANDS_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 int at_command_at(void);
 int at_command_with_ok_ack(char * command, uint32_t timeout_ms);
 int at_command_echo_set(bool on);

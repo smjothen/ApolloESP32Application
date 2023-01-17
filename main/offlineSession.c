@@ -79,14 +79,14 @@ bool offlineSession_mount_folder()
             .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
     };
 
-	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
+	esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(tmp_path, "files", &mount_config, &s_wl_handle);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
 
 		//If failing to mount, try using partition for chargers numbers below ~ZAP000150
 		if((err == ESP_ERR_NOT_FOUND) && (i2cCheckSerialForDiskPartition() == true))
 		{
-			err = esp_vfs_fat_spiflash_mount(tmp_path, "disk", &mount_config, &s_wl_handle);
+			err = esp_vfs_fat_spiflash_mount_rw_wl(tmp_path, "disk", &mount_config, &s_wl_handle);
 			if (err != ESP_OK) {
 				ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
 
@@ -485,7 +485,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	if(readLen <= 996)
 		crcCalc = crc32_normal(0, base64SessionData, readLen);
 
-	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
 	if(crcRead != crcCalc)
 	{
@@ -558,7 +558,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 	uint32_t nrOfOCMFElements = 0;
 	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	ESP_LOGI(TAG, "NrOfElements read: %" PRIi32 "", nrOfOCMFElements);
 
 	/// Build OCMF strings for each element
 	if(nrOfOCMFElements > 0)
@@ -579,7 +579,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
 
-			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 		}
 	}
 
@@ -634,7 +634,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
 
-	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
 	if(crcRead != crcCalc)
 	{
@@ -712,7 +712,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 	uint32_t nrOfOCMFElements = 0;
 	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	ESP_LOGI(TAG, "NrOfElements read: %" PRIi32 "", nrOfOCMFElements);
 
 	/// Build OCMF strings for each element, Should never be more than maxElements
 	if((nrOfOCMFElements > 0) && (nrOfOCMFElements <= max_offline_signed_values))
@@ -733,7 +733,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
 
-			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 
 			if((crcCalc == packetCrc))
 			{
@@ -890,7 +890,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			/// Should at least be one element 'B'
 			if(nrOfOCMFElements == 0)
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
@@ -899,7 +899,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			///100 elements, leave room for last element with 'E'
 			if((label == 'T') && (nrOfOCMFElements >= (max_offline_signed_values-1)))
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
@@ -908,14 +908,14 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			///Max 100 elements check if room for 'e'
 			if((label == 'E') && (nrOfOCMFElements >= max_offline_signed_values))
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
 			}
 		}
 
-		ESP_LOGW(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %d", activeFileNumber, label, nrOfOCMFElements);
+		ESP_LOGW(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %" PRId32 "", activeFileNumber, label, nrOfOCMFElements);
 
 		/// And add 1.
 
@@ -927,8 +927,8 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 		//ESP_LOGW(TAG, "FileNo %d: writing to OFFS-file with crc=%u", activeFileNumber, line.crc);
 
 		int newElementPosition = (FILE_OCMF_START_ADDR_1004) + (nrOfOCMFElements * sizeof(struct LogOCMFData));
-		ESP_LOGW(TAG, "FileNo %d: New element position: #%d: %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
-		ESP_LOGW(TAG, "OCMF Write %i addr: %i : %c %i %f 0x%X", nrOfOCMFElements, newElementPosition, line.label, line.timestamp, line.energy, line.crc);
+		ESP_LOGW(TAG, "FileNo %d: New element position: #%" PRId32 ": %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
+		ESP_LOGW(TAG, "OCMF Write %" PRIi32 " addr: %i : %c %i %f 0x%" PRIX32 "", nrOfOCMFElements, newElementPosition, line.label, line.timestamp, line.energy, line.crc);
 
 		/// Write new element
 		fseek(sessionFile, newElementPosition, SEEK_SET);
@@ -943,7 +943,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 
 		nrOfOCMFElements = 99;
 		fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%d", activeFileNumber, nrOfOCMFElements);
+		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%" PRId32 "", activeFileNumber, nrOfOCMFElements);
 		fclose(sessionFile);
 	}
 

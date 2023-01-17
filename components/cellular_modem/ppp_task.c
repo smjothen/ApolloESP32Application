@@ -66,7 +66,7 @@ typedef enum {
 
 void cellularPinsInit(void){
     gpio_config_t io_conf; 
-	io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
 	io_conf.mode = GPIO_MODE_OUTPUT;
 	io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
 	io_conf.pull_down_en = 0;
@@ -211,6 +211,7 @@ void ppp_configure_uart(void){
         // .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
         .flow_ctrl = UART_HW_FLOWCTRL_CTS_RTS,
         .rx_flow_ctrl_thresh = 120,
+        .source_clk = UART_SCLK_DEFAULT,
     };
     uart_param_config(UART_NUM_1, &uart_config);
     uart_set_pin(UART_NUM_1, CELLULAR_PIN_TXD, CELLULAR_PIN_RXD, CELLULAR_PIN_RTS, CELLULAR_PIN_CTS);
@@ -669,7 +670,7 @@ int configure_modem_for_ppp(void){
 static void on_ip_event(void *arg, esp_event_base_t event_base,
                       int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "IP event! %d", event_id);
+    ESP_LOGD(TAG, "IP event! %" PRId32 "", event_id);
     if (event_id == IP_EVENT_PPP_GOT_IP) {
         esp_netif_dns_info_t dns_info;
 
@@ -719,7 +720,7 @@ char * pppGetIp4Address()
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data)
 {
-    ESP_LOGI(TAG, "PPP state changed event %d", event_id);
+    ESP_LOGI(TAG, "PPP state changed event %" PRId32 "", event_id);
     if (event_id == NETIF_PPP_ERRORUSER) {
         /* User interrupted event from esp-netif */
         esp_netif_t *netif = event_data;

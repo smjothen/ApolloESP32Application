@@ -9,7 +9,6 @@
 #include "freertos/event_groups.h"
 
 #include "cJSON.h"
-#include "iot_button.h"
 
 #include "esp_log.h"
 #include "esp_websocket_client.h"
@@ -37,7 +36,7 @@ QueueHandle_t ocpp_send_queue;
 void updateRequestUniqueId(void){
     int result = sprintf(
         pending_request_unique_id,
-        "apollo-%08x-%08x",
+        "apollo-%08" PRIx32 "-%08" PRIx32,
         esp_random(), esp_random()
     );
     configASSERT(result==24);
@@ -96,7 +95,7 @@ cJSON *runCall(const char* action, cJSON *payload){
         configASSERT(strlen(request_string)<OCPP_MESSAGE_MAX_LENGTH);
         cJSON_Delete(call); // Free BOTH the newly created and the payload passed to the routine
 
-        esp_websocket_client_send(client, request_string, strlen(request_string), portMAX_DELAY);
+        esp_websocket_client_send_text(client, request_string, strlen(request_string), portMAX_DELAY);
         free(request_string);
 
         xQueueReceive( 
@@ -146,7 +145,7 @@ void replyToCall(cJSON *message){
     char *reply_string = cJSON_Print(callReply);
     configASSERT(strlen(reply_string)<OCPP_MESSAGE_MAX_LENGTH);
     cJSON_Delete(callReply);
-    esp_websocket_client_send(client, reply_string, strlen(reply_string), portMAX_DELAY);
+    esp_websocket_client_send_text(client, reply_string, strlen(reply_string), portMAX_DELAY);
     free(reply_string);
     ESP_LOGI(TAG, "sent callreply");
 }
@@ -175,12 +174,12 @@ void ocpp_web_ws_event_handler(esp_websocket_event_data_t *data){
         case 3:
             // central system sent CallResult
             ESP_LOGI(TAG, "central system sent result");
-            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY))
+            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY));
             break;
 
         case 4:
             // central system sent callerror
-            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY))
+            configASSERT(xQueueSend(ocpp_response_recv_queue, (void * )&message, (portTickType)portMAX_DELAY));
             ESP_LOGE(TAG, "central system sent callerror");
 
             break;
@@ -325,13 +324,6 @@ static void ocpp_task(void *pvParameters)
 void ocpp_task_start(void)
 {
     ESP_LOGI(TAG, "staring ocpp ws client soon");
-
-    #define BUTTON_IO_NUM           0
-    #define BUTTON_ACTIVE_LEVEL     0
-    button_handle_t btn_handle = iot_button_create(BUTTON_IO_NUM, BUTTON_ACTIVE_LEVEL);
-    if (btn_handle) {
-        iot_button_set_evt_cb(btn_handle, BUTTON_CB_RELEASE, on_btn, "RELEASE");
-    }
 
     static uint8_t ucParameterToPass = {0};
     TaskHandle_t taskHandle = NULL;

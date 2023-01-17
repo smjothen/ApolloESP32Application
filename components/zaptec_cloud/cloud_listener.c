@@ -123,7 +123,7 @@ char token[256];  // token was seen to be at least 136 char long
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	create_sas_token(604800, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-    mqtt_config->password = token;
+	mqtt_config->credentials.authentication.password = token;
     return 0;
 }
 
@@ -1644,7 +1644,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						//SetDataInterval(interval);
 						storage_Set_TransmitInterval(interval);
 						storage_SaveConfiguration();
-						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+						ESP_LOGI(TAG, "Setting LogInterval %" PRId32 "", interval);
 						responseStatus = 200;
 					}
 					else
@@ -2072,7 +2072,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					{
 						storage_Set_PulseInterval(interval);
 						storage_SaveConfiguration();
-						ESP_LOGI(TAG, "Setting Pulse interval %d", interval);
+						ESP_LOGI(TAG, "Setting Pulse interval %" PRId32 "", interval);
 						responseStatus = 200;
 					}
 					else
@@ -2273,7 +2273,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 							uint32_t nrOfSignedValues = (uint32_t)strtol(sec+1, &endptr, 10);
 							if(nrOfSignedValues <= 110)
 							{
-								ESP_LOGW(TAG, "NrSess: %i NrSV: %i", nrOfSessions, nrOfSignedValues);
+								ESP_LOGW(TAG, "NrSess: %" PRIi32 " NrSV: %" PRIi32 "", nrOfSessions, nrOfSignedValues);
 								sessionHandler_TestOfflineSessions(nrOfSessions, nrOfSignedValues);
 							}
 						}
@@ -2580,8 +2580,9 @@ static int ridNr = 4199;
 static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
 static esp_err_t reconnectErr = ESP_OK;
-static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
+	esp_mqtt_event_handle_t event = event_data;
 
 	//ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
 	MqttSetRxDiagnostics(event->data_len, event->topic_len);
@@ -2651,7 +2652,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         mqttConnected = true;
         //When connected, reset connection timeout to default
-        mqtt_config.reconnect_timeout_ms = 10000;
+				mqtt_config.network.reconnect_timeout_ms = 10000;
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         incrementalRefreshTimeout = 0;
 
@@ -2869,14 +2870,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 2.0;
 
 
-				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %d)", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
+				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %" PRId32 ")", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
 
 
 				incrementalRefreshTimeout = 10 + backOffSeconds + randomSeconds;
     			//incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
-    			mqtt_config.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
+    			mqtt_config.network.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
     			esp_mqtt_set_config(mqtt_client, &mqtt_config);
-    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.reconnect_timeout_ms);
+    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.network.reconnect_timeout_ms);
     		}
     		else
     		{
@@ -2939,8 +2940,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     memset(event->data, 0, event->data_len);
     event->data_len = 0;
     event->total_data_len = 0;
-
-    return ESP_OK;
 }
 
 int cloud_listener_GetResetCounter()
@@ -3091,39 +3090,39 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
        // strlen(cert)//, cert
     );
 
-    mqtt_config.uri = broker_url;
-    mqtt_config.event_handle = mqtt_event_handler;
-    mqtt_config.port = MQTT_PORT;
-    mqtt_config.username = username;
-    mqtt_config.client_id = cloudDeviceInfo.serialNumber;
+    mqtt_config.broker.address.uri = broker_url;
+    mqtt_config.broker.address.port = MQTT_PORT;
+    mqtt_config.credentials.username = username;
+    mqtt_config.credentials.client_id = cloudDeviceInfo.serialNumber;
     //mqtt_config.cert_pem = cert;
 
     if(certificate_GetUsage())
     {
-    	mqtt_config.use_global_ca_store = true;
+    	mqtt_config.broker.verification.use_global_ca_store = true;
     }
     else
     {
-    	mqtt_config.use_global_ca_store = false;
+    	mqtt_config.broker.verification.use_global_ca_store = false;
     	ESP_LOGE(TAG, "*** CERTIFICATES NOT USED ***");
     }
 
-    mqtt_config.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
+    //mqtt_config.broker.address.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
 
-    mqtt_config.lwt_qos = 1;
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.qos = 1;
+    mqtt_config.session.last_will.topic = event_topic;
     static char *lwt = "{\"EventType\":30,\"Message\":\"mqtt connection broke[lwt]\",\"Type\":5}";
-    mqtt_config.lwt_msg = lwt;
+    mqtt_config.session.last_will.msg = lwt;
 
-    mqtt_config.disable_auto_reconnect = false;
-    mqtt_config.reconnect_timeout_ms = 10000;
+    mqtt_config.network.disable_auto_reconnect = false;
+    mqtt_config.network.reconnect_timeout_ms = 10000;
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    if(storage_Get_Standalone() == 0)
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
-    else
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
+    if(storage_Get_Standalone() == 0) {
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+		} else {
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
+		}
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;
@@ -3135,6 +3134,9 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
+
+		esp_mqtt_client_register_event(mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, NULL);
+
     esp_mqtt_client_start(mqtt_client);
 }
 
@@ -3166,7 +3168,7 @@ void update_installationId()
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.topic = event_topic;
 
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }
@@ -3196,7 +3198,7 @@ void update_mqtt_event_pattern(bool usePingReply)
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.topic = event_topic;
 
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }
@@ -3238,13 +3240,13 @@ void periodic_refresh_token(uint8_t source)
  */
 void cloud_listener_SetMQTTKeepAliveTime(uint8_t isStandalone)
 {
-	int previous = mqtt_config.keepalive;
+	int previous = mqtt_config.session.keepalive;
     if(isStandalone == 0)
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
     else
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
 
-    ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.keepalive);
+    ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.session.keepalive);
 
     esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }

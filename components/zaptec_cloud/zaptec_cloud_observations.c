@@ -6,6 +6,7 @@
 #include "esp_system.h"
 #include "string.h"
 #include "esp_ota_ops.h"
+#include "esp_mac.h"
 
 #include "../../main/storage.h"
 #include "../../main/main.h"
@@ -127,7 +128,7 @@ void GetUTCTimeString(char * timeString, time_t *epochSec, uint32_t *epochUsec)
 
 	strftime(strftime_buf, sizeof(strftime_buf), "%Y-%02m-%02dT%02H:%02M:%02S", &timeinfo);
 
-	sprintf(strftime_buf+strlen(strftime_buf), ".%06dZ", (uint32_t)t_now.tv_usec);
+	sprintf(strftime_buf+strlen(strftime_buf), ".%06" PRId32 "Z", (uint32_t)t_now.tv_usec);
 	strcpy(timeString, strftime_buf);
 	if((epochSec == NULL) || (epochSec == NULL))
 		return;
@@ -212,13 +213,13 @@ cJSON *create_double_observation(int observation_id, double value){
 
 cJSON *create_uint32_t_observation(int observation_id, uint32_t value){
     char value_string[32];
-    sprintf(value_string, "%d", value);
+    sprintf(value_string, "%" PRId32 "", value);
     return create_observation(observation_id, value_string);
 }
 
 cJSON *create_int32_t_observation(int observation_id, int32_t value){
     char value_string[32];
-    sprintf(value_string, "%d", value);
+    sprintf(value_string, "%" PRId32 "", value);
     return create_observation(observation_id, value_string);
 }
 
@@ -498,10 +499,10 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
 #ifdef DEVELOPEMENT_URL
     char sourceVersionString[38] = {0};
-    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_ota_get_app_description()->version);
+    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_get_app_description()->version);
     add_observation_to_collection(observations, create_observation(SourceVersion, sourceVersionString));
 #else
-    add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_ota_get_app_description()->version));
+    add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_app_get_description()->version));
 #endif
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSmartMainboardBootSwVersion, (uint32_t)get_bootloader_version()));
     add_observation_to_collection(observations, create_uint32_t_observation(MCUResetSource,  MCU_GetResetSource()));
@@ -517,7 +518,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     char buf[256];
     GetTimeOnString(buf);
-    snprintf(buf + strlen(buf), sizeof(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %d  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());
+    snprintf(buf + strlen(buf), sizeof(buf), " Boot: ESP: v%s, MCU: v%s  Switch: %d/MaxInst: %2.1fA Sta: %2.1fA  ChargeState: %d  MCnt: %" PRId32 "  BRTC: 0x%X 0x%X Partition: %s", GetSoftwareVersion(), MCU_GetSwVersionString(), MCU_GetSwitchState(), MCU_ChargeCurrentInstallationMaxLimit(), MCU_StandAloneCurrent(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), RTCGetBootValue0(), RTCGetBootValue1(), OTAReadRunningPartition());
 
     ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
     add_observation_to_collection(observations, create_observation(808, buf));
@@ -615,6 +616,11 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
     //return publish_json_blocked(observations, 10000);
 }
 
+uint32_t mqtt_GetNrOfRetransmits() {
+    ESP_LOGE(TAG, "FIX ME");
+    return 0;
+}
+
 static uint32_t txCnt = 0;
 static float OPENVoltage = 0.0;
 int publish_debug_telemetry_observation_all(double rssi){
@@ -663,16 +669,16 @@ int publish_debug_telemetry_observation_all(double rssi){
 	GetTimeOnString(buf);
 	if(IsUKOPENPowerBoardRevision())
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f  T_M: %3.2f %3.2f   OPENV: %3.2f V: %3.2f   I: %2.2f  C%d CM%d MCnt:%" PRId32 " Rs:%" PRId32 " Rc:%" PRId32 "", MCU_GetEmeterTemperature(0), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), OPENVoltage, MCU_GetVoltages(0), MCU_GetCurrents(0), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 	else
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%d Rs:%d Rc:%d", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
+		snprintf(buf + strlen(buf), sizeof(buf), " T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  C%d CM%d MCnt:%" PRId32 " Rs:%" PRId32 " Rc:%" PRId32 "", MCU_GetEmeterTemperature(0), MCU_GetEmeterTemperature(1), MCU_GetEmeterTemperature(2), MCU_GetTemperaturePowerBoard(0), MCU_GetTemperaturePowerBoard(1), MCU_GetVoltages(0), MCU_GetVoltages(1), MCU_GetVoltages(2), MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetChargeMode(), MCU_GetChargeOperatingMode(), MCU_GetDebugCounter(), mqtt_GetNrOfRetransmits(), connectivity_GetNrOfLTEReconnects());
 	}
 
 	if(storage_Get_DiagnosticsMode() == eNFC_ERROR_COUNT)
 	{
-		snprintf(buf + strlen(buf), sizeof(buf), " NFC Pass: %d Fail: %d ", GetPassedDetectedCounter(), GetFailedDetectedCounter());
+		snprintf(buf + strlen(buf), sizeof(buf), " NFC Pass: %" PRId32 " Fail: %" PRId32 " ", GetPassedDetectedCounter(), GetFailedDetectedCounter());
 	}
 
 	ESP_LOGI(TAG, "Sending charging telemetry: %d/256", strlen(buf));
@@ -813,7 +819,7 @@ int publish_telemetry_observation_on_change(){
 		{
 			if(((warnings & 0x400000) && !(previousWarnings & 0x400000)) || (!(warnings & 0x400000) && (previousWarnings & 0x400000)))
 			{
-				ESP_LOGI(TAG, "Sending O-PEN voltage on warning change: 0x%06X, 0x%06X", warnings, previousWarnings);
+				ESP_LOGI(TAG, "Sending O-PEN voltage on warning change: 0x%06" PRIX32 ", 0x%06" PRIX32, warnings, previousWarnings);
 				add_observation_to_collection(observations, create_double_observation(ParamOPENVoltage, MCU_GetOPENVoltage()));
 			}
 		}
@@ -1056,7 +1062,7 @@ int publish_telemetry_observation_on_change(){
 	if((RTCIsRegisterChanged() || sendRTC) && (maxRTCSend < 10)) //If there is an I2C bus error, don't send unlimited nr of messages.
 	{
 		char buf[80];
-		snprintf(buf, sizeof(buf)," RTC: %i 0x%X->0x%X %i 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
+		snprintf(buf, sizeof(buf)," RTC: %" PRIi32 " 0x%X->0x%X %" PRIi32 " 0x%X->0x%X", RTCGetValueCheckCounter0(), RTCGetLastIncorrectValue0(), RTCGetLastValue0(), RTCGetValueCheckCounter1(), RTCGetLastIncorrectValue1(), RTCGetLastValue1());
 
 		ESP_LOGI(TAG, "Sending RTC telemetry: %d/80", strlen(buf));
 

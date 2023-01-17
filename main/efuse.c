@@ -6,14 +6,41 @@
 
 static const char * TAG = "EFUSE          ";
 
+static const esp_efuse_desc_t REG0_DESC[] = {
+		{EFUSE_BLK0, 0, 32},
+};
+
+static const esp_efuse_desc_t* REG0[] = {
+		&REG0_DESC[0],
+		NULL
+};
+
+static const esp_efuse_desc_t REG6_DESC[] = {
+		{EFUSE_BLK0, 192, 32},
+};
+
+static const esp_efuse_desc_t* REG6[] = {
+		&REG6_DESC[0],
+		NULL
+};
+
 esp_err_t GetEfuseInfo(struct EfuseInfo * info){
 
-	uint32_t reg =  esp_efuse_read_reg(EFUSE_BLK0, 0);
+	uint32_t reg = 0;
+
+	if (esp_efuse_read_field_blob(REG0, &reg, 32) != ESP_OK) {
+		return ESP_FAIL;
+	}
 
 	info->write_protect = (uint16_t)(reg & 0xffff);
 	info->read_protect = (uint8_t)((reg>>16) & 0xf);
 
-	reg = esp_efuse_read_reg(EFUSE_BLK0, 6);
+	reg = 0;
+
+	if (esp_efuse_read_field_blob(REG6, &reg, 32) != ESP_OK) {
+		return ESP_FAIL;
+	}
+
 	info->coding_scheme = reg & 0b11;
 	info->key_status = reg & 1<<10;
 

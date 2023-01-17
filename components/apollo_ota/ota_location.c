@@ -88,6 +88,9 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 ESP_LOGI(TAG, "Last mbedtls failure: 0x%x", mbedtls_err);
             }
             break;
+        case HTTP_EVENT_REDIRECT:
+            ESP_LOGI(TAG, "HTTP_EVENT_REDIRECT");
+            break;
     }
     return ESP_OK;
 }
@@ -154,7 +157,7 @@ static void log_task_info(void)
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
     char formated_memory_use[256];
     snprintf(formated_memory_use, 256,
-             "[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d, heap_caps_get_free_size: %d)",
+             "[MEMORY USE] (GetFreeHeapSize now: %" PRId32 ", GetMinimumEverFreeHeapSize: %" PRId32 ", heap_caps_get_free_size: %d)",
              xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size);
     ESP_LOGD(TAG, "freertos api result:\n\r%s", formated_memory_use);
 
@@ -219,7 +222,7 @@ int get_image_location(char *location, int buffersize, char * version)
     esp_err_t err = esp_http_client_perform(client);
 
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %" PRId64 "",
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
         ESP_LOGI(TAG, "Body: %s", local_response_buffer);
@@ -247,7 +250,7 @@ int get_image_location(char *location, int buffersize, char * version)
         }
     } else {
         ESP_LOGE(TAG, "HTTP POST request failed: %s", esp_err_to_name(err));
-        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %" PRId64 "",
                         esp_http_client_get_status_code(client),
                         esp_http_client_get_content_length(client));
                 ESP_LOGI(TAG, "Body: %s", local_response_buffer);

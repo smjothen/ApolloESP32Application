@@ -67,6 +67,9 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     case HTTP_EVENT_DISCONNECTED:
         ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
         break;
+    case HTTP_EVENT_REDIRECT:
+        ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+        break;
     }
     return ESP_OK;
 }
@@ -86,7 +89,7 @@ void _do_sdk_ota(char *image_location){
 	if(!useCert)
 		ESP_LOGE(TAG, "CERTIFICATES NOT USED");
 
-    esp_http_client_config_t config = {
+    esp_http_client_config_t http_config = {
         .url = image_location,
         //.cert_pem = (char *)server_cert_pem_start,
         .use_global_ca_store = useCert,
@@ -95,6 +98,9 @@ void _do_sdk_ota(char *image_location){
 		.timeout_ms = 20000,
 		.buffer_size = 1536,
     };
+
+    esp_https_ota_config_t config = {0};
+    config.http_config = &http_config;
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_TIMEOUT_MINUTES*60*1000);
     TimerHandle_t local_timeout_timer = xTimerCreate( "sdk_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
@@ -142,7 +148,7 @@ void ota_time_left()
 
 	timeLeft = (xTimerGetExpiryTime(timeout_timer) - xTaskGetTickCount());
 
-	ESP_LOGE(TAG, "OTA time left: %i, %s", timeLeft, xTimerIsTimerActive(timeout_timer)==pdFALSE ? "INACTIVE" : "ACTIVE");
+	ESP_LOGE(TAG, "OTA time left: %" PRIi32 ", %s", timeLeft, xTimerIsTimerActive(timeout_timer)==pdFALSE ? "INACTIVE" : "ACTIVE");
 }
 
 

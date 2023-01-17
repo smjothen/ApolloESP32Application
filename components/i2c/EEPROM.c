@@ -134,11 +134,12 @@ esp_err_t _eeprom_write_byte(uint8_t byte_to_write, uint16_t address){
 		return read_error;
 	}
 
-	if(readback_byte == byte_to_write)
+	if(readback_byte == byte_to_write) {
 		return ESP_OK;
-	else
+	} else {
 		ESP_LOGW(TAG, "Readback error %d and %d", readback_byte, byte_to_write);
 		return ESP_FAIL;
+	}
 }
 
 esp_err_t _eeprom_write_byte_with_retires(uint8_t byte_to_write, uint16_t address){
