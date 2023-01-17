@@ -616,11 +616,6 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval)
     //return publish_json_blocked(observations, 10000);
 }
 
-uint32_t mqtt_GetNrOfRetransmits() {
-    ESP_LOGE(TAG, "FIX ME");
-    return 0;
-}
-
 static uint32_t txCnt = 0;
 static float OPENVoltage = 0.0;
 int publish_debug_telemetry_observation_all(double rssi){

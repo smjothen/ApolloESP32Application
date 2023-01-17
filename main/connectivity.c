@@ -68,17 +68,6 @@ static const uint32_t restartTimeLimit = 3900;
 static uint32_t nrOfConnectsFailsBeforeReinit = 2;
 static uint32_t nrOfLTEReconnects = 0;
 
-uint32_t mqtt_GetTransportConnectFailures() {
-	ESP_LOGE(TAG, "FIXME");
-	return 0;
-}
-
-uint32_t mqtt_ClearTransportConnectFailures() {
-	ESP_LOGE(TAG, "FIXME");
-	return 0;
-}
-
-
 uint32_t connectivity_GetNrOfLTEReconnects()
 {
 	return nrOfLTEReconnects;
