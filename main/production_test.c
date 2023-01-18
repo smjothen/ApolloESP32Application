@@ -542,6 +542,7 @@ int prodtest_perform(struct DeviceInfo device_info, bool new_id)
 
 	if(IsProgrammableFPGAUsed() == true)
 	{
+		memset(payload,0,130);
 		MCU_GetFPGAInfo(payload, 130);
 		ESP_LOGI(TAG, "%s", payload);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_INFO, payload);
@@ -1072,7 +1073,7 @@ int test_speed_hwid(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 
-    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
