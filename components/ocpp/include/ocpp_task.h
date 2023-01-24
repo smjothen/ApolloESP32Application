@@ -23,7 +23,7 @@ enum call_type{
 /**
  * Reply to central service originated action call.
  */
-int send_call_reply(cJSON * call);
+int send_call_reply(cJSON * call); // TODO: ensure cleanup when used
 
 void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info);
 
@@ -31,6 +31,12 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
  * Used to send new action calls originating from the charge point once all prior calls have finished
  */
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type);
+
+/**
+ * Equivalent to enqueue_call, but uses a wait of '0' when waiting for semaphores or other thread synchronisation.
+ * Allows enqueuing calls from rtos timers.
+ */
+int enqueue_call_immediate(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type);
 void block_enqueue_call(uint8_t call_type_mask);
 uint8_t get_blocked_enqueue_mask();
 size_t enqueued_call_count();

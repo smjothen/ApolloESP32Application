@@ -6,4 +6,12 @@
 #define OCPP_DIAGNOSTICS_STATUS_UPLOAD_FAILED "UploadFailed"
 #define OCPP_DIAGNOSTICS_STATUS_UPLOADING "Uploading"
 
+enum ocpp_diagnostics_status{
+	eOCPP_DIAGNOSTICS_STATUS_IDLE,
+	eOCPP_DIAGNOSTICS_STATUS_UPLOADED,
+	eOCPP_DIAGNOSTICS_STATUS_UPLOAD_FAILED,
+	eOCPP_DIAGNOSTICS_STATUS_UPLOADING
+};
+
+const char * ocpp_diagnostics_status_from_id(enum ocpp_diagnostics_status status);
 #endif /*OCPP_DIAGNOSTICS_STATUS_H*/

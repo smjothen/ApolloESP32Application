@@ -1740,6 +1740,7 @@ error:
 		ESP_LOGE(TAG, "Unable to create error reply");
 	}else{
 		send_call_reply(error_reply);
+		cJSON_Delete(error_reply);
 	}
 }
 

@@ -12,6 +12,7 @@
 #include "storage.h"
 #include "sessionHandler.h"
 #include "offlineSession.h"
+#include "offline_log.h"
 #include "fat.h"
 
 #include "ocpp_listener.h"
@@ -77,6 +78,7 @@ void not_supported_cb(const char * unique_id, const char * action, cJSON * paylo
 	return;
 }
 
+//TODO: This is run in a timer. MCU_SendCommandId blocks on semaphore with non-zero timeout, this could cause deadlock.
 static void reset(){
 	ESP_LOGI(TAG, "Restarting MCU");
 	MessageType ret = MCU_SendCommandId(CommandReset);
@@ -707,8 +709,8 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				}
 
 				ESP_LOGI(TAG, "Sending meter values");
-				if(enqueue_call(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
-							(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC) != 0){
+				if(enqueue_call_immediate(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
+								(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC) != 0){
 
 					ESP_LOGE(TAG, "Unable to send meter values");
 					cJSON_Delete(request);
@@ -785,7 +787,7 @@ static void clock_aligned_meter_values_on_aligned_start(){
 		ESP_LOGE(TAG, "Unable to create repeating clock aligned meter values timer");
 
 	}else{
-		xTimerStart(clock_aligned_handle, pdMS_TO_TICKS(200));
+		xTimerStart(clock_aligned_handle, 0);
 		init_interval_measurands(eOCPP_CONTEXT_SAMPLE_CLOCK);
 	}
 }
@@ -2692,6 +2694,8 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_TRIGGER_MESSAGE_ID, trigger_message_cb, NULL);
+
+		attach_call_cb(eOCPP_ACTION_GET_DIAGNOSTICS_ID, get_diagnostics_cb, NULL);
 
 		ESP_LOGI(TAG, "Starting connection with Central System");
 

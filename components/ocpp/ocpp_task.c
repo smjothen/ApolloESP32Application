@@ -232,25 +232,25 @@ static bool convert_tmp_id(int tmp_id, int * result_id_out){
 	return found_conversion;
 }
 
-int add_call(struct ocpp_call_with_cb * message, enum call_type type){
+int add_call(struct ocpp_call_with_cb * message, enum call_type type, TickType_t wait){
 	if(ocpp_call_queue == NULL)
 		return -1;
 
 	switch(type){
 	case eOCPP_CALL_GENERIC:
-		if(xQueueSendToBack(ocpp_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+		if(xQueueSendToBack(ocpp_call_queue, &message, wait) != pdPASS){
 			return -1;
 		}
 		break;
 	case eOCPP_CALL_TRANSACTION_RELATED:
-		if(xQueueSendToBack(ocpp_transaction_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+		if(xQueueSendToBack(ocpp_transaction_call_queue, &message, wait) != pdPASS){
 			return -1;
 		}else{
 			set_txn_enqueue_timestamp(time(NULL));
 		}
 		break;
 	case eOCPP_CALL_BLOCKING:
-		if(xQueueSendToBack(ocpp_blocking_call_queue, &message, pdMS_TO_TICKS(500)) != pdPASS){
+		if(xQueueSendToBack(ocpp_blocking_call_queue, &message, wait) != pdPASS){
 			return -1;
 		}
 		break;
@@ -271,7 +271,7 @@ uint8_t get_blocked_enqueue_mask(){
 	return enqueue_blocking_mask;
 }
 
-int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
+int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, TickType_t wait){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
 		return -1;
@@ -293,7 +293,7 @@ int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callba
 	message_with_cb->error_cb = error_cb;
 	message_with_cb->cb_data = cb_data;
 
-	int err = add_call(message_with_cb, type);
+	int err = add_call(message_with_cb, type, wait);
 
 	if(err != 0){
 		ESP_LOGE(TAG, "Unable to enqueue call");
@@ -301,6 +301,14 @@ int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callba
 	}
 
 	return err;
+}
+
+int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
+	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, pdMS_TO_TICKS(500));
+}
+
+int enqueue_call_immediate(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
+	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, 0);
 }
 
 static uint8_t call_blocking_mask = 0;
@@ -615,7 +623,7 @@ int send_next_call(int last_listener_state){
 	BaseType_t call_aquired = pdFALSE;
 
 	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING)){ // Attempt to get call from prioritized queue
-		call_aquired = xQueueReceive(ocpp_blocking_call_queue, &call, pdMS_TO_TICKS(1));
+		call_aquired = xQueueReceive(ocpp_blocking_call_queue, &call, 0);
 	}
 
 	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED)){
@@ -679,7 +687,7 @@ int send_next_call(int last_listener_state){
 		}
 
 		if(call_aquired != pdTRUE){
-			call_aquired = xQueueReceive(ocpp_transaction_call_queue, &call, pdMS_TO_TICKS(1));
+			call_aquired = xQueueReceive(ocpp_transaction_call_queue, &call, 0);
 
 			if(call_aquired == pdTRUE){
 				get_txn_enqueue_timestamp();
@@ -706,7 +714,7 @@ int send_next_call(int last_listener_state){
 	}
 
 	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_GENERIC)){ // Attempt to get generic call
-		call_aquired = xQueueReceive(ocpp_call_queue, &call, pdMS_TO_TICKS(1));
+		call_aquired = xQueueReceive(ocpp_call_queue, &call, 0);
 	}
 
 	if(call_aquired != pdTRUE){
@@ -806,7 +814,7 @@ void ocpp_heartbeat(){
 		return;
 	}
 
-	if(enqueue_call(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
+	if(enqueue_call_immediate(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
 		ESP_LOGE(TAG, "Unable to send heartbeat");
 		cJSON_Delete(heartbeat_request);
 	}

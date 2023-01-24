@@ -2137,10 +2137,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
 				{
 					int ret = deleteOfflineLog();
-					if(ret == 1)
+					if(ret == 0){
 						publish_debug_telemetry_observation_Diagnostics("Delete OK");
-					else
-						publish_debug_telemetry_observation_Diagnostics("Delete failed");
+					}else{
+						char description[64];
+						snprintf(description, sizeof(description), "Delete failed: %s", strerror(ret));
+						publish_debug_telemetry_observation_Diagnostics(description);
+					}
 				}
 				else if(strstr(commandString,"StartStack") != NULL)
 				{
