@@ -54,7 +54,19 @@ void MqttDataReset()
 	memset(&mqttDiagnostics, 0, sizeof(mqttDiagnostics));
 }
 
+static bool disableObservations = false;
+
+void cloud_observations_disable(bool disable) {
+    // This can get set during calibration so we don't send any energy/session data to the cloud
+    disableObservations = disable;
+}
+
 int _publish_json(cJSON *payload, bool blocking, TickType_t xTicksToWait){
+    if (disableObservations) {
+        ESP_LOGI(TAG, "Blocking observation during calibration!");
+        return 0;
+    }
+
     char *message = cJSON_PrintUnformatted(payload);
 
     if(message == NULL){
@@ -346,6 +358,11 @@ int publish_debug_telemetry_observation_local_settings()
     return publish_json(observations);
 }*/
 
+int publish_debug_telemetry_observation_Calibration(char *calibrationJSON) {
+    cJSON *observations = create_observation_collection();
+    add_observation_to_collection(observations, create_observation(MIDCalibration, calibrationJSON));
+    return publish_json_blocked(observations, 10 * 1000);
+}
 
 int publish_debug_telemetry_observation_Connectivity_None()
 {

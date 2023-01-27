@@ -41,6 +41,9 @@ menu "Zaptec"
      config ZAPTEC_RUN_FACTORY_TESTS
      	    bool "Runs production test even if already passed"
 
+     config ZAPTEC_MCU_APPLICATION_ONLY
+		      bool "Allow MCU without bootloader"
+
      config ZAPTEC_RUN_FACTORY_SSID
      	    string "Wifi ssid to use with ZAPTEC_RUN_FACTORY_TESTS"
 	    depends on ZAPTEC_RUN_FACTORY_TESTS

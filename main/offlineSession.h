@@ -9,6 +9,7 @@
 
 void offlineSession_Init();
 bool offlineSession_mount_folder();
+void offlineSession_disable(void);
 
 int offlineSession_FindNewFileNumber();
 int offlineSession_FindOldestFile();

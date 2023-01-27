@@ -37,6 +37,7 @@
 #include "sas_token.h"
 #include "offlineSession.h"
 #include "zaptec_cloud_observations.h"
+#include "calibration.h"
 #ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	#include "apollo_console.h"
 #endif
@@ -48,7 +49,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.2.1";
+char softwareVersion[] = "2.0.0.404";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -491,7 +492,11 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
+#ifndef CONFIG_ZAPTEC_MCU_APPLICATION_ONLY
+
     validate_booted_image();
+
+#endif
 
 	// The validate_booted_image() must sync the dsPIC FW before we canstart the polling
 	dspic_periodic_poll_start();
@@ -601,17 +606,19 @@ void app_main(void)
 	}
 	//#endif
 
-    #ifndef BG_BRIDGE
+  #ifndef BG_BRIDGE
     sessionHandler_init();
 	#endif
 
-    size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+	size_t free_heap_size_start = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 
-    char onTimeString[20]= {0};
+	char onTimeString[20]= {0};
 
     bool hasBeenOnline = false;
     int otaDelayCounter = 0;
     int lowMemCounter = 0;
+
+		bool calibrationMode = false;
 
 	while (true)
     {
@@ -643,7 +650,7 @@ void app_main(void)
 
     	if(onTimeCounter % 10 == 0)
     	{
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF());
+    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d cal: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), calibration_task_watermark());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -749,6 +756,12 @@ void app_main(void)
 			otaDelayCounter = 0;
 		}
 
+		// Allow starting calibration task once when the handle is plugged in
+		if (MCU_IsCalibrationHandle() && !calibrationMode) {
+			ESP_LOGI(TAG_MAIN, "Starting calibration task!");
+			calibration_task_start();
+			calibrationMode = true;
+		}
 
 	#ifdef useSimpleConsole
 		int i;

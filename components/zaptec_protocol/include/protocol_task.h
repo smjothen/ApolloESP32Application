@@ -6,6 +6,8 @@
 #include "../../main/DeviceInfo.h"
 
 float GetFloat(uint8_t * input);
+float GetUint32_t(uint8_t * input);
+uint16_t GetUInt16(uint8_t * input);
 
 void zaptecProtocolStart();
 void dspic_periodic_poll_start();
@@ -14,6 +16,7 @@ void protocol_task_ctrl_debug(int state);
 uint32_t GetMCUComErrors();
 
 MessageType MCU_SendCommandId(uint16_t paramIdentifier);
+MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, size_t length);
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
 MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);
 MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);
@@ -21,6 +24,7 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
 
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);
+ZapMessage MCU_SendUint8WithReply(uint16_t paramIdentifier, uint8_t data);
 
 void MCU_StartLedOverride();
 void MCU_StopLedOverride();
@@ -54,6 +58,8 @@ int8_t MCU_GetChargeMode();
 uint8_t MCU_GetChargeOperatingMode();
 void SetTransitionOperatingModeState(enum ChargerOperatingMode newTransitionState);
 enum ChargerOperatingMode GetTransitionOperatingModeState();
+
+bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret);
 
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
@@ -98,5 +104,11 @@ void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
 bool MCU_IsReady();
 
+bool MCU_GetMidStoredCalibrationId(uint32_t *id);
+bool MCU_SetMIDBlinkEnabled(bool enabled);
+bool MCU_GetInterpolatedEnergyCounter(float *energy);
+bool MCU_IsCalibrationHandle(void);
+
+bool MCU_GetMidStatus(uint32_t *id);
 
 #endif /* PROTOCOL_TASK_H */
