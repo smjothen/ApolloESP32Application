@@ -127,6 +127,13 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 				ctx->Params.VoltageOffset,
 		};
 
+		const char *paramNames[] = {
+			"CurrentGain",
+			"VoltageGain",
+			"CurrentOffset",
+			"VoltageOffset",
+		};
+
 		for (size_t i = 0; i < sizeof (params) / sizeof (params[0]); i++) {
 			bool hasParam = true;
 			for (int j = 0; j < 3; j++) {
@@ -135,9 +142,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 				}
 			}
 
-			const char *key = i == 0 ? "CurrentGain" :
-				i == 1 ? "VoltageGain" :
-				i == 2 ? "CurrentOffset" : "VoltageOffset";
+			const char *key = paramNames[i];
 
 			if (hasParam) {
 				cJSON *param = cJSON_CreateObject();
@@ -153,14 +158,16 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 		cJSON *verifications = cJSON_CreateObject();
 
 		CalibrationParameter *verifs[] = {
-			&ctx->Verifs.Verification[I_tr_3_phase_PF1],
-			&ctx->Verifs.Verification[I_max],
+			&ctx->Verifs.Verification[I_min_go],
+		};
+
+		const char *verifNames[] = {
+			"I_min_go"
 		};
 
 		for (size_t i = 0; i < sizeof (verifs) / sizeof (verifs[0]); i++) {
 			bool hasParam = verifs[i]->assigned;
-
-			const char *key = i == 0 ? "I_tr_3_phase_PF1" : "I_max";
+			const char *key = verifNames[i];
 
 			if (hasParam) {
 				cJSON_AddNumberToObject(verifications, key, verifs[i]->value);

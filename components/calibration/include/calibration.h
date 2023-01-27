@@ -117,12 +117,10 @@ typedef enum {
     PreFlashVerification = 8,
     I_min_pre = 9,
     I_tr_L3 = 10,
+    I_min_go = 11,
 } CalibrationVerificationTest;
 
-#define CALIBRATION_TOTAL_VERIFICATIONS 11
-
-// Go should run two verifications: I_tr_3_phase_PF1, I_max
-#define CALIBRATION_EXP_VERIFICATIONS 2
+#define CALIBRATION_TOTAL_VERIFICATIONS 12
 
 typedef enum {
     CALIBRATION_TYPE_NONE = 0,

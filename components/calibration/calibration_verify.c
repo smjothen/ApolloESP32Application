@@ -56,6 +56,9 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             expectedCurrent = 5.0;
             expectedPhases = L3;
             break;
+        case I_min_go:
+            expectedCurrent = 0.5;
+            break;
     }
 
     // Relays should be closed anyway, but ...
@@ -175,6 +178,7 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             case I_max:
             case PreFlashVerification:
             case I_min_pre:
+            case I_min_go:
                 max_error = 0.005;
                 break;
         }
