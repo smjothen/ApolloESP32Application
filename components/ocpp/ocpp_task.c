@@ -722,6 +722,28 @@ int send_next_call(int last_listener_state){
 		return -1;
 	}
 
+	if(call == NULL || call->call_message == NULL || !cJSON_IsArray(call->call_message) || cJSON_GetArraySize(call->call_message) != 4){
+		bool message_is_null = true;
+		bool is_array = false;
+		int array_size = 0;
+		bool call_is_null = call == NULL;
+
+		if(!call_is_null){
+			message_is_null = call->call_message;
+			if(!message_is_null){
+				is_array = cJSON_IsArray(call->call_message);
+				if(is_array)
+					array_size = cJSON_GetArraySize(call->call_message);
+			}
+		}
+
+		ESP_LOGE(TAG, "Malformed call in queue. call is %s, message is %s (%s), message size is %d",
+			call_is_null ? "null" : "not null", message_is_null ? "null" : "not null", is_array ? "array" : "not array", array_size);
+
+		xSemaphoreGive(ocpp_active_call_lock_1);
+		return -1;
+	}
+
 	active_call_id = cJSON_GetArrayItem(call->call_message, 1)->valuestring;
 	active_call = call;
 

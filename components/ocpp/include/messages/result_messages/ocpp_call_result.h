@@ -22,7 +22,7 @@ cJSON * ocpp_create_update_firmware_confirmation(const char * unique_id);
 
 //Firmware Management Profile
 cJSON * ocpp_create_get_diagnostics_confirmation(const char * unique_id, const char * file_name);
-//cJSON * ocpp_create_update_firmware_confirmation(const char * unique_id);
+cJSON * ocpp_create_update_firmware_confirmation(const char * unique_id);
 
 //Local Auth List Management Profile
 cJSON * ocpp_create_send_local_list_confirmation(const char * unique_id, const char * status);

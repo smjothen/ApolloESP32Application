@@ -4,6 +4,7 @@
 #include "freertos/timers.h"
 
 #include "esp_log.h"
+#include "esp_crc.h"
 
 #include "ocpp.h"
 #include "connectivity.h"
@@ -14,6 +15,7 @@
 #include "offlineSession.h"
 #include "offline_log.h"
 #include "fat.h"
+#include "apollo_ota.h"
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
@@ -24,6 +26,7 @@
 #include "messages/result_messages/ocpp_call_result.h"
 #include "messages/error_messages/ocpp_call_error.h"
 #include "ocpp_json/ocppj_message_structure.h"
+#include "ocpp_json/ocppj_validation.h"
 #include "types/ocpp_reset_status.h"
 #include "types/ocpp_reset_type.h"
 #include "types/ocpp_ci_string_type.h"
@@ -40,6 +43,7 @@
 #include "types/ocpp_message_trigger.h"
 #include "types/ocpp_trigger_message_status.h"
 #include "types/ocpp_charge_point_error_code.h"
+#include "types/ocpp_firmware_status.h"
 #include "protocol_task.h"
 
 #define TASK_OCPP_STACK_SIZE 3200
@@ -62,6 +66,9 @@ enum central_system_connection_status{
 	eCS_CONNECTION_OFFLINE = 0,
 	eCS_CONNECTION_ONLINE,
 };
+
+static char * mnt_directory = "/files";
+static char * firmware_update_request_path = "/files/ocpp_upd.bin";
 
 enum central_system_connection_status connection_status = eCS_CONNECTION_OFFLINE;
 
@@ -2641,6 +2648,271 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 
 }
 
+static void ocpp_prepare_firmware_update(){
+	xTaskNotify(task_ocpp_handle, eOCPP_FIRMWARE_UPDATE, eSetBits);
+}
+
+TimerHandle_t firmware_update_handle = NULL;
+
+int defer_update(time_t when){
+	time_t now = time(NULL);
+	if(when > now){
+		int update_delay = when - now;
+		firmware_update_handle = xTimerCreate("Ocpp firmware update",
+						pdMS_TO_TICKS(update_delay * 1000),
+						pdFALSE, NULL, ocpp_prepare_firmware_update);
+
+		if(firmware_update_handle == NULL || xTimerStart(firmware_update_handle, pdMS_TO_TICKS(200)) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to activate new firmware update timer");
+			return -1;
+		}else{
+			int days = update_delay / 24*60*60;
+			update_delay %= 24*60*60;
+			int hours = update_delay / 60*60;
+			update_delay %= 60*60;
+			int minutes = update_delay / 60;
+			update_delay %= 60;
+			ESP_LOGI(TAG, "Update will start in %d days %d hours %d minutes and %d seconds",  days, hours, minutes, update_delay);
+		}
+	}else{
+		ocpp_prepare_firmware_update();
+	}
+
+	return 0;
+}
+
+struct update_request{
+	char location[1024];
+	int retries;
+	time_t retrieve_date;
+	int retry_interval;
+};
+
+static struct update_request update_info = {0};
+
+static int save_update_request(struct update_request * request){
+	int ret = 0;
+
+	struct stat st;
+	if(stat(mnt_directory, &st) != 0)
+		return ENOTDIR;
+
+	FILE* fp = fopen(firmware_update_request_path, "wb");
+	if(fp == NULL)
+		return errno;
+
+	uint32_t crc_calc = esp_crc32_le(0, (uint8_t *)request, sizeof(struct update_request));
+
+	if(fwrite(request, sizeof(request), 1, fp) != 1){
+		ret = errno;
+		goto error;
+	}
+
+	if(fwrite(&crc_calc, sizeof(uint32_t), 1, fp) != 1){
+		ret = errno;
+		goto error;
+	}
+
+	return fclose(fp);
+error:
+	fclose(fp);
+	remove(firmware_update_request_path);
+
+	return ret;
+}
+
+static int load_update_request(struct update_request * request){
+	int ret = 0;
+
+	struct stat st;
+	if(stat(mnt_directory, &st) != 0)
+		return ENOTDIR;
+
+	FILE* fp = fopen(firmware_update_request_path, "rb");
+	if(fp == NULL)
+		return errno;
+
+	if(fread(request, sizeof(struct update_request), 1, fp) != 1){
+		ret = errno;
+		goto error;
+	}
+
+	uint32_t crc_read;
+	if(fread(&crc_read, sizeof(uint32_t), 1, fp) != 1){
+		ret = errno;
+		goto error;
+	}
+
+	uint32_t crc_calc = esp_crc32_le(0, (uint8_t *)request, sizeof(struct update_request));
+
+	if(crc_calc != crc_read){
+		ret = EINVAL;
+		goto error;
+	}
+
+	return fclose(fp);
+error:
+	fclose(fp);
+	remove(firmware_update_request_path);
+
+	return ret;
+}
+
+static void update_firmware_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Received request to update firmware");
+	char err_str[128];
+
+	char * location = NULL;
+	enum ocppj_err_t err = ocppj_get_string_field(payload, "location", true, &location, err_str, sizeof(err_str));
+
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'location' from payload: %s", err_str);
+		goto error;
+	}
+
+	if(strlen(location)+1 > sizeof(update_info.location)){
+		snprintf(err_str, sizeof(err_str), "'location' too long. Firmware only supports %d", sizeof(update_info.location)-1);
+		err = eOCPPJ_ERROR_NOT_SUPPORTED;
+		ESP_LOGW(TAG, "Invalid location: %s", err_str);
+
+		goto error;
+	}
+
+	//TODO: add aditional verification of location
+	strcpy(update_info.location, location);
+
+	err = ocppj_get_int_field(payload, "retries", false, &update_info.retries, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_VALUE){
+		if(err != eOCPPJ_NO_ERROR){
+			ESP_LOGW(TAG, "Unable to get 'retries' from payload: %s", err_str);
+			goto error;
+		}
+	}else {
+		update_info.retries = 0;
+	}
+
+	char * date_string = NULL;
+	err = ocppj_get_string_field(payload, "retrieveDate", true, &date_string, err_str, sizeof(err_str));
+
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'retrieveDate' from payload: %s", err_str);
+		goto error;
+	}
+
+	update_info.retrieve_date = ocpp_parse_date_time(date_string);
+	if(update_info.retrieve_date == (time_t)-1){
+		ESP_LOGE(TAG, "Unable parse 'retriveDate'");
+
+		snprintf(err_str, sizeof(err_str), "Unrecognised dateTime format for 'retriveDate'");
+		err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+
+		goto error;
+	}
+
+	err = ocppj_get_int_field(payload, "retryInterval", false, &update_info.retry_interval, err_str, sizeof(err_str));
+
+	if(err != eOCPPJ_NO_VALUE){
+		if(err != eOCPPJ_NO_ERROR){
+			ESP_LOGW(TAG, "Unable to get 'retryInterval' from payload: %s", err_str);
+			goto error;
+		}
+	}else{
+		update_info.retry_interval = 30;
+	}
+
+	int save_err = save_update_request(&update_info);
+	if(save_err != 0){
+		snprintf(err_str, sizeof(err_str), "Unable to save request: %s", strerror(save_err));
+
+		err = eOCPPJ_ERROR_INTERNAL;
+		ESP_LOGE(TAG, "%s", err_str);
+
+		goto error;
+	}
+
+	if(defer_update(update_info.retrieve_date) != 0){
+		snprintf(err_str, sizeof(err_str), "Unable to defer update");
+
+		err = eOCPPJ_ERROR_INTERNAL;
+		ESP_LOGE(TAG, "%s", err_str);
+
+		goto error;
+	}
+
+	cJSON * reply =  ocpp_create_update_firmware_confirmation(unique_id);
+	if(reply == NULL){
+		ESP_LOGE(TAG, "Unable to create confirmation for update firmware");
+	}else{
+		send_call_reply(reply);
+		cJSON_Delete(reply);
+	}
+
+	return;
+
+error:
+	if(err == eOCPPJ_NO_ERROR || eOCPPJ_NO_VALUE){
+		ESP_LOGE(TAG, "Update firmware callback exit error without id");
+
+		err = eOCPPJ_ERROR_INTERNAL;
+		snprintf(err_str, sizeof(err_str), "Unknown error occured");
+	}
+
+	cJSON * error_reply = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	if(error_reply == NULL){
+		ESP_LOGE(TAG, "Unable to create error reply");
+	}else{
+		send_call_reply(error_reply);
+		cJSON_Delete(error_reply);
+	}
+}
+
+int set_firmware_update_state(){
+	int err = load_update_request(&update_info);
+	if(err != 0){
+		return err != ENOENT ? err : 0; // No file, means no update was requested and no update related error.
+	}
+
+	if(update_info.retrieve_date < time(NULL)){ // An update should have been attempted
+		cJSON * call = NULL;
+		if(ota_CheckIfHasBeenUpdated()){
+			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLED);
+
+			remove(firmware_update_request_path);
+		}else{
+			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
+
+			if(update_info.retries > 0){
+				update_info.retries--;
+				err = save_update_request(&update_info);
+				if(err != 0){
+					return err;
+				}else{
+					/*
+					 * Interval may exceed user expectation if reboot was not due to failed OTA, as the interval between last
+					 * update and reboot/boot has been lost.
+					 */
+					err = defer_update(time(NULL)+update_info.retry_interval);
+				}
+			}else{
+				remove(firmware_update_request_path);
+			}
+		}
+
+		if(call != NULL){
+			if(enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
+				ESP_LOGE(TAG, "Unable to enqueue firmware_status_notification");
+			}
+		}else{
+			ESP_LOGE(TAG, "Expected firmware status call");
+		}
+
+	}else{ // Update has been requested but no update should have been attempted.
+		defer_update(update_info.retrieve_date);
+	}
+
+	return err;
+}
+
 uint8_t previous_enqueue_mask = 0;
 
 time_t last_online_timestamp = 0;
@@ -2696,6 +2968,7 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_TRIGGER_MESSAGE_ID, trigger_message_cb, NULL);
 
 		attach_call_cb(eOCPP_ACTION_GET_DIAGNOSTICS_ID, get_diagnostics_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_UPDATE_FIRMWARE_ID, update_firmware_cb, NULL);
 
 		ESP_LOGI(TAG, "Starting connection with Central System");
 
@@ -2762,6 +3035,12 @@ static void ocpp_task(){
 		//Handle ClockAlignedDataInterval
 		restart_clock_aligned_meter_values();
 
+		// Check if UpdateFormware.req is in progress or need to be restarted and update with FirmwareStatusNotification if needed
+		err = set_firmware_update_state();
+		if(err != 0){
+			ESP_LOGE(TAG, "Error while attemptig to set firmware update status: %s", strerror(err));
+		}
+
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
 		while(should_run && should_restart == false){
@@ -2795,6 +3074,21 @@ static void ocpp_task(){
 
 					last_problem_timestamp = time(NULL);
 					break;
+				}
+
+				if(data & eOCPP_FIRMWARE_UPDATE){
+					ESP_LOGI(TAG, "Attempting to start firmware update from ocpp");
+					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+					if(ret == MsgCommandAck)
+					{
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+
+						start_ocpp_ota(update_info.location);
+					}
+					else
+					{
+						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+					}
 				}
 
 				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)

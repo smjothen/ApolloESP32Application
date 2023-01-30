@@ -28,12 +28,14 @@ static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
 static const int SAFE_OTA_UNBLOCKED = BIT2;
+static const int OCPP_OTA = BIT7;
 static bool updateOnlyIfNewVersion = false;
 
 const uint OTA_TIMEOUT_MINUTES = 30;
 const uint OTA_GLOBAL_TIMEOUT_MINUTES = 60;
 const uint OTA_RETRY_PAUSE_SECONDS = 30;
 
+#define OCPP_IMAGE_VERSION "2.0.0.399"
 
 void on_ota_timeout( TimerHandle_t xTimer ){
     ota_log_timeout();
@@ -146,9 +148,9 @@ void ota_time_left()
 }
 
 
+char image_location[1024] = {0};
 static void ota_task(void *pvParameters){
 
-    char image_location[1024] = {0};
     char image_version[16] = {0};
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
@@ -179,7 +181,18 @@ static void ota_task(void *pvParameters){
 
         ota_log_location_fetch();
 
-        int ret = get_image_location(image_location,sizeof(image_location), image_version);
+	int ret;
+	if(ota_selection_field & OCPP_OTA){ // OCPP defines a location, it can therefore not be based on the cloud api endpoint
+		// OCPP does not define a version for firmware. For testing version will be set to indicate validity for ZGB Prefix
+		strcpy(image_version, OCPP_IMAGE_VERSION);
+
+		log_set_origin_ocpp(true);
+		ret = 0;
+	}else{
+		ret = get_image_location(image_location,sizeof(image_location), image_version);
+
+		log_set_origin_ocpp(false);
+	}
         // strcpy( image_location,"http://api.zaptec.com/api/firmware/6476103f-7ef9-4600-9450-e72a282c192b/download");
         // strcpy( image_location,"https://api.zaptec.com/api/firmware/ZAP000001/current");
         ESP_LOGI(TAG, "image location to use: %s, err: %d", image_location, ret);
@@ -371,6 +384,16 @@ int start_segmented_ota(void){
 int start_safe_ota(void){
     xEventGroupSetBits(event_group, SAFE_OTA_UNBLOCKED);
     return 0;
+}
+
+int start_ocpp_ota(const char * location){
+	if(strlen(location) > sizeof(image_location))
+		return -1;
+
+	strcpy(image_location, location);
+
+	xEventGroupSetBits(event_group, OCPP_OTA | SEGMENTED_OTA_UNBLOCKED);
+	return 0;
 }
 
 

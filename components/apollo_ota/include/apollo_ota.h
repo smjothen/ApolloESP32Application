@@ -6,6 +6,7 @@ int start_ota(void);
 int start_segmented_ota(void);
 int start_segmented_ota_if_new_version(void);
 int start_safe_ota(void);
+int start_ocpp_ota(const char * location);
 bool otaIsRunning();
 void validate_booted_image(void);
 const char* OTAReadRunningPartition();
