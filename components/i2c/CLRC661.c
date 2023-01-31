@@ -103,6 +103,12 @@ void NFCClearTag()
 	memset(&tagInfo, 0, sizeof(struct TagInfo));
 }
 
+static uint16_t lastFailedATQA = 0;
+uint16_t NFCGetLastFailedATQA()
+{
+	return lastFailedATQA;
+}
+
 int NFCReadTag()
 {
     uint8_t message[5] = {0};
@@ -217,22 +223,23 @@ int NFCReadTag()
 
 	i2c_master_read_slave(slaveAddressNFC, message, 2);
 
-
-
-	if(message[0] == 0x04)
+	//Detect 00 02 (Classic 1K) and 00 04 (Classic 4K)
+	if(((message[0] == 0x02) || (message[0] == 0x04)) && (message[1] == 0x0))
 	{
 		uidLength = 4;
-		printf("Single UID\n");
+		printf("Single UID: ATQA: %02X %02X\n", message[1], message[0]);
 	}
+	//Detect 00 44 (Ultralight C)
 	else if ((message[0] == 0x44) && (message[1] == 0x0))
 	{
 		uidLength = 7;
-		printf("Double UID\n");
+		printf("Double UID: ATQA: %02X %02X\n", message[1], message[0]);
 	}
 	else
 	{
-		if((message[0] != 0x26) && (message[0] != 0x26))
-			printf("Unknown ATQA: %02X %02X\n", message[1], message[0]);
+		printf("Unknown ATQA: %02X %02X\n", message[1], message[0]);
+
+		lastFailedATQA = message[1]<<8 | message[0];
 
 		//6-> Tx off
 		message[0] = 0x28;
