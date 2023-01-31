@@ -2505,6 +2505,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					sessionHandler_SendFPGAInfo();
 					responseStatus = 200;
 				}
+				else if(strstr(commandString, "GetFailedRFID"))
+				{
+					char atqa[12] = {0};
+					uint16_t value = NFCGetLastFailedATQA();
+					snprintf(atqa, 12,"ATQA: %02X %02X", ((value>>8) & 0xff), (value & 0xff));
+					publish_debug_telemetry_observation_Diagnostics(atqa);
+					responseStatus = 200;
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
