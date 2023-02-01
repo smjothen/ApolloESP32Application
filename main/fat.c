@@ -206,7 +206,7 @@ esp_err_t fat_eraseAndRemountPartition()
 {
 	esp_err_t err = ESP_OK;
 
-	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
 
 	if(part != NULL)
 	{

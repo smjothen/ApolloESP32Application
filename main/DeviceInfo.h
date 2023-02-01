@@ -73,6 +73,7 @@ typedef enum {
 #define DIAGNOSTICS_STRING_SIZE 100
 
 // Network IDs
+#define NETWORK_NONE 0
 #define NETWORK_1P3W 1
 #define NETWORK_3P3W 2
 #define NETWORK_1P4W 3

@@ -133,7 +133,7 @@ esp_err_t offlineSession_eraseAndRemountPartition(char * diagnosticsString, size
 {
 	esp_err_t err = ESP_OK;
 
-	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
 
 	if(part != NULL)
 	{

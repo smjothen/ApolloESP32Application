@@ -2600,7 +2600,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}*/
 				else if(strstr(commandString, "fixpartition"))
 				{
-					int status = 0;
 					char partbuf[150] = {0};
 					if(strstr(commandString, "fixpartitionfiles"))
 					{
