@@ -195,9 +195,33 @@ void fat_static_unmount()
 {
 	// Unmount FATFS
 	ESP_LOGI(TAG, "Unmounting FAT filesystem");
-	ESP_ERROR_CHECK( esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
+	esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle);
 
 	mounted = false;
 	ESP_LOGI(TAG, "Done unmounting");
 }
 
+
+esp_err_t fat_eraseAndRemountPartition()
+{
+	esp_err_t err = ESP_OK;
+
+	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
+
+	if(part != NULL)
+	{
+		fat_static_unmount();
+
+		err = esp_partition_erase_range(part, 0, part->size);
+	}
+	else
+	{
+		return err;
+	}
+
+	mounted = false;
+
+	fat_static_mount();
+
+	return err;
+}
