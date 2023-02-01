@@ -70,6 +70,111 @@ void offlineSession_Init()
 	offlineSession_mount_folder();
 }
 
+static FILE *testFile = NULL;
+bool offlineSession_test_Createfile(char * fileDiagnostics, int size)
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
+		return false;
+	}
+
+	testFile = fopen("/offs/0.bin", "wb+");
+
+	if(testFile == NULL)
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " New file = NULL");
+	}
+	else
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " New file = 0x%08x", (unsigned int)testFile);
+		fclose(testFile);
+	}
+
+	return true;
+}
+
+
+bool offlineSession_test_Deletefile(char * fileDiagnostics, int size)
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
+		return false;
+	}
+
+	FILE *fp = fopen("/offs/0.bin", "r");
+	if(fp==NULL)
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File before remove: can't be opened");
+		ESP_LOGI(TAG, "File before remove: can't be opened ");
+		return false;
+	}
+	else
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File before remove: can be opened");
+		ESP_LOGI(TAG, "File before remove: can be opened ");
+	}
+
+	fclose(fp);
+
+	remove("/offs/0.bin");
+
+	fp = fopen("/offs/0.bin", "r");
+	if(fp==NULL)
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File after remove: deleted SUCCEEDED");
+		ESP_LOGI(TAG, "File after remove: delete SUCCEEDED");
+	}
+	else
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File after remove: deleted FAILED");
+		ESP_LOGE(TAG, "File after remove: delete FAILED");
+	}
+
+	fclose(fp);
+
+	return true;
+}
+
+
+esp_err_t offlineSession_eraseAndRemountPartition(char * diagnosticsString, size_t size)
+{
+	esp_err_t err = ESP_OK;
+
+	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+
+	if(part != NULL)
+	{
+		offlineSession_test_Createfile(diagnosticsString, size);
+
+		ESP_LOGI(TAG, "Unmounting files-filesystem");
+		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
+		snprintf(diagnosticsString + strlen(diagnosticsString), size, " Unm: %i", err);
+		if(err != ESP_OK)
+			ESP_LOGE(TAG, "Unmounting failed: %i", err);
+
+		err = esp_partition_erase_range(part, 0, part->size);
+		snprintf(diagnosticsString + strlen(diagnosticsString), size, " Erase: %i", err);
+		if(err != ESP_OK)
+			ESP_LOGE(TAG, "Erase failed: %i", err);
+	}
+	else
+	{
+		return err;
+	}
+
+	mounted = false;
+
+	offlineSession_mount_folder();
+
+	snprintf(diagnosticsString + strlen(diagnosticsString), size, " M: %i", mounted);
+
+	offlineSession_test_Createfile(diagnosticsString, size);
+
+	offlineSession_test_Deletefile(diagnosticsString, size);
+
+	return err;
+}
+
 
 bool offlineSession_mount_folder()
 {

@@ -928,8 +928,7 @@ bool IsUKOPENPowerBoardRevision()
 
 bool IsProgrammableFPGAUsed()
 {
-	//if((HwIdPower == HW_POWER_4_X804) || (HwIdPower == HW_POWER_5_UK_X804))
-	if((HwIdPower == HW_POWER_5_UK_X804))
+	if((HwIdSpeed == HW_SPEED_3_UK) || (HwIdSpeed == HW_SPEED_5_EU))
 		return true;
 	else
 		return false;
