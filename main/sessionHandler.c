@@ -900,7 +900,7 @@ static void authorize_compare_parent(){
 			struct ocpp_authorization_data auth_data = {0};
 			if(storage_Get_ocpp_local_auth_list_enabled() &&
 				(storage_Get_ocpp_local_pre_authorize() ||
-					(storage_Get_ocpp_local_authorize_offline() && is_connected() == false))){
+					(storage_Get_ocpp_local_authorize_offline() && ocpp_is_connected() == false))){
 
 				if(fat_ReadAuthData(active_tag->id_tag, &auth_data)){
 					strcpy(active_tag->parent_id, auth_data.id_tag_info.parent_id_tag);
@@ -1014,7 +1014,7 @@ void authorize(struct TagInfo tag, void (*on_accept)(const char *), void (*on_de
 
 	if(storage_Get_ocpp_local_auth_list_enabled() &&
 		(storage_Get_ocpp_local_pre_authorize() ||
-			(storage_Get_ocpp_local_authorize_offline() && is_connected() == false))){
+			(storage_Get_ocpp_local_authorize_offline() && ocpp_is_connected() == false))){
 
 		ESP_LOGI(TAG, "Attempting local authorization");
 

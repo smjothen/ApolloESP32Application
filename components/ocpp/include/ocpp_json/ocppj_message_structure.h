@@ -1,11 +1,25 @@
 #ifndef OCPPJ_MESSAGE_STRUCTURE_H
 #define OCPPJ_MESSAGE_STRUCTURE_H
 
+#include "cJSON.h"
+
 enum ocpp_message_type_id{
 	eOCPPJ_MESSAGE_ID_CALL = 2,
 	eOCPPJ_MESSAGE_ID_RESULT = 3,
 	eOCPPJ_MESSAGE_ID_ERROR = 4,
 };
+
+#define OCPPJ_INDEX_MESSAGE_TYPE_ID 0
+#define OCPPJ_INDEX_UNIQUE_ID 1
+
+#define OCPPJ_CALL_INDEX_ACTION 2
+#define OCPPJ_CALL_INDEX_PAYLOAD 3
+
+#define OCPPJ_RESULT_INDEX_PAYLOAD 2
+
+#define OCPPJ_ERROR_INDEX_ERROR_CODE 2
+#define OCPPJ_ERROR_INDEX_ERROR_DESCRIPTION 3
+#define OCPPJ_ERROR_INDEX_ERROR_DETAILS 3
 
 // Errors
 #define OCPPJ_ERROR_NOT_IMPLEMENTED "NotImplemented"
@@ -65,5 +79,16 @@ enum ocppj_err_t{
 #define	OCPPJ_ACTION_UPDATE_FIRMWARE "UpdateFirmware"
 
 const char * ocppj_error_code_from_id(enum ocppj_err_t error_id);
+
+const char * ocppj_get_string_from_message(cJSON * message, unsigned int index);
+
+#define ocppj_get_unique_id_from_call(call) ({ocppj_get_string_from_message(call, OCPPJ_INDEX_UNIQUE_ID);})
+#define ocppj_get_action_from_call(call) ({ocppj_get_string_from_message(call, OCPPJ_CALL_INDEX_ACTION);})
+
+#define ocppj_get_unique_id_from_result(call) ({ocppj_get_string_from_message(call, OCPPJ_INDEX_UNIQUE_ID);})
+
+#define ocppj_get_unique_id_from_error(call) ({ocppj_get_string_from_message(call, OCPPJ_INDEX_UNIQUE_ID);})
+#define ocppj_get_error_code_from_error(call) ({ocppj_get_string_from_message(call, OCPPJ_INDEX_ERROR_CODE);})
+#define ocppj_get_error_description_from_error(call) ({ocppj_get_string_from_message(call, OCPPJ_INDEX_ERROR_DESCRIPTION);})
 
 #endif /*OCPPJ_MESSAGE_STRUCTURE_H*/

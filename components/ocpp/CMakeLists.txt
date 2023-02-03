@@ -1,5 +1,6 @@
 
 idf_component_register(SRCS
+  "ocpp_call_with_cb.c"
   "ocpp_listener.c"
   "ocpp_smart_charging.c"
   "ocpp_task.c"

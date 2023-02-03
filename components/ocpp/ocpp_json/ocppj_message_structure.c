@@ -36,3 +36,7 @@ const char * ocppj_error_code_from_id(enum ocppj_err_t error_id){
 		return NULL;
 	}
 }
+
+const char * ocppj_get_string_from_message(cJSON * call, unsigned int index){
+	return cJSON_GetStringValue(cJSON_GetArrayItem(call, index));
+}

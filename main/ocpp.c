@@ -61,16 +61,10 @@ static bool should_run = false;
 static bool should_restart = false;
 static bool pending_reset = false;
 static bool graceful_exit = false;
-
-enum central_system_connection_status{
-	eCS_CONNECTION_OFFLINE = 0,
-	eCS_CONNECTION_ONLINE,
-};
+static bool connected = false;
 
 static char * mnt_directory = "/files";
 static char * firmware_update_request_path = "/files/ocpp_upd.bin";
-
-enum central_system_connection_status connection_status = eCS_CONNECTION_OFFLINE;
 
 void not_supported_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	const char * description = (const char *)cb_data;
@@ -2648,6 +2642,11 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 
 }
 
+enum ocpp_main_event{
+	eOCPP_FIRMWARE_UPDATE = 1<<0,
+	eOCPP_QUIT = 1<<1
+};
+
 static void ocpp_prepare_firmware_update(){
 	xTaskNotify(task_ocpp_handle, eOCPP_FIRMWARE_UPDATE, eSetBits);
 }
@@ -2703,7 +2702,7 @@ static int save_update_request(struct update_request * request){
 
 	uint32_t crc_calc = esp_crc32_le(0, (uint8_t *)request, sizeof(struct update_request));
 
-	if(fwrite(request, sizeof(request), 1, fp) != 1){
+	if(fwrite(request, sizeof(struct update_request), 1, fp) != 1){
 		ret = errno;
 		goto error;
 	}
@@ -2867,6 +2866,7 @@ error:
 }
 
 int set_firmware_update_state(){
+	ESP_LOGI(TAG, "Setting firmware update state");
 	int err = load_update_request(&update_info);
 	if(err != 0){
 		return err != ENOENT ? err : 0; // No file, means no update was requested and no update related error.
@@ -2925,7 +2925,7 @@ static void transition_online(){
 		sessionHandler_OcppSendState();
 	}
 
-	connection_status = eCS_CONNECTION_ONLINE;
+	connected = true;
 }
 
 static void transition_offline(){
@@ -2937,8 +2937,17 @@ static void transition_offline(){
 
 	sessionHandler_OcppSaveState();
 
-	connection_status = eCS_CONNECTION_OFFLINE;
+	connected = false;
 }
+
+#define MAIN_EVENT_OFFSET 0
+#define MAIN_EVENT_MASK 0xf
+#define WEBSOCKET_EVENT_OFFSET 4
+#define WEBSOCKET_EVENT_MASK 0xf0
+#define TASK_EVENT_OFFSET 8
+#define TASK_EVENT_MASK 0xf00
+
+#define eOCPP_NO_EVENT 0
 
 static void ocpp_task(){
 	while(should_run){
@@ -2998,9 +3007,10 @@ static void ocpp_task(){
 			}
 		}while(err != 0);
 
-		set_task_to_notify(task_ocpp_handle);
+		ocpp_configure_task_notification(task_ocpp_handle, TASK_EVENT_OFFSET);
+		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
 
-		connection_status = eCS_CONNECTION_ONLINE;
+		connected = true;
 
 		retry_attempts = 0;
 		retry_delay = 5;
@@ -3043,39 +3053,30 @@ static void ocpp_task(){
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
+		uint enqueued_calls = 0;
+
 		while(should_run && should_restart == false){
-			uint32_t data = ulTaskNotifyTake(pdTRUE,0);
+			uint32_t data = 0;
 
-			if(data != eOCPP_WEBSOCKET_NO_EVENT && data != eOCPP_WEBSOCKET_RECEIVED_MATCHING){
-				ESP_LOGW(TAG, "Handling websocket event");
-				switch(data){
-				case eOCPP_WEBSOCKET_CONNECTED:
-					ESP_LOGI(TAG, "Continuing ocpp call handling");
+			if(connected && enqueued_calls > 0){ // Prevent blocking when calls are waiting
+				data = ulTaskNotifyTake(pdTRUE, 0);
+			} else if(connected){
+				data = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+			}else{
+				data = ulTaskNotifyTake(pdTRUE, OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp));
+			}
 
-					if(connection_status == eCS_CONNECTION_OFFLINE){
-						transition_online();
-					}
+			const uint websocket_event = (data & WEBSOCKET_EVENT_MASK) >> WEBSOCKET_EVENT_OFFSET;
+			const uint task_event = (data & TASK_EVENT_MASK) >> TASK_EVENT_OFFSET;
+			const uint main_event = (data & MAIN_EVENT_MASK) >> MAIN_EVENT_OFFSET;
 
-					break;
-				case eOCPP_WEBSOCKET_DISCONNECT:
-					ESP_LOGW(TAG, "Websocket disconnected");
+			if(main_event != eOCPP_NO_EVENT){
+				ESP_LOGI(TAG, "Handling main event");
 
-					if(connection_status == eCS_CONNECTION_ONLINE){
-						transition_offline();
-					}
-
-					break;
-				case eOCPP_WEBSOCKET_FAILURE: // TODO: Get additional websocket errors
-					ESP_LOGW(TAG, "Websocket FAILURE %d", ++problem_count);
-
-					if(last_problem_timestamp + OCPP_PROBLEM_RESET_INTERVAL > time(NULL)){
-						problem_count = 1;
-					}
-
-					last_problem_timestamp = time(NULL);
+				if(data & eOCPP_QUIT){
+					ESP_LOGE(TAG, "Quitting ocpp loop");
 					break;
 				}
-
 				if(data & eOCPP_FIRMWARE_UPDATE){
 					ESP_LOGI(TAG, "Attempting to start firmware update from ocpp");
 					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
@@ -3090,29 +3091,58 @@ static void ocpp_task(){
 						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 					}
 				}
+			}
+
+			if(websocket_event != eOCPP_NO_EVENT && websocket_event){
+				ESP_LOGI(TAG, "Handling websocket event");
+
+				if(websocket_event & eOCPP_WEBSOCKET_CONNECTION_CHANGED){
+
+					if(ocpp_is_connected() && !connected){
+						ESP_LOGI(TAG, "Websocket went online");
+						transition_online();
+
+					}else if(!ocpp_is_connected() && connected){
+						ESP_LOGW(TAG, "Websocket went offline");
+						transition_offline();
+					}
+				}
+
+				if(websocket_event & eOCPP_WEBSOCKET_FAILURE){ // TODO: Get additional websocket errors
+					ESP_LOGW(TAG, "Websocket FAILURE %d", ++problem_count);
+
+					if(last_problem_timestamp + OCPP_PROBLEM_RESET_INTERVAL > time(NULL)){
+						problem_count = 1;
+					}
+
+					last_problem_timestamp = time(NULL);
+				}
 
 				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
 					break;
 
 			}
 
-			switch(connection_status){
-			case eCS_CONNECTION_ONLINE:
-				if(handle_ocpp_call((int)data) == eOCPP_WEBSOCKET_DISCONNECT){
-					ESP_LOGW(TAG, "Send ocpp indicate disconnected");
-					transition_offline();
-				}
-				break;
-			case eCS_CONNECTION_OFFLINE:
-				if(is_connected()){
-					ESP_LOGW(TAG, "OCPP component reports online but ocpp thread has not recieved event yet");
-					transition_online();
-				}
-				else if(last_online_timestamp + OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT < time(NULL)){
-					ESP_LOGE(TAG, "%d seconds since OCPP was last online, attempting reboot", OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT);
-					esp_restart(); // TODO: write reason for reboot;
+			if(enqueued_calls > 0 || task_event & eOCPP_TASK_CALL_ENQUEUED){
+				if(connected){
+					int remaining = handle_ocpp_call();
+					if(remaining != -1){
+						enqueued_calls = remaining;
+					}else{
+						ESP_LOGE(TAG, "Unable to handle ocpp call");
+						problem_count++; //TODO: integrate with problem count restart
+						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
+					}
+				}else{
+					enqueued_calls = 1; // There may be more calls, but that is irrelevant
 				}
 			}
+
+			if(!connected && last_online_timestamp + OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT <= time(NULL)){
+				ESP_LOGE(TAG, "%d seconds since OCPP was last online, attempting reboot", OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT);
+				esp_restart(); // TODO: write reason for reboot;
+			}
+
 		}
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
@@ -3148,8 +3178,8 @@ clean:
 				ESP_LOGW(TAG, "Remaining messages to send: %d. timeout: (%d/%d sec)",
 					message_count, exit_duration, OCPP_EXIT_TIMEOUT);
 
-				err = handle_ocpp_call(eOCPP_WEBSOCKET_NO_EVENT);
-				if(err){
+				err = handle_ocpp_call();
+				if(err < 0){
 					ESP_LOGE(TAG, "Error sending message during graceful exit. Exiting non gracefully");
 					break;
 				}
@@ -3199,11 +3229,13 @@ bool ocpp_task_exists(){
 
 void ocpp_end(bool graceful){
 	should_run = false;
+	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 	graceful_exit = graceful;
 }
 
 void ocpp_restart(bool graceful){
 	should_restart = true;
+	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 	graceful_exit = graceful;
 }
 

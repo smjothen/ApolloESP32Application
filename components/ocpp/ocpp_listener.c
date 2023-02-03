@@ -11,6 +11,7 @@
 
 static const char * TAG = "OCPP_LISTENER";
 static TaskHandle_t task_to_notify = NULL;
+static uint notify_offset = 0;
 
 static const size_t MAX_DYNAMIC_BUFFER_SIZE = 32768;
 static char * dynamic_buffer = NULL; // Used if payload is larger than websocket rx_buffer
@@ -21,9 +22,18 @@ struct ocpp_call_callback_with_data{
 	void * cb_data;
 };
 
+static bool is_connected = false;
+
 static struct ocpp_call_callback_with_data callbacks[OCPP_CALL_ACTION_ID_COUNT] = {0};
 
+bool ocpp_is_connected(){
+	return is_connected;
+}
+
 void clean_listener(){
+	task_to_notify = NULL;
+	notify_offset = 0;
+
 	if(dynamic_buffer != NULL){
 		free(dynamic_buffer);
 		dynamic_buffer = NULL;
@@ -31,8 +41,9 @@ void clean_listener(){
 	}
 }
 
-void set_task_to_notify(TaskHandle_t task){
+void ocpp_configure_websocket_notification(TaskHandle_t task, uint offset){
 	task_to_notify = task;
+	notify_offset = offset;
 }
 
 int attach_call_cb(enum ocpp_call_action_id action_id, ocpp_call_callback call_cb, void * cb_data){
@@ -197,8 +208,7 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		return;
 	}
 
-	char * active_id = NULL;
-	struct ocpp_call_with_cb * call;
+	struct ocpp_active_call call = {0};
 
 	switch(message_type_id){
 	case eOCPPJ_MESSAGE_ID_CALL:
@@ -207,64 +217,37 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		break;
 
 	case eOCPPJ_MESSAGE_ID_RESULT:
-		if(take_active_call(&call, &active_id, 500) != pdTRUE){
-			ESP_LOGE(TAG, "Unable to take active call for result. Possibly recent timeout");
-			break;
-		}
 		ESP_LOGD(TAG, "Recieved ocpp result message: %s", unique_id);
 
-		if(active_id != NULL && strcmp(active_id, unique_id) == 0){
-			if(task_to_notify != NULL)
-				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING, eSetValueWithOverwrite);
-
-			if(call == NULL){
-				ESP_LOGE(TAG, "Active call id matched response, but original call was NULL");
-			}
-			if(call->result_cb != NULL){
-				call->result_cb(unique_id, payload, call->cb_data);
-			}else{
-				ESP_LOGD(TAG, "Finished call %s", unique_id);
-			}
-
-			clear_active_call();
-		}else{
-			ESP_LOGE(TAG, "Got result to unexpected message id, ignoring");
-			ESP_LOGE(TAG, "Expected %s got %s", active_id != NULL ? active_id : "NULL", unique_id);
-
-			give_active_call();
+		if(take_active_call_if_match(&call, unique_id, 500) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to match result to an active call");
+			break;
 		}
 
+		if(task_to_notify != NULL)
+			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING<<notify_offset, eSetBits);
+
+		if(call.call->result_cb != NULL){
+			call.call->result_cb(unique_id, payload, call.call->cb_data);
+		}else{
+			ESP_LOGD(TAG, "Finished call %s", unique_id);
+		}
+
+		free_call_with_cb(call.call);
 		break;
 
 	case eOCPPJ_MESSAGE_ID_ERROR:
 		ESP_LOGE(TAG, "Recieved ocpp error message");
-		if(take_active_call(&call, &active_id, 500) != pdTRUE){
-			ESP_LOGE(TAG, "Unable to take active call for error. Possibly recent timeout");
+
+		if(take_active_call_if_match(&call, unique_id, 500) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to match error response to an active call");
 			break;
 		}
 
-		if(active_id != NULL && strcmp(active_id, unique_id) == 0){
-			if(task_to_notify != NULL)
-				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING, eSetValueWithOverwrite);
+		if(task_to_notify != NULL)
+			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING<<notify_offset, eSetBits);
 
-			if(call == NULL){
-				ESP_LOGE(TAG, "Active call id matched error, but original call was NULL");
-			}
-			if(call->error_cb != NULL){
-				call->error_cb(unique_id, error_code, error_description, error_details, call->cb_data);
-			}else{
-				ESP_LOGW(TAG, "No error callback for ocpp call %s", unique_id);
-			}
-
-			clear_active_call();
-
-		}else{
-			ESP_LOGE(TAG, "Got error to unexpected message id, ignoring");
-			ESP_LOGE(TAG, "Expected %s got %s", active_id != NULL ? active_id : "NULL", unique_id);
-
-			give_active_call();
-		}
-
+		fail_active_call(&call, error_code, error_description, error_details);
 		break;
 	}
 
@@ -278,15 +261,21 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 	switch (event_id) {
 	case WEBSOCKET_EVENT_CONNECTED:
 		ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
-		set_connected(true);
-		if(task_to_notify != NULL)
-			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTED, eSetValueWithOverwrite);
+		if(is_connected == false){
+			is_connected = true;
+
+			if(task_to_notify != NULL)
+				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
+		}
 		break;
 	case WEBSOCKET_EVENT_DISCONNECTED:
 		ESP_LOGW(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-		set_connected(false);
-		if(task_to_notify != NULL)
-			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_DISCONNECT, eSetValueWithOverwrite);
+		if(is_connected == true){
+			is_connected = false;
+
+			if(task_to_notify != NULL)
+				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
+		}
 		break;
 	case WEBSOCKET_EVENT_DATA:
 		switch(data->op_code){
@@ -363,7 +352,7 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 	case WEBSOCKET_EVENT_ERROR:
 		ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
 		if(task_to_notify != NULL)
-			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_FAILURE, eSetValueWithOverwrite);
+			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_FAILURE<<notify_offset, eSetBits);
 		break;
 	}
 }

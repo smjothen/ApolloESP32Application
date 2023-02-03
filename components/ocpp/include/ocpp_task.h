@@ -69,24 +69,41 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 void stop_ocpp(void);
 
 /**
+ * We store the original timestamp and retries with the active_call. These should only be relevant for
+ * failed transactions, but makes it easier to identify failed transaction during retransmit.
+ */
+struct ocpp_active_call{
+	struct ocpp_call_with_cb * call;
+	bool is_transaction_related;
+	time_t timestamp;
+	uint retries;
+};
+
+/**
  * Get the stucture with the message that was last transmitted to the central system and expecting a reply.
- * it takes a semaphore, which is given back by calling clear_active_call or give_active_call.
  */
-BaseType_t take_active_call(struct ocpp_call_with_cb ** call_data, char  ** call_id, uint timeout_ms);
+BaseType_t take_active_call_if_match(struct ocpp_active_call * call, const char * unique_id, uint timeout_ms);
 
 /**
- * Give back active call without clearing it.
+ * Prepares the call for new attempt if it is a transaction and maximum retries has not been exceeded. Otherwise it calls the error callback.
  */
-BaseType_t give_active_call();
+void fail_active_call(struct ocpp_active_call * call, const char * error_code, const char * error_description, cJSON * error_details);
 
 /**
- * Indicate that a reply has been recieved and handled or failed and clear stucture for next ocpp call.
- * This function is called by ocpp_listener.
+ * Sends the next message of type CALL (client-to-server) if any exists
+ *
+ * @return The number of messages still waiting to be sent or -1 on error.
  */
-void clear_active_call(void);
-
-int handle_ocpp_call(int last_listener_state);
+int handle_ocpp_call();
 void block_sending_call(uint8_t call_type_mask);
+
+/**
+ * @brief Sets a task to be notified of ocpp_task_event using eSetBits.
+ *
+ * @param task the task to be notified.
+ * @param offset a value used to left shift the ocpp_task_event to allow room for other notifications.
+ */
+void ocpp_configure_task_notification(TaskHandle_t task, uint offset);
 
 /**
  * Used for initial boot.
@@ -108,12 +125,11 @@ void update_heartbeat_timer(uint sec);
 
 void update_transaction_message_related_config(uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
 
-/**
- * Check if weboscket is connected to central system
- */
-bool is_connected(void);
-void set_connected(bool connected);
-
 enum ocpp_registration_status get_registration_status(void);
+
+enum ocpp_task_event{
+	eOCPP_TASK_CALL_ENQUEUED = 1<<0,
+	eOCPP_TASK_FAILURE = 1<<1
+};
 
 #endif /* OCPP_TASK_H */

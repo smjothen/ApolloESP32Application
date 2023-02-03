@@ -17,6 +17,7 @@
 #include "ocpp_task.h"
 #include "ocpp_listener.h"
 #include "messages/call_messages/ocpp_call_request.h"
+#include "ocpp_json/ocppj_message_structure.h"
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
@@ -35,9 +36,13 @@ SemaphoreHandle_t ocpp_active_call_lock_1 = NULL;
  * The specification allows only one active call from the charge point:
  * "A Charge Point or Central System SHOULD NOT send a CALL message to the other party unless all the
  * CALL messages it sent before have been responded to or have timed out."
+ *
+ * We still use a queue for the active call with a single item to prevent ocpp_task from setting a new
+ * message as active until it has been taken by ocpp_listener. We also use the freeRTOS peek functionality
+ * of queue to check if received response corresponds to active call.
  */
-char * active_call_id; // "Maximum of 36 characters, to allow for GUIDs" (37 with '\0')
-struct ocpp_call_with_cb * active_call = NULL;
+QueueHandle_t ocpp_active_call_queue = NULL; // queue size 1
+
 bool is_trigger_message = false; // Will always be false until TriggerMessage is implemented
 
 time_t last_call_timestamp = {0};
@@ -46,7 +51,6 @@ QueueHandle_t ocpp_call_queue = NULL; // For normal messages
 QueueHandle_t ocpp_blocking_call_queue = NULL; // For messages that prevent significant ocpp behaviour (BootNotification)
 QueueHandle_t ocpp_transaction_call_queue = NULL; // transactions SHOULD be delivered as soon as possible, in chronological order, MUST queue when offline
 
-bool websocket_connected = false;
 enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
 
 uint32_t default_heartbeat_interval = 60 * 60 * 24;
@@ -64,18 +68,18 @@ TimerHandle_t heartbeat_handle = NULL;
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
 
-char last_transaction_id[37] = {0};
-struct ocpp_call_with_cb * failed_transaction = NULL;
-unsigned int failed_transaction_count = 0;
-
-time_t last_transaction_timestamp = {0};
+struct ocpp_active_call * failed_transaction_call = NULL; // Transaction message that should be attempted again
+struct ocpp_active_call * awaiting_failed = NULL; // Transaction message that was attempted to be sent, but blocked by failed transaction.
 
 long int central_system_time_offset = 0;
-
 time_t (*non_enqueued_timestamp)();
 cJSON * (*non_enqueued_message)(void ** cb_data);
 
 bool offline_enabled = false;
+
+TaskHandle_t task_to_notify;
+uint task_notify_offset = 0;
+
 ocpp_result_callback start_result_cb;
 ocpp_error_callback start_error_cb;
 
@@ -108,14 +112,6 @@ void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON
 
 enum ocpp_registration_status get_registration_status(){
 	return registration_status;
-}
-
-bool is_connected(void){
-	return websocket_connected;
-}
-
-void set_connected(bool connected){
-	websocket_connected = connected;
 }
 
 void update_central_system_time_offset(time_t charge_point_time, time_t central_system_time){
@@ -300,6 +296,9 @@ int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_erro
 		free(message_with_cb);
 	}
 
+	if(task_to_notify != NULL)
+		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
+
 	return err;
 }
 
@@ -317,6 +316,12 @@ void block_sending_call(uint8_t call_type_mask){
 	call_blocking_mask = call_type_mask;
 }
 
+void ocpp_configure_task_notification(TaskHandle_t task, uint offset){
+	task_to_notify = task;
+	task_notify_offset = offset;
+}
+
+//TODO: consider adding offlineSession calls or removing
 size_t enqueued_call_count(){
 	size_t count = 0;
 
@@ -412,8 +417,13 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
 	}
 }
 
+bool check_active_call_validity(struct ocpp_active_call * call){
+	return call != NULL && check_call_with_cb_validity(call->call);
+}
 
 int check_send_legality(const char * action){
+	if(action == NULL)
+		return -1;
 
 	switch(registration_status){
 	case eOCPP_REGISTRATION_ACCEPTED:
@@ -445,341 +455,353 @@ int check_send_legality(const char * action){
 	return 0;
 }
 
-BaseType_t take_active_call(struct ocpp_call_with_cb ** call_data, char  ** call_id, uint timeout_ms){
-	if(xSemaphoreTake(ocpp_active_call_lock_1, pdMS_TO_TICKS(timeout_ms)) == pdTRUE){
-		*call_data = active_call;
-		*call_id = active_call_id;
+void update_transaction_id(struct ocpp_active_call * call){
+	if(!check_active_call_validity(call)){
+		ESP_LOGE(TAG, "Unable to update tmp id: Invalid active call");
+		return;
+	}
+
+	cJSON * message_payload = cJSON_GetArrayItem(call->call->call_message, 4);
+	if(message_payload == NULL){
+		ESP_LOGE(TAG, "Unable to update tmp id: No payload");
+		return;
+	}
+	cJSON * transaction_id_json = cJSON_GetObjectItem(message_payload, "transactionId");
+	if(transaction_id_json == NULL){
+		ESP_LOGE(TAG, "Unable to update tmp id: No transactionId");
+		return;
+	}
+	int new_id;
+	if(convert_tmp_id(transaction_id_json->valueint, &new_id)){
+		ESP_LOGW(TAG, "Replacing tmp id '%d' with '%d'", transaction_id_json->valueint, new_id);
+		cJSON_SetNumberValue(transaction_id_json, new_id);
+	}
+}
+
+BaseType_t take_active_call_if_match(struct ocpp_active_call * call, const char * unique_id, uint timeout_ms){
+
+	xSemaphoreTake(ocpp_active_call_lock_1, portMAX_DELAY);
+
+	BaseType_t ret = xQueuePeek(ocpp_active_call_queue, call, timeout_ms);
+	if(ret == pdTRUE){
+		if(call->call != NULL){
+			const char * active_id = ocppj_get_unique_id_from_call(call->call->call_message);
+			if(active_id == NULL || strcmp(active_id, unique_id) != 0){
+				ret = pdFALSE;
+			}else{
+				//Call matches, remove it from the queue
+				xQueueReset(ocpp_active_call_queue); // Use reset as it cannot fail and recieve would not give more info
+			}
+		}else{
+			ret = pdFALSE;
+		}
+	}
+
+	xSemaphoreGive(ocpp_active_call_lock_1);
+
+	return ret;
+}
+
+// Used if the active call was sendt or attempted to be sendt to allow retrying transaction related messages. Returns true if needs retries.
+void fail_active_call(struct ocpp_active_call * call, const char * error_code, const char * error_description, cJSON * error_details){
+	if(call != NULL && call->call != NULL){
+		if(call->is_transaction_related){
+			ESP_LOGE(TAG, "Failing transaction related call");
+			call->retries++;
+
+			if(call->retries < transaction_message_attempts){
+				ESP_LOGW(TAG, "Preparing for retransmit after error code '%s'", error_code  != NULL ? error_code : "UNKNOWN");
+
+				failed_transaction_call = calloc(sizeof(struct ocpp_active_call), 1);
+				if(failed_transaction_call == NULL){
+					ESP_LOGE(TAG, "Failed to allocate memory for failed transaction related call. Will call error cb");
+				}else{
+
+					memcpy(failed_transaction_call, call, sizeof(struct ocpp_active_call));
+					return;
+				}
+			}else{
+				ESP_LOGE(TAG, "Transaction retry attempts exceeded");
+			}
+		}else{
+			ESP_LOGE(TAG, "Failing call");
+		}
+
+		const char * unique_id = ocppj_get_unique_id_from_call(call->call->call_message);
+
+		// If call is transaction related, then only the last error will be given to the callback
+		if(call->call->error_cb != NULL){
+			call->call->error_cb(unique_id, error_code, error_description, error_details, call->call->cb_data);
+		}else{
+			const char * action = ocppj_get_action_from_call(call->call->call_message);
+			ESP_LOGE(TAG, "Failed: (%s) [%s]: %s", action != NULL ? action : "NULL", unique_id != NULL ? unique_id : "NULL",
+				error_code != NULL ? error_code : "NULL");
+		}
+		free_call_with_cb(call->call);
+	}
+}
+
+int get_waiting_transaction_messages(){
+	int ret = 0;
+
+	if(failed_transaction_call != NULL)
+		ret++;
+	if(awaiting_failed != NULL)
+		ret++;
+
+	if(non_enqueued_timestamp() != LONG_MAX)
+		ret+=2; // We dont know how many are on file, but return 2 to ensure that new check will occure
+
+	ret += uxQueueMessagesWaiting(ocpp_transaction_call_queue);
+	return ret;
+}
+
+BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t wait, uint * min_wait_out){
+
+	if(failed_transaction_call != NULL){
+		uint fail_wait = (transaction_message_retry_interval * failed_transaction_call->retries * (failed_transaction_call->retries+1)) / 2;
+
+		if(time(NULL) > fail_wait + failed_transaction_call->timestamp){
+			memcpy(call, failed_transaction_call, sizeof(struct ocpp_active_call));
+			free(awaiting_failed);
+			failed_transaction_call = NULL;
+
+			return pdTRUE;
+		}else{
+			*min_wait_out = fail_wait - (time(NULL) - failed_transaction_call->timestamp);
+			return pdFALSE;
+		}
+	}
+
+	*min_wait_out = 0; // Not waiting for failed transaction related message retry
+
+	if(awaiting_failed != NULL){
+		memcpy(call, awaiting_failed, sizeof(struct ocpp_active_call));
+		free(awaiting_failed);
+		awaiting_failed = NULL;
 
 		return pdTRUE;
-	}else{
-		*call_data = NULL;
-		call_id = NULL;
-
-		return pdFALSE;
-	}
-}
-
-BaseType_t give_active_call(){
-	return xSemaphoreGive(ocpp_active_call_lock_1);
-}
-
-static bool is_transaction_related_message(const char * unique_id){
-	return strncmp(unique_id, last_transaction_id, 36) == 0;
-}
-
-void clear_active_call(void){
-
-	if(active_call != NULL){
-		// If active call is a transaction retry, then also clear retry data
-		if(failed_transaction_count > 0){
-			if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
-				const char * unique_id = cJSON_GetArrayItem(active_call->call_message, 1)->valuestring;
-
-				if(is_transaction_related_message(unique_id)){
-					failed_transaction_count = 0;
-				}
-			}
-		}
-
-		cJSON_Delete(active_call->call_message); //Includes reference of active_call_id
-		active_call_id = NULL;
-		free(active_call);
-		active_call = NULL;
 	}
 
-	if(ocpp_active_call_lock_1 != NULL)
-		xSemaphoreGive(ocpp_active_call_lock_1);
-}
+	if(offline_enabled){
+		struct ocpp_call_with_cb * call_with_cb = NULL;
 
-// Used if the active call was sendt or attempted to be sendt to allow retrying transaction related messages
-void fail_active_call(const char * fail_description){
-	if(active_call != NULL){
-		if(cJSON_IsArray(active_call->call_message) && cJSON_GetArrayItem(active_call->call_message, 0)->valueint == eOCPPJ_MESSAGE_ID_CALL){
-			const char * unique_id = cJSON_GetArrayItem(active_call->call_message, 1)->valuestring;
-
-			if(is_transaction_related_message(unique_id)){
-				if(failed_transaction_count < transaction_message_attempts){
-					ESP_LOGW(TAG, "Preparing failed transaction for retry");
-					active_call_id = NULL;
-
-					failed_transaction = active_call;
-					active_call = NULL;
-
-					failed_transaction_count++;
-
-					xSemaphoreGive(ocpp_active_call_lock_1);
-				}
-				else{
-					ESP_LOGE(TAG, "Giving up on transaction: retry attemps exceeded");
-					failed_transaction_count = 0;
-					clear_active_call();
-				}
-			}
-			else{
-				active_call->error_cb(0, "CP failure", fail_description, NULL, active_call->cb_data);
-				clear_active_call();
-			}
-		}else{
-			ESP_LOGE(TAG, "Message is malformed, unable to determin type");
-			active_call->error_cb(0, "CP failure", fail_description, NULL, active_call->cb_data);
-			clear_active_call();
-		}
-	}
-}
-
-int send_next_call(int last_listener_state){
-
-	struct ocpp_call_with_cb * call;
-	if(ocpp_active_call_lock_1 == NULL){
-		ESP_LOGE(TAG, "The lock is not initialized");
-		return -1;
-	}
-
-	struct ocpp_call_with_cb * last_call;
-	char * last_call_id;
-	BaseType_t aquired_lock = pdFALSE;
-	/*
-	 * If we are not able to take the active call immediately, that means that ocpp_listener has recieved a result.
-	 * We give it 5 seconds to finish to finish handeling the result.
-	 */
-	int new_listener_state = eOCPP_WEBSOCKET_NO_EVENT;
-	if((aquired_lock = take_active_call(&last_call, &last_call_id, 5000)) == pdTRUE){
-		//We check if ocpp_listener has informed us of a result and there is an active call
-		if(last_call != NULL && last_listener_state != eOCPP_WEBSOCKET_RECEIVED_MATCHING){
-			//The wait is 0 as ocpp_listener should only send this message while it has aquired the active call lock.
-			new_listener_state = ulTaskNotifyTake(pdTRUE, 0);
-		}else{
-			// If there is no active call, then no response matches with no call
-			new_listener_state = eOCPP_WEBSOCKET_RECEIVED_MATCHING;
-		}
-
-		if(new_listener_state == eOCPP_WEBSOCKET_RECEIVED_MATCHING){  // check if listener has received response
-			if(last_call != NULL){
-
-				ESP_LOGE(TAG, "ocpp_listener handled result but did not clear it!");
-
-				clear_active_call(); // We clear the call that listener should have
-				 // And reaquire the active_call_lock for next call
-				aquired_lock = take_active_call(&last_call, &last_call_id, 500);
-			}
-			// The active call is now cleared and lock is ready for next call
-		}else{
-			/*
-			 * else the ocpp_listener has not recieved a response. We give back the active call lock.
-			 * and wait for a message timeout. We save the listener state if it indicate connection change
-			 * so that we can return the newest connection state.
-			 */
-			give_active_call();
-
-			time_t wait_begin = time(NULL);
-			do{
-				if(new_listener_state == eOCPP_WEBSOCKET_DISCONNECT
-					|| new_listener_state == eOCPP_WEBSOCKET_CONNECTED){
-
-					last_listener_state = new_listener_state;
-				}
-
-				time_t sec_to_timeout = OCPP_CALL_TIMEOUT - (time(NULL) - wait_begin);
-				if(sec_to_timeout > 0){
-					new_listener_state = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(sec_to_timeout));
-				}else{
-					new_listener_state = eOCPP_WEBSOCKET_NO_EVENT;
-				}
-
-			}while(new_listener_state != eOCPP_WEBSOCKET_RECEIVED_MATCHING
-				&& new_listener_state != eOCPP_WEBSOCKET_NO_EVENT);
-
-			//Ìf ocpp_listener indicate response is matching, we give it 5 seconds to handle it and release the lock
-			if(new_listener_state == eOCPP_WEBSOCKET_RECEIVED_MATCHING){
-				if((aquired_lock = take_active_call(&last_call, &last_call_id, 5000)) != pdTRUE)
-					ESP_LOGE(TAG, "ocpp_listener recieved result, but did not finish within 5 seconds");
-
-			}else{
-				ESP_LOGE(TAG, "Call timed out, clearing for next call");
-				if(take_active_call(&last_call, &last_call_id, 500) == pdTRUE){
-					fail_active_call("timeout");
-				}else{
-					ESP_LOGE(TAG, "Unable to aquire lock for clearing");
-					return -1;
-				}
-				aquired_lock = take_active_call(&last_call, &last_call_id, 500);
-			}
-
-		}
-	}else{
-		/*
-		 * If it is not able to handle the result in 5 seconds, we log it as an error because it might indicate a deadlock.
-		 * We exit and try again next time send_next_call is called. If the listener is done by then there should be no problem.
-		 */
-		ESP_LOGE(TAG, "Unable to take active call. ocpp_listener might be causing a deadlock preventing new ocpp messages.");
-		return -1;
-	}
-
-	if(aquired_lock != pdTRUE){
-		ESP_LOGE(TAG, "Unable to aquire lock for sending new call");
-		return -1;
-	}
-
-	BaseType_t call_aquired = pdFALSE;
-
-	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING)){ // Attempt to get call from prioritized queue
-		call_aquired = xQueueReceive(ocpp_blocking_call_queue, &call, 0);
-	}
-
-	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED)){
-		// Attempt to get transaction call
-
-		if(failed_transaction != NULL){
-			if(time(NULL) > last_transaction_timestamp + transaction_message_retry_interval * failed_transaction_count){
-				call = failed_transaction;
-				failed_transaction = NULL;
-				last_transaction_timestamp = time(NULL);
-
-				call_aquired = pdTRUE;
-			}
-		}
-
-		if(call_aquired != pdTRUE && offline_enabled && non_enqueued_timestamp() < peek_txn_enqueue_timestamp()){
-
-			char action[32] = "\0";
-			void * cb_data = NULL;
-			cJSON * message = non_enqueued_message(&cb_data);
-			if(message == NULL || !cJSON_IsArray(message) || cJSON_GetArraySize(message) != 4){
-				ESP_LOGE(TAG, "Expected non enqueued messsage but no message was %s", (message == NULL) ? "NULL" : "malformed");
-			}
-			else{
-				strcpy(action, cJSON_GetArrayItem(message, 2)->valuestring);
-
-				call = malloc(sizeof(struct ocpp_call_with_cb));
-				if(call == NULL){
+		while(non_enqueued_timestamp() < peek_txn_enqueue_timestamp()){
+			if(call_with_cb == NULL){
+				call_with_cb = malloc(sizeof(struct ocpp_call_with_cb));
+				if(call_with_cb == NULL){
 					ESP_LOGE(TAG, "Unable to allocate call for non enqueued transaction");
-					xSemaphoreGive(ocpp_active_call_lock_1);
-					return -1;
+					return pdFALSE;
 				}
+			}
 
-				call->cb_data = cb_data;
+			call_with_cb->call_message = non_enqueued_message(&call_with_cb->cb_data);
+
+			if(check_call_with_cb_validity(call->call) == false){
+				ESP_LOGE(TAG, "Invalid message on file");
+			}else{
+				const char * action = ocppj_get_action_from_call(call->call->call_message);
 				if(strcmp(action, OCPPJ_ACTION_START_TRANSACTION) == 0){
-					call->call_message = message;
-					call->result_cb = start_result_cb;
-					call->error_cb = start_error_cb;
+					call_with_cb->result_cb = start_result_cb;
+					call_with_cb->error_cb = start_error_cb;
 
 				}else if(strcmp(action, OCPPJ_ACTION_STOP_TRANSACTION) == 0){
-					call->call_message = message;
-					call->result_cb = stop_result_cb;
-					call->error_cb = stop_error_cb;
+					call_with_cb->result_cb = stop_result_cb;
+					call_with_cb->error_cb = stop_error_cb;
 
 				}else if(strcmp(action, OCPPJ_ACTION_METER_VALUES) == 0){
-					call->call_message = message;
-					call->result_cb = meter_result_cb;
-					call->error_cb = meter_error_cb;
+					call_with_cb->result_cb = meter_result_cb;
+					call_with_cb->error_cb = meter_error_cb;
 
 				}else{
 					ESP_LOGE(TAG, "Non enqueued transaction message is not a know transaction related message. No callback will be used");
-					call->call_message = message;
-					call->result_cb = NULL;
-					call->error_cb = NULL;
-					call->cb_data = NULL;
+					call_with_cb->result_cb = NULL;
+					call_with_cb->error_cb = NULL;
 				}
-				call_aquired = pdTRUE;
-				last_transaction_timestamp = time(NULL);
-			}
 
-		}
+				call->call = call_with_cb;
+				call->is_transaction_related = true;
 
-		if(call_aquired != pdTRUE){
-			call_aquired = xQueueReceive(ocpp_transaction_call_queue, &call, 0);
-
-			if(call_aquired == pdTRUE){
-				get_txn_enqueue_timestamp();
-				last_transaction_timestamp = time(NULL);
+				return pdTRUE;
 			}
 		}
+	}
 
-		if(call_aquired == pdTRUE){
-			ESP_LOGI(TAG, "Sending next transaction related message");
-			if(call->call_message != NULL && cJSON_IsArray(call->call_message) && cJSON_GetArraySize(call->call_message) >= 4){
-				strncpy(last_transaction_id, cJSON_GetArrayItem(call->call_message, 1)->valuestring, 36);
-				cJSON * payload = cJSON_GetArrayItem(call->call_message, 3);
+	if(xQueueReceive(ocpp_transaction_call_queue, &call->call, wait) == pdTRUE){
+		call->is_transaction_related = true;
+		get_txn_enqueue_timestamp();
+		return pdTRUE;
+	}
 
-				if(cJSON_HasObjectItem(payload, "transactionId")){
-					cJSON * transaction_id_json = cJSON_GetObjectItem(payload, "transactionId");
-					int new_id;
-					if(convert_tmp_id(transaction_id_json->valueint, &new_id)){
-						ESP_LOGW(TAG, "Replacing tmp id '%d' with '%d'", transaction_id_json->valueint, new_id);
-						cJSON_SetNumberValue(transaction_id_json, new_id);
+	return pdFALSE;
+}
+
+int send_next_call(){
+
+	struct ocpp_active_call call = {0};
+
+	UBaseType_t blocking_count = 0;
+	UBaseType_t transaction_count = 0;
+	UBaseType_t generic_count = 0;
+
+	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING))
+		blocking_count = uxQueueMessagesWaiting(ocpp_blocking_call_queue);
+
+	if(!(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED))
+		transaction_count = get_waiting_transaction_messages();
+
+	if(!(call_blocking_mask & eOCPP_CALL_GENERIC))
+		generic_count = uxQueueMessagesWaiting(ocpp_call_queue);
+
+	int total_count = blocking_count + transaction_count + generic_count;
+
+	BaseType_t call_aquired  = pdFALSE;
+	if(blocking_count > 0)
+		call_aquired = xQueueReceive(ocpp_blocking_call_queue, &call.call, pdMS_TO_TICKS(2500));
+
+	uint min_wait;
+	if(!call_aquired && transaction_count > 0){
+		call_aquired = receive_transaction_call(&call, pdMS_TO_TICKS(2500), &min_wait);
+
+		if(call_aquired){
+			update_transaction_id(&call);
+		}
+	}
+
+	if(!call_aquired && generic_count > 0)
+		call_aquired = xQueueReceive(ocpp_call_queue, &call.call, pdMS_TO_TICKS(2500));
+
+	if(!call_aquired){
+		return total_count;
+	}else{
+		total_count--; // We removed call from queue or file
+
+		if(call.timestamp == 0) // If the call does not have a previous timestamp, then it was created now
+			call.timestamp = time(NULL);
+	}
+
+	// Wait for currently active call to be handled or timeout, and set next call as active
+	BaseType_t activated = xQueueSendToBack(ocpp_active_call_queue, &call, pdMS_TO_TICKS(OCPP_CALL_TIMEOUT));
+
+	if(activated == pdFALSE){
+		/*
+		 * We lock access to the active call to prevent a race condition where the listener
+		 * checks a response unique id against the active call before it timed out and
+		 * takes the active call after we replace it with the new one.
+		 */
+		xSemaphoreTake(ocpp_active_call_lock_1, portMAX_DELAY);
+
+		ESP_LOGE(TAG, "Unable to send to ocpp_active_call_queue: active timed out");
+		struct ocpp_active_call timed_out_call;
+		if(xQueueReceive(ocpp_active_call_queue, &timed_out_call, 0) == pdTRUE){
+			fail_active_call(&timed_out_call, OCPPJ_ERROR_INTERNAL, "CP timeout", NULL);
+		}else{
+			ESP_LOGE(TAG, "Unable to take timed out call, Did listener just receive it?");
+		}
+
+		// Remove the timed out call if we were not able to take it, ensuring that we should be able to send the new call
+		xQueueReset(ocpp_active_call_queue); // At the time of writing; xQueueReset may only return pdTRUE
+
+		activated = xQueueSendToBack(ocpp_active_call_queue, &call, 0);
+
+		xSemaphoreGive(ocpp_active_call_lock_1);
+
+		if(!activated){
+			/*
+			 * If we are still not able to set the new call as active after a queue reset.
+			 * Then somthing is dreadfully wrong and we discard the call we are trying to send.
+			 */
+			ESP_LOGE(TAG, "Unable to set new call as active despite queue reset");
+			return total_count;
+		}
+	}
+
+	/*
+	 * We have set a new message as active, but if the last message failed and was a transaction. Then that message
+	 * is chronologically before the new message. If the new message is also a transaction, then the failed message
+	 * blocks the new message and we need to set the current message as awaiting completion of the failed message.
+	 */
+	if(call.is_transaction_related && failed_transaction_call != NULL){ // The message we intended to send is now blocked
+		ESP_LOGW(TAG, "Transaction message selected for next active call is blocked by failed message");
+
+		awaiting_failed = calloc(sizeof(struct ocpp_active_call), 1);
+		if(awaiting_failed == NULL){
+			ESP_LOGE(TAG, "Unable to create buffer for awaiting call. Message may be in incorrect order");
+		}else{
+
+			if(xQueueReceive(ocpp_active_call_queue, awaiting_failed, 0) != pdTRUE){
+				ESP_LOGE(TAG, "Unable to remove active transaction message that should have been blocked. Message may be in incorrect order");
+
+				free(awaiting_failed);
+				awaiting_failed = NULL;
+			}else{
+				if(generic_count > 0){
+					if(xQueueReceive(ocpp_call_queue, &call.call, pdMS_TO_TICKS(2500)) == pdTRUE){
+						call.is_transaction_related = false;
+						call.timestamp = time(NULL);
+
+						if(xQueueSend(ocpp_active_call_queue, &call, pdMS_TO_TICKS(2500)) != pdTRUE){
+							fail_active_call(&call, OCPPJ_ERROR_INTERNAL,"CP unable to set active call after transaction was blocked by failed transaction", NULL);
+							return total_count;
+						}
+					}else{
+						ESP_LOGE(TAG, "Unable to aquire next non transaction call");
+						return total_count;
 					}
+				}else{
+					ESP_LOGW(TAG, "No alternative call to send");
+					return total_count;
 				}
 			}
 		}
 	}
 
-	if(call_aquired != pdTRUE && !(call_blocking_mask & eOCPP_CALL_GENERIC)){ // Attempt to get generic call
-		call_aquired = xQueueReceive(ocpp_call_queue, &call, 0);
+	if(check_active_call_validity(&call) != true){
+		ESP_LOGE(TAG, "Active call is invalid");
+
+		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP call invalid when set as active", NULL);
+		xQueueReset(ocpp_active_call_queue);
+		return total_count;
 	}
 
-	if(call_aquired != pdTRUE){
-		xSemaphoreGive(ocpp_active_call_lock_1);
-		return -1;
-	}
-
-	if(call == NULL || call->call_message == NULL || !cJSON_IsArray(call->call_message) || cJSON_GetArraySize(call->call_message) != 4){
-		bool message_is_null = true;
-		bool is_array = false;
-		int array_size = 0;
-		bool call_is_null = call == NULL;
-
-		if(!call_is_null){
-			message_is_null = call->call_message;
-			if(!message_is_null){
-				is_array = cJSON_IsArray(call->call_message);
-				if(is_array)
-					array_size = cJSON_GetArraySize(call->call_message);
-			}
-		}
-
-		ESP_LOGE(TAG, "Malformed call in queue. call is %s, message is %s (%s), message size is %d",
-			call_is_null ? "null" : "not null", message_is_null ? "null" : "not null", is_array ? "array" : "not array", array_size);
-
-		xSemaphoreGive(ocpp_active_call_lock_1);
-		return -1;
-	}
-
-	active_call_id = cJSON_GetArrayItem(call->call_message, 1)->valuestring;
-	active_call = call;
-
-	char * action = cJSON_GetArrayItem(call->call_message, 2)->valuestring;
+	const char * action = ocppj_get_action_from_call(call.call->call_message);
 
 	int err = check_send_legality(action);
 
 	if(err != 0){
 		ESP_LOGE(TAG, "Could not send '%s' now, specification prohibits it", action);
-		goto error;
+
+		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP call prohibited by state", NULL);
+		xQueueReset(ocpp_active_call_queue);
+		return total_count;
 	}
 
-	char * message_string = cJSON_Print(call->call_message);
+	char * message_string = cJSON_Print(call.call->call_message);
 	if(message_string == NULL){
 		ESP_LOGE(TAG, "Unable to create message string from call");
-		goto error;
+
+		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP unable to serialize", NULL);
+		xQueueReset(ocpp_active_call_queue);
+		return total_count;
 	}
 
-	ESP_LOGI(TAG, "Sending next call (%s) [%s]", action, active_call_id);
+	const char * active_call_id = ocppj_get_unique_id_from_call(call.call->call_message);
+	ESP_LOGI(TAG, "Sending next call (%s) [%s]", action, active_call_id != NULL ? active_call_id : "NULL");
 
 	err = esp_websocket_client_send_text(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message_string);
 
 	if(err == -1){
 		ESP_LOGE(TAG, "Got websocket error when sending ocpp message");
-		goto error;
+
+		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP unable to send", NULL);
+		xQueueReset(ocpp_active_call_queue);
+
+		return total_count;
 	}
-	last_call_timestamp = time(NULL);
+
 	reset_heartbeat_timer();
-
-	give_active_call();
-
-	return last_listener_state;
-error:
-	fail_active_call("Not sendt");
-	return -1;
+	return total_count;
 }
 
 
@@ -926,12 +948,13 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 	}
 
 	for(int i = 0; i < 5; i++){
-		if(websocket_connected){
+		if(ocpp_is_connected()){
 			ocpp_call_queue = xQueueCreate(5, sizeof(struct ocpp_call_with_cb *));
 			ocpp_blocking_call_queue = xQueueCreate(1, sizeof(struct ocpp_call_with_cb *));
 			ocpp_transaction_call_queue = xQueueCreate(MAX_TRANSACTION_QUEUE_SIZE, sizeof(struct ocpp_call_with_cb *));
+			ocpp_active_call_queue = xQueueCreate(1, sizeof(struct ocpp_active_call));
 
-			if(ocpp_call_queue == NULL || ocpp_transaction_call_queue == NULL || ocpp_blocking_call_queue == NULL){
+			if(ocpp_call_queue == NULL || ocpp_transaction_call_queue == NULL || ocpp_blocking_call_queue == NULL || ocpp_active_call_queue == NULL){
 				ESP_LOGE(TAG, "Unable to create call queues");
 				goto error;
 			}
@@ -946,6 +969,7 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 				ESP_LOGE(TAG, "Unable to open semaphore");
 				goto error;
 			}
+
 			return 0;
 		}
 
@@ -1140,7 +1164,7 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	}
 
 	ESP_LOGI(TAG, "Sending boot notification message");
-	if(send_next_call(eOCPP_WEBSOCKET_NO_EVENT) != 0){
+	if(send_next_call() != 0){
 		ESP_LOGE(TAG, "Unable to send message");
 		return -1;
 	}
@@ -1167,7 +1191,7 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 				heartbeat_interval = -1;
 
 				ESP_LOGI(TAG, "Sending new boot notification message");
-				if(send_next_call(eOCPP_WEBSOCKET_NO_EVENT) != 0){
+				if(send_next_call() == -1){
 					ESP_LOGE(TAG, "Unable to send new boot notification message");
 					return -1;
 				}
@@ -1205,7 +1229,12 @@ void stop_ocpp(void){
 
 	if(ocpp_transaction_call_queue != NULL){
 		vQueueDelete(ocpp_transaction_call_queue);
-		ocpp_blocking_call_queue = NULL;
+		ocpp_transaction_call_queue = NULL;
+	}
+
+	if(ocpp_active_call_queue != NULL){
+		vQueueDelete(ocpp_active_call_queue);
+		ocpp_active_call_queue = NULL;
 	}
 
 	if(ocpp_active_call_lock_1 != NULL){
@@ -1213,9 +1242,9 @@ void stop_ocpp(void){
 		ocpp_active_call_lock_1 = NULL;
 	}
 
+
 	clean_listener();
 
-	clear_active_call();
 	block_enqueue_call(0);
 	block_sending_call(0);
 
@@ -1223,6 +1252,6 @@ void stop_ocpp(void){
 	return;
 }
 
-int handle_ocpp_call(int last_listener_state){
-	return send_next_call(last_listener_state);
+int handle_ocpp_call(){
+	return send_next_call();
 }

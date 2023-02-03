@@ -1,6 +1,7 @@
 #ifndef OCPP_CALL_WITH_CB_H
 #define OCPP_CALL_WITH_CB_H
 
+#include <stdbool.h>
 #include "cJSON.h"
 
 #include "messages/error_messages/ocpp_call_error_cb.h"
@@ -13,4 +14,6 @@ struct ocpp_call_with_cb{
 	void * cb_data;
 };
 
+void free_call_with_cb(struct ocpp_call_with_cb * call);
+bool check_call_with_cb_validity(struct ocpp_call_with_cb * call);
 #endif /*OCPP_CALL_WITH_CB_H*/
