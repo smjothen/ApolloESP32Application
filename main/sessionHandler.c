@@ -401,6 +401,8 @@ static void sessionHandler_task()
 	//Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
 
+    bool fileSystemOk = false;
+
     uint32_t previousWarnings = 0;
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
@@ -429,6 +431,11 @@ static void sessionHandler_task()
     chargeController_Init();
 
     offlineSession_Init();
+
+    /// Check for corrupted "files"-partition
+    fileSystemOk = offlineSession_CheckAndCorrectFilesSystem();
+
+    ESP_LOGW(TAG, "FileSystemOk: %i Correction needed: %i", fileSystemOk, offlineSession_FileSystemCorrected());
 
 	while (1)
 	{
@@ -1122,6 +1129,17 @@ static void sessionHandler_task()
 
 
 				sessionHandler_SendFPGAInfo();
+
+				if(offlineSession_FileSystemCorrected() == true)
+				{
+					ESP_LOGW(TAG,"Event content: %s", offlineSession_GetDiagnostics());
+					if(offlineSession_FileSystemVerified())
+						publish_debug_message_event("File system corrected OK", cloud_event_level_warning);
+					else
+						publish_debug_message_event("File system correction FAILED", cloud_event_level_warning);
+
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+				}
 
 				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)

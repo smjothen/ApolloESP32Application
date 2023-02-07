@@ -10,6 +10,7 @@
 */
 
 #include "fat.h"
+#include "errno.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -201,12 +202,18 @@ void fat_static_unmount()
 	ESP_LOGI(TAG, "Done unmounting");
 }
 
+static char fatDiagnostics[150] = {0};
 
-esp_err_t fat_eraseAndRemountPartition()
+char * fat_GetDiagnostics()
 {
-	esp_err_t err = ESP_OK;
+	return fatDiagnostics;
+}
 
-	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
+bool fat_eraseAndRemountPartition()
+{
+	esp_err_t err = ESP_FAIL;
+
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
 
 	if(part != NULL)
 	{
@@ -214,14 +221,75 @@ esp_err_t fat_eraseAndRemountPartition()
 
 		err = esp_partition_erase_range(part, 0, part->size);
 	}
-	else
-	{
-		return err;
-	}
 
 	mounted = false;
 
 	fat_static_mount();
 
-	return err;
+	snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk erase err: %i ,M: %i", err, mounted);
+
+	return mounted;
+}
+
+
+bool fat_CheckFilesSystem()
+{
+	bool deletedOK = false;
+	bool createdOK = fat_Factorytest_CreateFile();
+	if(createdOK)
+		deletedOK = fat_Factorytest_DeleteFile();
+
+	snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
+
+	return deletedOK; //True if both bools are OK
+}
+
+bool fat_CorrectFilesystem()
+{
+	return fat_eraseAndRemountPartition();
+}
+
+
+static FILE *testDiskFile = NULL;
+bool fat_Factorytest_CreateFile()
+{
+	if(!fat_static_mount()){
+		ESP_LOGE(TAG, "failed to mount disk");
+		return false;
+	}
+
+	testDiskFile = fopen("/spiflash/testdisk.bin", "wb+");
+
+	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
+
+	if(testDiskFile == NULL)
+	{
+		snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file = NULL, %i:%s,", errno, strerror(errno));
+		return false;
+	}
+	else
+	{
+		snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file = 0x%08x", (unsigned int)testDiskFile);
+		fclose(testDiskFile);
+	}
+
+	return true;
+}
+
+bool fat_Factorytest_DeleteFile()
+{
+	if(!fat_static_mount()){
+		ESP_LOGE(TAG, "failed to mount disk");
+		return false;
+	}
+
+	int status = remove("/spiflash/testdisk.bin");
+	ESP_LOGW(TAG, "Status from remove: %i", status);
+
+	if(status == 0)
+	{
+		return true;
+	}
+
+	return false;
 }

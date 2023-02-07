@@ -54,6 +54,7 @@ static int activeFileNumber = -1;
 static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
+static char fileDiagnostics[150] = {0};
 
 void offlineSession_Init()
 {
@@ -63,23 +64,43 @@ void offlineSession_Init()
 	offlineSession_mount_folder();
 }
 
+
+
+bool offlineSession_CheckFilesSystem()
+{
+	bool deletedOK = false;
+	bool createdOK = offlineSession_test_CreateFile();
+	if(createdOK)
+		deletedOK = offlineSession_test_DeleteFile();
+
+	snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
+
+	return deletedOK; //True if both bools are OK
+}
+
+bool firstcreate = true;
 static FILE *testFile = NULL;
-bool offlineSession_test_Createfile(char * fileDiagnostics, int size)
+bool offlineSession_test_CreateFile()
 {
 	if(!offlineSession_mount_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return false;
 	}
 
-	testFile = fopen("/offs/0.bin", "wb+");
+	testFile = fopen("/offs/testfile.bin", "wb+");
 
-	if(testFile == NULL)
+	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
+
+	//if(testFile == NULL)
+	if((testFile == NULL) || (firstcreate == true))
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " New file = NULL");
+		firstcreate = false;
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " New file = NULL, %i:%s,", errno, strerror(errno));
+		return false;
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " New file = 0x%08x", (unsigned int)testFile);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " New file = 0x%08x", (unsigned int)testFile);
 		fclose(testFile);
 	}
 
@@ -87,85 +108,168 @@ bool offlineSession_test_Createfile(char * fileDiagnostics, int size)
 }
 
 
-bool offlineSession_test_Deletefile(char * fileDiagnostics, int size)
+/*bool offlineSession_test_DeleteFile()
 {
 	if(!offlineSession_mount_folder()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return false;
 	}
 
-	FILE *fp = fopen("/offs/0.bin", "r");
+	FILE *fp = fopen("/offs/testfile.bin", "r");
 	if(fp==NULL)
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File before remove: can't be opened");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File can't be opened,");
 		ESP_LOGI(TAG, "File before remove: can't be opened ");
 		return false;
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File before remove: can be opened");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File can be opened,");
 		ESP_LOGI(TAG, "File before remove: can be opened ");
 	}
 
 	fclose(fp);
 
-	remove("/offs/0.bin");
+	remove("/offs/testfile.bin");
 
-	fp = fopen("/offs/0.bin", "r");
+	fp = fopen("/offs/testfile.bin", "r");
 	if(fp==NULL)
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File after remove: deleted SUCCEEDED");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File deleted OK");
 		ESP_LOGI(TAG, "File after remove: delete SUCCEEDED");
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), size, " File after remove: deleted FAILED");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File deleted FAILED");
 		ESP_LOGE(TAG, "File after remove: delete FAILED");
 	}
 
 	fclose(fp);
 
 	return true;
+}*/
+
+
+bool offlineSession_test_DeleteFile()
+{
+	if(!offlineSession_mount_folder()){
+		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
+		return false;
+	}
+
+	int status = remove("/offs/testfile.bin");
+	ESP_LOGW(TAG, "Status from remove: %i", status);
+	if(status == 0)
+	{
+		return true;
+	}
+	else
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " remove = %i, %i:%s ", status, errno, strerror(errno));
+	}
+
+	return false;
 }
 
 
-esp_err_t offlineSession_eraseAndRemountPartition(char * diagnosticsString, size_t size)
+
+char * offlineSession_GetDiagnostics()
+{
+	return fileDiagnostics;
+}
+
+static bool isFileSystemOK = false;
+/// Intended for check during factory test
+bool offlineSession_FileSystemVerified()
+{
+	return isFileSystemOK;
+}
+
+static bool fileSystemCorrected = true;
+bool offlineSession_FileSystemCorrected()
+{
+	return fileSystemCorrected = false;
+}
+
+/*
+ * Some chargers has not been able to create new files on the "files" partition
+ * This function checks is file creation returns NULL, and if so formats and remounts the
+ * file system to correct the problem.
+ */
+bool offlineSession_CheckAndCorrectFilesSystem()
+{
+	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
+	{
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "Semaphore fault");
+		ESP_LOGE(TAG, "failed to obtain offs lock during check and correct");
+		return false;
+	}
+
+	///Test file system by creating one test-file
+	isFileSystemOK = offlineSession_test_CreateFile();
+	//bool deletedOK = false;
+
+	if(isFileSystemOK == false)
+	{
+		ESP_LOGE(TAG, "FILE SYSTEM FAULTY");
+		isFileSystemOK = offlineSession_eraseAndRemountPartition();
+
+		if(isFileSystemOK)
+		{
+			snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " M: %i,", mounted);
+
+			isFileSystemOK = offlineSession_test_CreateFile();
+			if(isFileSystemOK)
+				fileSystemCorrected = offlineSession_test_DeleteFile();
+		}
+		ESP_LOGW(TAG, "FILE SYSTEM CORRECTED");
+	}
+	else
+	{
+		bool deletedOK = offlineSession_test_DeleteFile();
+		if(deletedOK == false)
+			ESP_LOGE(TAG, "Removing testfile failed");
+	}
+
+	xSemaphoreGive(offs_lock);
+
+	return isFileSystemOK;
+}
+
+
+bool offlineSession_eraseAndRemountPartition()
 {
 	esp_err_t err = ESP_OK;
+	bool status = false;
 
-	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
 
 	if(part != NULL)
 	{
-		offlineSession_test_Createfile(diagnosticsString, size);
-
 		ESP_LOGI(TAG, "Unmounting files-filesystem");
 		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
-		snprintf(diagnosticsString + strlen(diagnosticsString), size, " Unm: %i", err);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Unm: %i,", err);
 		if(err != ESP_OK)
 			ESP_LOGE(TAG, "Unmounting failed: %i", err);
 
 		err = esp_partition_erase_range(part, 0, part->size);
-		snprintf(diagnosticsString + strlen(diagnosticsString), size, " Erase: %i", err);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Erase: %i,", err);
 		if(err != ESP_OK)
+		{
 			ESP_LOGE(TAG, "Erase failed: %i", err);
+			return false;
+		}
+
+		mounted = false;
+
+		status = offlineSession_mount_folder();
 	}
 	else
 	{
-		return err;
+		return false;
 	}
 
-	mounted = false;
-
-	offlineSession_mount_folder();
-
-	snprintf(diagnosticsString + strlen(diagnosticsString), size, " M: %i", mounted);
-
-	offlineSession_test_Createfile(diagnosticsString, size);
-
-	offlineSession_test_Deletefile(diagnosticsString, size);
-
-	return err;
+	return status;
 }
 
 

@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.2.6"; //Based on unsigned "2.0.2.4" (FPGA program on Speed 3(UK) and 5(EU))
+char softwareVersion[] = "2.0.2.8"; //Based on unsigned "2.0.2.4" (FPGA program on Speed 3(UK) and 5(EU))
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -290,7 +290,7 @@ void SetOnlineWatchdog()
 
 void app_main(void)
 {
-	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
+	ESP_LOGE(TAG_MAIN, "Zaptec Go:3 %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL
 	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
