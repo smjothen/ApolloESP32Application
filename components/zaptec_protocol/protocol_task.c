@@ -236,6 +236,17 @@ float GetUint32_t(uint8_t * input)
 	return tmp;
 }
 
+uint16_t GetUInt16(uint8_t * input)
+{
+	uint16_t tmp = 0;
+
+	uint8_t swap[2] = {0};
+	swap[0] = input[1];
+	swap[1] = input[0];
+	memcpy(&tmp, &swap[0], sizeof (swap));
+	return tmp;
+}
+
 int MCURxGetStackWatermark()
 {
 	if(uartRecvTaskHandle != NULL)
@@ -650,6 +661,20 @@ MessageType MCU_SendCommandId(uint16_t paramIdentifier)
 	return rxMsg.type;
 }
 
+MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, size_t length)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgCommand;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndByteArray(&txMsg, data, length, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg.type;
+}
 
 MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)
 {
@@ -664,6 +689,21 @@ MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)
 	freeZapMessageReply();
 
 	return rxMsg.type;
+}
+
+ZapMessage MCU_SendUint8WithReply(uint16_t paramIdentifier, uint8_t data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneByte(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+	return rxMsg;
 }
 
 
@@ -784,6 +824,26 @@ uint8_t MCU_GetOverrideGridType()
 }
 
 
+bool MCU_SetMIDBlinkEnabled(bool enabled) {
+    return MCU_SendUint8Parameter(ParamMIDBlinkEnabled, enabled) == MsgWriteAck;
+}
+
+bool MCU_GetInterpolatedEnergyCounter(float *energy) {
+    ZapMessage msg = MCU_ReadParameter(ParamSessionEnergyCountImportActiveInterpolated);
+    if (msg.length == 4 && msg.type == MsgReadAck && msg.identifier == ParamSessionEnergyCountImportActiveInterpolated) {
+        *energy = GetFloat(msg.data);
+        return true;
+    }
+    return false;
+}
+
+bool MCU_IsCalibrationHandle(void) {
+    ZapMessage msg = MCU_ReadParameter(ParamIsCalibrationHandle);
+    if (msg.length == 1 && msg.type == MsgReadAck && msg.identifier == ParamIsCalibrationHandle) {
+        return msg.data[0];
+    }
+    return false;
+}
 
 static uint8_t IT3OptimizationEnabled = 0;
 uint8_t MCU_UpdateIT3OptimizationState()
@@ -868,8 +928,7 @@ bool IsUKOPENPowerBoardRevision()
 
 bool IsProgrammableFPGAUsed()
 {
-	//if((HwIdPower == HW_POWER_4_X804) || (HwIdPower == HW_POWER_5_UK_X804))
-	if((HwIdPower == HW_POWER_5_UK_X804))
+	if((HwIdSpeed == HW_SPEED_3_UK) || (HwIdSpeed == HW_SPEED_5_EU))
 		return true;
 	else
 		return false;
@@ -1184,8 +1243,21 @@ float MCU_StandAloneCurrent()
 }
 
 
+bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret) {
+	ZapMessage rxMsgm = MCU_ReadParameter(param);
+	if((rxMsgm.length == (1+3*4)) && (rxMsgm.identifier == param)) {
+      uint8_t *data = rxMsgm.data;
+      *source = *data++;
+      ret[0] = GetFloat(data);
+      data += 4;
+      ret[1] = GetFloat(data);
+      data += 4;
+      ret[2] = GetFloat(data);
+      return true;
+  }
 
-
+  return false;
+}
 
 int16_t MCU_GetServoCheckParameter(int parameterDefinition)
 {
@@ -1259,6 +1331,27 @@ float MCU_GetHWCurrentMaxLimit()
 	}
 
 	return limit;
+}
+
+
+bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
+    ZapMessage msg = MCU_ReadParameter(ParamMidStoredCalibrationId);
+    if (msg.length != 4 || msg.identifier != ParamMidStoredCalibrationId) {
+        return false;
+    }
+
+    *id = GetUint32_t(msg.data);
+    return true;
+}
+
+bool MCU_GetMidStatus(uint32_t *id) {
+    ZapMessage msg = MCU_ReadParameter(ParamMidStatus);
+    if (msg.length != 4 || msg.identifier != ParamMidStatus) {
+        return false;
+    }
+
+    *id = GetUint32_t(msg.data);
+    return true;
 }
 
 

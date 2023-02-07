@@ -223,7 +223,7 @@ int certificate_GetCurrentBundleVersion()
 	return currentBundleVersion;
 }
 
-static int overrideVersion = 0;
+static int overrideVersion = -1;
 void certifcate_setOverrideVersion(int override)
 {
 	overrideVersion = override;
@@ -279,7 +279,7 @@ void certificate_task(void* tlsErrorCause)
 		// POST
 		char post_data [100] = {0};
 		//snprintf(post_data, 100,"{\"ver\":6, \"serial\": \"%s\", \"fw\": \"%s\"}", i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion());
-		if(overrideVersion > 0)
+		if(overrideVersion > -1)
 		{
 			snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\", \"override\":%d }", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError, overrideVersion);
 		}
@@ -288,7 +288,7 @@ void certificate_task(void* tlsErrorCause)
 			snprintf(post_data, 100,"{\"ver\":%d, \"serial\": \"%s\", \"fw\": \"%s\", \"error\": \"%d\"}", currentBundleVersion, i2cGetLoadedDeviceInfo().serialNumber, GetSoftwareVersion(), tlsError);
 		}
 
-		overrideVersion = 0;
+		overrideVersion = -1;
 
 		ESP_LOGW(TAG, "post_data: %s", post_data);
 

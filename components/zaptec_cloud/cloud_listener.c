@@ -35,6 +35,7 @@
 #include "../../main/ocpp.h"
 #include "../../main/chargeController.h"
 #include "../../main/production_test.h"
+#include "fat.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -2464,6 +2465,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"SS") != NULL)
 				{
+					if (strstr(commandString,"SSID")) {
+						// Probably SetNewWifi should handle this..
+						return responseStatus;
+					}
 					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
 
 					//Remove end of string formatting
@@ -2649,6 +2654,122 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					sessionHandler_SendFPGAInfo();
 					responseStatus = 200;
+				}
+				else if(strstr(commandString, "GetFailedRFID"))
+				{
+					char atqa[12] = {0};
+					uint16_t value = NFCGetLastFailedATQA();
+					snprintf(atqa, 12,"ATQA: %02X %02X", ((value>>8) & 0xff), (value & 0xff));
+					publish_debug_telemetry_observation_Diagnostics(atqa);
+					responseStatus = 200;
+				}
+				/*else if(strstr(commandString, "getpartitions"))
+				{
+					char buf[351]={0};
+					offlineSession_test_GetPartitions(buf);
+					ESP_LOGW(TAG, "Part buf len: %i", strlen(buf));
+					publish_debug_telemetry_observation_Diagnostics(buf);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "erasefilespartition"))
+				{
+					esp_partition_t *part  = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+
+					esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+
+					char partbuf[50];
+					snprintf(partbuf, 50, "ErasePartitionResult: %i", err);
+
+					publish_debug_telemetry_observation_Diagnostics(partbuf);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "getaccenergy"))
+				{
+					double accumulated_energy = OCMF_Write_Read_accumulated_energy(0.0);
+					ESP_LOGW(TAG, "Read accumulated energy: %f", accumulated_energy);
+					char accbuf[50];
+					snprintf(accbuf, 40, "ReadEnergy: %f", accumulated_energy);
+					publish_debug_telemetry_observation_Diagnostics(accbuf);
+				}
+				else if(strstr(commandString, "setaccenergy"))
+				{
+					float newEnergy = 0;
+					sscanf(&commandString[14], "%f", &newEnergy);
+
+					double accumulated_energy = OCMF_Write_Read_accumulated_energy(newEnergy);
+					ESP_LOGW(TAG, "Wrote accumulated energy: %f", accumulated_energy);
+					char accbuf[50];
+					snprintf(accbuf, 40, "WroteEnergy: %f", accumulated_energy);
+					publish_debug_telemetry_observation_Diagnostics(accbuf);
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString, "getmount"))
+				{
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testmount"))
+				{
+					offlineSession_mount_folder();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}*/
+				/*else if(strstr(commandString, "testcreate"))
+				{
+					offlineSession_test_Createfile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testwrite"))
+				{
+					offlineSession_test_Writefile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testread"))
+				{
+					offlineSession_test_Readfile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testdelete"))
+				{
+					offlineSession_test_Deletefile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "readsessionfile"))
+				{
+					offlineSession_Diagnostics_ReadFileContent(0);
+
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}*/
+				else if(strstr(commandString, "fixpartition"))
+				{
+					char partbuf[150] = {0};
+					enum fat_id partition_id = -1;
+					if(strstr(commandString, "fixpartitionfiles"))
+					{
+						partition_id = eFAT_ID_FILES;
+					}
+					else if(strstr(commandString, "fixpartitiondisk"))
+					{
+						partition_id = eFAT_ID_DISK;
+					}
+
+					if(partition_id != -1){
+						fat_fix_and_log_result(partition_id, partbuf, sizeof(partbuf));
+
+						publish_debug_telemetry_observation_Diagnostics(partbuf);
+
+						responseStatus = 200;
+					}else{
+						ESP_LOGW(TAG, "fixpartition with invalid partition requested");
+						responseStatus = 400;
+					}
 				}
 			}
 	}

@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+import "nanopb.proto";
+
+// For C variant:
+//   1. Install nanopb
+//   2. nanopb_generator.py calibration-message.proto  
+
+message CalibrationUdpMessage {
+    
+    message StateMessage {
+
+        int32 State = 1;
+
+        int32 Sequence = 2;
+
+        // This message is included when starting the test (State = Starting)
+        message CalibrationRunMessage {
+            uint32 Run = 1;
+
+            repeated string SelectedSerials = 2 [(nanopb).type = FT_POINTER];
+
+            string Key = 3 [(nanopb).type = FT_POINTER];
+
+            // The protocol version required by the test bench
+            uint32 ServerProtocol = 4;
+        }
+        CalibrationRunMessage Run = 3;
+
+        // This message is included in Verification steps
+        message VerificationState {
+            uint32 TestId = 1;
+        }
+        VerificationState Verification = 4;
+    }
+    StateMessage State = 1;
+
+    message DataMessage {
+        message PhaseSnapshot {
+            double L1 = 1;
+            double L2 = 2;
+            double L3 = 3;
+        };
+        
+        message EnergySnapshot {
+            double WattHours = 1;
+        };
+
+        oneof message_type {
+            PhaseSnapshot ReferenceMeterVoltage = 1;
+            PhaseSnapshot ReferenceMeterCurrent = 2;
+            EnergySnapshot ReferenceMeterEnergy = 3;
+        };
+    }
+    DataMessage Data = 2;
+
+    message ChargerAck {
+        uint32 Sequence = 1;
+    }
+
+    ChargerAck Ack = 3;
+}
+
+message ChargerStateUdpMessage {
+
+    string Serial = 10 [(nanopb).type = FT_POINTER];
+
+    // Currently active run on charger
+    uint32 RunAck = 4;
+
+    // Currently active calibration state on charger
+    int32 StateAck = 1;
+    
+    // Charger state of the current calibration state (InProgress/Complete/Failed)
+    int32 State = 2;
+
+    // Latest sequence number received from server
+    uint32 SequenceAck = 6;
+
+
+    // InitStatus is sent during the "Starting"-phase to let the test bench know the state of the charger
+    message InitStatus {
+        // The protocol supported by the charger
+        uint32 ClientProtocol = 1;
+
+        string FirmwareVersion = 2 [(nanopb).type = FT_POINTER];
+
+        double Uptime = 50;
+
+        // State that helps the test bench determine which tests to run
+        bool NeedsMIDCalibration = 3;
+
+        bool HasProductionTestPassed = 10;
+        bool IsCalibrated = 11;
+        bool IsVerified = 12;
+
+        bool Has4G = 20;
+        bool Is4GVerified = 21;
+    }
+
+    InitStatus Init = 5;
+
+    // Status messages are used to convey error messages from the charger to the test bench
+    message StatusMessage {
+        int32 Id = 1;
+        int32 Type = 2;
+        string Status = 3 [(nanopb).type = FT_POINTER];
+    }
+
+    StatusMessage Status = 3;
+
+    // Flag that specifies if the charger state is idle, and that all relays are open
+    bool IsIdle = 7;
+
+    // If the charger is currently detecting that the current transformer is overloaded, the phases will be conveyed here
+    uint32 OverloadedPhases = 50;
+}
