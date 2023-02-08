@@ -23,7 +23,7 @@ enum call_type{
 /**
  * Reply to central service originated action call.
  */
-int send_call_reply(cJSON * call); // TODO: ensure cleanup when used
+int send_call_reply(cJSON * call);
 
 void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info);
 

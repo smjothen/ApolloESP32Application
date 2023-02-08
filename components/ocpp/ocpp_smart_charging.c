@@ -921,7 +921,6 @@ void clear_charging_profile_cb(const char * unique_id, const char * action, cJSO
 
 	if(reply != NULL){
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 	}else{
 		ESP_LOGE(TAG, "Unable to create ClearChargingProfile.conf");
 	}
@@ -933,7 +932,6 @@ error:
 		cJSON * reply = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
 		if(reply != NULL){
 			send_call_reply(reply);
-			cJSON_Delete(reply);
 		}
 	}else{
 		ESP_LOGE(TAG, "Error occured during clear charging profile, but no ocpp json error set");
@@ -1011,7 +1009,6 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 			ESP_LOGE(TAG, "Unable to create set charge profile confirmation");
 		}else{
 			send_call_reply(reply);
-			cJSON_Delete(reply);
 		}
 	}
 
@@ -1022,7 +1019,6 @@ error:
 		ESP_LOGE(TAG, "No reply created");
 	}else{
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 	}
 
 	ocpp_free_charging_profile(charging_profile);

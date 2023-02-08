@@ -179,7 +179,6 @@ int call_handler(esp_websocket_client_handle_t client, const char * unique_id, c
 			return -1;
 		}
 		send_call_reply(ocpp_error);
-		cJSON_Delete(ocpp_error);
 		return -1;
 	}
 }

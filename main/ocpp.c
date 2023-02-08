@@ -75,7 +75,6 @@ void not_supported_cb(const char * unique_id, const char * action, cJSON * paylo
 		return;
 	}
 	send_call_reply(ocpp_error);
-	cJSON_Delete(ocpp_error);
 	return;
 }
 
@@ -108,7 +107,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			}
 			else{
 				send_call_reply(conf);
-				cJSON_Delete(conf);
 			}
 			pending_reset = true;
 			should_run = false;
@@ -122,7 +120,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			}
 			else{
 				send_call_reply(conf);
-				cJSON_Delete(conf);
 			}
 
 			/*
@@ -181,7 +178,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			}
 			else{
 				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
 				return;
 			}
 		}
@@ -192,7 +188,6 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 		}
 		else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 			return;
 		}
 	}
@@ -1511,7 +1506,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 				return;
 			}else{
 				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
 				return;
 			}
 		}
@@ -1531,7 +1525,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 					return;
 				}else{
 					send_call_reply(ocpp_error);
-					cJSON_Delete(ocpp_error);
 					return;
 				}
 			}
@@ -1605,7 +1598,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 			goto error;
 		}else{
 			send_call_reply(response);
-			cJSON_Delete(response);
 
 			return;
 		}
@@ -1630,7 +1622,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 		}
 		else{
 			send_call_reply(response);
-			cJSON_Delete(response);
 
 			return;
 		}
@@ -1642,7 +1633,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 		}
 		else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 			return;
 		}
 
@@ -1656,7 +1646,6 @@ error: ;
 		return;
 	}else{
 		send_call_reply(ocpp_error);
-		cJSON_Delete(ocpp_error);
 		return;
 	}
 }
@@ -1668,7 +1657,6 @@ static void change_config_confirm(const char * unique_id, const char * configura
 		return;
 	}else{
 		send_call_reply(response);
-		cJSON_Delete(response);
 	}
 }
 
@@ -1901,7 +1889,6 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			return;
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 			return;
 		}
 	}
@@ -1918,7 +1905,6 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			return;
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 			return;
 		}
 
@@ -2329,7 +2315,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2344,7 +2329,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2361,7 +2345,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2379,7 +2362,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for invalid authorization data");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		free_auth_list(auth_list, auth_list_length);
 		return;
@@ -2395,7 +2377,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 				ESP_LOGE(TAG, "Unable to create send local list confirmation VERSION_MISMATCH");
 			}else{
 				send_call_reply(response);
-				cJSON_Delete(response);
 			}
 			free_auth_list(auth_list, auth_list_length);
 			return;
@@ -2409,7 +2390,6 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 		ESP_LOGE(TAG, "Unable to create change configuration confirmation");
 	}else{
 		send_call_reply(response);
-		cJSON_Delete(response);
 	}
 	free_auth_list(auth_list, auth_list_length);
 }
@@ -2424,7 +2404,6 @@ static void get_local_list_version_cb(const char * unique_id, const char * actio
 			ESP_LOGE(TAG, "Unable to create call error for internal error");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2434,7 +2413,6 @@ static void get_local_list_version_cb(const char * unique_id, const char * actio
 		ESP_LOGE(TAG, "Unable to create get local list confirmation");
 	}else{
 		send_call_reply(response);
-		cJSON_Delete(response);
 	}
 }
 
@@ -2447,7 +2425,6 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2459,7 +2436,6 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2479,7 +2455,6 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 			ESP_LOGE(TAG, "Unable to respond to unknown vendor id");
 		}else{
 			send_call_reply(response);
-			cJSON_Delete(response);
 		}
 		return;
 	}
@@ -2492,7 +2467,6 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 		ESP_LOGE(TAG, "Unable to create internal error response");
 	}else{
 		send_call_reply(ocpp_error);
-		cJSON_Delete(ocpp_error);
 	}
 	return;
 }
@@ -2524,7 +2498,6 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2544,7 +2517,6 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -2580,7 +2552,6 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		ESP_LOGE(TAG, "Unable to create confirmation for trigger message");
 	}else{
 		send_call_reply(conf);
-		cJSON_Delete(conf);
 	}
 
 	if(strcmp(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED) != 0){
@@ -2843,7 +2814,6 @@ static void update_firmware_cb(const char * unique_id, const char * action, cJSO
 		ESP_LOGE(TAG, "Unable to create confirmation for update firmware");
 	}else{
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 	}
 
 	return;
@@ -2861,7 +2831,6 @@ error:
 		ESP_LOGE(TAG, "Unable to create error reply");
 	}else{
 		send_call_reply(error_reply);
-		cJSON_Delete(error_reply);
 	}
 }
 

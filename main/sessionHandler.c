@@ -1374,7 +1374,6 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 			ESP_LOGE(TAG, "Error occured during parsing of ReserveNow.req, but no error was created");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 
 		return;
@@ -1387,7 +1386,6 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 
 		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 		return;
 	}
 
@@ -1472,7 +1470,6 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 				ESP_LOGE(TAG, "Unable to create reservation response");
 			}else{
 				send_call_reply(response);
-				cJSON_Delete(response);
 			}
 		}else{
 			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer and 'type' to be AvailabilityType", NULL);
@@ -1480,7 +1477,6 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 			}else{
 				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
 			}
 			return;
 		}
@@ -1490,7 +1486,6 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1505,7 +1500,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1521,7 +1515,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 			}else{
 				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
 			}
 			return;
 		}
@@ -1532,7 +1525,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 				ESP_LOGE(TAG, "Unable to create call error property constraint violation");
 			}else{
 				send_call_reply(ocpp_error);
-				cJSON_Delete(ocpp_error);
 			}
 			return;
 
@@ -1546,7 +1538,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 
@@ -1565,7 +1556,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 		return;
 	}else{
 		send_call_reply(response);
-		cJSON_Delete(response);
 	}
 
 	if(!accept_request)
@@ -1602,7 +1592,6 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1615,7 +1604,6 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1637,7 +1625,6 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	}
 	else{
 		send_call_reply(response);
-		cJSON_Delete(response);
 	}
 
 	if(stop_charging_accepted){
@@ -1658,7 +1645,6 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1675,7 +1661,6 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1686,7 +1671,6 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 		}else{
 			send_call_reply(ocpp_error);
-			cJSON_Delete(ocpp_error);
 		}
 		return;
 	}
@@ -1710,7 +1694,6 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 					ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 				}else{
 					send_call_reply(ocpp_error);
-					cJSON_Delete(ocpp_error);
 				}
 				return;
 			}
@@ -1731,7 +1714,6 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 			ESP_LOGE(TAG, "Unable to create accepted response");
 		}else{
 			send_call_reply(response);
-			cJSON_Delete(response);
 		}
 	}
 	ESP_LOGI(TAG, "Change availability complete %d->%d", old_is_enabled, storage_Get_IsEnabled());

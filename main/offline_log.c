@@ -757,7 +757,6 @@ void get_diagnostics_cb(const char * unique_id, const char * action, cJSON * pay
 		ESP_LOGE(TAG, "Unable to create get diagnostics confirmation");
 	}else{
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 	}
 
 	return;
@@ -774,7 +773,6 @@ error:
 		ESP_LOGE(TAG, "Unable to create error reply");
 	}else{
 		send_call_reply(error_reply);
-		cJSON_Delete(error_reply);
 	}
 }
 

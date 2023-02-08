@@ -355,6 +355,8 @@ int send_call_reply(cJSON * call){
 		return -1;
 	}
 
+	cJSON_Delete(call);
+
 	int err = esp_websocket_client_send_text(client, message, strlen(message), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message);
 
