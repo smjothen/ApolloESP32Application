@@ -607,6 +607,9 @@ uint32_t storage_Get_MaxStartDelay()
 
 uint16_t storage_Get_cover_on_value()
 {
+	//Change default value on existing chargers (from 160-130)
+	if(configurationStruct.cover_on_value == 0xd0)
+		return DEFAULT_COVER_ON_VALUE;
 
 	return configurationStruct.cover_on_value;
 }

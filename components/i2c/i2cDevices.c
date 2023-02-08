@@ -334,7 +334,7 @@ enum tamper_status_id{
 #define PROXIMITY_COVER_ON_MARGIN 0x30
 #define PROXIMITY_ON_OFF_DELAY 3 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
 
-static uint16_t proximity_cover_on_value = 0xB2; //178-48 = 130 //0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
+static uint16_t proximity_cover_on_value = DEFAULT_COVER_ON_VALUE;//0xB2; //178-48 = 130 //0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
 
 enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
 
@@ -344,6 +344,12 @@ uint8_t tamper_change_count = 0; // Times change has been detected since last de
 
 static void tamper_isr_hander(void * args){
 	tamper_has_new_value = true;
+}
+
+static uint16_t limitToSet = 0;
+void tamper_set_new_limit(uint16_t newLimit)
+{
+	limitToSet = newLimit;
 }
 
 esp_err_t tamper_interrupt_set_limits(uint16_t cover_on_value){
@@ -387,6 +393,7 @@ esp_err_t configure_tamper_protection(){
 
 	proximity_cover_on_value = storage_Get_cover_on_value();
 
+	ESP_LOGI(TAG, "Setting proximity_cover_on_value as limit: %i", proximity_cover_on_value);
 	if(tamper_interrupt_set_limits(proximity_cover_on_value) != ESP_OK)
 		return ESP_FAIL;
 
@@ -426,8 +433,56 @@ esp_err_t I2CCalibrateCoverProximity(){
 	return ESP_OK;
 }
 
+/*
+ * For remotely activating printout
+ */
+static bool testPrint = false;
+void tamper_PrintProximity()
+{
+	testPrint = true;
+}
+
+static int sendProximity = 0;
+static int sendDuration = 600;//Default
+void tamper_SendProximity(int duration)
+{
+	sendProximity = 1;
+	sendDuration = duration;
+}
+
+
+static bool sentOnBoot = false;
 void detect_tamper(){
 	enum tamper_status_id old_status = tamper_status;
+
+	if(testPrint == true)
+	{
+		uint16_t testValue;
+
+		SFH7776_get_proximity(&testValue);
+		ESP_LOGW(TAG, "INT: %i Proximity: %i", tamper_has_new_value, testValue);
+	}
+
+	//Send measurements to cloud for limited period
+	if(sendProximity > 0)
+	{
+		sendProximity++;
+		if(((sendProximity % 60) == 0) || (sendProximity == 2))
+		{
+			ESP_LOGW(TAG, "sendProximity %i/%i", sendProximity, sendDuration);
+
+			uint16_t sendValue;
+			SFH7776_get_proximity(&sendValue);
+
+			char buf[25];
+			snprintf(buf, sizeof(buf), "Proximity: %i", sendValue);
+			if(isMqttConnected())
+				publish_debug_telemetry_observation_Diagnostics(buf);
+		}
+
+		if(sendProximity > sendDuration)
+			sendProximity = 0;
+	}
 
 	if(tamper_has_new_value){
 		ESP_LOGW(TAG, "Proximity sensor registered change");
@@ -464,21 +519,44 @@ void detect_tamper(){
 		}
 	}
 
-	if(old_status != tamper_status){
-		ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
-		publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+	if((old_status != tamper_status) || (sentOnBoot == false)){
 
-		switch(tamper_status){
-		case eTAMPER_STATUS_COVER_ON:
-			publish_debug_telemetry_security_log("Cover status", "on");
-			break;
-		case eTAMPER_STATUS_COVER_OFF:
-			publish_debug_telemetry_security_log("Cover status", "off");
-			break;
-		default:
-			publish_debug_telemetry_security_log("Cover status", "unknown");
+		if(old_status != tamper_status)
+		{
+			if(tamper_status == eTAMPER_STATUS_COVER_ON)
+				ESP_LOGW(TAG, "New tamper status: %d: Cover ON", tamper_status);
+			else if(tamper_status == eTAMPER_STATUS_COVER_OFF)
+				ESP_LOGW(TAG, "New tamper status: %d: Cover OFF", tamper_status);
+			else
+				ESP_LOGW(TAG, "New tamper status: %d", tamper_status);
+		}
+
+
+		if(isMqttConnected()){
+			ESP_LOGI(TAG, "Syncing tamper status with cloud");
+			publish_debug_telemetry_observation_tamper_cover_state(tamper_status);
+			sentOnBoot = true;
+
+			switch(tamper_status){
+			case eTAMPER_STATUS_COVER_ON:
+				publish_debug_telemetry_security_log("Cover status", "on");
+				break;
+			case eTAMPER_STATUS_COVER_OFF:
+				publish_debug_telemetry_security_log("Cover status", "off");
+				break;
+			default:
+				publish_debug_telemetry_security_log("Cover status", "unknown");
+			}
 		}
 	}
+
+	///Allow setting new limit remotely. Must be done here to avoid I2C bus collision
+	if(limitToSet != 0)
+	{
+		tamper_interrupt_set_limits(limitToSet);
+		limitToSet = 0;
+	}
+
 }
 
 static void i2cDevice_task(void *pvParameters)
@@ -736,7 +814,8 @@ static void i2cDevice_task(void *pvParameters)
 			RTCHasNewTime = false;
 		}
 
-		if(tamper_status != eTAMPER_STATUS_DISABLED){
+		/// Do not read tamper if not used or before serial is written to EEPROM during factory setup
+		if((tamper_status != eTAMPER_STATUS_DISABLED) && (i2cGetLoadedDeviceInfo().EEPROMFormatVersion != 0xFF)){
 			detect_tamper();
 		}
 

@@ -10,6 +10,7 @@
 //#include "https_client.h"
 #include "production_test.h"
 #include "DeviceInfo.h"
+#include "DeviceInfo.h"
 #include "i2cDevices.h"
 #include "EEPROM.h"
 #include "RTC.h"
@@ -27,6 +28,7 @@
 #include "ppp_task.h"
 #include "protocol_task.h"
 #include "adc_control.h"
+#include "efuse.h"
 #include "fat.h"
 #include "offlineSession.h"
 
@@ -254,6 +256,7 @@ enum test_item{
 	TEST_ITEM_COMPONENT_LED,
 	TEST_ITEM_COMPONENT_BUZZER,
 	TEST_ITEM_COMPONENT_PROXIMITY,
+	TEST_ITEM_COMPONENT_EFUSES,
 	TEST_ITEM_COMPONENT_OPEN_RELAY,
 	TEST_ITEM_COMPONENT_RTC,
 	TEST_ITEM_COMPONENT_SWITCH,
@@ -898,26 +901,27 @@ int test_proximity(){
 	char payload[128];
 
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
-	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 
 	esp_err_t err = SFH7776_detect();
 
 	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
-		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "pressent" : "missing");
+		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "present" : "missing");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
 
 		ESP_LOGE(TAG, "%s", payload);
 		goto fail;
 
 	}else if(!should_exist){
-		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+		sprintf(payload, "Proximity sensor not applicable");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 		return 0;
 	}
 
 	if(SFH7776_set_mode_control(0b0100) != ESP_OK
 		|| SFH7776_set_sensor_control(0b0100) != ESP_OK){
-
 
 		sprintf(payload, "Unable to write sensor registers");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
@@ -952,13 +956,96 @@ int test_proximity(){
 	}
 
 
-	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 	return 0;
 
 fail:
-	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "proximity");
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_PROXIMITY, "Proximity");
 	return -1;
 }
+
+#ifdef CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION
+int test_efuses(){
+	char payload[128];
+
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+
+	struct EfuseInfo efuses = {0};
+
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		sprintf(payload, "Unable to read efuses");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+
+	}
+
+	sprintf(payload, "Encryption counter before: %#04x, Encryption configuration: %#04x.",
+		efuses.flash_crypt_cnt, efuses.encrypt_config);
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	uint set_count = __builtin_parity(efuses.flash_crypt_cnt);
+	ESP_LOGI(TAG, "Encryption cnt: %#04x, Parity: %d", efuses.flash_crypt_cnt, set_count);
+
+	if(efuses.encrypt_config != 0xf || set_count % 2 != 1)
+		goto fail;
+
+
+	sprintf(payload, "Secure boot %s", efuses.enabled_secure_boot_v2 ? "enabled" : "disabled");
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(!efuses.enabled_secure_boot_v2)
+		goto fail;
+
+	sprintf(payload, "UART download %s, ROM BASIC fallback %s, JTAG %s, DL encrypt %s, DL decrypt %s, DL cache %s",
+		efuses.disabled_uart_download ? "Off" : "on", efuses.disabled_console_debug ? "Off" : "on",
+		efuses.disabled_jtag ? "Off" : "on", efuses.disabled_dl_encrypt ? "Off" : "on",
+		efuses.disabled_dl_decrypt ? "Off" : "on", efuses.disabled_dl_cache ? "Off" : "on");
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(!(!efuses.disabled_uart_download && efuses.disabled_console_debug && efuses.disabled_jtag && !efuses.disabled_dl_encrypt
+			&& efuses.disabled_dl_decrypt && efuses.disabled_dl_cache))
+		goto fail;
+
+	if(lock_encryption_on_if_enabled() != ESP_OK){
+		sprintf(payload, "Unable to lock encryption cnt");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+	}
+
+	///Read back efuse value after flash_crypt_cnt has been updated
+	if(GetEfuseInfo(&efuses) != ESP_OK){
+		sprintf(payload, "Unable to read efuses");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+		goto fail;
+	}
+
+	sprintf(payload, "Encryption counter after: %#04x, Encryption configuration: %#04x.",
+		efuses.flash_crypt_cnt, efuses.encrypt_config);
+
+	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+
+	if(efuses.flash_crypt_cnt != 0x7F)
+	{
+		sprintf(payload, "Unable to lock encryption cnt %#04x != 0x7F", efuses.flash_crypt_cnt);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_EFUSES, payload);
+		goto fail;
+	}
+
+
+	prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+	return 0;
+
+fail:
+	prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_EFUSES, "efuses");
+	return -1;
+}
+#endif /* CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION */
 
 int test_OPEN_relay(){
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
@@ -1371,6 +1458,12 @@ int run_component_tests(){
 		goto err;
 	}
 
+#ifdef CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION
+	if(test_efuses()<0){ // Will fail if security features are off
+		goto err;
+	}
+#endif /* CONFIG_ZAPTEC_BUILD_TYPE_PRODUCTION */
+
 	if(test_rtc()<0){
 		goto err;
 	}
@@ -1378,7 +1471,7 @@ int run_component_tests(){
 	if(test_servo()<0){
 		goto err;
 	}
-		
+
 	if(test_hw_trig()<0){
 		goto err;
 	}

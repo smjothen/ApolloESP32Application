@@ -2451,7 +2451,9 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					sscanf(&commandString[20], "%d", &newProxValue);
 					if((newProxValue >= 0) && (newProxValue <= 1000))
 					{
-						storage_Set_cover_on_value(newProxValue);
+
+						storage_Set_cover_on_value((uint16_t)newProxValue);
+						storage_SaveConfiguration();
 					}
 				}
 				else if(strstr(commandString, "GetCoverProximity"))
@@ -2465,7 +2467,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 				else if(strstr(commandString, "PrintCoverProximity"))
 				{
+					tamper_PrintProximity();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "SendCoverProximity "))
+				{
+					int duration = 0;
+					sscanf(&commandString[21], "%d", &duration);
 
+					ESP_LOGW(TAG, "Setting duration %i", duration);
+
+					if((duration >= 0) && (duration <= 300000))
+					{
+						tamper_SendProximity(duration);
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
 				}
 				else if(strstr(commandString, "CalibrateCoverProximity"))
 				{
