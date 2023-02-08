@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <dirent.h>
+#include <errno.h>
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "esp_system.h"
@@ -224,4 +226,52 @@ esp_err_t fat_eraseAndRemountPartition()
 	fat_static_mount();
 
 	return err;
+}
+
+int fat_list_directory(const char * directory_path, cJSON * result){
+	if(directory_path == NULL || result == NULL)
+		return EINVAL;
+
+	char result_line[128];
+
+	DIR * dir = opendir(directory_path);
+	if(dir == NULL){
+		snprintf(result_line, sizeof(result_line), "Unable to open '%s' directory: %s", directory_path, strerror(errno));
+		cJSON_AddStringToObject(result, "error", result_line);
+		return errno;
+	}
+
+	errno = 0;
+
+	struct dirent * dp = readdir(dir);
+	cJSON * list = cJSON_CreateArray();
+	if(list == NULL){
+		ESP_LOGE(TAG, "Unable to create directory list");
+		return ENOMEM;
+	}
+
+	while(dp != NULL){
+		if(dp->d_type == DT_REG || dp->d_type == DT_DIR){
+			snprintf(result_line, sizeof(result_line), "%-9s: %.12s", (dp->d_type == DT_REG) ? "File" : "Directory", dp->d_name);
+			if(cJSON_AddItemToArray(list, cJSON_CreateString(result_line)) != true){
+				ESP_LOGE(TAG, "Unable to add entry to directory listing");
+			}
+		}
+		dp = readdir(dir);
+	}
+
+	if(errno != 0){
+		snprintf(result_line, sizeof(result_line), "Unable to get next directory entry: %s", strerror(errno));
+		cJSON_AddStringToObject(result, "error", result_line);
+	}
+
+	closedir(dir);
+	if(cJSON_AddItemReferenceToObject(result, "entries", list) != true){
+		ESP_LOGE(TAG, "Unable to add directory list to result");
+
+		cJSON_Delete(list);
+		return ENOMEM;
+	}
+
+	return 0;
 }
