@@ -78,7 +78,7 @@ bool offlineSession_CheckFilesSystem()
 	return deletedOK; //True if both bools are OK
 }
 
-bool firstcreate = true;
+//bool firstcreate = true;
 static FILE *testFile = NULL;
 bool offlineSession_test_CreateFile()
 {
@@ -89,18 +89,19 @@ bool offlineSession_test_CreateFile()
 
 	testFile = fopen("/offs/testfile.bin", "wb+");
 
-	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
+	if((testFile == NULL) || (errno != 0))
+		ESP_LOGE(TAG, "#### Create file errno: fp: 0x%p %i: %s", testFile, errno, strerror(errno));
 
-	//if(testFile == NULL)
-	if((testFile == NULL) || (firstcreate == true))
+	//if((testFile == NULL) || (firstcreate == true))
+	if(testFile == NULL)
 	{
-		firstcreate = false;
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " New file = NULL, %i:%s,", errno, strerror(errno));
+		//firstcreate = false;
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "New file = NULL, %i:%s,", errno, strerror(errno));
 		return false;
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " New file = 0x%08x", (unsigned int)testFile);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "New file = 0x%08x", (unsigned int)testFile);
 		fclose(testFile);
 	}
 
@@ -172,6 +173,10 @@ bool offlineSession_test_DeleteFile()
 }
 
 
+void offlineSession_ClearDiagnostics()
+{
+	memset(fileDiagnostics, 0, sizeof(fileDiagnostics));
+}
 
 char * offlineSession_GetDiagnostics()
 {
@@ -185,10 +190,10 @@ bool offlineSession_FileSystemVerified()
 	return isFileSystemOK;
 }
 
-static bool fileSystemCorrected = true;
+static bool fileSystemCorrected = false;
 bool offlineSession_FileSystemCorrected()
 {
-	return fileSystemCorrected = false;
+	return fileSystemCorrected;
 }
 
 /*
@@ -220,13 +225,22 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 			isFileSystemOK = offlineSession_test_CreateFile();
 			if(isFileSystemOK)
+			{
 				fileSystemCorrected = offlineSession_test_DeleteFile();
+				snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " fileSystemCorrected: %i", fileSystemCorrected);
+			}
+		}
+		else
+		{
+			snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " EraseAndRemount failed");
 		}
 		ESP_LOGW(TAG, "FILE SYSTEM CORRECTED");
 	}
 	else
 	{
 		bool deletedOK = offlineSession_test_DeleteFile();
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Removed: %i", deletedOK);
+
 		if(deletedOK == false)
 			ESP_LOGE(TAG, "Removing testfile failed");
 	}
@@ -248,16 +262,20 @@ bool offlineSession_eraseAndRemountPartition()
 	{
 		ESP_LOGI(TAG, "Unmounting files-filesystem");
 		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Unm: %i,", err);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " UnmErr: %i,", err);
 		if(err != ESP_OK)
 			ESP_LOGE(TAG, "Unmounting failed: %i", err);
 
 		err = esp_partition_erase_range(part, 0, part->size);
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Erase: %i,", err);
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " EraseErr: %i,", err);
 		if(err != ESP_OK)
 		{
 			ESP_LOGE(TAG, "Erase failed: %i", err);
 			return false;
+		}
+		else
+		{
+			ESP_LOGI(TAG, "Erase files-partition OK");
 		}
 
 		mounted = false;

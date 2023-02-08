@@ -2443,21 +2443,45 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				sessionHandler_SendRelayStates();
 				responseStatus = 200;
 			}
-
-			else if(strstr(commandString, "CalibrateCoverProximity"))
+			else if(strstr(commandString, "CoverProximity"))
 			{
-				esp_err_t err = I2CCalibrateCoverProximity();
+				if(strstr(commandString, "SetCoverProximity "))
+				{
+					int newProxValue = 0;
+					sscanf(&commandString[20], "%d", &newProxValue);
+					if((newProxValue >= 0) && (newProxValue <= 1000))
+					{
+						storage_Set_cover_on_value(newProxValue);
+					}
+				}
+				else if(strstr(commandString, "GetCoverProximity"))
+				{
 
-				switch(err){
-				case ESP_OK:
+					char buf[50];
+					snprintf(buf, 50, "CoverPriximity: %i", storage_Get_cover_on_value());
+
+					publish_debug_telemetry_observation_Diagnostics(buf);
 					responseStatus = 200;
-					break;
-				case ESP_FAIL:
-					responseStatus = 500;
-					break;
-				case ESP_ERR_NOT_SUPPORTED:
-					responseStatus = 501; // TODO: See if more appropriate status code exist. (405?)
-					break;
+				}
+				else if(strstr(commandString, "PrintCoverProximity"))
+				{
+
+				}
+				else if(strstr(commandString, "CalibrateCoverProximity"))
+				{
+					esp_err_t err = I2CCalibrateCoverProximity();
+
+					switch(err){
+					case ESP_OK:
+						responseStatus = 200;
+						break;
+					case ESP_FAIL:
+						responseStatus = 500;
+						break;
+					case ESP_ERR_NOT_SUPPORTED:
+						responseStatus = 501; // TODO: See if more appropriate status code exist. (405?)
+						break;
+					}
 				}
 			}
 			else if(strstr(commandString, "pppoff"))
@@ -2577,30 +2601,35 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				if(strstr(commandString, "FixPartitionFilesCheck"))
 				{
+					offlineSession_ClearDiagnostics();
 					offlineSession_CheckFilesSystem();
 					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 					responseStatus = 200;
 				}
 				else if(strstr(commandString, "FixPartitionFilesErase"))
 				{
+					offlineSession_ClearDiagnostics();
 					offlineSession_eraseAndRemountPartition();
 					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 					responseStatus = 200;
 				}
 				else if(strstr(commandString, "FixPartitionFilesCorrect"))
 				{
+					offlineSession_ClearDiagnostics();
 					offlineSession_CheckAndCorrectFilesSystem();
 					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 					responseStatus = 200;
 				}
 				else if(strstr(commandString, "FixPartitionDiskCheck"))
 				{
+					fat_ClearDiagnostics();
 					fat_CheckFilesSystem();
 					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
 					responseStatus = 200;
 				}
 				else if(strstr(commandString, "FixPartitionDiskErase"))
 				{
+					fat_ClearDiagnostics();
 					fat_eraseAndRemountPartition();
 					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
 					responseStatus = 200;
@@ -2609,6 +2638,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					responseStatus = 400;
 				}
+			}
+			else if(strstr(commandString, "GetFileDiagnostics"))
+			{
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+				responseStatus = 200;
 			}
 		}
 	}

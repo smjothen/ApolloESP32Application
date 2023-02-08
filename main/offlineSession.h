@@ -11,7 +11,7 @@ void offlineSession_Init();
 bool offlineSession_CheckFilesSystem();
 bool offlineSession_test_CreateFile();
 bool offlineSession_test_DeleteFile();
-//bool offlineSession_Factorytest_DeleteFile();
+void offlineSession_ClearDiagnostics();
 char * offlineSession_GetDiagnostics();
 bool offlineSession_FileSystemVerified();
 bool offlineSession_CheckAndCorrectFilesSystem();

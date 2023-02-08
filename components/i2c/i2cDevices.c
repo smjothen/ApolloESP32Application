@@ -332,9 +332,9 @@ enum tamper_status_id{
  * - cover off: around 0x0028
  */
 #define PROXIMITY_COVER_ON_MARGIN 0x30
-#define PROXIMITY_ON_OFF_DELAY 5 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
+#define PROXIMITY_ON_OFF_DELAY 3 // Delay between change detected and state updated if no other change is detected. Prevents rapid change or uncertanty of measurement
 
-static uint16_t proximity_cover_on_value = 0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
+static uint16_t proximity_cover_on_value = 0xB2; //178-48 = 130 //0xd0; // expected value when cover is on. Should be calibrated. Overwritten by value in storage during configuration.
 
 enum tamper_status_id tamper_status = eTAMPER_STATUS_DISABLED;
 
@@ -524,8 +524,6 @@ static void i2cDevice_task(void *pvParameters)
 		}
 	}
 
-	//Temporary for TUV-SUD
-	tamper_status = eTAMPER_STATUS_DISABLED;
 
 	while (true)
 	{

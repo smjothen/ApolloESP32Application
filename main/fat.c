@@ -204,6 +204,11 @@ void fat_static_unmount()
 
 static char fatDiagnostics[150] = {0};
 
+void fat_ClearDiagnostics()
+{
+	memset(fatDiagnostics, 0, sizeof(fatDiagnostics));
+}
+
 char * fat_GetDiagnostics()
 {
 	return fatDiagnostics;
