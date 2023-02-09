@@ -2416,7 +2416,8 @@ static void get_local_list_version_cb(const char * unique_id, const char * actio
 	}
 }
 
-const char known_vendors[0][256]; // 0 known vendors with type CiString255Type
+#define KNOWN_VENDOR_COUNT 0
+const char known_vendors[KNOWN_VENDOR_COUNT][256]; // 0 known vendors with type CiString255Type
 
 static void data_transfer_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	if(!cJSON_HasObjectItem(payload, "vendorId")){
@@ -2441,14 +2442,14 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 	}
 
 	bool found_match = false;
-
-	for(size_t i = 0; i < sizeof(known_vendors); i++){
+#if KNOWN_VENDOR_COUNT > 0
+	for(size_t i = 0; i < KNOWN_VENDOR_COUNT; i++){
 		if(strcmp(vendor_id_json->valuestring, known_vendors[i]) == 0){
 			found_match = true;
 			break;
 		}
 	}
-
+#endif /* KNOWN_VENDOR_COUNT > 0 */
 	if(found_match == false){
 		cJSON * response = ocpp_create_data_transfer_confirmation(unique_id, OCPP_DATA_TRANSFER_STATUS_UNKNOWN_VENDOR_ID, NULL);
 		if(response == NULL){

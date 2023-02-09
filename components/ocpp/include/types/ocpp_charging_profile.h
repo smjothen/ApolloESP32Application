@@ -100,4 +100,6 @@ void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile)
 struct ocpp_charging_profile * ocpp_get_default_charging_profile(enum ocpp_charging_profile_purpose purpose);
 
 cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charging_schedule);
+
+bool ocpp_period_is_equal_charge(const struct ocpp_charging_schedule_period * p1, const struct ocpp_charging_schedule_period * p2);
 #endif /*OCPP_CHARGING_PROFILE_H*/

@@ -18,7 +18,7 @@ struct ocpp_charging_schedule_period_list * ocpp_extend_period_list(struct ocpp_
 	while(period_list->next != NULL)
 		period_list = period_list->next;
 
-	if(period_list->value.limit == period->limit && period_list->value.number_phases){ // period can be merged with last period in list
+	if(ocpp_period_is_equal_charge(&period_list->value, period)){ // period can be merged with last period in list
 		return period_list;
 	}
 
@@ -585,4 +585,19 @@ cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charg
 error:
 	cJSON_Delete(payload);
 	return NULL;
+}
+
+bool ocpp_period_is_equal_charge(const struct ocpp_charging_schedule_period * p1, const struct ocpp_charging_schedule_period * p2){
+
+	if(p1 == p2)
+		return true;
+
+	if(p1 != NULL && p2 != NULL
+		&& p1->limit == p2->limit
+		&& p1->number_phases == p2->number_phases){
+
+		return true;
+	}
+
+	return false;
 }

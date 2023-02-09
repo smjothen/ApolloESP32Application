@@ -1178,7 +1178,7 @@ static time_t get_when_schedule_is_active(time_t relative_start, int relative_of
 }
 
 /**
- * @brief copy the period list from a profile at an offset into a new list with a relative offset.
+ * @brief copy the period list from a profile at an offset into a new list with a relative offset. Its the callers resposibility to free the returned value.
  *
  * @param start time Relative start time.
  * @param offset The initial offset from relative start in the profils period list from witch to start copying.
@@ -1189,10 +1189,10 @@ static time_t get_when_schedule_is_active(time_t relative_start, int relative_of
  * @param offset_end_out Output parameter to indicate when output list may not be valid.
  * @param copy_count_out Output parameter with number of elemets copied.
  *
- * @return pointer to last period.
+ * @return pointer to copied period list.
  */
-struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int offset, time_t end, struct ocpp_charging_profile * profile, size_t max_copies,
-							struct ocpp_charging_schedule_period_list * period_out, int * offset_end_out, int * copy_count_out){
+struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int offset, time_t end, struct ocpp_charging_profile * profile,
+							size_t max_copies, int * offset_end_out, int * copy_count_out){
 
 	struct ocpp_charging_schedule_period_list * period = &profile->charging_schedule.schedule_period;
 	struct ocpp_charging_schedule_period_list * period_last = NULL;
@@ -1205,19 +1205,26 @@ struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int off
 		return NULL;
 	}
 
+	struct ocpp_charging_schedule_period_list * copy = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
+	if(copy == NULL){
+		ESP_LOGE(TAG, "Unable to create buffer for copying period list");
+		return NULL;
+	}
+
+	struct ocpp_charging_schedule_period_list * ret = copy; // save the head of the copy for return.
+
 	int offset_diff = offset - abs_offset;
 	while(period != NULL && period->value.start_period < abs_offset){ // Move period pointer to first within requested range
 		period_last = period;
 		period = period->next;
 	}
 
-	// TODO: make sure the last entry in the period_out is merged with the first added one if they are the same
 	if(period != NULL && period->value.start_period == abs_offset){
 		ESP_LOGI(TAG, "Offset on start_period");
 
-		period_out->value.start_period = offset;
-		period_out->value.limit = period->value.limit;
-		period_out->value.number_phases = period->value.number_phases;
+		copy->value.start_period = offset;
+		copy->value.limit = period->value.limit;
+		copy->value.number_phases = period->value.number_phases;
 
 		period_last = period;
 		period = period->next;
@@ -1225,9 +1232,9 @@ struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int off
 	} else { // requested offset is part of previous list entry
 		ESP_LOGI(TAG, "Offset on start_period");
 
-		period_out->value.start_period = offset;
-		period_out->value.limit = period_last->value.limit;
-		period_out->value.number_phases = period_last->value.number_phases;
+		copy->value.start_period = offset;
+		copy->value.limit = period_last->value.limit;
+		copy->value.number_phases = period_last->value.number_phases;
 	}
 
 	(*copy_count_out)++;
@@ -1243,14 +1250,14 @@ struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int off
 	while(period != NULL && *copy_count_out < max_copies // Copy while input exist and output not exceeded,
 		&& period->value.start_period < *offset_end_out + offset_diff){ // Valid offset not exceeded
 
-		struct ocpp_charging_schedule_period_list * new_period = ocpp_extend_period_list(period_out, &period->value);
+		struct ocpp_charging_schedule_period_list * new_period = ocpp_extend_period_list(copy, &period->value);
 
 		if(new_period == NULL){
 			ESP_LOGE(TAG, "Unable to copy period");
 			break;
 		}else{
 			new_period->value.start_period = period->value.start_period + offset_diff;
-			period_out = new_period;
+			copy = new_period;
 
 			(*copy_count_out)++;
 
@@ -1263,7 +1270,7 @@ struct ocpp_charging_schedule_period_list * copy_period_at(time_t start, int off
 	if(period != NULL && period->value.start_period + offset_diff < *offset_end_out)
 		*offset_end_out = period->value.start_period + offset_diff;
 
-	return period_out;
+	return ret;
 }
 
 /**
@@ -1312,20 +1319,38 @@ int compute_range(time_t start, int offset, time_t end, int * transaction_id,
 
 		}else{ // If current profile is active
 
-			if(empty == false){
-				period_list_out->next = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
-				if(period_list_out->next == NULL){
-					ESP_LOGE(TAG, "Unable to allocate period list");
-					goto cleanup;
-				}
-				period_list_out = period_list_out->next;
+			int copy_count = 0;
+			struct ocpp_charging_schedule_period_list * period_section = copy_period_at(start, offset,  end, current_profile, max_periods,
+												&offset, &copy_count);
+			if(period_section == NULL){
+				ESP_LOGE(TAG, "Unable to copy period");
+				goto cleanup;
 			}
 
-			int copy_count = 0;
-			period_list_out = copy_period_at(start, offset,  end, current_profile, max_periods,
-							period_list_out, &offset, &copy_count);
+			if(empty){
+				period_list_out->value.start_period = period_section->value.start_period;
+				period_list_out->value.limit = period_section->value.limit;
+				period_list_out->value.number_phases = period_section->value.number_phases;
+
+				empty = false;
+			}
+
+			if(ocpp_period_is_equal_charge(&period_list_out->value, &period_section->value)){
+				struct ocpp_charging_schedule_period_list * tmp = period_section;
+				period_section = period_section->next;
+
+				copy_count--;
+
+				free(tmp);
+			}
+
 			max_periods -= copy_count;
-			empty = false;
+
+			period_list_out->next = period_section;
+
+			while(period_list_out->next != NULL)
+				period_list_out = period_list_out->next;
+
 		}
 
 		while(start + offset >= end && index > 0){ // End for current profile and higher priority profile exist
@@ -1593,9 +1618,28 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 	int offset_max = 0;
 
 	int copy_count = 0;
-	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_tx, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &tx_schedule.schedule_period, &offset_tx, &copy_count);
+	struct ocpp_charging_schedule_period_list * periods = copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_tx, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &offset_tx, &copy_count);
+	if(periods == NULL){
+		ESP_LOGE(TAG, "Unable to copy period when creating composite schedule");
+		return ESP_FAIL;
+	}
+
+	tx_schedule.schedule_period.value.start_period = periods->value.start_period;
+	tx_schedule.schedule_period.value.limit = periods->value.limit;
+	tx_schedule.schedule_period.value.number_phases = periods->value.number_phases;
+	tx_schedule.schedule_period.next = periods->next;
+
 	copy_count = 0;
-	copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period, &offset_max, &copy_count);
+	periods = copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &offset_max, &copy_count);
+	if(periods == NULL){
+		ESP_LOGE(TAG, "Unable to copy period when creating composite schedule");
+		return ESP_FAIL;
+	}
+
+	max_schedule.schedule_period.value.start_period = periods->value.start_period;
+	max_schedule.schedule_period.value.limit = periods->value.limit;
+	max_schedule.schedule_period.value.number_phases = periods->value.number_phases;
+	max_schedule.schedule_period.next = periods->next;
 
 	tx_schedule.start_schedule = malloc(sizeof(time_t));
 	max_schedule.start_schedule = malloc(sizeof(time_t));
@@ -1712,7 +1756,6 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 
 	if(reply != NULL){
 		send_call_reply(reply);
-		cJSON_Delete(reply);
 	}else{
 		ESP_LOGE(TAG, "Unable to create ocpp error for not implemented");
 		err = eOCPPJ_ERROR_INTERNAL;
@@ -1736,7 +1779,6 @@ error:
 		ESP_LOGE(TAG, "Unable to create error reply");
 	}else{
 		send_call_reply(error_reply);
-		cJSON_Delete(error_reply);
 	}
 }
 
@@ -1938,9 +1980,7 @@ static void ocpp_smart_task(){
 				}
 			}
 
-			if(last_min != current_min
-				|| current_period.limit != last_period.limit
-				|| current_period.number_phases != last_period.number_phases){
+			if(last_min != current_min || !ocpp_period_is_equal_charge(&current_period, &last_period)){
 
 				ESP_LOGI(TAG, "Charging variables changed: min: %f, limit: %f, phases: %d",
 					current_min, current_period.limit, current_period.number_phases);
