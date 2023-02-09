@@ -505,7 +505,7 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 			goto error;
 		}
 
-		// TODO: check decoded length compared to length of each expected ocpp_charging_scheduøe_period
+		// TODO: check decoded length compared to length of each expected ocpp_charging_schedule_period
 		failed_from = eFROM_PERIOD;
 
 		struct ocpp_charging_schedule_period_list ** entry = &profile->charging_schedule.schedule_period.next;
@@ -1537,8 +1537,7 @@ void combine_schedules(struct ocpp_charging_schedule * schedule1, struct ocpp_ch
 	*schedule_out->start_schedule = *schedule1->start_schedule;
 
 	schedule_out->charge_rate_unit = eOCPP_CHARGING_RATE_A;
-	// TODO: Check if the combined schedule should have the lowest or highest minChargingRate
-	schedule_out->min_charging_rate = (schedule1->min_charging_rate > schedule2->min_charging_rate) ? schedule1->min_charging_rate : schedule2->min_charging_rate;
+	schedule_out->min_charging_rate = (schedule1->min_charging_rate < schedule2->min_charging_rate) ? schedule1->min_charging_rate : schedule2->min_charging_rate;
 
 	struct ocpp_charging_schedule_period_list * list1 = &schedule1->schedule_period;
 	struct ocpp_charging_schedule_period_list * list2 = &schedule2->schedule_period;
@@ -1741,8 +1740,6 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 
 	*max_schedule.duration = compute_range(start_time, 0, start_time+duration, NULL,
 					next_max_profile, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &max_schedule.schedule_period);
-
-	//TODO: Duration should be limited if max periods exceeded.
 
 	struct ocpp_charging_schedule composite_schedule = {0};
 	combine_schedules(&tx_schedule, &max_schedule, &composite_schedule);
