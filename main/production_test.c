@@ -311,7 +311,7 @@ int prodtest_send(enum test_state state, enum test_item item, char *message){
 	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
 
 	/// Debug for testing subset of factory tests without socket connection
-	ESP_LOGW(TAG, "%s", payload);
+	//ESP_LOGW(TAG, "%s", payload);
 	//return 0;
 
 	if(prodtest_sock_send(payload)<0){
@@ -1121,15 +1121,10 @@ int test_disk_partition(){
 		if(created)
 			deleted = fat_Factorytest_DeleteFile();
 
-		if((created == false) || (deleted == false))
-		{
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition failed");
-		}
-		else
-		{
-			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition retry OK");
-			diskPartitionOk = true;
-		}
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition failed");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk formatted. Restart required");
+
+		diskPartitionOk = false;
 	}
 	else
 	{
@@ -1181,6 +1176,8 @@ int test_files_partition(){
 		}
 		else
 		{
+			snprintf(payload, sizeof(payload), "%s", offlineSession_GetDiagnostics());
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, payload);
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition retry OK");
 			filesPartitionOk = true;
 		}
@@ -1718,7 +1715,7 @@ int charge_cycle_test(){
 				return -1;
 			}
 
-			snprintf(payload, 100, "Cycle currents[%d]: %f, %.2f", i, MCU_GetCurrents(0), GetPowerMeas());
+			snprintf(payload, 100, "Cycle currents[%d]: %f A, %.2f W", i, MCU_GetCurrents(0), MCU_GetPower());
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
 
 			if(i==5){
@@ -1784,8 +1781,8 @@ int charge_cycle_test(){
 				return -1;
 			}
 
-			snprintf(payload, 100, "Cycle currents[%d]: %f, %f, %f, %.2f",
-				 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), GetPowerMeas()
+			snprintf(payload, 100, "Cycle currents[%d]: %f, %f, %f A, %.2f W",
+				 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetPower()
 			);
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
 
