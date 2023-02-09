@@ -995,6 +995,8 @@ error:
 	return LONG_MAX;
 }
 
+#define MAX_SESSION_DATA_LENGTH 16384
+
 esp_err_t readSessionData_ocpp(FILE * fp, time_t * timestamp_out, unsigned char ** session_data_out, size_t * session_data_length_out){
 	if(fread(timestamp_out, sizeof(time_t), 1, fp) != 1)
 		goto error;
@@ -1006,7 +1008,9 @@ esp_err_t readSessionData_ocpp(FILE * fp, time_t * timestamp_out, unsigned char 
 	if(base64_length == 0)
 		return ESP_ERR_NOT_FOUND;
 
-	// TODO: Set max malloc size
+	if(base64_length > MAX_SESSION_DATA_LENGTH)
+		goto error;
+
 	char * base64_buffer = malloc(sizeof(unsigned char) * base64_length);
 	if(base64_buffer == NULL)
 		goto error;
