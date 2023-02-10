@@ -202,7 +202,13 @@ esp_err_t update_charging_profile(struct ocpp_charging_profile * profile){
 		optional_period = optional_period->next;
 	}
 
-	if(optional_period_count != 0){
+	if(optional_period_count > 0){
+
+		if(optional_period_count > CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS){
+			ESP_LOGE(TAG, "Period count exceeds max count when writing to file");
+			goto error;
+		}
+
 		if(fwrite(&optional_period_count, sizeof(size_t), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to write period count");
 			goto error;
@@ -464,6 +470,11 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 			goto error;
 		}
 
+		if(periods_count == 0 || periods_count > CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS){
+			ESP_LOGE(TAG, "Read charging profile has invalid period count");
+			goto error;
+		}
+
 		size_t out_length;
 		if(fread(&out_length, sizeof(size_t), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read lenght of the base64 periods string");
@@ -505,23 +516,28 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 			goto error;
 		}
 
-		// TODO: check decoded length compared to length of each expected ocpp_charging_schedule_period
+		if(decoded_length != sizeof(struct ocpp_charging_schedule_period) * periods_count){
+			ESP_LOGE(TAG, "Unexpected length of decoded data");
+			free(periods);
+			goto error;
+		}
+
 		failed_from = eFROM_PERIOD;
 
-		struct ocpp_charging_schedule_period_list ** entry = &profile->charging_schedule.schedule_period.next;
-		*entry = NULL;
+		struct ocpp_charging_schedule_period_list * entry = &profile->charging_schedule.schedule_period;
 
 		for(size_t i = 0; i < periods_count; i++){
-			*entry = malloc(sizeof(struct ocpp_charging_schedule_period_list));
+			entry->next = malloc(sizeof(struct ocpp_charging_schedule_period_list));
+			entry = entry->next;
+
 			if(entry == NULL){
 				ESP_LOGE(TAG, "Unable to allcate memory for new period entry");
 				goto error;
 			}else{
-				(*entry)->next = NULL;
+				entry->next = NULL;
 			}
 
-			memcpy(&(*entry)->value, &periods[i], sizeof(struct ocpp_charging_schedule_period));
-			entry = &(*entry)->next;
+			memcpy(&entry->value, &periods[i], sizeof(struct ocpp_charging_schedule_period));
 		}
 	}
 
