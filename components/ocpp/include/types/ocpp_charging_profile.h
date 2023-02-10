@@ -97,6 +97,7 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
  */
 void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule, bool with_reference);
 void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile);
+void ocpp_free_charging_schedule_period_list(struct ocpp_charging_schedule_period_list * periods);
 struct ocpp_charging_profile * ocpp_get_default_charging_profile(enum ocpp_charging_profile_purpose purpose);
 
 cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charging_schedule);

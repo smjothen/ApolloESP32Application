@@ -1643,6 +1643,7 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 	tx_schedule.schedule_period.value.limit = periods->value.limit;
 	tx_schedule.schedule_period.value.number_phases = periods->value.number_phases;
 	tx_schedule.schedule_period.next = periods->next;
+	free(periods);
 
 	copy_count = 0;
 	periods = copy_period_at(relative_start, sec_since_start, LONG_MAX, profile_max, CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &offset_max, &copy_count);
@@ -1655,9 +1656,13 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 	max_schedule.schedule_period.value.limit = periods->value.limit;
 	max_schedule.schedule_period.value.number_phases = periods->value.number_phases;
 	max_schedule.schedule_period.next = periods->next;
+	free(periods);
 
-	tx_schedule.start_schedule = malloc(sizeof(time_t));
-	max_schedule.start_schedule = malloc(sizeof(time_t));
+	if(tx_schedule.start_schedule == NULL)
+		tx_schedule.start_schedule = malloc(sizeof(time_t));
+
+	if(max_schedule.start_schedule == NULL)
+		max_schedule.start_schedule = malloc(sizeof(time_t));
 
 	if(tx_schedule.start_schedule == NULL || max_schedule.start_schedule == NULL){
 		ESP_LOGE(TAG, "Unable to allocate start schedule for tx of max schedule during creation schedule");
@@ -1948,9 +1953,9 @@ static void ocpp_smart_task(){
 			if(data & eSCHEDULE_CHANGE){
 				ESP_LOGI(TAG, "Updating composite schedule");
 
-				// Re-allocate the structure to free all optional values. TODO: Change to only re-allocate when needed
-				ocpp_free_charging_schedule(schedule, true);
-				schedule = calloc(sizeof(struct ocpp_charging_schedule), 1);
+				if(schedule == NULL)
+					schedule = calloc(sizeof(struct ocpp_charging_schedule), 1);
+
 				if(schedule == NULL){
 					ESP_LOGE(TAG, "Unable to allocate memory for composite schedule");
 					goto error;
@@ -1966,6 +1971,9 @@ static void ocpp_smart_task(){
 				if(tmp_schedule_dt < 0){
 					tmp_schedule_dt = 1; // Create schedule for at least 1 second
 				}
+
+				ocpp_free_charging_schedule_period_list(schedule->schedule_period.next);
+				schedule->schedule_period.next = NULL;
 
 				create_composite_schedule(transaction_start_time, current_time - transaction_start_time, profile_tx, profile_max, schedule);
 

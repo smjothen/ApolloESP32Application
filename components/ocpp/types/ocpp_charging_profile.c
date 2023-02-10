@@ -371,16 +371,19 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 	}
 }
 
+void ocpp_free_charging_schedule_period_list(struct ocpp_charging_schedule_period_list * periods){
+	while(periods != NULL){
+		struct ocpp_charging_schedule_period_list * tmp = periods->next;
+		free(periods);
+		periods = tmp;
+	}
+}
+
 void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedule, bool with_reference){
 	if(charging_schedule == NULL)
 		return;
 
-	struct ocpp_charging_schedule_period_list * next_period = charging_schedule->schedule_period.next;
-	while(next_period != NULL){
-		struct ocpp_charging_schedule_period_list * tmp = next_period->next;
-		free(next_period);
-		next_period = tmp;
-	}
+	ocpp_free_charging_schedule_period_list(charging_schedule->schedule_period.next);
 
 	free(charging_schedule->start_schedule);
 	free(charging_schedule->duration);
