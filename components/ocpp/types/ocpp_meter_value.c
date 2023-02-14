@@ -564,6 +564,8 @@ const char * ocpp_unit_from_id(enum ocpp_unit_id id){
 		return OCPP_UNIT_OF_MEASURE_VA;
 	case eOCPP_UNIT_KVA:
 		return OCPP_UNIT_OF_MEASURE_KVA;
+	case eOCPP_UNIT_VAR:
+		return OCPP_UNIT_OF_MEASURE_VAR;
 	case eOCPP_UNIT_KVAR:
 		return OCPP_UNIT_OF_MEASURE_KVAR;
 	case eOCPP_UNIT_A:
@@ -600,6 +602,8 @@ enum ocpp_unit_id ocpp_unit_to_id(const char * unit){
 		return eOCPP_UNIT_VA;
 	}else if(strcmp(unit, OCPP_UNIT_OF_MEASURE_KVA) == 0){
 		return eOCPP_UNIT_KVA;
+	}else if(strcmp(unit, OCPP_UNIT_OF_MEASURE_VAR) == 0){
+		return eOCPP_UNIT_VAR;
 	}else if(strcmp(unit, OCPP_UNIT_OF_MEASURE_KVAR) == 0){
 		return eOCPP_UNIT_KVAR;
 	}else if(strcmp(unit, OCPP_UNIT_OF_MEASURE_A) == 0){

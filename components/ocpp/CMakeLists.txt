@@ -49,3 +49,17 @@ idf_component_register(SRCS
   INCLUDE_DIRS "./include"
   REQUIRES esp_websocket_client json fatfs zaptec_cloud utz
   )
+
+find_package(Doxygen
+  OPTIONAL_COMPONENTS dot mscgen dia
+  )
+
+if(DOXYGEN_FOUND)
+  message("Doxygen found. Adding documentation generation target for ocpp component")
+
+  doxygen_add_docs(ocpp_doc
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    )
+else (DOXYGEN_FOUND)
+  message("Consider installing doxygen for generating ocpp documentation")
+endif (DOXYGEN_FOUND)

@@ -7,13 +7,34 @@
 #include "messages/error_messages/ocpp_call_error_cb.h"
 #include "messages/result_messages/ocpp_call_result_cb.h"
 
+/** @file
+ * @brief Contains structure and functions to deal with an OCPP req call.
+ *
+ * In ocpp a call expects either a CallResult or CallError as a reply.
+ */
+
+/**
+ * @brief a call with callbacks for both CallResult and CallError
+ */
 struct ocpp_call_with_cb{
-	cJSON * call_message;
-	ocpp_result_callback result_cb;
-	ocpp_error_callback error_cb;
-	void * cb_data;
+	cJSON * call_message; ///< .req call
+	ocpp_result_callback result_cb; ///< function to be called if a matching CallResult is recieved
+	ocpp_error_callback error_cb; ///< function to be called if a matching CallError is recieved
+	void * cb_data; ///< Data to be given as a parameter to the callback function
 };
 
+/**
+ * @brief free a ocpp_call_with_cb and its message
+ *
+ * @param call the call to be freed
+ */
 void free_call_with_cb(struct ocpp_call_with_cb * call);
+
+/**
+ * @brief check if a call contains a message that comply with the OCPP json specification for a Call.
+ *
+ * @param call The call to be checked
+ * @return true if call is valid, false if not
+ */
 bool check_call_with_cb_validity(struct ocpp_call_with_cb * call);
 #endif /*OCPP_CALL_WITH_CB_H*/

@@ -5,8 +5,18 @@
 
 #include "messages/call_messages/ocpp_call_cb.h"
 
+/** @file
+ * @brief Websocket event handler for OCPP.
+ *
+ * Expects CS initiated .req messages and .conf replies to CP initiated messages.
+ */
+
 /**
  * @brief set a callback for a given ocpp request sent by the central system.
+ *
+ * @param action_id id of the action to that will initiate the callback.
+ * @param call_cb the callback function to excecute when request is receive.
+ * @param cb_data data to send as a parameter to the callback function.
  */
 int attach_call_cb(enum ocpp_call_action_id action_id, ocpp_call_callback call_cb, void * cb_data);
 
@@ -33,9 +43,12 @@ void clean_listener();
  */
 bool ocpp_is_connected();
 
+/**
+ * @brief events that the listener can send with xTaskNotify
+ */
 enum ocpp_websocket_event{
-	eOCPP_WEBSOCKET_CONNECTION_CHANGED = 1<<0, // Websocket connected or disconnected
-	eOCPP_WEBSOCKET_FAILURE = 1<<1,
-	eOCPP_WEBSOCKET_RECEIVED_MATCHING = 1<<2,
+	eOCPP_WEBSOCKET_CONNECTION_CHANGED = 1<<0, ///< Websocket changed to connected or disconnected
+	eOCPP_WEBSOCKET_FAILURE = 1<<1, ///< A failure occured in the websocket
+	eOCPP_WEBSOCKET_RECEIVED_MATCHING = 1<<2, ///< A .conf matching the active call was received
 };
 #endif /*OCPP_LISTENER_H*/

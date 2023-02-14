@@ -5,7 +5,14 @@
 
 #include <cJSON.h>
 
-// Defines for recognized/implemented keys in GetConfiguration and ChangeConfiguration
+/** @file
+* @brief Contains the OCPP type KeyValue, the related configuration value and helper functions
+*/
+
+/** @name KeyValue
+* @brief Identifiers for each configuration value
+*/
+///@{
 // Core profile keys
 #define OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS "AuthorizeRemoteTxRequests"
 #define OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL "ClockAlignedDataInterval"
@@ -39,16 +46,32 @@
 #define OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED "LocalAuthListEnabled"
 #define OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH "LocalAuthListMaxLength"
 #define OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH "SendLocalListMaxLength"
+///@}
 
+/// The number of unique config keys
 #define OCPP_CONFIG_KEY_COUNT 31
 
+/**
+ * @brief Contains information about a specific configuration key. It is returned in GetConfiguration.conf.
+ */
 struct ocpp_key_value{
-	char key[34]; //ocpp defines key as CiString50Type, but longest key in 1.6 core is 33 +'\0'
-	bool readonly;
-	char * value;
+	char key[34]; ///< "Required" NOTE: the specification uses CiString50Type but longest core is 33 and longest read only is 39
+	bool readonly; ///< "Required. False if the value can be set with the ChangeConfiguration message"
+	char * value; ///< "Optional. If key is known but not set, this field may be absent"
 };
 
+/**
+ * @brief converts key value to JSON equivalent
+ *
+ * @param key_value value to convert
+ */
 cJSON * create_key_value_json(struct ocpp_key_value key_value);
+
+/**
+ * @brief check if given key is a valid key
+ *
+ * @param key value to check if valid.
+ */
 bool is_configuration_key(const char * key);
 
 #endif /*OCPP_KEY_VALUE_H*/
