@@ -2532,35 +2532,38 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		}
 	}
 
-	char trigger_status[15] = OCPP_TRIGGER_MESSAGE_STATUS_REJECTED;
-
-	const char * requested_message = trigger_message_json->valuestring;
-	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0
-		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_HEARTBEAT) == 0
-		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_METER_VALUES) == 0
-		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_STATUS_NOTIFICATION) == 0){
-
-		strcpy(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED);
-
-	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION ) == 0
-		|| strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
-
-		strcpy(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_NOT_IMPLEMENTED);
-	}
-
-	cJSON * conf =  ocpp_create_trigger_message_confirmation(unique_id, trigger_status);
+	cJSON * conf =  ocpp_create_trigger_message_confirmation(unique_id, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED);
 	if(conf == NULL){
 		ESP_LOGE(TAG, "Unable to create confirmation for trigger message");
 	}else{
 		send_call_reply(conf);
 	}
 
-	if(strcmp(trigger_status, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED) != 0){
-		return;
-	}
+	const char * requested_message = trigger_message_json->valuestring;
 
 	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0){
 		enqueue_boot_notification();
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION) == 0){
+		send_diagnostics_status_notification();
+
+	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
+		cJSON * call = NULL;
+		if(otaIsRunning()){
+			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_DOWNLOADING);
+
+		}else{
+			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_IDLE);
+		}
+
+		if(call == NULL) {
+			ESP_LOGE(TAG, "Unable to create firmware status notification");
+		}else{
+			if(enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
+				ESP_LOGE(TAG, "Unable to enqueue triggered firmware status notification");
+				cJSON_Delete(call);
+			}
+		}
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_HEARTBEAT) == 0){
 		ocpp_heartbeat();
@@ -2871,6 +2874,7 @@ int set_firmware_update_state(){
 		if(call != NULL){
 			if(enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
 				ESP_LOGE(TAG, "Unable to enqueue firmware_status_notification");
+				cJSON_Delete(call);
 			}
 		}else{
 			ESP_LOGE(TAG, "Expected firmware status call");

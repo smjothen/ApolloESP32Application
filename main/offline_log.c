@@ -290,22 +290,25 @@ int deleteOfflineLog()
 
 enum ocpp_diagnostics_status diagnostics_status = eOCPP_DIAGNOSTICS_STATUS_IDLE;
 
+void send_diagnostics_status_notification(){
+	const char * status = ocpp_diagnostics_status_from_id(diagnostics_status);
+	cJSON * status_json = ocpp_create_diagnostics_status_notification_request(status);
+
+	if(status_json == NULL || enqueue_call_immediate(status_json, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
+		ESP_LOGE(TAG, "Unable to send or create diagnostics status notification for '%s'", status);
+	}
+}
+
 void update_diagnostics_status(enum ocpp_diagnostics_status new_status){
 	if(new_status != diagnostics_status){
-		if(new_status != eOCPP_DIAGNOSTICS_STATUS_IDLE){
+		diagnostics_status = new_status;
 
-			const char * status = ocpp_diagnostics_status_from_id(new_status);
-			cJSON * status_json = ocpp_create_diagnostics_status_notification_request(status);
-
-			if(status_json == NULL || enqueue_call_immediate(status_json, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
-				ESP_LOGE(TAG, "Unable to send or create diagnostics status notification for '%s'", status);
-			}
+		if(diagnostics_status != eOCPP_DIAGNOSTICS_STATUS_IDLE){
+			send_diagnostics_status_notification();
 		}
 
-		if(new_status == eOCPP_DIAGNOSTICS_STATUS_UPLOADED || new_status == eOCPP_DIAGNOSTICS_STATUS_UPLOAD_FAILED){
+		if(diagnostics_status == eOCPP_DIAGNOSTICS_STATUS_UPLOADED || diagnostics_status == eOCPP_DIAGNOSTICS_STATUS_UPLOAD_FAILED){
 			diagnostics_status = eOCPP_DIAGNOSTICS_STATUS_IDLE;
-		}else{
-			diagnostics_status = new_status;
 		}
 	}
 }
