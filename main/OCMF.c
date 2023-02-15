@@ -13,6 +13,7 @@
 #include "protocol_task.h"
 #include "offlineSession.h"
 #include <math.h>
+#include "zaptec_cloud_observations.h"
 
 static const char *TAG = "OCMF           ";
 
@@ -134,9 +135,11 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 	if(CompletedSessionObject == NULL)
 	{
 		xSemaphoreGive(ocmf_lock);
+		offlineSession_AppendLogString("3 CS_Object == NULL");
 		return ESP_ERR_NOT_FOUND;
 	}
 
+	offlineSession_AppendLogString("3 CS_Object OK");
 
 	/// 2. ..then get OCMF log entires
 	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
@@ -190,7 +193,12 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		{
 			cJSON_ReplaceItemInObject(CompletedSessionObject, "ReliableClock", cJSON_CreateBool(false));
 			ESP_LOGW(TAG, "Cleared ReliableClock");
-			//ESP_LOGW(TAG, "IsBool E: %i", cJSON_IsBool(cJSON_GetObjectItem(CompletedSessionObject,"ReliableClock")));
+
+			/// Must set an EndDateTime(for Cloud to parse) even tough the time is incorrect. Set time of reporting.
+			char lastEdt[33];
+			GetUTCTimeString(lastEdt, NULL, NULL);
+			cJSON_ReplaceItemInObject(CompletedSessionObject, "EndDateTime", cJSON_CreateString(lastEdt));
+			ESP_LOGE(TAG, "Set final EDT %s", lastEdt);
 		}
 		//ESP_LOGW(TAG, "EndDateTime length: %i", edtLength);
 

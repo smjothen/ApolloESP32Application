@@ -55,6 +55,7 @@ static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
 static char fileDiagnostics[150] = {0};
+static char sequenceDiagnostics[250] = {0};
 
 void offlineSession_Init()
 {
@@ -64,6 +65,46 @@ void offlineSession_Init()
 	offlineSession_mount_folder();
 }
 
+
+void offlineSession_AppendLogString(char * stringToAdd)
+{
+	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s\r\n", stringToAdd);
+}
+
+void offlineSession_AppendLogStringWithInt(char * stringToAdd, int value)
+{
+	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s %i\r\n", stringToAdd, value);
+}
+
+void offlineSession_AppendLogStringWithIntInt(char * stringToAdd, int value1, int value2)
+{
+	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s %i %i\r\n", stringToAdd, value1, value2);
+}
+
+void offlineSession_AppendLogStringErr()
+{
+	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%i:%s\r\n", errno, strerror(errno));
+}
+
+
+void offlineSession_AppendLogLength()
+{
+	int len = 0;
+	if(sequenceDiagnostics != NULL)
+		len = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "(%i)", len);
+}
+
+char * offlineSession_GetLog()
+{
+	return sequenceDiagnostics;
+}
+
+void offlineSession_ClearLog()
+{
+	memset(sequenceDiagnostics, 0, sizeof(sequenceDiagnostics));
+}
 
 
 bool offlineSession_CheckFilesSystem()
@@ -635,6 +676,17 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	if(sessionFile == NULL)
 	{
 		ESP_LOGE(TAG, "Could not create or open sessionFile");
+		if(createNewFile)
+		{
+			offlineSession_AppendLogString("1 sessionFile = NULL");
+			offlineSession_AppendLogStringErr();
+		}
+		else
+		{
+			offlineSession_AppendLogString("2 Reopen sessionFile = NULL");
+			offlineSession_AppendLogStringErr();
+		}
+
 		xSemaphoreGive(offs_lock);
 		return;
 	}
@@ -828,6 +880,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
+		offlineSession_AppendLogString("3 Read:CS SEM FAIL");
 		return NULL;
 	}
 
@@ -837,6 +890,8 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	if(sessionFile == NULL)
 	{
+		offlineSession_AppendLogString("3 Read:sessionFile == NULL");
+		offlineSession_AppendLogStringErr();
 		ESP_LOGE(TAG, "Print: sessionFile == NULL");
 		xSemaphoreGive(offs_lock);
 		return NULL;
@@ -868,8 +923,11 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 		fclose(sessionFile);
 		free(base64SessionData);
 		xSemaphoreGive(offs_lock);
+		offlineSession_AppendLogStringWithIntInt("3 Read:CS CRC FAIL", (int)crcRead, (int)crcCalc);
 		return NULL;
 	}
+
+	offlineSession_AppendLogStringWithIntInt("3 Read:CS CRC OK", (int)crcRead, (int)crcCalc);
 
 	size_t outLen = 0;
 	char *sessionDataCreated = (char*)base64_decode(base64SessionData, base64SessionDataLen, &outLen);
@@ -987,6 +1045,10 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 				cJSON_AddItemToArray(entryArray, logArrayElement);
 			}
+			else
+			{
+				offlineSession_AppendLogStringWithIntInt("3 Read:CSH CRC FAIL", (int)crcCalc, (int)packetCrc);
+			}
 		}
 	}
 
@@ -1049,6 +1111,9 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 
 	/// Search for file number to use for this session
 	activeFileNumber = offlineSession_FindNewFileNumber();
+
+	offlineSession_AppendLogStringWithInt("1 ActiveFile: ", activeFileNumber);
+
 	if(activeFileNumber < 0)
 	{
 		return ESP_FAIL;
@@ -1058,6 +1123,8 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 
 	//Save the session structure to the file including the start 'B' message
 	offlineSession_UpdateSessionOnFile(sessionData, true);
+
+	offlineSession_AppendLogString("1 sessionFile created");
 
 	return ret;
 }

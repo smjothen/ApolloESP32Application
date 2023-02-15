@@ -2236,6 +2236,41 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				offlineSession_DeleteAllFiles();
 				responseStatus = 200;
 			}
+			else if(strstr(commandString,"PrintOffsLog") != NULL)
+			{
+				ESP_LOGW(TAG, "SequenceLog: \r\n%s", offlineSession_GetLog());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetNrOfSessions") != NULL)
+			{
+				char sbuf[12] = {0};
+				snprintf(sbuf, 12,"Files: %i", offlineSession_FindNrOfFiles());
+				publish_debug_telemetry_observation_Diagnostics(sbuf);
+
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetOfflineFile ") != NULL)
+			{
+				int fileNo = -1;
+				sscanf(&commandString[17], "%d", &fileNo);
+				if((fileNo >= 0) && (fileNo < 100))
+				{
+					cJSON * csObject = offlineSession_ReadChargeSessionFromFile(fileNo);
+					if(csObject == NULL)
+					{
+						publish_debug_telemetry_observation_Diagnostics("csObject == NULL");
+					}
+					else
+					{
+						char *buf = cJSON_PrintUnformatted(csObject);
+						publish_debug_telemetry_observation_Diagnostics(buf);
+						free(csObject);
+
+					}
+				}
+
+				responseStatus = 200;
+			}
 			//Test Offline Sessions
 			else if(strstr(commandString,"tos ") != NULL)
 			{

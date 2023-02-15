@@ -345,7 +345,7 @@ void chargeController_ClearNextStartTime()
 	}
 	else
 	{
-		ESP_LOGW(TAG, "Start time already cleared");
+		ESP_LOGI(TAG, "Start time already cleared");
 	}
 }
 
