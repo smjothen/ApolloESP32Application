@@ -1878,6 +1878,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				storage_SaveConfiguration();
 				responseStatus = 200;
 			}
+			if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eALWAYS_SEND_SESSION_DIAGNOSTICS);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
 
 			else if(strstr(commandString,"OverrideNetworkType") != NULL)
 			{
@@ -2241,7 +2247,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				ESP_LOGW(TAG, "SequenceLog: \r\n%s", offlineSession_GetLog());
 				responseStatus = 200;
 			}
-			else if(strstr(commandString,"GetNrOfSessions") != NULL)
+			else if(strstr(commandString,"GetNrOfSessionsFiles") != NULL)
 			{
 				char sbuf[12] = {0};
 				snprintf(sbuf, 12,"Files: %i", offlineSession_FindNrOfFiles());

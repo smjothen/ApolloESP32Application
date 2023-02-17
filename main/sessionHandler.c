@@ -338,7 +338,11 @@ void sessionHandler_CheckAndSendOfflineSessions()
 		{
 			offlineSession_AppendLogString("3 CS sent OK");
 			offlineSession_AppendLogLength();
-			publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+
+			if((storage_Get_DiagnosticsMode() == eALWAYS_SEND_SESSION_DIAGNOSTICS) || (completedSessionString == NULL))
+			{
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+			}
 
 			nrOfSentSessions++;
 			/// Sending succeeded -> delete file from flash

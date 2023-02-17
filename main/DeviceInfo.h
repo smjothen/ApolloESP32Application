@@ -147,6 +147,7 @@ enum DiagnosticsModes
 	eACTIVATE_TCP_PORT				= 5,
 	eDISABLE_CERTIFICATE_ONCE		= 6,
 	eDISABLE_CERTIFICATE_ALWAYS		= 7,
+	eALWAYS_SEND_SESSION_DIAGNOSTICS= 8,
 };
 
 struct Configuration

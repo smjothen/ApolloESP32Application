@@ -704,6 +704,15 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 
 	ESP_LOGW(TAG,"%d: %s\n", strlen(sessionData), sessionData);
 	//ESP_LOGW(TAG,"%d: %s\n", strlen(base64SessionData), base64SessionData);
+	if(base64SessionDataLen != outLen)
+	{
+		ESP_LOGE(TAG,"##### %i != %i ######", base64SessionDataLen, outLen);
+		offlineSession_AppendLogStringWithIntInt("1 base64EncodeLen vs outLen", base64SessionDataLen, outLen);
+	}
+	/*else
+	{
+		ESP_LOGI(TAG,"***** %i == %i ******", base64SessionDataLen, outLen);
+	}*/
 
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 	fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
@@ -756,8 +765,8 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 
 
-	char * base64SessionData = calloc(1000-4, 1);
-	fread(base64SessionData, 1000-4, 1, sessionFile);
+	char * base64SessionData = calloc(1000-6, 1);
+	fread(base64SessionData, 1000-6, 1, sessionFile);
 
 	int readLen = strlen(base64SessionData);
 	uint32_t crcCalc = 0;
@@ -909,8 +918,8 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	/// Go to beginning before reading
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
 
-	char * base64SessionData = calloc(1000-4, 1);
-	fread(base64SessionData, 1000-4, 1, sessionFile);
+	char * base64SessionData = calloc(1000-6, 1);
+	fread(base64SessionData, 1000-6, 1, sessionFile);
 
 	int base64SessionDataLen = strlen(base64SessionData);
 
@@ -932,10 +941,46 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	size_t outLen = 0;
 	char *sessionDataCreated = (char*)base64_decode(base64SessionData, base64SessionDataLen, &outLen);
 
-	//printf("%d: %s\n", strlen(base64SessionData), base64SessionData);
-	//printf("%d: %.*s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
+	char *sessionData = NULL;
+
+	if(sessionDataCreated != NULL)
+	{
+		/// Sanity check
+		if(outLen <= 1000)
+		{
+			//int sessionLen = strlen(sessionDataCreated);
+			//printf("%d:%d: %s\n", strlen(base64SessionData), outLen, base64SessionData);
+			//printf("%d:%d %s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
+
+			sessionData = malloc(outLen+1);//, sizeof(char));
+			if(sessionData != NULL)
+			{
+				//ESP_LOGE(TAG,"%d:%d %s\n", strlen(sessionDataCreated), outLen, sessionDataCreated);
+
+				memset(sessionData, 0, outLen+1);
+				strncpy(sessionData, sessionDataCreated, outLen);
+				ESP_LOGW(TAG,"%d->%d==%d %s\n",strlen(sessionDataCreated), outLen, strlen(sessionData), sessionData);
+				offlineSession_AppendLogStringWithInt("3 SessLen: ", outLen);
+			}
+			else
+			{
+				offlineSession_AppendLogString("3 NULL from malloc");
+			}
+		}
+		else
+		{
+			offlineSession_AppendLogString("3 outLen > 1000");
+		}
+	}
+	else
+	{
+		offlineSession_AppendLogString("3 NULL from base64_decode");
+	}
+	//printf("%d:%d %.*s\n", strlen(sessionDataCreated), outLen, outLen, sessionDataCreated);
 
 	cJSON * jsonSession = cJSON_Parse(sessionDataCreated);
+
+	free(sessionData);
 
 	fclose(sessionFile);
 
