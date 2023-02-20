@@ -108,7 +108,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
                     if (error < max_error) {
                         ESP_LOGI(TAG, "%s: VGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
-                        calibration_fail(ctx, "Voltage gain too large for L%d: %f >= %f", phase + 1, error, max_error);
+                        calibration_fail(ctx, "Voltage gain too large for L%d: Ref: %f / eMeter: %f: Err %f >= %f", phase + 1, reference, average, error, max_error);
                         return false;
                     }
                 }
