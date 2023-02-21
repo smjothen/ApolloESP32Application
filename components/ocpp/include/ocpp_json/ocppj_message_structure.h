@@ -97,7 +97,7 @@ enum ocppj_err_t{
 ///@}
 
 /**
- * @brief Converts a erroc code id to the string expected in the CallError JSON.
+ * @brief Converts an error code id to the string expected in the CallError JSON.
  *
  * @param error_id the id to convert.
  */

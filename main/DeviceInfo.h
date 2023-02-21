@@ -192,29 +192,21 @@ struct Configuration
 	uint32_t ocpp_clock_aligned_data_interval;
 	uint32_t ocpp_connection_timeout;
 	//char * ocpp_connector_phase_rotation; // use phaseRotation
-	uint8_t ocpp_connector_phase_rotation_max_length;
-	uint8_t ocpp_get_configuration_max_keys;
 	uint32_t ocpp_heartbeat_interval;
 	//int ocpp_light_intensity; // use hmiBrightness instead
 	bool ocpp_local_authorize_offline;
 	bool ocpp_local_pre_authorize;
 	//int ocpp_max_energy_on_invalid_id;
+	uint16_t ocpp_message_timeout;
 	char ocpp_meter_values_aligned_data[DEFAULT_CSL_SIZE];
-	uint8_t ocpp_meter_values_aligned_data_max_length;
 	char ocpp_meter_values_sampled_data[DEFAULT_CSL_SIZE];
-	uint8_t ocpp_meter_values_sampled_data_max_length;
 	uint32_t ocpp_meter_value_sample_interval;
 	//int configurationStruct.ocpp_minimum_status_duration;
-	uint8_t ocpp_number_of_connectors;
 	uint8_t ocpp_reset_retries;
 	bool ocpp_stop_transaction_on_ev_side_disconnect;
 	bool ocpp_stop_transaction_on_invalid_id;
 	char ocpp_stop_txn_aligned_data[DEFAULT_CSL_SIZE];
-	uint8_t ocpp_stop_txn_aligned_data_max_length;
 	char ocpp_stop_txn_sampled_data[DEFAULT_CSL_SIZE];
-	uint8_t ocpp_stop_txn_sampled_data_max_length;
-	char ocpp_supported_feature_profiles[128];
-	uint8_t ocpp_supported_feature_profiles_max_length;
 	uint8_t ocpp_transaction_message_attempts;
 	uint16_t ocpp_transaction_message_retry_interval;
 	bool ocpp_unlock_connector_on_ev_side_disconnect;
@@ -222,11 +214,6 @@ struct Configuration
 
 	// ocpp local auth list profile settings
 	bool ocpp_local_auth_list_enabled;
-	uint16_t ocpp_local_auth_max_length;
-	uint8_t ocpp_send_local_list_max_length;
-
-	// ocpp reservation profile settings
-	bool ocpp_reserve_connector_zero_supported;
 
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];

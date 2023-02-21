@@ -2,11 +2,7 @@
 #include "types/ocpp_key_value.h"
 #include "types/ocpp_ci_string_type.h"
 
-cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, char ** unknown_key){
-
-
-	if(configuration_key_count > 0 && configuration_key == NULL)
-		return NULL;
+cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, cJSON * configuration_key, size_t unknown_key_count, char ** unknown_key){
 
 	if(unknown_key_count > 0 && unknown_key == NULL)
 		return NULL;
@@ -15,18 +11,8 @@ cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_
 	if(payload == NULL)
 		return NULL;
 
-	if(configuration_key_count > 0){
-		cJSON * configuration_key_json = cJSON_CreateArray();
-		for(size_t i = 0; i < configuration_key_count; i++){
-			cJSON * key = create_key_value_json(configuration_key[i]);
-			if(key == NULL){
-				cJSON_Delete(configuration_key_json);
-				goto error;
-			}
-			cJSON_AddItemToArray(configuration_key_json, key);
-		}
-		cJSON_AddItemToObject(payload, "configurationKey", configuration_key_json);
-	}
+	if(configuration_key != NULL)
+		cJSON_AddItemToObject(payload, "configurationKey", configuration_key);
 
 	if(unknown_key_count > 0){
 		cJSON * unknown_key_json = cJSON_CreateArray();
@@ -45,7 +31,8 @@ cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_
 		}
 		cJSON_AddItemToObject(payload, "unknownKey", unknown_key_json);
 	}
-		cJSON * result = ocpp_create_call_result(unique_id, payload);
+
+	cJSON * result = ocpp_create_call_result(unique_id, payload);
 
 	if(result == NULL){
 		goto error;

@@ -65,6 +65,8 @@ TimerHandle_t heartbeat_handle = NULL;
 
 #define MAX_TRANSACTION_QUEUE_SIZE 20
 
+static uint16_t ocpp_call_timeout = 10;
+
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
 
@@ -107,6 +109,10 @@ void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON
 	meter_error_cb = meter_transaction_error_cb;
 
 	offline_enabled = true;
+}
+
+void ocpp_change_message_timeout(uint16_t timeout){
+	ocpp_call_timeout = timeout;
 }
 
 
@@ -683,7 +689,7 @@ int send_next_call(){
 	}
 
 	// Wait for currently active call to be handled or timeout, and set next call as active
-	BaseType_t activated = xQueueSendToBack(ocpp_active_call_queue, &call, pdMS_TO_TICKS(OCPP_CALL_TIMEOUT));
+	BaseType_t activated = xQueueSendToBack(ocpp_active_call_queue, &call, pdMS_TO_TICKS(ocpp_call_timeout * 1000));
 
 	if(activated == pdFALSE){
 		/*

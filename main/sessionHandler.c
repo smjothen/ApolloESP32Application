@@ -418,8 +418,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 	ocpp_requested_phases = number_phases;
 
 #ifdef OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
-	if(ocpp_requested_phases != ocpp_active_phases &&
-		(!sessionHandler_OcppTransactionIsActive(1) || storage_Get_ocpp_connector_switch_3_to_1_phase_supported())){
+	if(ocpp_requested_phases != ocpp_active_phases && !sessionHandler_OcppTransactionIsActive(1)){
 
 		ESP_LOGW(TAG, "OCPP requested a legal change of number of phases, but this is currently not supported or meaningfull in current context");
 
@@ -1230,7 +1229,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 			return eOCPP_CP_STATUS_AVAILABLE;
 		}
 
-	case CHARGE_OPERATION_STATE_REQUESTING: // TODO: Add support for transition B6
+	case CHARGE_OPERATION_STATE_REQUESTING:
 		if(reservation_info != NULL && reservation_info->is_reservation_state){
 			return eOCPP_CP_STATUS_RESERVED;
 
@@ -1289,7 +1288,7 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 		if(cJSON_IsNumber(connector_id_json)){
 			connector_id = connector_id_json->valueint;
 
-			if(connector_id < 0 || connector_id > storage_Get_ocpp_number_of_connectors()){
+			if(connector_id < 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 				err = true;
 				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'connectorId' does not name a valid connector", NULL);
 			}
@@ -1381,14 +1380,15 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 
 	cJSON * reply = NULL;
 
-	if(connector_id == 0 && !storage_Get_reserve_connector_zero_supported()){
+#ifndef CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED
+	if(connector_id == 0){
 		ESP_LOGW(TAG, "Reservation request was for connector 0 which is not supported by configuration");
 
 		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
 		send_call_reply(reply);
 		return;
 	}
-
+#endif
 	enum ocpp_cp_status_id state = get_ocpp_state();
 
 
@@ -1519,7 +1519,7 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 			return;
 		}
 
-		if(connector_id <= 0 || connector_id > storage_Get_ocpp_number_of_connectors()){
+		if(connector_id <= 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify an existing connector", NULL);
 			if(ocpp_error == NULL){
 				ESP_LOGE(TAG, "Unable to create call error property constraint violation");
@@ -1665,7 +1665,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 		return;
 	}
 
-	if(connector_id_json->valueint < 0 || connector_id_json->valueint > storage_Get_ocpp_number_of_connectors()){
+	if(connector_id_json->valueint < 0 || connector_id_json->valueint > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify a valid connector", NULL);
 		if(ocpp_error == NULL){
 			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");

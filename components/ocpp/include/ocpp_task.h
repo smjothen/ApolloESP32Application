@@ -16,7 +16,12 @@
  */
 
 
-#define OCPP_CALL_TIMEOUT 10000 ///< Maximum time in ms to wait for a response from CS before a call is automatically failed.
+/**
+ * @brief changes the maximum time before a call is considered timed out.
+ *
+ * @param timeout the new maximum duration of a call
+ */
+void ocpp_change_message_timeout(uint16_t timeout);
 
 /**
  * @brief Determins queueing of outgoing calls and error handling in case of transactions.

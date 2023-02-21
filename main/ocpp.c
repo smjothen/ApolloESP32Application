@@ -143,7 +143,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			 * The loss of information should therefore be acceptable.
 			 */
 			bool ongoing_transaction = false;
-			for(size_t i = 1; i <= storage_Get_ocpp_number_of_connectors(); i++){
+			for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 				if(sessionHandler_OcppTransactionIsActive(i)){
 					sessionHandler_OcppStopTransaction(OCPP_REASON_HARD_RESET);
 					ongoing_transaction = true;
@@ -756,9 +756,9 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 static void clock_aligned_meter_values(){
 	ESP_LOGI(TAG, "Starting clock aligned meter values");
 
-	size_t connector_count = storage_Get_ocpp_number_of_connectors() + 1;
+	size_t connector_count = CONFIG_OCPP_NUMBER_OF_CONNECTORS + 1;
 	uint * connectors = malloc(sizeof(uint) * connector_count);
-	for(size_t i =0; i <= storage_Get_ocpp_number_of_connectors(); i++){
+	for(size_t i =0; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 		connectors[i] = i;
 	}
 
@@ -834,33 +834,33 @@ static int allocate_and_write_configuration_u8(uint8_t value, char ** value_out)
 	if(*value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 4, "%d", value);
+		snprintf(*value_out, 4, "%u", value);
 		return 0;
 	}
 }
 
 static int allocate_and_write_configuration_u16(uint16_t value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 8);
+	*value_out = malloc(sizeof(char) * 6);
 	if(*value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 8, "%d", value);
+		snprintf(*value_out, 8, "%u", value);
 		return 0;
 	}
 }
 
 static int allocate_and_write_configuration_u32(uint32_t value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 16);
+	*value_out = malloc(sizeof(char) * 11);
 	if(*value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 16, "%d", value);
+		snprintf(*value_out, 16, "%u", value);
 		return 0;
 	}
 }
 
 int allocate_and_write_configuration_bool(bool value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 8);
+	*value_out = malloc(sizeof(char) * 6);
 	if(*value_out == NULL){
 		return -1;
 	}else{
@@ -881,26 +881,6 @@ static int allocate_and_write_configuration_str(const char * value, char ** valu
 		strcpy(*value_out, value);
 		return 0;
 	}
-}
-
-static void free_configuration_key(struct ocpp_key_value * configuration_key, size_t key_count){
-	if(configuration_key == NULL)
-		return;
-
-	for(size_t i = 0; i < key_count; i++){
-		free(configuration_key[i].value);
-	}
-	free(configuration_key);
-}
-
-static void free_unknown_key(char ** unknown_key, size_t key_count){
-	if(unknown_key == NULL)
-		return;
-
-	for(size_t i = 0; i < key_count; i++){
-		free(unknown_key[i]);
-	}
-	free(unknown_key);
 }
 
 static char * convert_to_ocpp_phase(uint8_t phase_rotation){
@@ -986,667 +966,869 @@ static uint8_t convert_from_ocpp_phase(char L1, char L2, char L3, bool is_it){
 
 	}
 }
-static int get_ocpp_configuration(const char * key, struct ocpp_key_value * configuration_out){
-	strcpy(configuration_out->key, key);
 
-	if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
-		configuration_out->readonly = false;
+cJSON * create_key_value(const char * key, bool read_only, const char * value){
+	cJSON * key_value_json = cJSON_CreateObject();
+	cJSON_AddStringToObject(key_value_json, "key", key);
+	cJSON_AddBoolToObject(key_value_json, "readonly", read_only);
+	cJSON_AddStringToObject(key_value_json, "value", value);
 
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_authorize_remote_tx_requests(), &configuration_out->value);
+	return key_value_json;
+}
 
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
-		configuration_out->readonly = false;
 
-		return allocate_and_write_configuration_u32(
-			storage_Get_ocpp_clock_aligned_data_interval(), &configuration_out->value);
+esp_err_t add_configuration_ocpp_allow_offline_tx_for_unknown_id(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
 
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
-		configuration_out->readonly = false;
+esp_err_t add_configuration_ocpp_authorization_cache_enabled(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
 
-		return allocate_and_write_configuration_u32(
-			storage_Get_ocpp_connection_timeout(), &configuration_out->value);
+esp_err_t add_configuration_ocpp_authorize_remote_tx_requests(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_authorize_remote_tx_requests(), &value) != 0)
+		return ESP_FAIL;
 
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
- 		configuration_out->readonly = false;
-
-		char phase_rotation_str[16];
-		sprintf(phase_rotation_str, "0.%s,1.%s",
-			convert_to_ocpp_phase(storage_Get_PhaseRotation()),
-			convert_to_ocpp_phase(storage_Get_PhaseRotation()));
-
-		return allocate_and_write_configuration_str(phase_rotation_str, &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_connector_phase_rotation_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_get_configuration_max_keys(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u32(
-			storage_Get_ocpp_heartbeat_interval(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u8(
-			floor(storage_Get_HmiBrightness() * 100), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_local_authorize_offline(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_local_pre_authorize(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_str(
-			storage_Get_ocpp_meter_values_aligned_data(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_meter_values_aligned_data_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_str(
-			storage_Get_ocpp_meter_values_sampled_data(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_meter_values_sampled_data_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u32(
-			storage_Get_ocpp_meter_value_sample_interval(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_number_of_connectors(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_reset_retries(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_stop_transaction_on_invalid_id(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_str(
-			storage_Get_ocpp_stop_txn_aligned_data(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_stop_txn_aligned_data_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_str(
-			storage_Get_ocpp_stop_txn_sampled_data(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_stop_txn_sampled_data_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_str(
-			storage_Get_ocpp_supported_feature_profiles(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_supported_feature_profiles_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_transaction_message_attempts(), &configuration_out->value);
-
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_u16(
-			storage_Get_ocpp_transaction_message_retry_interval(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
-		configuration_out->readonly = false;
-
-		return allocate_and_write_configuration_bool(
-			storage_Get_ocpp_local_auth_list_enabled(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u16(
-			storage_Get_ocpp_local_auth_list_max_length(), &configuration_out->value);
-
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0){
-		configuration_out->readonly = true;
-
-		return allocate_and_write_configuration_u8(
-			storage_Get_ocpp_send_local_list_max_length(), &configuration_out->value);
-
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
 	}else{
-		configuration_out->readonly = true;
-		configuration_out->value = malloc(sizeof(char) * 30);
-		if(configuration_out->value == NULL){
-			return -1;
-		}else{
-			strcpy(configuration_out->value, "UNHANDLED_CONFIGURATION_ERROR");
-			return 0;
-		}
+		return ESP_OK;
 	}
 }
 
-static int get_all_ocpp_configurations(struct ocpp_key_value * configuration_out){
-	size_t index = 0;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS);
-	configuration_out[index].readonly = false;
-	int err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_authorize_remote_tx_requests(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u32(
-		storage_Get_ocpp_clock_aligned_data_interval(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u32(
-		storage_Get_ocpp_connection_timeout(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION);
-	configuration_out[index].readonly = false;
-
-	char phase_rotation_str[16];
-	sprintf(phase_rotation_str, "1.%s", convert_to_ocpp_phase(storage_Get_PhaseRotation()));
-
-	err = allocate_and_write_configuration_str(phase_rotation_str, &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_connector_phase_rotation_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_get_configuration_max_keys(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u32(
-		storage_Get_ocpp_heartbeat_interval(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LIGHT_INTENSITY);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u8(
-		floor(storage_Get_HmiBrightness() * 100), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_local_authorize_offline(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_local_pre_authorize(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_str(
-			storage_Get_ocpp_meter_values_aligned_data(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_meter_values_aligned_data_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_str(
-		storage_Get_ocpp_meter_values_sampled_data(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_meter_values_sampled_data_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u32(
-		storage_Get_ocpp_meter_value_sample_interval(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_number_of_connectors(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_RESET_RETRIES);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_reset_retries(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_stop_transaction_on_invalid_id(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_str(
-		storage_Get_ocpp_stop_txn_aligned_data(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_stop_txn_aligned_data_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_str(
-		storage_Get_ocpp_stop_txn_sampled_data(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_stop_txn_sampled_data_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_str(
-		storage_Get_ocpp_supported_feature_profiles(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_supported_feature_profiles_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_transaction_message_attempts(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_transaction_message_retry_interval(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED);
-	configuration_out[index].readonly = false;
-
-	err = allocate_and_write_configuration_bool(
-		storage_Get_ocpp_local_auth_list_enabled(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u16(
-		storage_Get_ocpp_local_auth_list_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-	index++;
-
-	strcpy(configuration_out[index].key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH);
-	configuration_out[index].readonly = true;
-
-	err = allocate_and_write_configuration_u8(
-		storage_Get_ocpp_send_local_list_max_length(), &configuration_out[index].value);
-	if(err != 0)
-		goto error;
-
-	return 0;
-
-error:
-	free_configuration_key(configuration_out, index);
-	return -1;
+esp_err_t add_configuration_ocpp_blink_repeat(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t add_configuration_ocpp_clock_aligned_data_interval(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u32(storage_Get_ocpp_clock_aligned_data_interval(), &value) != 0)
+		return ESP_FAIL;
 
-//TODO: check if this should be scheduled for different thread to free up the websocket thread
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_connection_timeout(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u32(storage_Get_ocpp_connection_timeout(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTION_TIMEOUT, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
+	char * value;
+	char phase_rotation_str[CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH * 13 +1];
+
+	size_t offset = 0;
+
+	for(size_t i = 0; i < CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
+		if(i > 0)
+			phase_rotation_str[offset++] = ',';
+
+		sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
+	}
+
+	if(allocate_and_write_configuration_str(phase_rotation_str, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_connector_phase_rotation_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_get_configuration_max_keys(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_heartbeat_interval(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u32(storage_Get_ocpp_heartbeat_interval(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_light_intensity(cJSON * key_list){
+	char * value;
+	uint8_t intensity_percentage = (uint8_t)floor(storage_Get_HmiBrightness() * 100);
+
+	if(allocate_and_write_configuration_u8(intensity_percentage, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LIGHT_INTENSITY, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_local_authorize_offline(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_authorize_offline(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_local_pre_authorize(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_pre_authorize(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_max_energy_on_invalid_id(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_message_timeout(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u16(storage_Get_ocpp_message_timeout(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MESSAGE_TIMEOUT, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_meter_values_aligned_data(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(storage_Get_ocpp_meter_values_aligned_data(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_meter_values_aligned_data_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_meter_values_sampled_data(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(storage_Get_ocpp_meter_values_sampled_data(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_meter_values_sampled_data_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_meter_value_sample_interval(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u32(storage_Get_ocpp_meter_value_sample_interval(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_minimum_status_duration(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_number_of_connectors(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_NUMBER_OF_CONNECTORS, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_reset_retries(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_reset_retries(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESET_RETRIES, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_transaction_max_meter_values(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_transaction_on_invalid_id(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_transaction_on_invalid_id(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_txn_aligned_data(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(storage_Get_ocpp_stop_txn_aligned_data(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_txn_sampled_data(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_stop_txn_sampled_data_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_supported_feature_profiles(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_supported_feature_profiles_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_transaction_message_attempts(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(storage_Get_ocpp_transaction_message_attempts(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_transaction_message_retry_interval(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u16(storage_Get_ocpp_transaction_message_retry_interval(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_websocket_ping_interval(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_supported_file_transfer_protocols(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(CONFIG_OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FILE_TRANSFER_PROTOCOLS, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_local_auth_list_enabled(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_auth_list_enabled(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_local_auth_list_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u16(CONFIG_OCPP_LOCAL_AUTH_LIST_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_send_local_list_max_length(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_SEND_LOCAL_LIST_MAX_LENGTH, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_reserve_connector_zero_supported(cJSON * key_list){
+#ifdef CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED
+	char * value;
+	if(allocate_and_write_configuration_bool(CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESERVE_CONNECTOR_ZERO_SUPPORTED, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+#else
+	return ESP_FAIL_UNKONOWN;
+#endif
+}
+
+esp_err_t add_configuration_ocpp_charge_profile_max_stack_level(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGE_PROFILE_MAX_STACK_LEVEL, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_charging_schedule_allowed_charging_rate_unit(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_charging_schedule_max_periods(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+esp_err_t add_configuration_ocpp_connector_switch_3_to_1_phase_supported(cJSON * key_list){
+#ifdef CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
+	char * value;
+	if(allocate_and_write_configuration_bool(CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+#else
+	return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t add_configuration_ocpp_max_charging_profiles_installed(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_u8(CONFIG_OCPP_MAX_CHARGING_PROFILES_INSTALLED, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+static esp_err_t get_ocpp_configuration(const char * key, cJSON * configuration_out){
+
+	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0){
+		return add_configuration_ocpp_allow_offline_tx_for_unknown_id(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED) == 0){
+		return add_configuration_ocpp_authorization_cache_enabled(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
+		return add_configuration_ocpp_authorize_remote_tx_requests(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_BLINK_REPEAT) == 0){
+		return  add_configuration_ocpp_blink_repeat(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
+		return add_configuration_ocpp_clock_aligned_data_interval(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTION_TIMEOUT) == 0){
+		return add_configuration_ocpp_connection_timeout(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
+		return add_configuration_ocpp_connector_phase_rotation(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_connector_phase_rotation_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS) == 0){
+		return add_configuration_ocpp_get_configuration_max_keys(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
+		return add_configuration_ocpp_heartbeat_interval(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LIGHT_INTENSITY) == 0){
+		return add_configuration_ocpp_light_intensity(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
+		return add_configuration_ocpp_local_authorize_offline(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
+		return add_configuration_ocpp_local_pre_authorize(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MAX_ENERGY_ON_INVALID_ID) == 0){
+		return add_configuration_ocpp_max_energy_on_invalid_id(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
+		return add_configuration_ocpp_message_timeout(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
+		return add_configuration_ocpp_meter_values_aligned_data(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_meter_values_aligned_data_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
+		return add_configuration_ocpp_meter_values_sampled_data(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_meter_values_sampled_data(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
+		return add_configuration_ocpp_meter_value_sample_interval(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION) == 0){
+		return add_configuration_ocpp_minimum_status_duration(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS) == 0){
+		return add_configuration_ocpp_number_of_connectors(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
+		return add_configuration_ocpp_reset_retries(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_MAX_METER_VALUES) == 0){
+		return add_configuration_ocpp_stop_transaction_max_meter_values(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
+		return add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID) == 0){
+		return add_configuration_ocpp_stop_transaction_on_invalid_id(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
+		return add_configuration_ocpp_stop_txn_aligned_data(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_stop_txn_aligned_data_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
+		return add_configuration_ocpp_stop_txn_sampled_data(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_stop_txn_sampled_data_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES) == 0){
+		return add_configuration_ocpp_supported_feature_profiles(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_supported_feature_profiles_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
+		return add_configuration_ocpp_transaction_message_attempts(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
+		return add_configuration_ocpp_transaction_message_retry_interval(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
+		return add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL) == 0){
+		return add_configuration_ocpp_websocket_ping_interval(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SUPPORTED_FILE_TRANSFER_PROTOCOLS) == 0){
+		return add_configuration_ocpp_supported_file_transfer_protocols(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
+		return add_configuration_ocpp_local_auth_list_enabled(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_local_auth_list_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_send_local_list_max_length(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESERVE_CONNECTOR_ZERO_SUPPORTED) == 0){
+		return add_configuration_ocpp_reserve_connector_zero_supported(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CHARGE_PROFILE_MAX_STACK_LEVEL) == 0){
+		return add_configuration_ocpp_charge_profile_max_stack_level(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT) == 0){
+		return add_configuration_ocpp_charging_schedule_allowed_charging_rate_unit(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS) == 0){
+		return add_configuration_ocpp_charging_schedule_max_periods(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED) == 0){
+		return add_configuration_ocpp_connector_switch_3_to_1_phase_supported(configuration_out);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED) == 0){
+		return add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
+	}else{
+		return ESP_ERR_NOT_SUPPORTED;
+	}
+}
+
+void get_all_ocpp_configurations(cJSON * configuration_out){
+	add_configuration_ocpp_allow_offline_tx_for_unknown_id(configuration_out);
+	add_configuration_ocpp_authorization_cache_enabled(configuration_out);
+	add_configuration_ocpp_authorize_remote_tx_requests(configuration_out);
+	add_configuration_ocpp_blink_repeat(configuration_out);
+	add_configuration_ocpp_clock_aligned_data_interval(configuration_out);
+	add_configuration_ocpp_connection_timeout(configuration_out);
+	add_configuration_ocpp_connector_phase_rotation(configuration_out);
+	add_configuration_ocpp_connector_phase_rotation_max_length(configuration_out);
+	add_configuration_ocpp_get_configuration_max_keys(configuration_out);
+	add_configuration_ocpp_heartbeat_interval(configuration_out);
+	add_configuration_ocpp_light_intensity(configuration_out);
+	add_configuration_ocpp_local_authorize_offline(configuration_out);
+	add_configuration_ocpp_local_pre_authorize(configuration_out);
+	add_configuration_ocpp_max_energy_on_invalid_id(configuration_out);
+	add_configuration_ocpp_message_timeout(configuration_out);
+	add_configuration_ocpp_meter_values_aligned_data(configuration_out);
+	add_configuration_ocpp_meter_values_aligned_data_max_length(configuration_out);
+	add_configuration_ocpp_meter_values_sampled_data(configuration_out);
+	add_configuration_ocpp_meter_values_sampled_data_max_length(configuration_out);
+	add_configuration_ocpp_meter_value_sample_interval(configuration_out);
+	add_configuration_ocpp_minimum_status_duration(configuration_out);
+	add_configuration_ocpp_number_of_connectors(configuration_out);
+	add_configuration_ocpp_reset_retries(configuration_out);
+	add_configuration_ocpp_stop_transaction_max_meter_values(configuration_out);
+	add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(configuration_out);
+	add_configuration_ocpp_stop_transaction_on_invalid_id(configuration_out);
+	add_configuration_ocpp_stop_txn_aligned_data(configuration_out);
+	add_configuration_ocpp_stop_txn_aligned_data_max_length(configuration_out);
+	add_configuration_ocpp_stop_txn_sampled_data(configuration_out);
+	add_configuration_ocpp_stop_txn_sampled_data_max_length(configuration_out);
+	add_configuration_ocpp_supported_feature_profiles(configuration_out);
+	add_configuration_ocpp_supported_feature_profiles_max_length(configuration_out);
+	add_configuration_ocpp_transaction_message_attempts(configuration_out);
+	add_configuration_ocpp_transaction_message_retry_interval(configuration_out);
+	add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(configuration_out);
+	add_configuration_ocpp_websocket_ping_interval(configuration_out);
+	add_configuration_ocpp_supported_file_transfer_protocols(configuration_out);
+	add_configuration_ocpp_local_auth_list_enabled(configuration_out);
+	add_configuration_ocpp_local_auth_list_max_length(configuration_out);
+	add_configuration_ocpp_send_local_list_max_length(configuration_out);
+	add_configuration_ocpp_reserve_connector_zero_supported(configuration_out);
+	add_configuration_ocpp_charge_profile_max_stack_level(configuration_out);
+	add_configuration_ocpp_charging_schedule_allowed_charging_rate_unit(configuration_out);
+	add_configuration_ocpp_charging_schedule_max_periods(configuration_out);
+	add_configuration_ocpp_connector_switch_3_to_1_phase_supported(configuration_out);
+	add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
+}
+
 static void get_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Got request for get configuration");
+
+	char err_str[128];
+	enum ocppj_err_t err = eOCPPJ_NO_ERROR;
 
 	int key_length = 0;
 
 	if(cJSON_HasObjectItem(payload, "key")){
 		cJSON * key = cJSON_GetObjectItem(payload, "key");
 
-		if(cJSON_IsArray(key)){
-			key_length = cJSON_GetArraySize(key);
-		}else{
-			key_length = -1;
+		if(!cJSON_IsArray(key)){
+			err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			sprintf(err_str, "Expected 'key' to be a valid array");
+
+			goto error;
+		}
+
+		key_length = cJSON_GetArraySize(key);
+
+		if(key_length > CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS){
+			err = eOCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION;
+			snprintf(err_str, sizeof(err_str), "Length of 'key' (%d) exceed maximum lenght (%d)", key_length, CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS);
+
+			goto error;
+		}
+
+		for(size_t i = 0; i < key_length; i++){
+			cJSON * key_name = cJSON_GetArrayItem(key, i);
+			if(!cJSON_IsString(key_name) || !is_ci_string_type(key_name->valuestring, 50)){
+				err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+				sprintf(err_str, "key %d is not a valid CiString50Type", i);
+
+				goto error;
+			}
 		}
 	}
 
-	if(key_length > 0){
+	cJSON * configuration_key = cJSON_CreateArray();
+	if(configuration_key == NULL){
+		err = eOCPPJ_ERROR_INTERNAL;
+		sprintf(err_str, "Unable to allocate memory for configurationKey");
+	}
 
-		if(key_length > storage_Get_ocpp_get_configuration_max_keys()){
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Too many keys requested", NULL);
-			if(ocpp_error == NULL){
-				ESP_LOGE(TAG, "Unable to create call error for property constraint violation");
-				return;
-			}else{
-				send_call_reply(ocpp_error);
-				return;
-			}
-		}
+	size_t unknown_key_index = 0;
+	char * unknown_key[CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS] = {0};
 
+	if(key_length == 0){
+		get_all_ocpp_configurations(configuration_key);
+
+	}else if(key_length > 0){
 		cJSON * key = cJSON_GetObjectItem(payload, "key");
 
-		size_t configuration_key_index = 0; // for keys that are recognized/implemented
-		size_t unknown_key_index = 0;
-
-		// Validate 'key' items and determine how many keys need to be allocated
 		for(size_t i = 0; i < key_length; i++){
-			cJSON * key_id = cJSON_GetArrayItem(key, i);
-			if(!cJSON_IsString(key_id) || !is_ci_string_type(key_id->valuestring, 50)){
-				cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected key to contain items of CiString50Type", NULL);
-				if(ocpp_error == NULL){
-					ESP_LOGE(TAG, "Unable to create call error for type constraint violation of 'key' field inner items");
-					return;
+			char * key_str = cJSON_GetArrayItem(key, i)->valuestring;
+			esp_err_t config_err = get_ocpp_configuration(key_str, configuration_key);
+
+			if(config_err != ESP_OK){
+				if(config_err != ESP_ERR_NOT_SUPPORTED){
+					ESP_LOGE(TAG, "Unexpected result when getting configuration: %s", esp_err_to_name(config_err));
+				}
+
+				unknown_key[unknown_key_index] = malloc(sizeof(char) * strlen(key_str) + 1);
+				if(unknown_key[unknown_key_index] == NULL){
+					ESP_LOGE(TAG, "Unable to allocate buffer for unknown key");
 				}else{
-					send_call_reply(ocpp_error);
-					return;
-				}
-			}
-
-			if(is_configuration_key(key_id->valuestring)){
-				configuration_key_index++;
-			}else{
-				unknown_key_index++;
-			}
-		}
-
-		struct ocpp_key_value * configuration_key_buffer = NULL;
-		char ** unknown_key_buffer = NULL;
-
-		if(configuration_key_index > 0){
-			configuration_key_buffer = malloc(configuration_key_index * sizeof(struct ocpp_key_value));
-			if(configuration_key_buffer == NULL){
-				goto error;
-			}
-		}
-
-		if(unknown_key_index > 0){
-			unknown_key_buffer = malloc(unknown_key_index * sizeof(char*));
-			if(unknown_key_buffer == NULL){
-				free(configuration_key_buffer);
-				goto error;
-			}
-			for(size_t i = 0; i < unknown_key_index; i++){
-				unknown_key_buffer[i] = malloc(51 * sizeof(char));
-				if(unknown_key_buffer[i] == NULL){
-					while(i > 0){
-						free(unknown_key_buffer[--i]);
-					}
-
-					free(unknown_key_buffer);
-					free(configuration_key_buffer);
-
-					goto error;
+					strcpy(unknown_key[unknown_key_index], key_str);
+					unknown_key_index++;
 				}
 			}
 		}
-
-		configuration_key_index = 0;
-		unknown_key_index = 0;
-
-		for(size_t i = 0; i < key_length; i++){
-			const char * key_str = cJSON_GetArrayItem(key, i)->valuestring;
-			if(is_configuration_key(key_str)){
-				int err = get_ocpp_configuration(key_str, &configuration_key_buffer[configuration_key_index++]);
-				if(err != 0){
-					ESP_LOGE(TAG, "Error while getting ocpp configuration, aborting get configuration cb");
-					free_configuration_key(configuration_key_buffer, configuration_key_index-1);
-					free_unknown_key(unknown_key_buffer, unknown_key_index);
-
-					goto error;
-				}
-			}
-			else{
-				strcpy(unknown_key_buffer[unknown_key_index++], key_str);
-			}
-		}
-
-		cJSON * response = ocpp_create_get_configuration_confirmation(unique_id, configuration_key_index, configuration_key_buffer, unknown_key_index, unknown_key_buffer);
-
-		free_configuration_key(configuration_key_buffer, configuration_key_index);
-		free_unknown_key(unknown_key_buffer, unknown_key_index);
-
-		if(response == NULL){
-			ESP_LOGE(TAG, "Unable to create configuration response");
-
-			goto error;
-		}else{
-			send_call_reply(response);
-
-			return;
-		}
-	}else if(key_length == 0){ // No keys in request, send all
-		struct ocpp_key_value * key_values = malloc(sizeof(struct ocpp_key_value) * OCPP_CONFIG_KEY_COUNT);
-		if(key_values == NULL){
-			goto error;
-		}
-		int err = get_all_ocpp_configurations(key_values);
-		if(err != 0){
-			ESP_LOGE(TAG, "Unable to get all configurations");
-			goto error;
-		}
-
-		cJSON * response = ocpp_create_get_configuration_confirmation(unique_id, OCPP_CONFIG_KEY_COUNT, key_values, 0, NULL);
-
-		free_configuration_key(key_values, OCPP_CONFIG_KEY_COUNT);
-
-		if(response == NULL){
-			ESP_LOGE(TAG, "Unable to create configuration response");
-			goto error;
-		}
-		else{
-			send_call_reply(response);
-
-			return;
-		}
-	}else{
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "'key' field expected to be array type", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for type constraint violation of 'key' field");
-			return;
-		}
-		else{
-			send_call_reply(ocpp_error);
-			return;
-		}
-
 	}
 
-error: ;
+	cJSON * response = ocpp_create_get_configuration_confirmation(unique_id, configuration_key, unknown_key_index, unknown_key);
 
-	cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "", NULL);
+	for(size_t i = 0; i < unknown_key_index; i++){
+		free(unknown_key[i]);
+	}
+
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create configuration response");
+		goto error;
+	}else{
+		send_call_reply(response);
+	}
+
+	return;
+
+error:
+
+	if(err == ESP_OK){
+		ESP_LOGE(TAG, "get_configuration_cb reached error exit, but no error set");
+		err = eOCPPJ_ERROR_INTERNAL;
+		err_str[0] = '\0';
+	}else{
+		ESP_LOGE(TAG, "get_configuration_cb reached error exit: [%s]: '%s'", ocppj_error_code_from_id(err), err_str);
+	}
+
+	cJSON * ocpp_error = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
 	if(ocpp_error == NULL){
 		ESP_LOGE(TAG, "Unable to create call error for internal error");
-		return;
 	}else{
 		send_call_reply(ocpp_error);
-		return;
 	}
 }
 
@@ -1937,7 +2119,6 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		 */
 
 		bool is_valid = true;
-		size_t max_value_count = storage_Get_ocpp_connector_phase_rotation_max_length();
 		size_t value_count = 1;
 		uint current_connector_id = 0;
 
@@ -1954,7 +2135,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			}else if(isdigit(value[i])){ // connector id
 				if(current_item_phase_count == 0){ // if not expecting phase value
 					current_connector_id = value[i] - '0';
-					if(current_connector_id > storage_Get_ocpp_number_of_connectors()){
+					if(current_connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 						is_valid = false;
 						break;
 					}
@@ -2005,7 +2186,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				case ',':
 					if(current_item_phase_count == 3){ // Phase rotation item complete
 						current_item_phase_count = 0;
-						if(++value_count > max_value_count){
+						if(++value_count > CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH){
 							is_valid = false;
 						}
 					}else{
@@ -2051,15 +2232,35 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			return;
 		}
 
-		storage_Set_HmiBrightness(value_long / 100.0f);
-		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
-		return;
+		float intensity = value_long / 100.0f;
+
+		MessageType ret = MCU_SendFloatParameter(HmiBrightness, intensity);
+		if(ret == MsgWriteAck)
+		{
+			ESP_LOGI(TAG, "Set hmiBrightness: %f", intensity);
+
+			storage_Set_HmiBrightness(value_long / 100.0f);
+			change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
+			return;
+		}else{
+			ESP_LOGE(TAG, "Unable to change hmi brightness");
+			change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);
+			return;
+		}
+
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value, NULL);
 
+		if(err == 0){
+			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
+		}
+
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value, NULL);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
+		err = set_config_u16(storage_Set_ocpp_message_timeout, value);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
@@ -2252,7 +2453,7 @@ static int validate_and_convert_auth_list(cJSON * auth_list, bool is_update_type
 		return 0;
 
 	int tag_count = cJSON_GetArraySize(auth_list);
-	if(tag_count > storage_Get_ocpp_send_local_list_max_length()){
+	if(tag_count > CONFIG_OCPP_SEND_LOCAL_LIST_MAX_LENGTH){
 		strcpy(error_type_out, OCPPJ_ERROR_OCCURENCE_CONSTRAINT_VIOLATION);
 		snprintf(error_reason_out, SEND_LOCAL_LIST_MAX_REASON_SIZE, "Number of elements in 'localAuthorizationList' exceed SendLocalListMaxLength");
 		return -1;
@@ -2349,7 +2550,7 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 		return;
 	}
 
-	struct ocpp_authorization_data ** auth_list = malloc(sizeof(struct ocpp_authorization_data *) * storage_Get_ocpp_send_local_list_max_length());
+	struct ocpp_authorization_data ** auth_list = malloc(sizeof(struct ocpp_authorization_data *) * CONFIG_OCPP_SEND_LOCAL_LIST_MAX_LENGTH);
 
 	char error_type[32];
 	char error_reason[SEND_LOCAL_LIST_MAX_REASON_SIZE];
@@ -2525,7 +2726,7 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 	uint * connector_id = NULL;
 	if(cJSON_HasObjectItem(payload, "connectorId")){
 		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
-		if(cJSON_IsNumber(connector_id_json) && connector_id_json->valueint > 0 && connector_id_json->valueint <= storage_Get_ocpp_number_of_connectors()){
+		if(cJSON_IsNumber(connector_id_json) && connector_id_json->valueint > 0 && connector_id_json->valueint <= CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 			connector_id = (uint *)&connector_id_json->valueint;
 		}else{
 			ESP_LOGE(TAG, "Trigger request contains invalid connectorId. connectorId will be ignored");
@@ -2573,7 +2774,7 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		size_t connector_count = 1;
 
 		if(connector_id == NULL){
-			connector_count = storage_Get_ocpp_number_of_connectors() + 1;
+			connector_count = CONFIG_OCPP_NUMBER_OF_CONNECTORS + 1;
 			connector_id = malloc(sizeof(uint) * connector_count);
 
 			if(connector_id == NULL){
@@ -2582,7 +2783,7 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 			}
 			allocated = true;
 
-			for(size_t i = 0; i <= storage_Get_ocpp_number_of_connectors(); i++){
+			for(size_t i = 0; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 				connector_id[i] = i;
 			}
 		}
@@ -3009,10 +3210,11 @@ static void ocpp_task(){
 			}
 		}while(err != 0);
 
+		ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 		start_ocpp_heartbeat();
 
 		ocpp_set_on_new_period_cb(sessionHandler_OcppSetChargingVariables);
-		if(ocpp_smart_charging_init(storage_Get_ocpp_number_of_connectors()) != ESP_OK){
+		if(ocpp_smart_charging_init() != ESP_OK){
 			ESP_LOGE(TAG, "Unable to initiate smart charging");
 		}
 
@@ -3125,7 +3327,7 @@ clean:
 
 		if(graceful_exit){
 			ESP_LOGI(TAG, "Attemting graceful exit");
-			for(size_t i = 1; i <= storage_Get_ocpp_number_of_connectors(); i++){
+			for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 				ESP_LOGI(TAG, "Checking connector %d", i);
 				if(sessionHandler_OcppTransactionIsActive(i)){
 					ESP_LOGI(TAG, "Active transaction on connector %d", i);

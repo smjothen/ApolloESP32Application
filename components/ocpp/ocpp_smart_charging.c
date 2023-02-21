@@ -30,8 +30,6 @@ static const char * base_path = CONFIG_OCPP_SMART_PATH;
 
 static SemaphoreHandle_t file_lock = NULL;
 
-static size_t conf_connector_count;
-
 static TaskHandle_t ocpp_smart_task_handle;
 
 void (* charge_value_cb)(float min_charging_limit, float max_charging_limit, uint8_t number_phases) = NULL;
@@ -975,7 +973,7 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 
 			connector_id = connector_id_json->valueint;
 
-			if(connector_id < 0 || connector_id > conf_connector_count){
+			if(connector_id < 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
 				ESP_LOGW(TAG, "Recieved invalid 'connectorId'");
 				reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'connectorId' does not name a valid connector", NULL);
 				goto error;
@@ -2040,7 +2038,7 @@ error:
 	ocpp_free_charging_schedule(schedule, true);
 }
 
-esp_err_t ocpp_smart_charging_init(size_t connector_count){
+esp_err_t ocpp_smart_charging_init(){
 	ESP_LOGI(TAG, "Initializing smart charging");
 
 	if(strcmp(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, "A") != 0){
@@ -2048,8 +2046,6 @@ esp_err_t ocpp_smart_charging_init(size_t connector_count){
 			CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT);
 		return ESP_ERR_NOT_SUPPORTED;
 	}
-
-	conf_connector_count = connector_count;
 
 	file_lock = xSemaphoreCreateMutex();
 	if(file_lock == NULL){

@@ -18,10 +18,8 @@
  *
  * The thread will mostly stay dormant untill woken by ocpp set/clear/ charging profile request, get schedule request or if
  * notified about new transaction or transactionid.
- *
- * @param connector_count nr of physical charging connectors, only 1 supported for now
  */
-esp_err_t ocpp_smart_charging_init(size_t connector_count);
+esp_err_t ocpp_smart_charging_init();
 
 /**
  * @brief Used to inform smart charging of id in case new charging profile is transaction id specific.

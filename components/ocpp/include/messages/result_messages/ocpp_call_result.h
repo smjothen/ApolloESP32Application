@@ -50,12 +50,11 @@ cJSON * ocpp_create_data_transfer_confirmation(const char * unique_id, const cha
  * @brief create a GetConfiguration.conf
  *
  * @param unique_id id given in the matching .req
- * @param configuration_key_count length of configuration_key array
  * @param configuration_key "Optional. List of requested or known keys"
  * @param unknown_key_count length of unknown_key array
  * @param unknown_key "Optional. Requested keys that are unknown"
  */
-cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, size_t configuration_key_count, struct ocpp_key_value * configuration_key, size_t unknown_key_count, char ** unknown_key);
+cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, cJSON * configuration_key, size_t unknown_key_count, char ** unknown_key);
 
 /**
  * @brief create a RemoteStartTransaction.conf

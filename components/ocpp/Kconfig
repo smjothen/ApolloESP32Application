@@ -1,26 +1,137 @@
 menu "OCPP"
-	config OCPP_SMART_PATH
-	       string "Base path where ocpp smart charging will store charging profiles"
-	       default "/files"
 
-	config OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL
-	       int "Max StackLevel of a ChargingProfile. The number defined also indicates the max allowed number of installed charging schedules per Charging Profile Purposes."
-	       default 8
+menu "Core profile"
 
-	config OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT
-	       string "A list of supported quantities for use in a ChargingSchedule. Allowed values: 'Current' and 'Power'"
-	       default "A"
+config OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH # 9.1.8
+       int "ConnectorPhaseRotationMaxLength"
+       help
+	Maximum number of items in a ConnectorPhaseRotation Configuration Key.
+       default 1
 
-	config OCPP_CHARGING_SCHEDULE_MAX_PERIODS
-	       int "Maximum number of periods that may be defined per ChargingSchedule."
-	       default 32
+config OCPP_GET_CONFIGURATION_MAX_KEYS # 9.1.9
+       int "GetConfigurationMaxKeys"
+       help
+	Maximum number of requested configuration keys in a GetConfiguration.req PDU.
+       default 62
 
-	config OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
-	       bool "If defined and true, this Charge Point support switching from 3 to 1 phase during a Transaction."
-	       default N
+config OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH # 9.1.16
+       int "MeterValuesAlignedDataMaxLength"
+       help
+	Maximum number of items in a MeterValuesAlignedData Configuration Key.
+       default 6
 
-	config OCPP_MAX_CHARGING_PROFILES_INSTALLED
-	       int "Maximum number of Charging profiles installed at a time"
-	       default 24
+config OCPP_METER_VALUES_SAMPLED_DATA_MAX_LENGTH # 9.1.18
+       int "MeterValuesSampledDataMaxLength"
+       help
+	Maximum number of items in a MeterValuesSampledData Configuration Key.
+       default 6
+
+config OCPP_NUMBER_OF_CONNECTORS # 9.1.21
+       int "NumberOfConnectors"
+       help
+	The number of physical charging connectors of this Charge Point.
+       default 1
+
+config OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH # 9.1.26
+       int "StopTxnAlignedDataMaxLength"
+       help
+	Maximum number of items in a StopTxnAlignedData Configuration Key.
+       default 6
+
+config OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH # 9.1.28
+       int "StopTxnSampledDataMaxLength"
+       help
+	Maximum number of items in a StopTxnSampledData Configuration Key.
+       default 6
+
+config OCPP_SUPPORTED_FEATURE_PROFILES # 9.1.29
+       string "SupportedFeatureProfiles"
+       help
+	A list of supported Feature Profiles. Possible profile identifiers: Core,
+	FirmwareManagement, LocalAuthListManagement, Reservation, SmartCharging and RemoteTrigger.
+       default "Core,Firmware Management,Local Auth List Management,Reservation,Smart Charging,Remote Trigger"
+
+config OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH # 9.1.30
+       int "SupportedFeatureProfilesMaxLength"
+       help
+	Maximum number of items in a SupportedFeatureProfiles Configuration Key.
+       default 6
+endmenu
+
+menu "Firmware Management"
+
+config OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS # errata 3.88
+       string "SupportedFileTransferProtocols"
+       help
+	This configuration key tells the Central System which file transfer protocols are supported
+	by the Charge Point. Allowed values:'FTP', 'FTPS', 'HTTP' and 'HTTPS'.
+       default "HTTP,HTTPS"
+endmenu
+menu "Local Auth List Management Profile"
+
+config OCPP_LOCAL_AUTH_LIST_MAX_LENGTH # 9.2.2
+       int "LocalAuthListMaxLength"
+       help
+        Maximum number of identifications that can be stored in the Local Authorization List
+       default 1024
+
+config OCPP_SEND_LOCAL_LIST_MAX_LENGTH # 9.2.3
+       int "SendLocalListMaxLength"
+       help
+	Maximum number of identifications that can be send in a single SendLocalList.req
+       default 255
+
+endmenu
+
+menu "Reservation Profile"
+
+config OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED # 9.3.1
+       bool "ReserveConnectorZeroSupported"
+       help
+	If this configuration key is present and set to true: Charge Point support reservations on
+	connector 0.
+       default y
+endmenu
+
+menu "Smart Charging Profile"
+
+config OCPP_SMART_PATH
+       string "Profile path"
+       help
+	"Base path where ocpp smart charging will store charging profiles"
+       default "/files"
+
+config OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL # 9.4.1
+       int "ChargeProfileMaxStackLevel"
+       help
+	Max StackLevel of a ChargingProfile. The number defined also indicates the max allowed
+	number of installed charging schedules per Charging Profile Purposes.
+       default 8
+
+config OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT # 9.4.2
+       string "ChargingScheduleAllowedChargingRateUnit"
+       help
+	A list of supported quantities for use in a ChargingSchedule. Allowed values: 'Current' and 'Power'
+       default "A"
+
+config OCPP_CHARGING_SCHEDULE_MAX_PERIODS # 9.4.3
+       int "ChargingScheduleMaxPeriods"
+       help
+	Maximum number of periods that may be defined per ChargingSchedule.
+       default 32
+
+config OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED # 9.4.4
+       bool "ConnectorSwitch3to1PhaseSupported"
+       help
+	If defined and true, this Charge Point support switching from 3 to 1 phase during a Transaction.
+       default n
+
+config OCPP_MAX_CHARGING_PROFILES_INSTALLED # 9.4.5
+       int "MaxChargingProfilesInstalled"
+       help
+	Maximum number of Charging profiles installed at a time
+       default 24
+
+endmenu
 
 endmenu
