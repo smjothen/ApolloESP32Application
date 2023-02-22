@@ -65,6 +65,10 @@ void ChargeModeUpdateToCloudNeeded();
 void sessionHandler_SendMCUSettings();
 void sessionHandler_SendRelayStates();
 void sessionHandler_SendFPGAInfo();
+
+void sessionHandler_SendMIDStatus(void);
+void sessionHandler_SendMIDStatusUpdate(void);
+	
 void StackDiagnostics(bool state);
 void ClearStartupSent();
 void SetPendingRFIDTag(char * pendingTag);

@@ -1133,6 +1133,7 @@ static void sessionHandler_task()
 
 
 				sessionHandler_SendFPGAInfo();
+				sessionHandler_SendMIDStatus();
 
 				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)
@@ -1147,6 +1148,8 @@ static void sessionHandler_task()
 				startupSent = true;
 			}
 
+			// Send MID status update if status changed
+			sessionHandler_SendMIDStatusUpdate();
 
 			if(CloudSettingsAreUpdated() == true)
 			{
@@ -1588,6 +1591,38 @@ void sessionHandler_SendFPGAInfo()
 
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 
+}
+
+static uint32_t calibrationId = 0;
+
+void sessionHandler_SendMIDStatus(void) {
+	if (MCU_GetMidStoredCalibrationId(&calibrationId) && calibrationId != 0) {
+		uint32_t midStatus = 0;
+		MCU_GetMidStatus(&midStatus);
+
+		char buf[64];
+		snprintf(buf, sizeof (buf), "MID Calibration ID: %d Status: 0x%08X", calibrationId, midStatus);
+
+		publish_debug_telemetry_observation_Diagnostics(buf);
+	}
+}
+
+void sessionHandler_SendMIDStatusUpdate(void) {
+	if (!calibrationId) {
+		return;
+	}
+
+	static uint32_t lastMidStatus = 0;
+	uint32_t midStatus = 0;
+
+	if (MCU_GetMidStatus(&midStatus) && midStatus != lastMidStatus) {
+		char buf[48];
+		snprintf(buf, sizeof (buf), "MID Status: 0x%08X -> 0x%08X", lastMidStatus, midStatus);
+
+		publish_debug_telemetry_observation_Diagnostics(buf);
+
+		lastMidStatus = midStatus;
+	}
 }
 
 
