@@ -1519,11 +1519,6 @@
 			<location>C:/gitHub/Apollo/goEsp32/esp-idf/components/nvs_flash/src/nvs_cxx_api.cpp</location>
 		</link>
 		<link>
-			<name>build/ide/esp_idf_components/nvs_flash/src/nvs_encr.cpp</name>
-			<type>1</type>
-			<location>C:/gitHub/Apollo/goEsp32/esp-idf/components/nvs_flash/src/nvs_encr.cpp</location>
-		</link>
-		<link>
 			<name>build/ide/esp_idf_components/nvs_flash/src/nvs_handle_locked.cpp</name>
 			<type>1</type>
 			<location>C:/gitHub/Apollo/goEsp32/esp-idf/components/nvs_flash/src/nvs_handle_locked.cpp</location>
@@ -1732,11 +1727,6 @@
 			<name>build/ide/esp_idf_components/bootloader_support/src/idf/bootloader_sha.c</name>
 			<type>1</type>
 			<location>C:/gitHub/Apollo/goEsp32/esp-idf/components/bootloader_support/src/idf/bootloader_sha.c</location>
-		</link>
-		<link>
-			<name>build/ide/esp_idf_components/bootloader_support/src/idf/secure_boot_signatures.c</name>
-			<type>1</type>
-			<location>C:/gitHub/Apollo/goEsp32/esp-idf/components/bootloader_support/src/idf/secure_boot_signatures.c</location>
 		</link>
 		<link>
 			<name>build/ide/esp_idf_components/bt/common/osi/alarm.c</name>

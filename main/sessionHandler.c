@@ -323,7 +323,8 @@ void sessionHandler_CheckAndSendOfflineSessions()
 		int sessionLength = 0;
 		if(completedSessionString == NULL)
 		{
-			offlineSession_AppendLogString("3 CSess = NULL ");
+			offlineSession_AppendLogString("3 CSess = NULL");
+			publish_debug_message_event("Empty CompletedSession", cloud_event_level_warning);
 		}
 		else
 		{
@@ -347,10 +348,13 @@ void sessionHandler_CheckAndSendOfflineSessions()
 			nrOfSentSessions++;
 			/// Sending succeeded -> delete file from flash
 			offlineSession_delete_session(fileToUse);
+
 			ESP_LOGW(TAG,"Sent CompletedSession: %i/%i", nrOfSentSessions, nrOfOfflineSessionFiles);
 		}
 		else
 		{
+			publish_debug_message_event("Failed sending CompletedSession", cloud_event_level_warning);
+
 			offlineSession_AppendLogString("3 CS send FAIL");
 			offlineSession_AppendLogLength();
 			publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());

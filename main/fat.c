@@ -202,11 +202,12 @@ void fat_static_unmount()
 	ESP_LOGI(TAG, "Done unmounting");
 }
 
-static char fatDiagnostics[150] = {0};
+#define FAT_DIAG_BUF_SIZE 150
+static char fatDiagnostics[FAT_DIAG_BUF_SIZE] = {0};
 
 void fat_ClearDiagnostics()
 {
-	memset(fatDiagnostics, 0, sizeof(fatDiagnostics));
+	memset(fatDiagnostics, 0, FAT_DIAG_BUF_SIZE);
 }
 
 char * fat_GetDiagnostics()
@@ -231,7 +232,11 @@ bool fat_eraseAndRemountPartition()
 
 	fat_static_mount();
 
-	snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk erase err: %i ,M: %i", err, mounted);
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
+	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk erase err: %i ,M: %i", err, mounted);
 
 	return mounted;
 }
@@ -244,7 +249,11 @@ bool fat_CheckFilesSystem()
 	if(createdOK)
 		deletedOK = fat_Factorytest_DeleteFile();
 
-	snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
+	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
 
 	return deletedOK; //True if both bools are OK
 }
@@ -267,14 +276,18 @@ bool fat_Factorytest_CreateFile()
 
 	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
 
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
 	if(testDiskFile == NULL)
 	{
-		snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file = NULL, %i:%s,", errno, strerror(errno));
+		snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file = NULL, %i:%s,", errno, strerror(errno));
 		return false;
 	}
 	else
 	{
-		snprintf(fatDiagnostics + strlen(fatDiagnostics), sizeof(fatDiagnostics), " Disk file = 0x%08x", (unsigned int)testDiskFile);
+		snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file = 0x%08x", (unsigned int)testDiskFile);
 		fclose(testDiskFile);
 	}
 
