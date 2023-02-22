@@ -112,7 +112,7 @@ config OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT # 9.4.2
        string "ChargingScheduleAllowedChargingRateUnit"
        help
 	A list of supported quantities for use in a ChargingSchedule. Allowed values: 'Current' and 'Power'
-       default "A"
+       default "Current"
 
 config OCPP_CHARGING_SCHEDULE_MAX_PERIODS # 9.4.3
        int "ChargingScheduleMaxPeriods"

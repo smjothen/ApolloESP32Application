@@ -64,7 +64,6 @@ enum ocpp_smart_event{
 
 struct ocpp_charging_profile ** tx_profiles = NULL;
 
-// Calling this function transfers the responsibility of freeing memory
 esp_err_t update_charging_profile(struct ocpp_charging_profile * profile){
 	ESP_LOGI(TAG, "Updating charging profile");
 
@@ -105,6 +104,8 @@ esp_err_t update_charging_profile(struct ocpp_charging_profile * profile){
 		tx_profiles[profile->stack_level] = profile;
 
 		xSemaphoreGive(file_lock);
+		xTaskNotify(ocpp_smart_task_handle, eNEW_PROFILE_TX, eSetBits);
+
 		return ESP_OK;
 	}
 
@@ -260,6 +261,12 @@ esp_err_t update_charging_profile(struct ocpp_charging_profile * profile){
 
 	fclose(fp);
 	xSemaphoreGive(file_lock);
+
+	if(profile->profile_purpose == eOCPP_CHARGING_PROFILE_PURPOSE_CHARGE_POINT_MAX){
+		xTaskNotify(ocpp_smart_task_handle, eNEW_PROFILE_MAX, eSetBits);
+	}else{
+		xTaskNotify(ocpp_smart_task_handle, eNEW_PROFILE_TX, eSetBits);
+	}
 
 	ocpp_free_charging_profile(profile);
 
@@ -952,6 +959,8 @@ error:
 	}
 }
 
+bool transaction_is_active = false;
+
 void set_charging_profile_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Received request to set charging profile");
 
@@ -993,7 +1002,7 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 
 		cJSON * charging_profile_json = cJSON_GetObjectItem(payload, "csChargingProfiles");
 		enum ocppj_err_t err =  ocpp_charging_profile_from_json(charging_profile_json, CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL,
-									CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT,
+									ocpp_get_allowed_charging_rate_units(),
 									CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS,
 									charging_profile, err_str, sizeof(err_str));
 
@@ -1004,26 +1013,27 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 			goto error;
 		}
 	}
-	enum ocpp_charging_profile_purpose profile_purpose = charging_profile->profile_purpose;
+
+	if(charging_profile->profile_purpose == eOCPP_CHARGING_PROFILE_PURPOSE_TX && transaction_is_active == false){
+		ESP_LOGW(TAG, "Attempt to set TxProfile without an active transaction");
+
+		reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_GENERIC, "TxProfile can only be set when an a transaction is active or in a RemoteStartTransaction.req", NULL);
+		goto error;
+	}
+
 	esp_err_t update_error = update_charging_profile(charging_profile);
 	charging_profile = NULL; // responsibility to free pointer profile has been transfered by update function
 	if(update_error != ESP_OK){
 		ESP_LOGE(TAG, "Unable to update profile: %s", esp_err_to_name(update_error));
 		reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Error occured during update of charging profile", NULL);
 		goto error;
-	}else{
-		reply = ocpp_create_set_charge_profile_confirmation(unique_id, OCPP_CHARGING_PROFILE_STATUS_ACCEPTED);
-		if(profile_purpose == eOCPP_CHARGING_PROFILE_PURPOSE_CHARGE_POINT_MAX){
-			xTaskNotify(ocpp_smart_task_handle, eNEW_PROFILE_MAX, eSetBits);
-		}else{
-			xTaskNotify(ocpp_smart_task_handle, eNEW_PROFILE_TX, eSetBits);
-		}
+	}
 
-		if(reply == NULL){
-			ESP_LOGE(TAG, "Unable to create set charge profile confirmation");
-		}else{
-			send_call_reply(reply);
-		}
+	reply = ocpp_create_set_charge_profile_confirmation(unique_id, OCPP_CHARGING_PROFILE_STATUS_ACCEPTED);
+	if(reply == NULL){
+		ESP_LOGE(TAG, "Unable to create set charge profile confirmation");
+	}else{
+		send_call_reply(reply);
 	}
 
 	return;
@@ -1720,13 +1730,13 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 					OCPP_CHARGING_RATE_A,
 					OCPP_CHARGING_RATE_W) != 0){
 
-			err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
 			strcpy(err_str, "Expected 'chargingRateUnit' to be ChargingRateUnit type");
 			goto error;
 
 		}
 
-		if(!ocpp_csl_contains(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, charging_rate_unit)){
+		if(!ocpp_csl_contains(ocpp_get_allowed_charging_rate_units(), charging_rate_unit)){
 			err = eOCPPJ_ERROR_NOT_SUPPORTED;
 			strcpy(err_str, "'Requested chargingRateUnit' is not supported");
 			goto error;
@@ -1822,8 +1832,8 @@ static void ocpp_smart_task(){
 	// Time until next predicted change event
 	uint32_t next_renewal_delay = UINT32_MAX;
 
-	bool transaction_is_active = false;
-	time_t transaction_start_time;
+	transaction_is_active = false;
+	time_t transaction_start_time = 0;
 
 	while(true){
 
@@ -2041,9 +2051,9 @@ error:
 esp_err_t ocpp_smart_charging_init(){
 	ESP_LOGI(TAG, "Initializing smart charging");
 
-	if(strcmp(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, "A") != 0){
+	if(strcmp(ocpp_get_allowed_charging_rate_units(), "A") != 0){
 		ESP_LOGE(TAG, "Configuration is set to unsupported charge rate unit '%s'",
-			CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT);
+			ocpp_get_allowed_charging_rate_units());
 		return ESP_ERR_NOT_SUPPORTED;
 	}
 

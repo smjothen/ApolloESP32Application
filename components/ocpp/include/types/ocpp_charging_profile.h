@@ -276,4 +276,15 @@ cJSON * ocpp_create_charging_schedule_json(struct ocpp_charging_schedule * charg
  * @param p2 period to compare
  */
 bool ocpp_period_is_equal_charge(const struct ocpp_charging_schedule_period * p1, const struct ocpp_charging_schedule_period * p2);
+
+/**
+ * @brief converts configuration version of allowed charging rate units to type version used in ocpp calls.
+ *
+ * @description OCPP 1.5 Errata sheet mentions that ChargingScheduleAllowedChargingRateUnit should have had allowed
+ * values 'A' and 'W'. This is the case in 2.0.1. But to not break compatibility with pre errata v4.0 'Current' and
+ * 'Power' remains as the allowed values. This function converts 'Current' to 'A' and 'Power' to 'W' as a csl.
+ * The function uses a static buffer for the result and only writes the buffer during the first call. Any new
+ * call to this function will return result of the original call.
+ */
+const char * ocpp_get_allowed_charging_rate_units();
 #endif /*OCPP_CHARGING_PROFILE_H*/

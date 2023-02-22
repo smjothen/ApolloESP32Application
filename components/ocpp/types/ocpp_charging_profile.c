@@ -155,7 +155,7 @@ enum ocppj_err_t charging_schedule_from_json(cJSON * chargingSchedule, const cha
 		}
 	}else{
 		snprintf(error_description_out, error_description_length, "Expected 'chargingRateUnit' to be ChargingRateUnitType type");
-		return eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+		return eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
 	}
 
 	if(cJSON_HasObjectItem(chargingSchedule, "chargingSchedulePeriod")){
@@ -603,4 +603,38 @@ bool ocpp_period_is_equal_charge(const struct ocpp_charging_schedule_period * p1
 	}
 
 	return false;
+}
+
+bool allowed_units_converted = false;
+char allowed_units_buffer[4];
+
+const char * ocpp_get_allowed_charging_rate_units(){
+	if(allowed_units_converted)
+		return allowed_units_buffer;
+
+	char tmp_allowed_config[16]; // configuration should have a maximum size equivalent to "Current,Power" (14)
+	strncpy(tmp_allowed_config, CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, sizeof(tmp_allowed_config));
+
+	char * buffer_end = allowed_units_buffer + (sizeof(allowed_units_buffer) -1);
+	char * buffer_position = allowed_units_buffer;
+
+	char * unit = strtok(tmp_allowed_config, ",");
+	while(unit != NULL && buffer_position < buffer_end -1){ // While more units in configuration csl and space for ',' and value
+
+		if(buffer_position != allowed_units_buffer) // Add ',' separator when not first/last value
+			buffer_position = stpncpy(buffer_position, ",", buffer_end - buffer_position);
+
+		if(strcmp(unit, "Current") == 0){
+			buffer_position = stpncpy(buffer_position, "A", buffer_end - buffer_position);
+
+		}else if(strcmp(unit, "Power") == 0){
+			buffer_position = stpncpy(buffer_position, "W", buffer_end - buffer_position);
+		}
+
+		unit = strtok(NULL, ",");
+	}
+
+	ESP_LOGW(TAG, "Allowed units set as '%s'", allowed_units_buffer);
+	allowed_units_converted = true;
+	return allowed_units_buffer;
 }

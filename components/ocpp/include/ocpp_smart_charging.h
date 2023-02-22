@@ -28,6 +28,14 @@ esp_err_t ocpp_smart_charging_init();
  */
 void ocpp_set_active_transaction_id(int * transaction_id);
 
+
+/**
+ * @brief gives a new ChargingProfile to the smart charging handler. This call transfers responsibility of freeing to smart charging component.
+ *
+ * @param profile the new ChargingProfile
+ */
+esp_err_t update_charging_profile(struct ocpp_charging_profile * profile);
+
 /**
  * @brief Informs the smart charging that transaction has begun or has ended
  *

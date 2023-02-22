@@ -34,6 +34,7 @@
 #include "ocpp_task.h"
 #include "ocpp_smart_charging.h"
 #include "ocpp.h"
+#include "ocpp_json/ocppj_validation.h"
 #include "messages/call_messages/ocpp_call_cb.h"
 #include "messages/call_messages/ocpp_call_request.h"
 #include "messages/result_messages/ocpp_call_result.h"
@@ -52,6 +53,7 @@
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_reservation_status.h"
 #include "types/ocpp_cancel_reservation_status.h"
+#include "types/ocpp_charging_profile_status.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 
@@ -1492,55 +1494,61 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 }
 
 static void remote_start_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Request to strat transaction");
+	ESP_LOGI(TAG, "Request to remote start transaction");
+	char err_str[128] = {0};
 
-	if(payload == NULL || !cJSON_HasObjectItem(payload, "idTag")){
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'idTag' field", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for formation violation");
+	int connector_id;
+	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", false, &connector_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+
+		if(err != eOCPPJ_NO_VALUE){
+			goto error;
 		}else{
-			send_call_reply(ocpp_error);
-		}
-		return;
-	}
-
-	int connector_id = 1;
-	if(cJSON_HasObjectItem(payload, "connectorId")){
-		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
-		if(cJSON_IsNumber(connector_id_json)){
-			connector_id = connector_id_json->valueint;
-		}else{
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be interger type", NULL);
-			if(ocpp_error == NULL){
-				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-			}else{
-				send_call_reply(ocpp_error);
+			if(connector_id <= 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+				err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+				strcpy(err_str, "Expected connectorId to name a valid connector");
+				goto error;
 			}
-			return;
-		}
-
-		if(connector_id <= 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify an existing connector", NULL);
-			if(ocpp_error == NULL){
-				ESP_LOGE(TAG, "Unable to create call error property constraint violation");
-			}else{
-				send_call_reply(ocpp_error);
-			}
-			return;
-
 		}
 	}
 
-	cJSON * id_tag_json = cJSON_GetObjectItem(payload, "idTag");
-	if(!cJSON_IsString(id_tag_json) || !is_ci_string_type(id_tag_json->valuestring, 20)){
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be CiSstring20Type", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-		}else{
-			send_call_reply(ocpp_error);
-		}
-		return;
+	char * id_tag;
+	err = ocppj_get_string_field(payload, "idTag", true, &id_tag, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR)
+		goto error;
 
+	if(cJSON_HasObjectItem(payload, "chargingProfile")){
+
+		struct ocpp_charging_profile * charging_profile = calloc(sizeof(struct ocpp_charging_profile), 1);
+		if(charging_profile == NULL){
+			err = eOCPPJ_ERROR_INTERNAL;
+			strcpy(err_str, "Unable to allocate memory for charging profile");
+			goto error;
+		}
+
+		err = ocpp_charging_profile_from_json(cJSON_GetObjectItem(payload, "chargingProfile"),
+						CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL,
+						ocpp_get_allowed_charging_rate_units(),
+						CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS,
+						charging_profile, err_str, sizeof(err_str));
+		if(err != eOCPPJ_NO_ERROR){
+			free(charging_profile);
+			goto error;
+		}
+
+		if(charging_profile->profile_purpose != eOCPP_CHARGING_PROFILE_PURPOSE_TX || charging_profile->transaction_id != NULL){
+			ocpp_free_charging_profile(charging_profile);
+
+			err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+			strcpy(err_str, "chargingProfile is valid, but RemoteStarttransaction requires purpose to be txProfile and no transactionId");
+			goto error;
+		}
+
+		if(update_charging_profile(charging_profile) != ESP_OK){
+			err = eOCPPJ_ERROR_INTERNAL;
+			strcpy(err_str, "Unable to set chargingProfile");
+			goto error;
+		}
 	}
 
 	bool accept_request = get_ocpp_state() == eOCPP_CP_STATUS_PREPARING;
@@ -1561,15 +1569,33 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 	if(!accept_request)
 		return;
 
-	struct TagInfo tag ={
-		.tagIsValid = true,
-	};
-	strcpy(tag.idAsString, id_tag_json->valuestring);
 
 	if(storage_Get_ocpp_authorize_remote_tx_requests()){
+		struct TagInfo tag ={
+			.tagIsValid = true,
+		};
+		strcpy(tag.idAsString, id_tag);
+
 		authorize(tag, start_charging_on_tag_accept, start_charging_on_tag_deny);
+	}else{
+		start_charging_on_tag_accept(id_tag);
+	}
+
+	return;
+error:
+	if(err == eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Remote start transaction error reached without known error");
+		err = eOCPPJ_ERROR_INTERNAL;
+	}
+
+	cJSON * ocpp_error = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	if(ocpp_error == NULL){
+		ESP_LOGE(TAG, "Unable to create call error for RemoteStartTransaction.req");
+	}else{
+		send_call_reply(ocpp_error);
 	}
 }
+
 static void stop_charging(){
 	ESP_LOGI(TAG, "Sending stop charging command");
 	MessageType ret = MCU_SendCommandId(CommandStopCharging);
