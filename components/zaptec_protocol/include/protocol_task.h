@@ -110,5 +110,6 @@ bool MCU_GetInterpolatedEnergyCounter(float *energy);
 bool MCU_IsCalibrationHandle(void);
 
 bool MCU_GetMidStatus(uint32_t *id);
+bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalCount);
 
 #endif /* PROTOCOL_TASK_H */

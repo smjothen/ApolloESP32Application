@@ -352,6 +352,9 @@ static bool isOnline = false;
 static bool previousIsOnline = true;
 static uint32_t pulseCounter = PULSE_INIT_TIME;
 
+static uint16_t autoClearLastCount = 0;
+static uint32_t autoClearLastTimeout = 0;
+
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 {
 	return chargeOperatingMode;
@@ -1366,8 +1369,24 @@ static void sessionHandler_task()
 			{
 				eMeterAlarmBlock = false;
 			}
-			
 
+			uint32_t acTimeout = 0;
+			uint16_t acCount = 0, acTotalCount = 0;
+			
+			// Send event log entry if auto clear on MCU occurs or if a reset of the timeout occurs
+			if (MCU_GetAutoClearStatus(&acTimeout, &acCount, &acTotalCount) && 
+					(acTotalCount != autoClearLastCount || acTimeout < autoClearLastTimeout)) {
+
+				char buf[64];
+				snprintf(buf, sizeof (buf), "AutoClear: %d / %d / %d", acTimeout, acCount, acTotalCount);
+
+				publish_debug_message_event(buf, cloud_event_level_warning);
+
+				ESP_LOGI(TAG, "AutoClear Timeout: %d CurrenTime: %d TotalClears: %d", acTimeout, acCount, acTotalCount);
+
+				autoClearLastTimeout = acTimeout;
+				autoClearLastCount = acTotalCount;
+			}
 
 			if(onTime % 15 == 0)//15
 			{

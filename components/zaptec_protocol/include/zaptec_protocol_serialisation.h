@@ -184,6 +184,8 @@
 		ESPResetSource = 815,
 		MCUFaultPins	= 816,
 		RelayStates		= 817,
+    ParamAutoClearState = 818,
+
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,

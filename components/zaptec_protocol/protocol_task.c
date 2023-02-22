@@ -1356,6 +1356,18 @@ bool MCU_GetMidStatus(uint32_t *id) {
 }
 
 
+bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalCount) {
+    ZapMessage msg = MCU_ReadParameter(ParamAutoClearState);
+    if (msg.length != 8 || msg.identifier != ParamAutoClearState) {
+        return false;
+    }
+
+    *timeout = GetUint32_t(msg.data);
+    *count = GetUInt16(msg.data + 4);
+    *totalCount = GetUInt16(msg.data + 6);
+    return true;
+}
+
 void MCU_GetOPENSamples(char * samples)
 {
 	if(MsgCommandAck == MCU_SendCommandId(CommandGetOPENSamples))
