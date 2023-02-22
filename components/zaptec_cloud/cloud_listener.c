@@ -2619,6 +2619,40 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					publish_debug_telemetry_observation_Diagnostics(partbuf);
 					responseStatus = 200;
 				}
+				else if(strstr(commandString, "listdirectory")){
+					char * directory_path = index(commandString, '/');
+					if(directory_path != NULL && strlen(directory_path) > 0){
+
+						for(size_t i = strlen(directory_path)-1; i > 0; i--){
+							if(isspace(directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+								|| directory_path[i] == '"'){
+								directory_path[i] = '\0';
+							}
+						}
+
+						ESP_LOGI(TAG, "Listing directory: '%s'", directory_path);
+
+						cJSON * result = cJSON_CreateObject();
+						if(result == NULL){
+							responseStatus = 500;
+						}else{
+							fat_list_directory(directory_path, result);
+							char * result_str = cJSON_PrintUnformatted(result);
+							cJSON_Delete(result);
+
+							if(result_str != NULL){
+								responseStatus = 200;
+								publish_debug_telemetry_observation_Diagnostics(result_str);
+								free(result_str);
+							}else{
+								responseStatus = 500;
+							}
+						}
+					}else{
+						ESP_LOGW(TAG, "listdirectory requested with missing path");
+						responseStatus = 400;
+					}
+				}
 			}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
