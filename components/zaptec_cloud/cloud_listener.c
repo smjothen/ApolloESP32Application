@@ -34,6 +34,7 @@
 #include "../../main/offlineSession.h"
 #include "../../main/chargeController.h"
 #include "../../main/production_test.h"
+#include "fat.h"
 
 #include "esp_tls.h"
 #include "base64.h"
@@ -2508,6 +2509,149 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					sessionHandler_SendFPGAInfo();
 					responseStatus = 200;
+				}
+				else if(strstr(commandString, "GetFailedRFID"))
+				{
+					char atqa[12] = {0};
+					uint16_t value = NFCGetLastFailedATQA();
+					snprintf(atqa, 12,"ATQA: %02X %02X", ((value>>8) & 0xff), (value & 0xff));
+					publish_debug_telemetry_observation_Diagnostics(atqa);
+					responseStatus = 200;
+				}
+				/*else if(strstr(commandString, "getpartitions"))
+				{
+					char buf[351]={0};
+					offlineSession_test_GetPartitions(buf);
+					ESP_LOGW(TAG, "Part buf len: %i", strlen(buf));
+					publish_debug_telemetry_observation_Diagnostics(buf);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "erasefilespartition"))
+				{
+					esp_partition_t *part  = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+
+					esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+
+					char partbuf[50];
+					snprintf(partbuf, 50, "ErasePartitionResult: %i", err);
+
+					publish_debug_telemetry_observation_Diagnostics(partbuf);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "getaccenergy"))
+				{
+					double accumulated_energy = OCMF_Write_Read_accumulated_energy(0.0);
+					ESP_LOGW(TAG, "Read accumulated energy: %f", accumulated_energy);
+					char accbuf[50];
+					snprintf(accbuf, 40, "ReadEnergy: %f", accumulated_energy);
+					publish_debug_telemetry_observation_Diagnostics(accbuf);
+				}
+				else if(strstr(commandString, "setaccenergy"))
+				{
+					float newEnergy = 0;
+					sscanf(&commandString[14], "%f", &newEnergy);
+
+					double accumulated_energy = OCMF_Write_Read_accumulated_energy(newEnergy);
+					ESP_LOGW(TAG, "Wrote accumulated energy: %f", accumulated_energy);
+					char accbuf[50];
+					snprintf(accbuf, 40, "WroteEnergy: %f", accumulated_energy);
+					publish_debug_telemetry_observation_Diagnostics(accbuf);
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+
+				else if(strstr(commandString, "getmount"))
+				{
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testmount"))
+				{
+					offlineSession_mount_folder();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}*/
+				/*else if(strstr(commandString, "testcreate"))
+				{
+					offlineSession_test_Createfile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testwrite"))
+				{
+					offlineSession_test_Writefile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testread"))
+				{
+					offlineSession_test_Readfile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "testdelete"))
+				{
+					offlineSession_test_Deletefile();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "readsessionfile"))
+				{
+					offlineSession_Diagnostics_ReadFileContent(0);
+
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+					responseStatus = 200;
+				}*/
+				else if(strstr(commandString, "fixpartition"))
+				{
+					int status = 0;
+					char partbuf[150] = {0};
+					if(strstr(commandString, "fixpartitionfiles"))
+					{
+						offlineSession_eraseAndRemountPartition(partbuf, sizeof(partbuf));
+					}
+					else if(strstr(commandString, "fixpartitiondisk"))
+					{
+						esp_err_t err = fat_eraseAndRemountPartition();
+						snprintf(partbuf, 100, "EraseDiskResult: %i", err);
+					}
+
+					publish_debug_telemetry_observation_Diagnostics(partbuf);
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "listdirectory")){
+					char * directory_path = index(commandString, '/');
+					if(directory_path != NULL && strlen(directory_path) > 0){
+
+						for(size_t i = strlen(directory_path)-1; i > 0; i--){
+							if(isspace(directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+								|| directory_path[i] == '"'){
+								directory_path[i] = '\0';
+							}
+						}
+
+						ESP_LOGI(TAG, "Listing directory: '%s'", directory_path);
+
+						cJSON * result = cJSON_CreateObject();
+						if(result == NULL){
+							responseStatus = 500;
+						}else{
+							fat_list_directory(directory_path, result);
+							char * result_str = cJSON_PrintUnformatted(result);
+							cJSON_Delete(result);
+
+							if(result_str != NULL){
+								responseStatus = 200;
+								publish_debug_telemetry_observation_Diagnostics(result_str);
+								free(result_str);
+							}else{
+								responseStatus = 500;
+							}
+						}
+					}else{
+						ESP_LOGW(TAG, "listdirectory requested with missing path");
+						responseStatus = 400;
+					}
 				}
 			}
 	}

@@ -17,6 +17,7 @@ int NFCInit();
 int NFCReadTag();
 struct TagInfo NFCGetTagInfo();
 void NFCClearTag();
+uint16_t NFCGetLastFailedATQA();
 void NFCTagInfoClearValid();
 
 #ifdef __cplusplus
