@@ -55,8 +55,12 @@ static int activeFileNumber = -1;
 static char activePathString[22] = {0};
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
-static char fileDiagnostics[150] = {0};
-static char sequenceDiagnostics[250] = {0};
+
+#define FILE_DIAG_BUF_SIZE 150
+static char fileDiagnostics[FILE_DIAG_BUF_SIZE] = {0};
+
+#define MAX_SEQ_DIAG_LEN 250
+static char sequenceDiagnostics[MAX_SEQ_DIAG_LEN] = {0};
 
 void offlineSession_disable(void) {
 	// For calibration, don't store energy in offline session
@@ -75,22 +79,38 @@ void offlineSession_Init()
 
 void offlineSession_AppendLogString(char * stringToAdd)
 {
-	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s\r\n", stringToAdd);
+	int seqDiagLen = 0;
+	if(sequenceDiagnostics != NULL)
+		seqDiagLen = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s\r\n", stringToAdd);
 }
 
 void offlineSession_AppendLogStringWithInt(char * stringToAdd, int value)
 {
-	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s %i\r\n", stringToAdd, value);
+	int seqDiagLen = 0;
+	if(sequenceDiagnostics != NULL)
+		seqDiagLen = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s %i\r\n", stringToAdd, value);
 }
 
 void offlineSession_AppendLogStringWithIntInt(char * stringToAdd, int value1, int value2)
 {
-	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%s %i %i\r\n", stringToAdd, value1, value2);
+	int seqDiagLen = 0;
+	if(sequenceDiagnostics != NULL)
+		seqDiagLen = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s %i %i\r\n", stringToAdd, value1, value2);
 }
 
 void offlineSession_AppendLogStringErr()
 {
-	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "%i:%s\r\n", errno, strerror(errno));
+	int seqDiagLen = 0;
+	if(sequenceDiagnostics != NULL)
+		seqDiagLen = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%i:%s\r\n", errno, strerror(errno));
 }
 
 
@@ -100,7 +120,11 @@ void offlineSession_AppendLogLength()
 	if(sequenceDiagnostics != NULL)
 		len = strlen(sequenceDiagnostics);
 
-	snprintf(sequenceDiagnostics + strlen(sequenceDiagnostics), sizeof(sequenceDiagnostics), "(%i)", len);
+	int seqDiagLen = 0;
+	if(sequenceDiagnostics != NULL)
+		seqDiagLen = strlen(sequenceDiagnostics);
+
+	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "(%i)", len);
 }
 
 char * offlineSession_GetLog()
@@ -121,12 +145,16 @@ bool offlineSession_CheckFilesSystem()
 	if(createdOK)
 		deletedOK = offlineSession_test_DeleteFile();
 
-	snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
+	int fileDiagLen = 0;
+	if(fileDiagnostics != NULL)
+		fileDiagLen = strlen(fileDiagnostics);
+
+	snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
 
 	return deletedOK; //True if both bools are OK
 }
 
-//bool firstcreate = true;
+
 static FILE *testFile = NULL;
 bool offlineSession_test_CreateFile()
 {
@@ -140,17 +168,46 @@ bool offlineSession_test_CreateFile()
 	if((testFile == NULL) || (errno != 0))
 		ESP_LOGE(TAG, "#### Create file errno: fp: 0x%p %i: %s", testFile, errno, strerror(errno));
 
-	//if((testFile == NULL) || (firstcreate == true))
+	int fileDiagLen = 0;
+
 	if(testFile == NULL)
 	{
-		//firstcreate = false;
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "New file = NULL, %i:%s,", errno, strerror(errno));
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "New file = NULL, %i:%s,", errno, strerror(errno));
 		return false;
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "New file = 0x%08x", (unsigned int)testFile);
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "New file = 0x%08x", (unsigned int)testFile);
+
+		uint8_t value = 0xA;
+		size_t wret = fwrite((void*)&value, sizeof(uint8_t), 1, testFile);
+
+		value = 0;
+		fseek(testFile, 0, SEEK_SET);
+
+		size_t rret = fread((void*)&value, sizeof(uint8_t), 1, testFile);
+
 		fclose(testFile);
+
+		if((rret != 1) || (value != 0xA))
+		{
+			ESP_LOGE(TAG, "fread verification failed: 0x%x, w:%i r:%i", value, wret, rret);
+			ESP_LOGE(TAG, "#### RW file errno: fp: 0x%p %i: %s", testFile, errno, strerror(errno));
+
+			if(fileDiagnostics != NULL)
+				fileDiagLen = strlen(fileDiagnostics);
+
+			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "Read failed: %i", (int)rret);
+			return false;
+		}
+
+		ESP_LOGI(TAG, "fread verification OK: 0x%x, %i", value, rret);
 	}
 
 	return true;
@@ -167,13 +224,13 @@ bool offlineSession_test_CreateFile()
 	FILE *fp = fopen("/offs/testfile.bin", "r");
 	if(fp==NULL)
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File can't be opened,");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File can't be opened,");
 		ESP_LOGI(TAG, "File before remove: can't be opened ");
 		return false;
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File can be opened,");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File can be opened,");
 		ESP_LOGI(TAG, "File before remove: can be opened ");
 	}
 
@@ -184,12 +241,12 @@ bool offlineSession_test_CreateFile()
 	fp = fopen("/offs/testfile.bin", "r");
 	if(fp==NULL)
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File deleted OK");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File deleted OK");
 		ESP_LOGI(TAG, "File after remove: delete SUCCEEDED");
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " File deleted FAILED");
+		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File deleted FAILED");
 		ESP_LOGE(TAG, "File after remove: delete FAILED");
 	}
 
@@ -214,7 +271,11 @@ bool offlineSession_test_DeleteFile()
 	}
 	else
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " remove = %i, %i:%s ", status, errno, strerror(errno));
+		int fileDiagLen = 0;
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " remove = %i, %i:%s ", status, errno, strerror(errno));
 	}
 
 	return false;
@@ -223,7 +284,7 @@ bool offlineSession_test_DeleteFile()
 
 void offlineSession_ClearDiagnostics()
 {
-	memset(fileDiagnostics, 0, sizeof(fileDiagnostics));
+	memset(fileDiagnostics, 0, FILE_DIAG_BUF_SIZE);
 }
 
 char * offlineSession_GetDiagnostics()
@@ -251,9 +312,13 @@ bool offlineSession_FileSystemCorrected()
  */
 bool offlineSession_CheckAndCorrectFilesSystem()
 {
+	int fileDiagLen = 0;
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), "Semaphore fault");
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "Semaphore fault");
 		ESP_LOGE(TAG, "failed to obtain offs lock during check and correct");
 		return false;
 	}
@@ -269,25 +334,39 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 		if(isFileSystemOK)
 		{
-			snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " M: %i,", mounted);
+			if(fileDiagnostics != NULL)
+				fileDiagLen = strlen(fileDiagnostics);
+
+			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " M: %i,", mounted);
 
 			isFileSystemOK = offlineSession_test_CreateFile();
 			if(isFileSystemOK)
 			{
 				fileSystemCorrected = offlineSession_test_DeleteFile();
-				snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " fileSystemCorrected: %i", fileSystemCorrected);
+
+				if(fileDiagnostics != NULL)
+					fileDiagLen = strlen(fileDiagnostics);
+
+				snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " fileSystemCorrected: %i", fileSystemCorrected);
 			}
 		}
 		else
 		{
-			snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " EraseAndRemount failed");
+			if(fileDiagnostics != NULL)
+				fileDiagLen = strlen(fileDiagnostics);
+
+			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " EraseAndRemount failed");
 		}
 		ESP_LOGW(TAG, "FILE SYSTEM CORRECTED");
 	}
 	else
 	{
 		bool deletedOK = offlineSession_test_DeleteFile();
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " Removed: %i", deletedOK);
+
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " Removed: %i", deletedOK);
 
 		if(deletedOK == false)
 			ESP_LOGE(TAG, "Removing testfile failed");
@@ -310,12 +389,23 @@ bool offlineSession_eraseAndRemountPartition()
 	{
 		ESP_LOGI(TAG, "Unmounting files-filesystem");
 		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " UnmErr: %i,", err);
+
+		int fileDiagLen = 0;
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " UnmErr: %i,", err);
+
 		if(err != ESP_OK)
 			ESP_LOGE(TAG, "Unmounting failed: %i", err);
 
 		err = esp_partition_erase_range(part, 0, part->size);
-		snprintf(fileDiagnostics + strlen(fileDiagnostics), sizeof(fileDiagnostics), " EraseErr: %i,", err);
+
+		if(fileDiagnostics != NULL)
+			fileDiagLen = strlen(fileDiagnostics);
+
+		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " EraseErr: %i,", err);
+
 		if(err != ESP_OK)
 		{
 			ESP_LOGE(TAG, "Erase failed: %i", err);
@@ -686,7 +776,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 
 	if(sessionFile == NULL)
 	{
-		ESP_LOGE(TAG, "Could not create or open sessionFile");
+		ESP_LOGE(TAG, "Could not create or open sessionFile %s (%i)", activePathString, createNewFile);
 		if(createNewFile)
 		{
 			offlineSession_AppendLogString("1 sessionFile = NULL");
@@ -1240,6 +1330,13 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			/// Should at least be one element 'B'
 			if(nrOfOCMFElements == 0)
 			{
+				if(label == 'T')
+					offlineSession_AppendLogString("2 T:nrOfOCMFElements == 0");
+				else if(label == 'E')
+					offlineSession_AppendLogString("3 E:nrOfOCMFElements == 0");
+				else
+					offlineSession_AppendLogString("nrOfOCMFElements == 0");
+
 				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
