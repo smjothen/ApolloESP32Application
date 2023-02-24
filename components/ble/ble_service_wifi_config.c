@@ -159,6 +159,8 @@ const uint8_t Timezone_uid128[ESP_UUID_LEN_128] 		= {0xe0, 0xfc, 0xb5, 0xc0, 0x5
 //TimeSchedule: 10492c5a-deec-4577-a25a-6950c0b5fce1
 const uint8_t TimeSchedule_uid128[ESP_UUID_LEN_128] 	= {0xe1, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
+const uint8_t RCDTest_uid128[ESP_UUID_LEN_128] 			= {0x0d, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+
 
 const uint8_t RunCommand_uid128[ESP_UUID_LEN_128] = 	{0x03, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 //static const uint8_t RUN_COMMAND_CHAR_descr[]   		= "Run Command";
@@ -315,6 +317,10 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_TIMESCHEDULE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_TIMESCHEDULE_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &TimeSchedule_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	//[CHARGER_TIMESCHEDULE_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+	[CHARGER_RCDTEST_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_RCDTEST_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &RCDTest_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_RCDTEST_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 
 	[CHARGER_RUN_COMMAND_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
@@ -1172,6 +1178,28 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		break;
 
+    case CHARGER_RCDTEST_UUID:
+
+    	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		//Always 1 characters
+    	char rcdCharState;
+		uint8_t rcdTestState = MCU_GetRCDButtonTestStates();
+
+		if(rcdTestState == 1)
+			rcdCharState = '1';
+		else if(rcdTestState == 2)
+			rcdCharState = '2';
+		else
+			rcdCharState = '0';
+
+		ESP_LOGW(TAG, "RCD Button State %c ", rcdCharState);
+
+		memcpy(rsp->attr_value.value, &rcdCharState, 1);
+		rsp->attr_value.len = 1;
+
+    	break;
+
     }
 }
 
@@ -1652,7 +1680,19 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			storage_SaveConfiguration();
 		}
 
-		//else if(command == CommandFactoryReset)
+		else if(command == CommandRunRCDTest)
+		{
+			MessageType ret = MCU_SendCommandId(CommandRunRCDTest);
+			if(ret == MsgCommandAck)
+			{
+
+				ESP_LOGW(TAG, "MCU RunRCDTest command OK");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU RunRCDTest command FAILED");
+			}
+		}
 		else
 			ESP_LOGI(TAG, "BLE command not supported: %i", command);
 

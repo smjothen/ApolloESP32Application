@@ -81,6 +81,7 @@ float MCU_GetHWCurrentMaxLimit();
 
 void MCU_GetOPENSamples(char * samples);
 uint8_t MCU_GetRelayStates();
+uint8_t MCU_GetRCDButtonTestStates();
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen);
 
 float MCU_GetMaxInstallationCurrentSwitch();

@@ -1294,6 +1294,15 @@ uint8_t MCU_GetRelayStates()
 	return relayStates;
 }
 
+uint8_t MCU_GetRCDButtonTestStates()
+{
+	ZapMessage rxMsg = MCU_ReadParameter(RCDButtonTestState);
+	uint8_t buttonState = 0;
+	if((rxMsg.length == 1) && (rxMsg.identifier == RCDButtonTestState))
+		buttonState = rxMsg.data[0];
+	return buttonState;
+}
+
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
 {
 	ZapMessage rxMsg = MCU_ReadParameter(ParamSmartFpgaVersionAndHash);
@@ -1303,6 +1312,7 @@ void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
 		ESP_LOGI(TAG, "%s", stringBuf);
 	}
 }
+
 
 void SetEspNotification(uint16_t notification)
 {

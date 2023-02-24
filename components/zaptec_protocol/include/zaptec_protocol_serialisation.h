@@ -57,6 +57,8 @@
 		ParamLedOverride = 290,
 		ParamLedOverrideClear = 291,
 
+		RCDButtonTestState = 402,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -277,6 +279,7 @@
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,
 		CommandITDiagnosticsStop = 807,
+		CommandRunRCDTest = 808,
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
 		CommandGetOPENSamples = 812,
