@@ -1,3 +1,4 @@
+#include <string.h>
 #include <stdio.h>
 
 #include "types/ocpp_id_tag_info.h"
@@ -26,7 +27,7 @@ enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_inf
 		snprintf(error_description, description_length, "Expected 'status' to be a valid AuthorizationStatus");
 		return 	eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
 	}
-	sprintf(id_tag_out->status, status_json->valuestring);
+	strcpy(id_tag_out->status, status_json->valuestring);
 
 	if(cJSON_HasObjectItem(idTagInfo, "parentIdTag")){
 		cJSON * parent_id_tag_json = cJSON_GetObjectItem(idTagInfo, "parentIdTag");
@@ -36,7 +37,7 @@ enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_inf
 			return eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
 
 		}else{
-			sprintf(id_tag_out->parent_id_tag, parent_id_tag_json->valuestring);
+			strcpy(id_tag_out->parent_id_tag, parent_id_tag_json->valuestring);
 		}
 	}else{
 		id_tag_out->parent_id_tag[0] = '\0';

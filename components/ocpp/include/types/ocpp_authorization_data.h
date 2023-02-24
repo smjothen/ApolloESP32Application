@@ -20,4 +20,14 @@ struct ocpp_authorization_data{
 	struct ocpp_id_tag_info id_tag_info;
 };
 
+/**
+ * @brief converts json to ocpp_authorization_data
+ *
+ * @param data The json payload to converts
+ * @param authorization_data_out Output parameter containing result
+ * @param error_description_out buffer to write to in case of error
+ * @param error_description_length size of error_description_out buffer
+ */
+enum ocppj_err_t ocpp_authorization_data_from_json(cJSON * data, struct ocpp_authorization_data * authorization_data_out,
+						char * error_description_out, size_t error_description_length);
 #endif /*OCPP_AUTHORIZATION_DATA_H*/

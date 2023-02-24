@@ -34,6 +34,7 @@ void storage_Set_TransmitChangeLevel(float newValue);
 
 //Set OCPP settings
 void storage_Set_url_ocpp(const char * newValue);
+void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue);
 void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue);
 void storage_Set_ocpp_clock_aligned_data_interval(uint32_t newValue);
 void storage_Set_ocpp_connection_timeout(uint32_t newValue);
@@ -95,6 +96,7 @@ uint32_t storage_Get_MaxStartDelay();
 
 //Get OCPP settings
 const char * storage_Get_url_ocpp();
+bool storage_Get_ocpp_allow_offline_tx_for_unknown_id();
 bool storage_Get_ocpp_authorize_remote_tx_requests();
 uint32_t storage_Get_ocpp_clock_aligned_data_interval();
 uint32_t storage_Get_ocpp_connection_timeout();

@@ -250,12 +250,20 @@ int fat_replace_file(const char * new_file, const char * old_file){
 	return 0;
 }
 
-int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_list, size_t list_length){
+int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data * auth_list, size_t list_length){
 	struct stat st;
 	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return -1;
+	}
+
+	if(list_length == 0){
+		if(stat("/disk/authlist.txt", &st) == 0){
+			return remove("/disk/authlist.txt");
+		}else{
+			return 0;
+		}
 	}
 
 	ESP_LOGI(TAG, "Creating temporary file for update auth list (Full)");
@@ -273,7 +281,7 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 	}
 
 	for(size_t i = 0; i < list_length; i++){
-		size_t written_items = fwrite(auth_list[i], sizeof(struct ocpp_authorization_data), 1, f);
+		size_t written_items = fwrite(&auth_list[i], sizeof(struct ocpp_authorization_data), 1, f);
 		if(written_items == 0){
 			fclose(f);
 			ESP_LOGI(TAG, "Error when writing full auth list. Changes not saved");
@@ -288,13 +296,15 @@ int fat_UpdateAuthListFull(int version, struct ocpp_authorization_data ** auth_l
 	return fat_replace_file("/disk/authlist.tmp", "/disk/authlist.txt");
 }
 
-int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data ** auth_list, size_t list_length){
+int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data * auth_list, size_t list_length){
 	struct stat st;
 	if(stat("/disk", &st) != 0)
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return -1;
 	}
+
+	bool * auth_list_item_is_written = NULL;
 
 	ESP_LOGI(TAG, "Creating temporary file for update auth list (Differential)");
 	FILE *f_w = fopen("/disk/authlist.tmp", "wb");
@@ -303,68 +313,79 @@ int fat_UpdateAuthListDifferential(int version, struct ocpp_authorization_data *
 		return -1;
 	}
 
-	FILE *f_r = fopen("/disk/authlist.txt", "rb");
-	if (f_r == NULL) {
-		fclose(f_w);
-		ESP_LOGE(TAG, "Failed to open old auth list");
-		return -1;
-	}
-
-	int version_old;
-	fscanf(f_r, "%d\n", &version_old);
-
-	if(ferror(f_r) != 0){
-		fclose(f_w);
-		fclose(f_r);
-		return -1;
-	}
-
 	if(fprintf(f_w, "%d\n", version) < 0){ // write version number
-		fclose(f_w);
-		fclose(f_r);
-		return -1;
+		ESP_LOGE(TAG, "Unable to write version during differential update");
+
+		goto error;
 	}
 
-	struct ocpp_authorization_data auth_data_read;
-	bool * auth_list_item_is_written = calloc(sizeof(bool), list_length);
+	auth_list_item_is_written = calloc(sizeof(bool), list_length);
+	if(auth_list_item_is_written == NULL){
+		ESP_LOGE(TAG, "Unable to allocate buffer to track written items during differential update");
 
-	//TODO: consider improving performance by changing data stucture to remove written items from aut_list
-	while(fread(&auth_data_read, sizeof(struct ocpp_authorization_data), 1, f_r) == 1){
-		bool is_match = false;
-		for(size_t i = 0; i < list_length; i++){
-			if(strcasecmp(auth_data_read.id_tag, auth_list[i]->id_tag) == 0){
-				is_match = true;
+		goto error;
+	}
 
-				if(strcmp(auth_list[i]->id_tag_info.status, "DELETE") != 0)
-					fwrite(auth_list[i], sizeof(struct ocpp_authorization_data), 1, f_w); // write authorization data that is in both auth_list and on file
+	if(stat("/disk/authlist.txt", &st) == 0){ // If old auth list exists
 
-				auth_list_item_is_written[i] = true;
-				break;
+		FILE *f_r = fopen("/disk/authlist.txt", "rb");
+		if (f_r == NULL) {
+			ESP_LOGE(TAG, "Failed to open old auth list");
+
+			goto error;
+		}
+
+		int version_old;
+		fscanf(f_r, "%d\n", &version_old);
+
+		if(ferror(f_r) != 0){
+			fclose(f_r);
+
+			goto error;
+		}
+
+		struct ocpp_authorization_data auth_data_read;
+
+		//TODO: consider improving performance by changing data stucture to remove written items from aut_list
+		while(fread(&auth_data_read, sizeof(struct ocpp_authorization_data), 1, f_r) == 1){
+			bool is_match = false;
+			for(size_t i = 0; i < list_length; i++){
+				if(strcasecmp(auth_data_read.id_tag, auth_list[i].id_tag) == 0){
+					is_match = true;
+
+					if(strcmp(auth_list[i].id_tag_info.status, "DELETE") != 0)
+						fwrite(&auth_list[i], sizeof(struct ocpp_authorization_data), 1, f_w); // write authorization data that is in both auth_list and on file
+
+					auth_list_item_is_written[i] = true;
+					break;
+				}
+			}
+
+			if(!is_match){
+				fwrite(&auth_data_read, sizeof(struct ocpp_authorization_data), 1, f_w); // Write authorization data that is only on file
+			}
+
+			if(ferror(f_w) != 0){
+				fclose(f_r);
+
+				goto error;
 			}
 		}
 
-		if(!is_match){
-			fwrite(&auth_data_read, sizeof(struct ocpp_authorization_data), 1, f_w); // Write authorization data that is only on file
-		}
-
-		if(ferror(f_w) != 0){
-			goto error;
-		}
+		fclose(f_r);
 	}
 
 	for(size_t i = 0; i < list_length; i++){
-		if(auth_list_item_is_written[i] == false){
-			if(strcmp(auth_list[i]->id_tag_info.status, "DELETE") != 0)
-				fwrite(auth_list[i], sizeof(struct ocpp_authorization_data), 1, f_w); // Write authorization data that is only in auth_list
+		if(auth_list_item_is_written[i] == false && strcmp(auth_list[i].id_tag_info.status, "DELETE") != 0){
+			if(fwrite(&auth_list[i], sizeof(struct ocpp_authorization_data), 1, f_w) != 1){ // Write authorization data that is only in auth_list
+				ESP_LOGE(TAG, "Unable to write new list items during differential update");
 
-			if(ferror(f_w) != 0){
 				goto error;
 			}
 		}
 	}
 
 	fclose(f_w);
-	fclose(f_r);
 	free(auth_list_item_is_written);
 
 	ESP_LOGI(TAG, "Auth list update complete, replacing old file");
@@ -373,7 +394,6 @@ error:
 
 	ESP_LOGE(TAG, "Error while writing auth list");
 	fclose(f_w);
-	fclose(f_r);
 	free(auth_list_item_is_written);
 	return -1;
 }
@@ -426,7 +446,11 @@ int fat_ReadAuthListVersion(){
 		return -1;
 	}
 
-        FILE *f = fopen("/disk/authlist.txt", "rb");
+	if(stat("/disk/authlist.txt", &st) != 0){
+		return 0;
+	}
+
+	FILE *f = fopen("/disk/authlist.txt", "rb");
 	if (f == NULL) {
 		ESP_LOGE(TAG, "Failed to open file for reading version");
 		return -1;

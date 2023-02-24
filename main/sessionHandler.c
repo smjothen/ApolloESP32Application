@@ -1199,7 +1199,7 @@ static int change_availability(uint8_t is_operative){
 static enum ocpp_cp_status_id get_ocpp_state(){
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first.
-	// We also require the the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
+	// We also require the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
 	if(storage_Get_IsEnabled() == 0 || get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 	}

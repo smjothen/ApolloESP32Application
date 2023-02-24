@@ -469,7 +469,7 @@ void update_transaction_id(struct ocpp_active_call * call){
 		return;
 	}
 
-	cJSON * message_payload = cJSON_GetArrayItem(call->call->call_message, 4);
+	cJSON * message_payload = cJSON_GetArrayItem(call->call->call_message, OCPPJ_CALL_INDEX_PAYLOAD);
 	if(message_payload == NULL){
 		ESP_LOGE(TAG, "Unable to update tmp id: No payload");
 		return;
