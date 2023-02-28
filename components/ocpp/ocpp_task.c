@@ -66,6 +66,7 @@ TimerHandle_t heartbeat_handle = NULL;
 #define MAX_TRANSACTION_QUEUE_SIZE 20
 
 static uint16_t ocpp_call_timeout = 10;
+static uint32_t ocpp_minimum_status_duration = 3;
 
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
@@ -113,6 +114,10 @@ void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON
 
 void ocpp_change_message_timeout(uint16_t timeout){
 	ocpp_call_timeout = timeout;
+}
+
+void ocpp_change_minimum_status_duration(uint32_t duration){
+	ocpp_minimum_status_duration = duration;
 }
 
 
@@ -375,40 +380,89 @@ int send_call_reply(cJSON * call){
 	}
 }
 
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info){
-	ESP_LOGD(TAG, "Sending status notification");
+SemaphoreHandle_t status_notification_lock = NULL;
+cJSON * awaiting_status_notification = NULL;
 
-	char state[15];
+static void send_status_notification(cJSON * status_notification){
+	ESP_LOGW(TAG, "Sending status notification to queue");
+	if(enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC) != 0){
+		ESP_LOGE(TAG, "Unable to enqueue status notification");
+		cJSON_Delete(status_notification);
+	}
+}
 
-	switch(new_state){
-	case eOCPP_CP_STATUS_AVAILABLE:
-		strcpy(state, OCPP_CP_STATUS_AVAILABLE);
-		break;
-	case eOCPP_CP_STATUS_PREPARING:
-		strcpy(state, OCPP_CP_STATUS_PREPARING);
-		break;
-	case eOCPP_CP_STATUS_CHARGING:
-		strcpy(state, OCPP_CP_STATUS_CHARGING);
-		break;
-	case eOCPP_CP_STATUS_SUSPENDED_EV:
-		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EV);
-		break;
-	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
-		strcpy(state, OCPP_CP_STATUS_SUSPENDED_EVSE);
-		break;
-	case eOCPP_CP_STATUS_FINISHING:
-		strcpy(state, OCPP_CP_STATUS_FINISHING);
-		break;
-	case eOCPP_CP_STATUS_RESERVED:
-		strcpy(state, OCPP_CP_STATUS_RESERVED);
-		break;
-	case eOCPP_CP_STATUS_UNAVAILABLE:
-		strcpy(state, OCPP_CP_STATUS_UNAVAILABLE);
-		break;
-	case eOCPP_CP_STATUS_FAULTED:
-		strcpy(state, OCPP_CP_STATUS_FAULTED);
-		break;
-	default:
+TimerHandle_t status_notification_handle = NULL;
+
+static void send_and_clear_notification(){
+	if(status_notification_lock == NULL || xSemaphoreTake(status_notification_lock, 0) != pdTRUE){
+		ESP_LOGW(TAG, "Unable to aquire lock to send notification. Preparation of next notification should be in progress");
+		return;
+	}
+
+	if(awaiting_status_notification != NULL){
+		send_status_notification(awaiting_status_notification);
+		awaiting_status_notification = NULL;
+	}else{
+		ESP_LOGW(TAG, "Awaited status notification is NULL");
+	}
+
+	xSemaphoreGive(status_notification_lock);
+}
+
+static int replace_awaiting_status_notification(cJSON * status_notification){
+	if(status_notification_lock == NULL || xSemaphoreTake(status_notification_lock, pdMS_TO_TICKS(500)) != pdTRUE){
+		ESP_LOGE(TAG, "Unable to aquire lock to replace awaiting status notification");
+		return -1;
+	}
+
+	if(status_notification_handle == NULL){
+		status_notification_handle = xTimerCreate("Ocpp status notification",
+							pdMS_TO_TICKS(ocpp_minimum_status_duration * 1000),
+							pdFALSE, NULL, send_and_clear_notification);
+
+		if(status_notification_handle == NULL){
+			ESP_LOGE(TAG, "Unable to create notification handle");
+			goto error;
+		}
+	}
+
+	if(xTimerStop(status_notification_handle, pdMS_TO_TICKS(500)) != pdTRUE){
+		ESP_LOGE(TAG, "Unable to stop current notification");
+		goto error;
+	}
+
+	cJSON_Delete(awaiting_status_notification);
+	awaiting_status_notification = status_notification;
+
+	if(xTimerGetPeriod(status_notification_handle) != pdMS_TO_TICKS(ocpp_minimum_status_duration * 1000))
+		xTimerChangePeriod(status_notification_handle, pdMS_TO_TICKS(ocpp_minimum_status_duration * 1000), pdMS_TO_TICKS(500));
+
+	xTimerReset(status_notification_handle, pdMS_TO_TICKS(500));
+
+	xSemaphoreGive(status_notification_lock);
+	return 0;
+
+error:
+	xSemaphoreGive(status_notification_lock);
+	return -1;
+}
+
+static void stop_awaiting_status_notification(){
+	if(status_notification_lock == NULL || xSemaphoreTake(status_notification_lock, 0) == pdTRUE){
+		if(status_notification_handle == NULL || xTimerStop(status_notification_handle, 500) == pdTRUE){
+			cJSON_Delete(awaiting_status_notification);
+			awaiting_status_notification = NULL;
+		}
+
+		xSemaphoreGive(status_notification_lock);
+	}
+}
+
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important){
+	ESP_LOGI(TAG, "Preparing status notification");
+
+	const char * state = ocpp_cp_status_from_id(new_state);
+	if(state == NULL){
 		ESP_LOGE(TAG, "Unknown status id: %d", new_state);
 		return;
 	}
@@ -416,14 +470,21 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
 	cJSON * status_notification  = ocpp_create_status_notification_request(1, error_code, info, state, time(NULL), NULL, NULL);
 	if(status_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create status notification request");
-	}else{
-		int err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
-		if(err != 0){
-			ESP_LOGE(TAG, "Unable to enqueue status notification");
+		return;
+	}
+
+	if(!important && ocpp_minimum_status_duration > 0){
+		if(replace_awaiting_status_notification(status_notification) != 0){
+			ESP_LOGE(TAG, "Unable to replace awaiting status notification.");
 			cJSON_Delete(status_notification);
 		}
+
+	}else{
+		stop_awaiting_status_notification();
+		send_status_notification(status_notification);
 	}
 }
+
 
 bool check_active_call_validity(struct ocpp_active_call * call){
 	return call != NULL && check_call_with_cb_validity(call->call);
@@ -973,6 +1034,12 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 				goto error;
 			}
 
+			status_notification_lock = xSemaphoreCreateMutex();
+			if(status_notification_lock == NULL){
+				ESP_LOGE(TAG, "Unable to create status notification lock");
+				goto error;
+			}
+
 			if(xSemaphoreGive(ocpp_active_call_lock_1) != pdTRUE){
 				ESP_LOGE(TAG, "Unable to open semaphore");
 				goto error;
@@ -1250,6 +1317,10 @@ void stop_ocpp(void){
 		ocpp_active_call_lock_1 = NULL;
 	}
 
+	if(status_notification_lock != NULL){
+		vSemaphoreDelete(status_notification_lock);
+		status_notification_lock = NULL;
+	}
 
 	clean_listener();
 

@@ -201,7 +201,7 @@ struct Configuration
 	char ocpp_meter_values_aligned_data[DEFAULT_CSL_SIZE];
 	char ocpp_meter_values_sampled_data[DEFAULT_CSL_SIZE];
 	uint32_t ocpp_meter_value_sample_interval;
-	//int configurationStruct.ocpp_minimum_status_duration;
+	uint32_t ocpp_minimum_status_duration;
 	uint8_t ocpp_reset_retries;
 	bool ocpp_stop_transaction_on_ev_side_disconnect;
 	bool ocpp_stop_transaction_on_invalid_id;

@@ -24,6 +24,19 @@
 void ocpp_change_message_timeout(uint16_t timeout);
 
 /**
+ * @brief changes the minimum delay for certain StatusNotification.req calls
+ *
+ * @description This function is meant for implementation of MinimumStatusDuration described in OCPP spec section 9.1.20.
+ * The duration given is the delay from a notification sent with ocpp_send_status_notification with important set to false,
+ * to the notification is enqueued to be sent with handle_ocpp_call if there has not been any other call to
+ * ocpp_send_status_notification. If another call to ocpp_send_status_notification is made, then the new call will replace
+ * the old one.
+ *
+ * @param duration time to wait for a replacing status notification to prevent sending the current notification
+ */
+void ocpp_change_minimum_status_duration(uint32_t duration);
+
+/**
  * @brief Determins queueing of outgoing calls and error handling in case of transactions.
  */
 enum call_type{
@@ -45,8 +58,10 @@ int send_call_reply(cJSON * call);
  * @param new_state "Required. This contains the current status of the Charge Point."
  * @param error_code "Required. This contains the error code reported by the Charge Point."
  * @param info "Optional. Additional free format information related to the error."
+ * @param important if false the notification will wait for MinimumStatusDuration seconds and
+ * not be sent if new notification is created within the duration.
  */
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info);
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important);
 
 /**
  * @brief Prepares a CP initiated call (.req call)

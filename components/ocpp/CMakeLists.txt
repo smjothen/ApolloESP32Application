@@ -5,6 +5,7 @@ idf_component_register(SRCS
   "ocpp_smart_charging.c"
   "ocpp_task.c"
   "types/ocpp_authorization_data.c"
+  "types/ocpp_charge_point_status.c"
   "types/ocpp_charging_profile.c"
   "types/ocpp_ci_string_type.c"
   "types/ocpp_csl.c"

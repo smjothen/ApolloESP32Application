@@ -723,7 +723,7 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 		 * Finishing seems to be intended for situation where user action is required before new transaction or new user, yet
 		 * we must inform CS of finishing before entering available.
 		 */
-		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected");
+		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected", true);
 	}
 
 	cJSON * response = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
@@ -1151,20 +1151,6 @@ void reserved_on_tag_deny(const char * tag_1, const char * tag_2){
 	start_charging_on_tag_deny(tag_1);
 }
 
-// Index in is equivalent to integer used to identify column in table in ocpp protocol specification section on status notification -1
-// Index is used as [from state][to state]
-bool want_status_notification[9][9] = {
-	{false, false, true,  false, false, false, false, true,  true},
-	{false, false, true,  false, false, false, false, false, true},
-	{true,  false, false, false, false, false, false, true,  true},
-	{true,  false, false, false, false, false, false, true,  true},
-	{true,  true,  false, false, false, false, false, true,  true},
-	{true,  false, false, false, false, false, false, true,  true},
-	{false, false, false, false, false, false, false, true,  true},
-	{true,  true,  true,  true,  true,  false, false, false, true},
-	{false, false, true,  false, false, false, false, false, false},
-};
-
 enum ocpp_cp_status_id saved_state = eOCPP_CP_STATUS_UNAVAILABLE;
 void sessionHandler_OcppSaveState(){
 	saved_state = ocpp_old_state;
@@ -1175,7 +1161,7 @@ bool sessionHandler_OcppStateHasChanged(){
 }
 
 void sessionHandler_OcppSendState(){
-	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL);
+	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, false);
 }
 
 static int change_availability(uint8_t is_operative){
@@ -1916,9 +1902,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		break;
 	}
 
-	if(want_status_notification[old_state-1][new_state-1]){
-		ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL);
-	}
+	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, false);
 
 	ocpp_old_state = new_state;
 }

@@ -59,4 +59,10 @@ enum ocpp_cp_status_id{
 	eOCPP_CP_STATUS_FAULTED, ///< "When a Charge Point or connector has reported an error and is not available for energy delivery (Inoperative)"
 };
 
+/**
+ * @brief converts id to charge point status
+ *
+ * @param id status id
+ */
+const char * ocpp_cp_status_from_id(enum ocpp_cp_status_id id);
 #endif /*OCPP_CHARGE_POINT_STATUS_H*/

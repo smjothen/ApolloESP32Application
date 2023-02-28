@@ -93,6 +93,7 @@ void storage_Init_Configuration()
 	strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
 	strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
 	configurationStruct.ocpp_meter_value_sample_interval = 0;
+	configurationStruct.ocpp_minimum_status_duration = 3;
 	configurationStruct.ocpp_reset_retries = 0;
 	configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect = true;
 	configurationStruct.ocpp_stop_transaction_on_invalid_id = true;
@@ -292,6 +293,11 @@ void storage_Set_ocpp_meter_values_sampled_data(const char * newValue)
 void storage_Set_ocpp_meter_value_sample_interval(uint32_t newValue)
 {
 	configurationStruct.ocpp_meter_value_sample_interval = newValue;
+}
+
+void storage_Set_ocpp_minimum_status_duration(uint32_t newValue)
+{
+	configurationStruct.ocpp_minimum_status_duration = newValue;
 }
 
 void storage_Set_ocpp_reset_retries(uint8_t newValue)
@@ -641,6 +647,11 @@ uint32_t storage_Get_ocpp_meter_value_sample_interval()
 	return configurationStruct.ocpp_meter_value_sample_interval;
 }
 
+uint32_t storage_Get_ocpp_minimum_status_duration()
+{
+	return configurationStruct.ocpp_minimum_status_duration;
+}
+
 uint8_t storage_Get_ocpp_reset_retries()
 {
 	return configurationStruct.ocpp_reset_retries;
@@ -910,7 +921,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data);
 	err += nvs_set_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data);
 	err += nvs_set_u32(configuration_handle, "oMtrValSamplInt", configurationStruct.ocpp_meter_value_sample_interval);
-	//err += nvs_set_u32(configuration_handle, "oStatusDur_min", configurationStruct.ocpp_minimum_status_duration);
+	err += nvs_set_u32(configuration_handle, "oStatusDur_min", configurationStruct.ocpp_minimum_status_duration);
 	err += nvs_set_u8(configuration_handle, "oResetRetries", configurationStruct.ocpp_reset_retries);
 	err += nvs_set_u8(configuration_handle, "oStopTxnEvDisc", configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect);
 	err += nvs_set_u8(configuration_handle, "oStopTxnOnInval", configurationStruct.ocpp_stop_transaction_on_invalid_id);
@@ -1002,7 +1013,9 @@ esp_err_t storage_ReadConfiguration()
 	readSize = DEFAULT_CSL_SIZE;
 	err += nvs_get_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data, &readSize);
 	err += nvs_get_u32(configuration_handle, "oMtrValSamplInt", &configurationStruct.ocpp_meter_value_sample_interval);
-	//err += nvs_get_u32(configuration_handle, "oStatusDur_min", &configurationStruct.ocpp_minimum_status_duration);
+	if(nvs_get_u32(configuration_handle, "oStatusDur_min", &configurationStruct.ocpp_minimum_status_duration) != 0)
+		configurationStruct.ocpp_minimum_status_duration = 3;
+
 	err += nvs_get_u8(configuration_handle, "oResetRetries", &configurationStruct.ocpp_reset_retries);
 	err += nvs_get_u8(configuration_handle, "oStopTxnEvDisc", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect);
 	err += nvs_get_u8(configuration_handle, "oStopTxnOnInval", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_invalid_id);

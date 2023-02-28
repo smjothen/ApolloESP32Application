@@ -1224,7 +1224,16 @@ esp_err_t add_configuration_ocpp_meter_value_sample_interval(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_minimum_status_duration(cJSON * key_list){
-	return ESP_ERR_NOT_SUPPORTED;
+	char * value;
+	if(allocate_and_write_configuration_u32(storage_Get_ocpp_minimum_status_duration(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
 }
 
 esp_err_t add_configuration_ocpp_number_of_connectors(cJSON * key_list){
@@ -2264,15 +2273,13 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value, NULL);
 
-		if(err == 0){
-			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
-		}
-
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value, NULL);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
 		err = set_config_u16(storage_Set_ocpp_message_timeout, value);
+		if(err == 0)
+			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
 		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
@@ -2297,6 +2304,12 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, NULL);
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION) == 0){
+		err = set_config_u32(storage_Set_ocpp_minimum_status_duration, value, NULL);
+		if(err == 0)
+			ocpp_change_minimum_status_duration(storage_Get_ocpp_minimum_status_duration());
+
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
 		err = set_config_u8(storage_Set_ocpp_reset_retries, value);
@@ -3123,7 +3136,16 @@ static void ocpp_task(){
 			}
 		}while(err != 0);
 
+		/*
+		 * From ocpp errata
+		 * "After the Central System accept a Charge Point by sending a BootNotification.conf with a status Accepted, the Charge Point
+		 * SHALL send a StatusNotification.req PDU for connectorId 0 and all connectors with the current status."
+		 */
+		sessionHandler_OcppSendState();
+
 		ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
+		ocpp_change_minimum_status_duration(storage_Get_ocpp_minimum_status_duration());
+
 		start_ocpp_heartbeat();
 
 		ocpp_set_on_new_period_cb(sessionHandler_OcppSetChargingVariables);
