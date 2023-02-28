@@ -1773,6 +1773,14 @@ void get_composite_schedule_cb(const char * unique_id, const char * action, cJSO
 	struct ocpp_charging_schedule composite_schedule = {0};
 	combine_schedules(&tx_schedule, &max_schedule, &composite_schedule);
 
+	/*
+	 * errata v4.0 states: "When ChargingSchedule is used as part of a GetCompositeSchedule.conf message, then [StartSchedule] field must be omitted."
+	 */
+	if(composite_schedule.start_schedule != NULL){
+		free(composite_schedule.start_schedule);
+		composite_schedule.start_schedule = NULL;
+	}
+
 	cJSON * reply = ocpp_create_get_composite_schedule_confirmation(unique_id, OCPP_GET_COMPOSITE_SCHEDULE_STATUS_ACCEPTED,
 									&connector_id, &start_time, &composite_schedule);
 
