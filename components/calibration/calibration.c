@@ -818,6 +818,12 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
+    uint32_t speedVer = MCU_GetHwIdMCUSpeed();
+    if (speedVer != 5) {
+        calibration_fail(ctx, "Can only calibrate Speed v5 boards, detected Speed v%d", speedVer);
+        return;
+    }
+
     uint32_t status;
     if (calibration_read_mid_status(&status)) {
         status &= ~MID_STATUS_ALL_PAGES_EMPTY;
