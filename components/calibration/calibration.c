@@ -194,19 +194,15 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress: {
-            if (!(ctx->Flags & CAL_FLAG_INIT)) {
-
-                if (calibration_tick_starting_init(ctx) < 0) {
-                    return false;
+            if (calibration_set_mode(ctx, Closed)) {
+                if (!(ctx->Flags & CAL_FLAG_INIT)) {
+                    // Init (set blinking, etc) must be done after entering MID
+                    // mode so blinking init. knows not to actually blink.
+                    if (calibration_tick_starting_init(ctx) >= 0) {
+                        ctx->Flags |= CAL_FLAG_INIT;
+                        CAL_CSTATE(ctx) = Complete;
+                    }
                 }
-
-                ctx->Flags |= CAL_FLAG_INIT;
-            } else {
-
-                if (calibration_set_mode(ctx, Closed)) {
-                    CAL_CSTATE(ctx) = Complete;
-                }
-
             }
 
             break;
@@ -530,7 +526,10 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
-        // Rebooted, set standalone current, etc again
+        // Rebooted, set blinking, standalone current, etc. again!
+        //
+        // NOTE: Must ensure this is done after entering MID mode to
+        // ensure no blinks.
         calibration_tick_starting_init(ctx);
 
         CAL_CSTATE(ctx) = Complete;
