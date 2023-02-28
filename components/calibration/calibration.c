@@ -763,14 +763,11 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             if (failed) {
                 ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
 
-                // TODO: If failed, then maybe got a bad calibration, allow rewriting?
-
-                /*
+                // If failed, then maybe got a bad calibration, allow rewriting?
                 if (MCU_SendCommandId(CommandMidClearCalibration) != MsgCommandAck) {
-                    return false;
+                    ESP_LOGE(TAG, "%s: Couldn't clear calibration!", calibration_state_to_string(ctx));
+                    return;
                 }
-                */
-
             } else {
                 ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
             }
