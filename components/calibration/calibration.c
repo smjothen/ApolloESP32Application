@@ -39,21 +39,31 @@
 
 static const char *TAG = "CALIBRATION    ";
 
-TaskHandle_t handle = NULL;
+static TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
-char raddr_name[32] = { 0 };
-char buf[256] = { 0 };
-char recvbuf[128] = { 0 };
-char hexbuf[256] = { 0 };
+static char raddr_name[32] = { 0 };
+static char buf[256] = { 0 };
+static char recvbuf[128] = { 0 };
+static char hexbuf[256] = { 0 };
 
-CalibrationCtx ctx = { 0 };
-CalibrationServer serv = { 0 };
-CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
+static CalibrationCtx ctx = { 0 };
+static CalibrationServer serv = { 0 };
+static CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
 
-fd_set fds = { 0 };
+static fd_set fds = { 0 };
 
 struct DeviceInfo devInfo;
+
+static bool calibration_is_simulated = false;
+
+void calibration_set_simulation(bool sim) {
+    calibration_is_simulated = sim;
+}
+
+bool calibration_is_simulation(void) {
+    return calibration_is_simulated;
+}
 
 bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     CalibrationHeader header = { 0 };
@@ -244,9 +254,10 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-#ifdef CONFIG_CAL_SIMULATION
-    return 3;
-#endif
+    if (calibration_is_simulation()) { 
+        return 3;
+    }
+
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 

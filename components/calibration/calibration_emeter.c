@@ -53,13 +53,11 @@ bool emeter_write_float(uint8_t reg, double value, uint8_t radix) {
 }
 
 bool emeter_read(uint8_t reg, uint32_t *val) {
-#ifdef CONFIG_CAL_SIMULATION
-
-	// Only used directly for VOFFS calibration, so simulate a small offset
-	*val = floatToSn(0.000187, 23);
-	return true;
-
-#endif
+	if (calibration_is_simulation()) {
+		// Only used directly for VOFFS calibration, so simulate a small offset
+		*val = floatToSn(0.000187, 23);
+		return true;
+	}
 
 	ZapMessage msg = MCU_SendUint8WithReply(ParamCalibrationReadParameter, reg);
 	if (msg.identifier != ParamCalibrationReadParameter || msg.type != MsgWriteAck || msg.length != 4) {

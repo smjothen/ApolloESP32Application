@@ -1262,13 +1262,6 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()){
-#ifdef CONFIG_CAL_SIMULATION
-		ESP_LOGI(TAG, "Using calibration SSID and PSK!");
-		strcpy(SSID, CONFIG_CAL_SSID);
-		strcpy(PSK, CONFIG_CAL_PSK);
-		return 0;
-#endif
-
 		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
 		// strcpy(SSID, "arntnett");
 		// strcpy(PSK, "4703c87e817842c4ce6b167d43701b7685693846db");

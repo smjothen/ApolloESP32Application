@@ -145,15 +145,9 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
             error = (energy / ref_energy) - 1.0;
         }
 
-#ifdef CONFIG_CAL_SIMULATION
-
-#ifdef CONFIG_CAL_SIMULATION_FAIL
-        error = 1.0000;
-#else
-        error = 0.0000;
-#endif
-
-#endif
+        if (calibration_is_simulation()) {
+            error = 0.0;
+        }
 
         float max_error = 0.0;
 

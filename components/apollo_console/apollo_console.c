@@ -15,6 +15,8 @@
 #include "eeprom_wp.h"
 #include "EEPROM.h"
 
+#include "calibration.h"
+
 static const char *TAG = "CONSOLE";
 static const char *REPLY_TAG = ">>>>>>";
 
@@ -93,6 +95,25 @@ static int register_new_id_cmd(void){
         .help = "Reset ZAPno, and reset",
         .hint = NULL,
         .func = &new_id_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+static int cal_sim_cmd(int argc, char **argv){
+    ESP_LOGI(TAG, "Setting calibration into simulation mode!");
+    calibration_set_simulation(true);
+    return 0;
+}
+
+static int register_cal_sim_cmd(void){
+    const esp_console_cmd_t cmd = {
+        .command = "cal_sim",
+        .help = "Set calibration into simulation mode",
+        .hint = NULL,
+        .func = &cal_sim_cmd,
         .argtable = NULL
     };
 
@@ -274,6 +295,7 @@ void apollo_console_init(void){
     register_reboot_cmd();
     register_new_id_cmd();
     register_clear_energy_cmd();
+    register_cal_sim_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }
