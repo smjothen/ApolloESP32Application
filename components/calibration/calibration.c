@@ -818,9 +818,20 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
+    bool verPass = false;
+
     uint32_t speedVer = MCU_GetHwIdMCUSpeed();
-    if (speedVer != 5) {
-        calibration_fail(ctx, "Can only calibrate Speed v5 boards, detected Speed v%d", speedVer);
+    switch (speedVer) {
+        case 5:
+        case 7:
+            verPass = true;
+            break;
+        default:
+            break;
+    }
+
+    if (!verPass) {
+        calibration_fail(ctx, "Can only calibrate MID/EU Speed boards, detected Speed v%d", speedVer);
         return;
     }
 
