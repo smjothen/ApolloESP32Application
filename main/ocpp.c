@@ -733,7 +733,7 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 
 		}
 
-		if(stoptxn_csl != NULL && csl[0] != '\0' && transaction_id != NULL){
+		if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0' && transaction_id != NULL){
 			ESP_LOGI(TAG, "Creating stoptxn meter values");
 
 			struct ocpp_meter_value_list * stoptxn_meter_value_list = ocpp_create_meter_list();
@@ -1263,7 +1263,16 @@ esp_err_t add_configuration_ocpp_reset_retries(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_transaction_max_meter_values(cJSON * key_list){
-	return ESP_ERR_NOT_SUPPORTED;
+	char * value;
+	if(allocate_and_write_configuration_u16(CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES, &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_MAX_METER_VALUES, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
 }
 
 esp_err_t add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(cJSON * key_list){

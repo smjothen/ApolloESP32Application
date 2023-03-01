@@ -584,74 +584,87 @@ static void start_transaction_error_cb(const char * unique_id, const char * erro
 	}
 }
 
-#define MAX_STOP_TXN_METER_VALUES 512
 static struct ocpp_meter_value_list * current_meter_values = NULL;
-static size_t current_meter_values_length = 0;
-bool current_meter_values_failed = true;
+static struct ocpp_meter_value_list * intermittent_meter_value = NULL;
 
-/**
+static size_t current_meter_values_length = 0;
+
+/*
  * This function is used to save transaction related meter values that are meant to be used in StopTransaction.req.
- * Ocpp does not specify a limit to how many meter values may be in a StopTransaction.req. Too prevent crashes due to no
- * more memory, we limit it by MAX_STOP_TXN_METER_VALUES.
- *
- * If the limit is reached we indicate that current meter values failed, delete the meter values and prevent saving new meter
- * values until the next transaction starts. A status notification is sendt to inform CS of the issue.
+ * Ocpp errata v4.0 specify a configuration key to limit how many meter values may be in a StopTransaction.req. Too
+ * prevent crashes due to no more memory, this key is set by CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES.
  */
 void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length){
 	if(connector_id != 1 || sessionHandler_OcppTransactionIsActive(connector_id) == false){
 		ESP_LOGE(TAG, "sessionHandler got notified of meter values without ongoing transaction, value recieved too late and transactionData might be wrong");
-		ocpp_meter_list_delete(values);
-		return;
-	}
-
-	if(current_meter_values == NULL){
-		if(current_meter_values_failed == false){
-			if(length > MAX_STOP_TXN_METER_VALUES){
-				ESP_LOGE(TAG, "First meter values list already too large for stop transaction");
-				goto error;
-			}
-
-			current_meter_values = ocpp_create_meter_list();
-			if(current_meter_values == NULL){
-				ESP_LOGE(TAG, "Unable to create meter value list to store transaction data");
-				goto error;
-			}
-
-			current_meter_values_length = 0;
-		}else{
-			ESP_LOGW(TAG, "New meter values for stop transaction after failed");
-			goto error;
-		}
-	}
-
-	if(current_meter_values_length + length < MAX_STOP_TXN_METER_VALUES){
-		struct ocpp_meter_value_list * last_ptr = ocpp_meter_list_get_last(current_meter_values);
-		if(last_ptr->value != NULL){
-			last_ptr->next = ocpp_create_meter_list();
-			if(last_ptr->next == NULL){
-				ESP_LOGE(TAG, "Unable to allocate space for StopTxnData");
-				goto error;
-			}
-
-			last_ptr = last_ptr->next;
-		}
-
-		last_ptr->value = values->value;
-		last_ptr->next = values->next;
-
-		current_meter_values_length += length;
-	}else{
-		ESP_LOGE(TAG, "Too many meter values for stop transaction");
-		current_meter_values_failed = true;
-
-		ocpp_meter_list_delete(current_meter_values);
-		current_meter_values = NULL;
-
-		//TODO: Inform CS of failure
 		goto error;
 	}
 
-	ESP_LOGW(TAG, "Current meter values length: %d (MAX: %d)", current_meter_values_length, MAX_STOP_TXN_METER_VALUES);
+	if(current_meter_values == NULL){
+
+		current_meter_values = ocpp_create_meter_list();
+		if(current_meter_values == NULL){
+			ESP_LOGE(TAG, "Unable to create meter value list to store transaction data");
+			goto error;
+		}
+
+		current_meter_values_length = 0;
+		intermittent_meter_value = NULL;
+	}
+
+
+	struct ocpp_meter_value_list * last_ptr = ocpp_meter_list_get_last(current_meter_values);
+	if(last_ptr->value != NULL){
+		last_ptr->next = ocpp_create_meter_list();
+		if(last_ptr->next == NULL){
+			ESP_LOGE(TAG, "Unable to allocate space for StopTxnData");
+			goto error;
+		}
+
+		last_ptr = last_ptr->next;
+	}
+
+	last_ptr->value = values->value;
+	last_ptr->next = values->next;
+
+	current_meter_values_length += length;
+
+	while(current_meter_values_length > CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES){
+		ESP_LOGW(TAG, "Too stop transaction meter values exceed maximum (%d > %d), deleting intermittent values", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
+
+		/*
+		 * Deletion starts with 2nd item, continues with 4th then 6th and so on.
+		 * It will attempt to not delete the first or last item if CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES > 1
+		 */
+		if(intermittent_meter_value == NULL // If no values have been deleted yet
+			|| intermittent_meter_value->next == NULL || intermittent_meter_value->next->next == NULL){ // or last item deleted was at the end of list
+
+			intermittent_meter_value = current_meter_values; // Start deleting from the start of meter values
+
+		} else { // At least one deletion has occured and not at end of list
+			intermittent_meter_value = intermittent_meter_value->next; // Skip odd numbered value
+		}
+
+		if(intermittent_meter_value->next == NULL){ // Should only happen if compiled with max values set to 0; should delete entire list
+			ocpp_meter_list_delete(current_meter_values); // Delete the entire list as it is only 1 value
+			current_meter_values = NULL;
+			intermittent_meter_value = NULL;
+
+		}else{ // should delete one item
+			struct ocpp_meter_value_list * tmp = intermittent_meter_value->next;
+			intermittent_meter_value->next = tmp->next;
+
+			if(tmp->value != NULL && tmp->value->sampled_value != NULL)
+				ocpp_sampled_list_delete(tmp->value->sampled_value);
+
+			free(tmp->value);
+			free(tmp);
+		}
+
+		current_meter_values_length--;
+	}
+
+	ESP_LOGI(TAG, "Current meter values length: %d (MAX: %d)", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
 	return;
 error:
 	ocpp_meter_list_delete(values);
@@ -670,7 +683,6 @@ static void sample_meter_values(){
 
 static void start_sample_interval(){
 	ESP_LOGI(TAG, "Starting sample interval");
-	current_meter_values_failed = false;
 
 	sample_handle = xTimerCreate("Ocpp sample",
 				pdMS_TO_TICKS(storage_Get_ocpp_meter_value_sample_interval() * 1000),

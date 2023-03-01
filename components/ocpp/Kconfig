@@ -32,6 +32,19 @@ config OCPP_NUMBER_OF_CONNECTORS # 9.1.21
 	The number of physical charging connectors of this Charge Point.
        default 1
 
+config OCPP_STOP_TRANSACTION_MAX_METER_VALUES # errata v4.0 as 9.1.23
+       int "StopTransactionMaxMeterValues"
+       help
+	The maximum amout of meter values that this Charge Poit ca report i the trasactioData field of a
+	StopTrasactio.req.  Whe the amout of meter values collected for a trasactio exceeds:
+	StopTrasactioMaxMeterValues, the Charge Poit MAY drop itermediate meter values, to prevet ruig out of
+	memory, or beig uable to sed the StopTrasactio.req (overruig the trasmit buffer size). The Start ad
+	Stop meter values SHALL ever be dropped.  Whe the Charge Poit eeds to store more itermediate values
+	tha: StopTrasactioMaxMeterValues, it is RECOMMEDED ot to start droppig messages from the start, or
+	stop storig ew values. It is better to drop itermediate messages first (1st message, 3th message, 5th
+	message etc.), or uses a smart algorithm, for example remove duplicate values first. etc
+       default 512
+
 config OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH # 9.1.26
        int "StopTxnAlignedDataMaxLength"
        help
