@@ -1044,6 +1044,16 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
             ctx->Position = testPos;
             ESP_LOGI(TAG, "Starting run %d in position %d", ctx->Run, ctx->Position);
         }
+
+        if (strcmp(msg->Run.SetupName, "dev") == 0) {
+            ESP_LOGI(TAG, "Run is a simulation, uploading disabled!");
+            ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
+            calibration_set_simulation(true);
+        } else {
+            calibration_set_simulation(false);
+        }
+
+
     }
 
     if (msg->Sequence < ctx->LastSeq) {
