@@ -24,6 +24,8 @@ message CalibrationUdpMessage {
 
             // The protocol version required by the test bench
             uint32 ServerProtocol = 4;
+
+            string SetupName = 5 [(nanopb).type = FT_POINTER];
         }
         CalibrationRunMessage Run = 3;
 
