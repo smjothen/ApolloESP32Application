@@ -150,6 +150,10 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
     // Disable offline sessions as well, chargers should be online during calibration but just in case...
     offlineSession_disable();
 
+    if (!calibration_turn_led_off(ctx)) {
+        return -5;
+    }
+
     if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
         return -4;
     }
@@ -166,10 +170,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
             ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
             ctx->Flags |= CAL_FLAG_UPLOAD_VER;
         }
-    }
-
-    if (!calibration_set_blinking(ctx, 1)) {
-        return -5;
     }
 
     /* Should be standalone already?
@@ -194,15 +194,19 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
 
     switch (CAL_CSTATE(ctx)) {
         case InProgress: {
-            if (calibration_set_mode(ctx, Closed)) {
-                if (!(ctx->Flags & CAL_FLAG_INIT)) {
-                    // Init (set blinking, etc) must be done after entering MID
-                    // mode so blinking init. knows not to actually blink.
-                    if (calibration_tick_starting_init(ctx) >= 0) {
-                        ctx->Flags |= CAL_FLAG_INIT;
-                        CAL_CSTATE(ctx) = Complete;
-                    }
+            if (!(ctx->Flags & CAL_FLAG_INIT)) {
+
+                // Turn off LED, etc
+                if (calibration_tick_starting_init(ctx) < 0) {
+                    return false;
                 }
+
+                ctx->Flags |= CAL_FLAG_INIT;
+            }
+
+            // Enter MID mode
+            if (calibration_set_mode(ctx, Closed)) {
+                CAL_CSTATE(ctx) = Complete;
             }
 
             break;
@@ -499,15 +503,19 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         }
 
         ctx->Flags |= CAL_FLAG_WROTE_PARAMS;
+        ctx->Flags &= ~CAL_FLAG_INIT;
         ctx->Ticks[WRITE_TICK] = 0;
 
         return false;
 
     } else {
+        // Rebooted, turn LED off, standalone current, etc. again!
+        if (!(ctx->Flags & CAL_FLAG_INIT)) {
+            if (calibration_tick_starting_init(ctx) < 0) {
+                return false;
+            }
 
-        // Turn off LED upon boot
-        if (!calibration_turn_led_off(ctx)) {
-            return false;
+            ctx->Flags |= CAL_FLAG_INIT;
         }
 
         // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
@@ -522,15 +530,10 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
+        // Enter MID mode
         if (!calibration_set_mode(ctx, Closed)) {
             return false;
         }
-
-        // Rebooted, set blinking, standalone current, etc. again!
-        //
-        // NOTE: Must ensure this is done after entering MID mode to
-        // ensure no blinks.
-        calibration_tick_starting_init(ctx);
 
         CAL_CSTATE(ctx) = Complete;
 
@@ -776,7 +779,6 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
         }
     }
 
-    calibration_set_blinking(ctx, 0);
     calibration_turn_led_off(ctx);
 
     static int blinkDelay = 0;
@@ -784,8 +786,10 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
     if (blinkDelay % 5 == 0) {
         // Indicate PASS/FAIL with by blinking green/red every tick
         if (failed) {
+            ESP_LOGE(TAG, "Blink!");
             calibration_blink_led_red(ctx);
         } else {
+            ESP_LOGI(TAG, "Blink!");
             calibration_blink_led_green(ctx);
         }
     }
