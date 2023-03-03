@@ -21,7 +21,7 @@
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
-#include "types/ocpp_charge_point_error_code.h
+#include "types/ocpp_charge_point_error_code.h"
 
 static const char *TAG = "OCPP_TASK";
 

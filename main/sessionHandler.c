@@ -456,13 +456,24 @@ void sessionHandler_OcppStopTransaction(const char * reason){
 	chargeSession_SetStoppedReason(reason);
 }
 
+static void notify_if_local_list_mismatch(const char * id_token, const struct ocpp_id_tag_info * id_tag_info){
+	struct ocpp_authorization_data local_id_tag;
+
+	if(fat_ReadAuthData(id_token, &local_id_tag)){
+		if(id_tag_info->expiry_date == local_id_tag.id_tag_info.expiry_date
+			|| strcmp(id_tag_info->parent_id_tag, local_id_tag.id_tag_info.parent_id_tag)
+			|| strcmp(id_tag_info->status, local_id_tag.id_tag_info.status)){
+				ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT, NULL, true);
+			}
+	}
+}
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 
 	bool is_current_transaction = false;
 	if(cJSON_HasObjectItem(payload, "transactionId")){
 		/*
-		 * Cloud sets session id whilest in requesting state, ocpp sets transaction id during charge state
+		 * Cloud sets session id whilst in requesting state, ocpp sets transaction id during charge state
 		 * if cloud sets the id first, we should not update it as it would confuse the cloud.
 		 */
 		int tmp_id = *(int*)cb_data;
@@ -504,50 +515,70 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 		ESP_LOGE(TAG, "Recieved start transaction response lacking 'transactionId'");
 	}
 
+	bool valid = false;
 	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		cJSON * id_tag_info = cJSON_GetObjectItem(payload, "idTagInfo");
 
-		if(cJSON_HasObjectItem(id_tag_info, "status")){
-			const char * status = cJSON_GetObjectItem(id_tag_info, "status")->valuestring;
-			ESP_LOGI(TAG, "Central system returned status %s", status);
+		char error_str[64];
+		struct ocpp_id_tag_info id_tag_info = {0};
+		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
+			!= eOCPPJ_NO_ERROR){
+			ESP_LOGW(TAG, "Received idTagInfo in startTransaction.conf is invalid: %s", error_str);
 
-			if(storage_Get_ocpp_stop_transaction_on_invalid_id() && strcmp(status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) != 0){
-				ESP_LOGW(TAG, "Transaction not Autorized");
-				if(is_current_transaction){
-					MessageType ret = MCU_SendCommandId(CommandStopCharging);
-					if(ret == MsgCommandAck)
-					{
-						ESP_LOGI(TAG, "MCU stop charging command OK");
-					}
-					else
-					{
-						ESP_LOGE(TAG, "MCU stop charging final command FAILED");
-						//TODO: Handle error. If this occurs there might be charging without valid token or payment
-					}
-					chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
-					SetAuthorized(false);
-				}else{
-					ESP_LOGE(TAG, "An inactive transaction was deauthorized");
-				}
-			}
+			valid = false;
+		}else{
+			if(chargeSession_GetAuthenticationCode()[0] != '\0')
+				notify_if_local_list_mismatch(chargeSession_GetAuthenticationCode(), &id_tag_info);
 
-			if(cJSON_HasObjectItem(id_tag_info, "parentIdTag")){
-				cJSON * parent_id_json = cJSON_GetObjectItem(id_tag_info, "parentIdTag");
-				if(cJSON_IsString(parent_id_json) && is_ci_string_type(parent_id_json->valuestring, 20)){
-					ESP_LOGI(TAG, "Adding parent id to current charge session");
-					chargeSession_SetParentId(parent_id_json->valuestring);
-				}else{
-					ESP_LOGE(TAG, "Recieved start transaction with invalid parent id");
-				}
-			}
+			ESP_LOGI(TAG, "Central system returned status %s", id_tag_info.status);
+			valid = strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0;
+		}
+
+		if(id_tag_info.parent_id_tag[0] != '\0'){
+			ESP_LOGI(TAG, "Adding parent id to current charge session");
+			chargeSession_SetParentId(id_tag_info.parent_id_tag);
 		}
 	}else{
 		ESP_LOGE(TAG, "Recieved start transaction response lacking 'idTagInfo'");
+		valid = false;
+	}
+
+	if(storage_Get_ocpp_stop_transaction_on_invalid_id() && !valid){
+		ESP_LOGW(TAG, "Transaction not Autorized");
+		if(is_current_transaction){
+			MessageType ret = MCU_SendCommandId(CommandStopCharging);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU stop charging command OK");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU stop charging final command FAILED");
+				//TODO: Handle error. If this occurs there might be charging without valid token or payment
+			}
+			chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
+			SetAuthorized(false);
+		}else{
+			ESP_LOGE(TAG, "An inactive transaction was deauthorized");
+		}
 	}
 }
 
 static void stop_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Stop transaction response success");
+
+	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+		char err_str[64];
+		struct ocpp_id_tag_info id_tag_info;
+
+		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, err_str, sizeof(err_str)) != eOCPPJ_NO_ERROR){
+			ESP_LOGE(TAG, "Received idTagInfo in stop transaction is invalid: %s", err_str);
+		}else{
+			if(cb_data != NULL)
+				notify_if_local_list_mismatch((const char *)cb_data, &id_tag_info);
+		}
+	}
+
+	free(cb_data);
 }
 
 bool pending_ocpp_authorize = false;
@@ -572,6 +603,11 @@ static void error_cb(const char * unique_id, const char * error_code, const char
 	}else{
 		ESP_LOGE(TAG, "Error reply from ocpp '%s' call", action);
 	}
+}
+
+static void stop_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
+	free(cb_data);
+	error_cb(unique_id, error_code, error_description, error_details, "stop");
 }
 
 static void start_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
@@ -728,13 +764,17 @@ static void stop_sample_interval(){
 			transaction_id, &connector, 1);
 }
 
-void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconnect
+void stop_transaction(){
 	stop_sample_interval();
 
 	int meter_stop = floor(get_accumulated_energy() * 1000);
 
 	time_t timestamp = time(NULL);
-	char * stop_token = (chargeSession_Get().StoppedByRFID) ? chargeSession_Get().StoppedById : NULL;
+	char * stop_token = NULL;
+
+	if(chargeSession_Get().StoppedByRFID){
+		stop_token = strndup(chargeSession_Get().StoppedById, 20);
+	}
 
 	if(strcmp(chargeSession_Get().StoppedReason, OCPP_REASON_EV_DISCONNECT) == 0 &&
 		storage_Get_ocpp_stop_transaction_on_ev_side_disconnect()){
@@ -755,9 +795,11 @@ void stop_transaction(){ // TODO: Use (required) StopTransactionOnEVSideDisconne
 
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create stop transaction request");
+		free(stop_token);
 	}else{
-		int err = enqueue_call(response, stop_transaction_response_cb, error_cb, "stop", eOCPP_CALL_TRANSACTION_RELATED);
+		int err = enqueue_call(response, stop_transaction_response_cb, stop_transaction_error_cb, stop_token, eOCPP_CALL_TRANSACTION_RELATED);
 		if(err != 0){
+			free(stop_token);
 			cJSON_Delete(response);
 			ESP_LOGE(TAG, "Unable to enqueue stop transaction request, storing stop transaction on file");
 			esp_err_t err = offlineSession_SaveStopTransaction_ocpp(*transaction_id, transaction_start, stop_token, meter_stop,
@@ -874,6 +916,9 @@ void authorize_compare_cb(const char * unique_id, cJSON * payload, void * cb_dat
 
 			ESP_LOGE(TAG, "Invalid idTagInfo: %s", error_str);
 		}else{
+			if(data->origin == eTAG_ORIGIN_CS)
+				notify_if_local_list_mismatch(data->id_tag, &id_tag_info);
+
 			strcpy(data->parent_id, id_tag_info.parent_id_tag);
 		}
 	}else{
@@ -1012,13 +1057,17 @@ static void authorize_cb(const char * unique_id, cJSON * payload, void * cb_data
 			!= eOCPPJ_NO_ERROR){
 			ESP_LOGE(TAG, "Received idTagInfo is invalid: %s", error_str);
 
-		}else if(strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
-			ESP_LOGI(TAG, "Authorization status accepted");
-			authorize_on_accept(pending_ocpp_id_tag);
-			return;
-
 		}else{
-			ESP_LOGW(TAG, "Authorization status is %s", id_tag_info.status);
+			notify_if_local_list_mismatch(pending_ocpp_id_tag, &id_tag_info);
+
+			if(strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
+				ESP_LOGI(TAG, "Authorization status accepted");
+				authorize_on_accept(pending_ocpp_id_tag);
+				return;
+
+			}else{
+				ESP_LOGW(TAG, "Authorization status is %s", id_tag_info.status);
+			}
 		}
 	}else{
 		ESP_LOGE(TAG, "Authorize response lacks required 'idTagInfo'");
