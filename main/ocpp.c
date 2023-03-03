@@ -3150,6 +3150,7 @@ static void ocpp_task(){
 		 * "After the Central System accept a Charge Point by sending a BootNotification.conf with a status Accepted, the Charge Point
 		 * SHALL send a StatusNotification.req PDU for connectorId 0 and all connectors with the current status."
 		 */
+		ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
 		sessionHandler_OcppSendState();
 
 		ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());

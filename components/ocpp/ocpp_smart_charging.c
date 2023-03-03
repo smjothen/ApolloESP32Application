@@ -738,16 +738,18 @@ struct ocpp_charging_profile * next_tx_profile(struct ocpp_charging_profile * cu
 		return NULL;
 	}
 
+	struct ocpp_charging_profile * result = NULL;
 	int requested_stack_level = (current_profile != NULL) ? current_profile->stack_level-1 : CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL;
 
 	for(; requested_stack_level >= 0; requested_stack_level--){
 		if(tx_profiles[requested_stack_level] != NULL){
-			xSemaphoreGive(file_lock);
-			return tx_profiles[requested_stack_level];
+			result = tx_profiles[requested_stack_level];
+			break;
 		}
 	}
+
 	xSemaphoreGive(file_lock);
-	return NULL;
+	return result;
 }
 
 struct ocpp_charging_profile * next_charge_profile_from_file(struct ocpp_charging_profile * current_profile,
@@ -829,7 +831,7 @@ struct ocpp_charging_profile * next_tx_or_tx_default_profile(struct ocpp_chargin
 	struct ocpp_charging_profile * result = NULL;
 
 	if(current_profile == NULL || current_profile->profile_purpose == eOCPP_CHARGING_PROFILE_PURPOSE_TX){
-		result  = next_tx_profile(current_profile);
+		result = ocpp_duplicate_charging_profile(next_tx_profile(current_profile));
 	}
 
 	if(result != NULL)

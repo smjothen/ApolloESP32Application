@@ -21,6 +21,7 @@
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
+#include "types/ocpp_charge_point_error_code.h
 
 static const char *TAG = "OCPP_TASK";
 
@@ -458,10 +459,20 @@ static void stop_awaiting_status_notification(){
 	}
 }
 
+enum ocpp_cp_status_id last_known_state = -1;
+
 void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important){
 	ESP_LOGI(TAG, "Preparing status notification");
 
 	const char * state = ocpp_cp_status_from_id(new_state);
+
+	if(new_state == last_known_state && strcmp(error_code, OCPP_CP_ERROR_NO_ERROR) == 0 && info == NULL && important == false){
+		ESP_LOGW(TAG, "Ignoring status notification for '%s': No new information", state);
+		return;
+	}
+
+	last_known_state = new_state;
+
 	if(state == NULL){
 		ESP_LOGE(TAG, "Unknown status id: %d", new_state);
 		return;

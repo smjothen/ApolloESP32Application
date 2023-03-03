@@ -392,6 +392,109 @@ void ocpp_free_charging_schedule(struct ocpp_charging_schedule * charging_schedu
 		free(charging_schedule);
 }
 
+struct ocpp_charging_schedule_period_list * ocpp_duplicate_charging_schedule_period_list(const struct ocpp_charging_schedule_period_list * period_list){
+	struct ocpp_charging_schedule_period_list * result = NULL;
+	struct ocpp_charging_schedule_period_list * result_tail = NULL;
+
+	while(period_list != NULL){
+		if(result_tail == NULL){
+			result_tail = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
+			result = result_tail;
+		}else{
+			result_tail->next = calloc(sizeof(struct ocpp_charging_schedule_period_list), 1);
+			result_tail = result_tail->next;
+		}
+
+		if(result_tail == NULL){
+			ESP_LOGE(TAG, "Unable to allocate memory for duplicating schedule_period->next");
+			goto error;
+		}
+
+		result_tail->value.start_period = period_list->value.start_period;
+		result_tail->value.limit = period_list->value.limit;
+		result_tail->value.number_phases = period_list->value.number_phases;
+
+		period_list = period_list->next;
+	}
+
+	return result;
+
+error:
+	 ocpp_free_charging_schedule_period_list(result);
+	 return NULL;
+}
+
+struct ocpp_charging_profile * ocpp_duplicate_charging_profile(const struct ocpp_charging_profile * profile){
+	if(profile == NULL)
+		return NULL;
+
+	struct ocpp_charging_profile * duplicate = malloc(sizeof(struct ocpp_charging_profile));
+	if(duplicate == NULL){
+		ESP_LOGE(TAG, "Unable to allocate memory for duplicate charging profile");
+		goto error;
+	}
+
+	memcpy(duplicate, profile, sizeof(struct ocpp_charging_profile));
+
+	duplicate->transaction_id = NULL;
+	duplicate->recurrency_kind = NULL;
+	duplicate->charging_schedule.duration = NULL;
+	duplicate->charging_schedule.start_schedule = NULL;
+	duplicate->charging_schedule.schedule_period.next = NULL;
+
+	if(profile->transaction_id != NULL){
+		duplicate->transaction_id = malloc(sizeof(int));
+		if(duplicate->transaction_id == NULL){
+			ESP_LOGE(TAG, "Unable to allocate memory for duplicate transaction_id");
+			goto error;
+		}
+
+		*duplicate->transaction_id = *profile->transaction_id;
+	}
+
+	if(profile->recurrency_kind != NULL){
+		duplicate->recurrency_kind = malloc(sizeof(enum ocpp_recurrency_kind));
+		if(duplicate->recurrency_kind == NULL){
+			ESP_LOGE(TAG, "Unable to allocate memory for duplicate recurrency_kind");
+			goto error;
+		}
+
+		*duplicate->recurrency_kind = *profile->recurrency_kind;
+	}
+
+	if(profile->charging_schedule.duration != NULL){
+		duplicate->charging_schedule.duration = malloc(sizeof(int));
+		if(duplicate->charging_schedule.duration == NULL){
+			ESP_LOGE(TAG, "Unable to allocate memory for duplicate duration");
+			goto error;
+		}
+
+		*duplicate->charging_schedule.duration = *profile->charging_schedule.duration;
+	}
+
+	if(profile->charging_schedule.start_schedule != NULL){
+		duplicate->charging_schedule.start_schedule = malloc(sizeof(time_t));
+		if(duplicate->charging_schedule.start_schedule == NULL){
+			ESP_LOGE(TAG, "Unable to allocate memory for duplicate start_schedule");
+			goto error;
+		}
+
+		*duplicate->charging_schedule.start_schedule = *profile->charging_schedule.start_schedule;
+	}
+
+	if(profile->charging_schedule.schedule_period.next != NULL){
+		duplicate->charging_schedule.schedule_period.next = ocpp_duplicate_charging_schedule_period_list(profile->charging_schedule.schedule_period.next);
+		if(duplicate->charging_schedule.schedule_period.next == NULL){
+			ESP_LOGE(TAG, "Unable to get schedule_period for duplicate profile");
+			goto error;
+		}
+	}
+
+	return duplicate;
+error:
+	return NULL;
+}
+
 void ocpp_free_charging_profile(struct ocpp_charging_profile * charging_profile){
 	if(charging_profile == NULL || charging_profile->stack_level == -1) // Only delete if it exists and is not default profile
 		return;

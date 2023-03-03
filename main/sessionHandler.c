@@ -12,6 +12,7 @@
 #include "zaptec_cloud_observations.h"
 #include "network.h"
 #include "protocol_task.h"
+#include "zaptec_protocol_warnings.h"
 #include "zaptec_cloud_listener.h"
 #include "DeviceInfo.h"
 #include "chargeSession.h"
@@ -345,6 +346,8 @@ time_t transaction_start = 0;
 int meter_start = 0;
 bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
+bool ocpp_faulted = false; // Used to differentiate between faulted state and any other state with same features
+enum ocpp_cp_status_id ocpp_faulted_exit_state = eOCPP_CP_STATUS_UNAVAILABLE; // ocpp only allows transitioning from faulted to pre-faulted state
 uint8_t pending_change_availability_state;
 time_t preparing_started = 0;
 
@@ -427,6 +430,15 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 		ocpp_active_phases = ocpp_requested_phases;
 	}
 #endif
+}
+
+void sessionHandler_OcppTransitionToFaulted(){
+	ocpp_faulted = true;
+	ocpp_faulted_exit_state = ocpp_old_state;
+}
+
+void sessionHandler_OcppTransitionFromFaulted(){
+	ocpp_faulted = false;
 }
 
 void sessionHandler_OcppStopTransaction(const char * reason){
@@ -1173,7 +1185,7 @@ bool sessionHandler_OcppStateHasChanged(){
 }
 
 void sessionHandler_OcppSendState(){
-	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, false);
+	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, true);
 }
 
 static int change_availability(uint8_t is_operative){
@@ -1195,6 +1207,12 @@ static int change_availability(uint8_t is_operative){
 
 // See transition table in section on Status notification in ocpp 1.6 specification
 static enum ocpp_cp_status_id get_ocpp_state(){
+
+	if(ocpp_faulted){
+		return eOCPP_CP_STATUS_FAULTED;
+	}else if(ocpp_old_state == eOCPP_CP_STATUS_FAULTED){
+		return ocpp_faulted_exit_state;
+	}
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first.
 	// We also require the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
@@ -2029,6 +2047,32 @@ static void handle_reserved(){
 	}
 }
 
+static uint32_t ocpp_notified_warnings = 0x00000000;
+// Masks used to convert an mcu warning to an ocpp ChargePointErrorCode
+enum ocpp_mcu_error_code{
+	/* WARNING_REBOOT*/
+	eOCPP_MCU_CONNECTOR_LOCK_FAILURE = WARNING_SERVO,
+	eOCPP_MCU_EV_COMMUNICATION_ERROR = WARNING_PILOT_STATE | WARNING_PILOT_LOW_LEVEL | WARNING_PILOT_NO_PROXIMITY,
+	eOCPP_MCU_GROUND_FAILURE = WARNING_RCD,
+	eOCPP_MCU_HIGH_TEMPERATURE = WARNING_TEMPERATURE,
+	eOCPP_MCU_INTERNAL_ERROR = WARNING_TEMPERATURE_ERROR | WARNING_UNEXPECTED_RELAY | WARNING_O_PEN | WARNING_FPGA_WATCHDOG | WARNING_MAX_SESSION_RESTART | WARNING_DISABLED | WARNING_FPGA_VERSION | WARNING_RCD,
+	/* eOCPP_MCU_OTHER_ERROR = WARNING_HUMIDITY, */
+	eOCPP_MCU_OVER_CURRENT_FAILURE = WARNING_OVERCURRENT_INSTALLATION | WARNING_CHARGE_OVERCURRENT,
+	/* eOCPP_MCU_OVER_VOLTAGE = , */
+	eOCPP_MCU_POWER_METER_FAILURE = WARNING_EMETER_NO_RESPONSE | WARNING_EMETER_LINK | WARNING_EMETER_ALARM,
+	eOCPP_MCU_POWER_SWITCHFAILURE = WARNING_NO_SWITCH_POW_DEF,
+	eOCPP_MCU_UNDER_VOLTAGE = WARNING_NO_VOLTAGE_L1 | WARNING_NO_VOLTAGE_L2_L3 | WARNING_12V_LOW_LEVEL,
+};
+
+// TODO: Update with errors that need to be cleared before exiting faulted state
+#define MCU_WARNING_TRANSITION_FAULTED (WARNING_RCD | WARNING_CLEAR_REPLUG | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT)
+
+static void handle_faulted(){
+	if((ocpp_notified_warnings & MCU_WARNING_TRANSITION_FAULTED) == false){
+		sessionHandler_OcppTransitionFromFaulted();
+	}
+}
+
 static void handle_state(enum ocpp_cp_status_id state){
 	switch(state){
 	case eOCPP_CP_STATUS_AVAILABLE:
@@ -2050,7 +2094,49 @@ static void handle_state(enum ocpp_cp_status_id state){
 		break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
 	case eOCPP_CP_STATUS_FAULTED:
+		handle_faulted();
 		break;
+	}
+}
+
+static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mask){
+	uint32_t new_warning = warning_mask & ~ocpp_notified_warnings;
+	ocpp_notified_warnings = warning_mask; // Allow new notification for warnings that has now been cleared
+
+	//TODO: Add description to status notifications
+	if(new_warning){ // A warning that has not been notified earlier
+		if(new_warning & MCU_WARNING_TRANSITION_FAULTED){
+			sessionHandler_OcppTransitionToFaulted();
+			*state = eOCPP_CP_STATUS_FAULTED;
+		}
+
+		if(new_warning & eOCPP_MCU_CONNECTOR_LOCK_FAILURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_EV_COMMUNICATION_ERROR){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_GROUND_FAILURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_GROUND_FAILURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_HIGH_TEMPERATURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_OVER_CURRENT_FAILURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_POWER_METER_FAILURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_POWER_SWITCHFAILURE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_SWITCH_FAILURE, NULL, true);
+		}
+		if(new_warning & eOCPP_MCU_UNDER_VOLTAGE){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true);
+		}
 	}
 }
 
@@ -2371,6 +2457,7 @@ static void sessionHandler_task()
 		// Handle ocpp state if session type is ocpp
 		if(storage_Get_session_controller() == eSESSION_OCPP){
 			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state(chargeOperatingMode, currentCarChargeMode);
+			handle_warnings(&ocpp_new_state, MCU_GetWarnings());
 
 			if(ocpp_new_state != ocpp_old_state){
 				handle_state_transition(ocpp_old_state, ocpp_new_state);

@@ -233,6 +233,22 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 					char * error_description_out, size_t error_description_length);
 
 /**
+ * @brief allocates a buffer and copies the period_list into the new buffer
+ * @description Caller is responsible for freeing the returned pointer.
+ *
+ * @param period_list original period_list to duplicate
+ */
+struct ocpp_charging_schedule_period_list * ocpp_duplicate_charging_schedule_period_list(const struct ocpp_charging_schedule_period_list * period_list);
+
+/**
+ * @brief allocates a buffer and copies the profile into the new buffer
+ * @description Caller is responsible for freeing the returned pointer.
+ *
+ * @param profile original profile to duplicate
+ */
+struct ocpp_charging_profile * ocpp_duplicate_charging_profile(const struct ocpp_charging_profile * profile);
+
+/**
  * @brief free memory allocated for a charging schedule
  *
  * @param charging_schedule The schedule to delete
