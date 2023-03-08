@@ -499,7 +499,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
 #ifdef DEVELOPEMENT_URL
     char sourceVersionString[38] = {0};
-    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_get_app_description()->version);
+    snprintf(sourceVersionString, 38, "%s (DEV)",(char*)esp_app_get_description()->version);
     add_observation_to_collection(observations, create_observation(SourceVersion, sourceVersionString));
 #else
     add_observation_to_collection(observations, create_observation(SourceVersion, (char*)esp_app_get_description()->version));
