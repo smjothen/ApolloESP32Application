@@ -140,14 +140,14 @@ esp_err_t offlineSession_eraseAndRemountPartition(char * diagnosticsString, size
 {
 	esp_err_t err = ESP_OK;
 
-	esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
 
 	if(part != NULL)
 	{
 		offlineSession_test_Createfile(diagnosticsString, size);
 
 		ESP_LOGI(TAG, "Unmounting files-filesystem");
-		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
+		err = esp_vfs_fat_spiflash_unmount_rw_wl(tmp_path, s_wl_handle);
 		snprintf(diagnosticsString + strlen(diagnosticsString), size, " Unm: %i", err);
 		if(err != ESP_OK)
 			ESP_LOGE(TAG, "Unmounting failed: %i", err);

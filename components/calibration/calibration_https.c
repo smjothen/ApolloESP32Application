@@ -314,7 +314,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 			}
 
 			ctx->Params.CalibrationId = cJSON_GetObjectItem(body, "CalibrationId")->valueint;
-			ESP_LOGI(TAG, "Got calibration ID %d!", ctx->Params.CalibrationId);
+			ESP_LOGI(TAG, "Got calibration ID %" PRIu32 "!", ctx->Params.CalibrationId);
 
 			cJSON_Delete(body);
 		}

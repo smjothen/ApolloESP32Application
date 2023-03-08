@@ -2604,7 +2604,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}*/
 				else if(strstr(commandString, "fixpartition"))
 				{
-					int status = 0;
+					//int status = 0;
 					char partbuf[150] = {0};
 					if(strstr(commandString, "fixpartitionfiles"))
 					{
@@ -2624,7 +2624,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					if(directory_path != NULL && strlen(directory_path) > 0){
 
 						for(size_t i = strlen(directory_path)-1; i > 0; i--){
-							if(isspace(directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+							if(isspace((unsigned char)directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
 								|| directory_path[i] == '"'){
 								directory_path[i] = '\0';
 							}
