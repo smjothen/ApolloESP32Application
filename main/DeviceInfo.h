@@ -9,13 +9,14 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-
 #ifdef CONFIG_ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
 #define DEVELOPEMENT_URL
 #endif
 
 //#define RUN_FACTORY_ASSIGN_ID //default commented out /* Replaced by CONFIG_ZAPTEC_FACTORY_ASSIGN_ID, se Kconfig / Menuconfig */
 //#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
+
+//#define MCU_APP_ONLY
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -79,7 +80,8 @@ struct RFIDTokens{
 typedef enum {
     HW_SPEED_UNKNOWN = 0,
     HW_SPEED_1       = 1,
-    HW_SPEED_3_UK    = 3,
+    HW_SPEED_3_UK    = 3,	//MCU flashes FPGA
+	HW_SPEED_5_EU    = 5,   //MCU flashes FPGA
 } hw_speed_revision;
 
 

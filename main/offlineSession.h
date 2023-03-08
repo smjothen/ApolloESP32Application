@@ -8,7 +8,11 @@
 #include "chargeSession.h"
 
 void offlineSession_Init();
+bool offlineSession_test_Createfile(char * fileDiagnostics, int size);
+bool offlineSession_test_Deletefile(char * fileDiagnostics, int size);
+esp_err_t offlineSession_eraseAndRemountPartition(char * diagnosticsString, size_t size);
 bool offlineSession_mount_folder();
+void offlineSession_disable(void);
 
 int offlineSession_FindNewFileNumber();
 int offlineSession_FindOldestFile();

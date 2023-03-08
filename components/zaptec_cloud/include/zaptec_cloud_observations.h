@@ -15,6 +15,8 @@ struct MqttDataDiagnostics
 	uint32_t nrOfTxMessages;
 };
 
+void cloud_observations_disable(bool disable);
+
 void MqttSetRxDiagnostics(uint32_t bytes, uint32_t metabytes);
 
 struct MqttDataDiagnostics MqttGetDiagnostics();
@@ -72,6 +74,8 @@ int publish_debug_telemetry_observation_all(double rssi);
 int publish_debug_telemetry_observation_TimeAndSchedule(uint8_t bitmask);
 
 int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
+
+int publish_debug_telemetry_observation_Calibration(char *calibrationJSON);
 
 void SetClearSessionFlag();
 

@@ -16,6 +16,6 @@ flash_encryption_key.bin
 .cache
 
 compile_commands.json
-.vim
-
 managed_components
+.vim
+build.clang

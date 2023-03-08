@@ -168,7 +168,7 @@ static void connectivity_task()
 	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-	if(devInfo.factory_stage != FactoryStageFinnished){
+	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()) {
 		staticNewInterface = eCONNECTION_WIFI;
 	}
 
