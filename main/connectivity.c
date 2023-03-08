@@ -2,8 +2,6 @@
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "string.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 #include "esp_log.h"
 #include "connectivity.h"
 #include "network.h"
