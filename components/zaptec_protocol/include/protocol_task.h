@@ -48,6 +48,7 @@ float MCU_GetCurrents(uint8_t phase);
 float MCU_GetPower();
 float MCU_GetEnergy();
 float MCU_GetMaximumEnergy();
+void MCU_AdjustMaximumEnergy();
 void MCU_ClearMaximumEnergy();
 
 int8_t MCU_GetChargeMode();

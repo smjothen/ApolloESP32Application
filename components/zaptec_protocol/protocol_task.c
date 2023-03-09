@@ -532,9 +532,11 @@ void uartSendTask(void *pvParameters){
         else if(rxMsg.identifier == ParamTotalChargePower)
         	totalChargePower = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamTotalChargePowerSession)
+        {
         	totalChargePowerSession = GetFloat(rxMsg.data);
-			if(max_reported_energy<totalChargePowerSession)
+        	if(max_reported_energy<totalChargePowerSession)
 				max_reported_energy = totalChargePowerSession;
+        }
 
 	    else if(rxMsg.identifier == ParamChargeMode)
 	    	chargeMode = rxMsg.data[0];
@@ -949,8 +951,15 @@ float MCU_GetMaximumEnergy(){
 	return max_reported_energy;
 }
 
-void MCU_ClearMaximumEnergy(){
+void MCU_AdjustMaximumEnergy(){
+	ESP_LOGI(TAG, "MCU_AjustMaximumEnergy: %f = %f", max_reported_energy, totalChargePowerSession);
 	max_reported_energy = totalChargePowerSession;
+}
+
+
+void MCU_ClearMaximumEnergy(){
+	ESP_LOGI(TAG, "MCU_ClearMaximumEnergy");
+	max_reported_energy = 0;
 }
 
 int8_t MCU_GetChargeMode()

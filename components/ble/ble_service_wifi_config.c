@@ -1687,6 +1687,10 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 			{
 
 				ESP_LOGW(TAG, "MCU RunRCDTest command OK");
+				if(isMqttConnected())
+				{
+					publish_debug_telemetry_observation_Diagnostics("BLE: RCD button test run");
+				}
 			}
 			else
 			{

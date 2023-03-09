@@ -1423,7 +1423,18 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//Only in system mode
 		if(storage_Get_Standalone() == 0)
 		{
-			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+
+			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_NOT_AUTHORIZED);
+			if(ret == MsgWriteAck)
+			{
+				ESP_LOGI(TAG, "Ack on SESSION_NOT_AUTHORIZED");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "NACK on SESSION_NOT_AUTHORIZED");
+			}
+
+			ret = MCU_SendCommandId(CommandAuthorizationDenied);
 			if(ret == MsgCommandAck)
 			{
 				responseStatus = 200;
@@ -2704,6 +2715,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 				responseStatus = 200;
+			}
+			else if(strstr(commandString, "RunRCDTest"))
+			{
+				MessageType ret = MCU_SendCommandId(CommandRunRCDTest);
+				if(ret == MsgCommandAck)
+				{
+
+					ESP_LOGW(TAG, "MCU RunRCDTest command OK");
+					if(isMqttConnected())
+					{
+						publish_debug_telemetry_observation_Diagnostics("Cloud: RCD button test run");
+					}
+					responseStatus = 200;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU RunRCDTest command FAILED");
+					responseStatus = 400;
+				}
 			}
 		}
 	}

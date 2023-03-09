@@ -48,7 +48,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.3.4"; //Based on unsigned "2.0.3.0" (FPGA program on Speed 3(UK) and 5(EU))
+char softwareVersion[] = "2.0.3.6"; //Based on unsigned "2.0.3.0" (FPGA program on Speed 3(UK) and 5(EU))
 
 uint8_t GetEEPROMFormatVersion()
 {
