@@ -257,6 +257,8 @@ void chargeSession_Start()
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
+	MCU_ClearMaximumEnergy();
+
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{
 		ESP_LOGI(TAG, "chargeSession_Start() using uncompleted Session from flash");

@@ -767,10 +767,16 @@ static void sessionHandler_task()
 
 
 		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
 		{
 			offlineSession_ClearLog();
 			chargeSession_Start();
+
+			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
+			if(isOnline && (OCMF_GetEnergyFault() == true))
+			{
+				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
+			}
 		}
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
@@ -792,7 +798,7 @@ static void sessionHandler_task()
 
 			if((NFCGetTagInfo().tagIsValid == true) && (stoppedByRfid == false))
 			{
-				if(isOnline)
+				if((isOnline) && (chargeSession_IsAuthenticated() == false))
 				{
 					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 					if(ret == MsgWriteAck)
@@ -1553,7 +1559,7 @@ void sessionHandler_StopAndResetChargeSession()
 		MessageType ret = MCU_SendCommandId(CommandResetSession);
 		if(ret == MsgCommandAck)
 		{
-			ESP_LOGI(TAG, "MCU ResetSession command OK");
+			ESP_LOGW(TAG, "******** MCU ResetSession command OK *********");
 
 			//return 200;
 		}
@@ -1563,15 +1569,27 @@ void sessionHandler_StopAndResetChargeSession()
 			//return 400;
 		}
 
-		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
-		sessionResetMode = eSESSION_RESET_NONE;
+		//SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+		sessionResetMode = eSESSION_RESET_WAIT;
 		ESP_LOGI(TAG, "Transition state STOP");
 	}
 
 	//Any failed or final state - cleare opModeOverride
-	if(sessionResetMode == eSESSION_RESET_NONE)
+	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() == 0.0))
+	{
+		MCU_ClearMaximumEnergy();
+		ESP_LOGI(TAG, "sessionReset: Energy cleared");
+		sessionResetMode = eSESSION_RESET_NONE;
+	}
+	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() != 0.0))
+	{
+		ESP_LOGW(TAG, "sessionReset: MCU_GetEnergy() = %f > 0.0", MCU_GetEnergy());
+	}
+
+	if((sessionResetMode == eSESSION_RESET_NONE) )
 	{
 		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+		ESP_LOGW(TAG, "eSESSION_RESET_NONE");
 	}
 
 	ESP_LOGE(TAG, "sessionResetMode: %i cnt %i", sessionResetMode, waitForCarCountDown);

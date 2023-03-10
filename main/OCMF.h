@@ -19,7 +19,7 @@ int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_i
 
 
 /******* CompletedSession *****/
-
+bool OCMF_GetEnergyFault();
 void OCMF_CompletedSession_StartStopOCMFLog(char label, time_t startTimeSec);
 void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in);
 //char * OCMF_CompletedSession_CreateNewOCMFLogFromFile();

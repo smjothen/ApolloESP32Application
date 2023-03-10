@@ -724,6 +724,7 @@ static void i2cDevice_task(void *pvParameters)
 
 							if(isAuthenticated == 1)
 							{
+								audio_play_nfc_card_accepted();
 								authentication_Execute(NFCGetTagInfo().idAsString);
 							}
 
