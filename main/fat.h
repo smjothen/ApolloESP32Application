@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include "cJSON.h"
 #include "esp_err.h"
 
 void fat_make();
@@ -15,3 +16,4 @@ bool fat_eraseAndRemountPartition();
 bool fat_CheckFilesSystem();
 bool fat_Factorytest_CreateFile();
 bool fat_Factorytest_DeleteFile();
+int fat_list_directory(const char * directory_path, cJSON * result);
