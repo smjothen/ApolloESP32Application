@@ -201,6 +201,11 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 		return 1;
 	}
 
+	else
+	{
+		offlineSession_AppendLogString(sessionIdFromCloud);
+	}
+
 	if(strlen(chargeSession.SessionId) > 0)
 	{
 		ESP_LOGW(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
@@ -251,6 +256,8 @@ static double startAcc = 0.0;
 void chargeSession_Start()
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
+
+	MCU_ClearMaximumEnergy();
 
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{

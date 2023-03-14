@@ -45,7 +45,8 @@ enum SessionResetMode
 	eSESSION_RESET_INITIATED = 1,
 	eSESSION_RESET_STOP_SENT = 2,
 	eSESSION_RESET_FINALIZE  = 3,
-	eSESSION_RESET_DO_RESET	 = 4
+	eSESSION_RESET_DO_RESET	 = 4,
+	eSESSION_RESET_WAIT	 	 = 5,
 };
 
 void sessionHandler_init();
