@@ -107,9 +107,11 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode) {
     if (mode == ctx->Mode) {
+        ctx->ReqMode = mode;
         return true;
     }
 
+    ESP_LOGI(TAG, "Mode requested: %d", mode);
     ctx->ReqMode = mode;
     return false;
 }
@@ -760,23 +762,25 @@ int calibration_send_state(CalibrationCtx *ctx) {
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
+    if (!calibration_set_mode(ctx, Idle)) {
+        ESP_LOGI(TAG, "Waiting for charger to go idle...");
+        return;
+    }
+
     if (!(ctx->Flags & CAL_FLAG_DONE)) {
+        if (failed) {
+            ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
 
-        if (calibration_set_mode(ctx, Idle)) {
-            if (failed) {
-                ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
-
-                // If failed, then maybe got a bad calibration, allow rewriting?
-                if (MCU_SendCommandId(CommandMidClearCalibration) != MsgCommandAck) {
-                    ESP_LOGE(TAG, "%s: Couldn't clear calibration!", calibration_state_to_string(ctx));
-                    return;
-                }
-            } else {
-                ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
+            // If failed, then maybe got a bad calibration, allow rewriting?
+            if (MCU_SendCommandId(CommandMidClearCalibration) != MsgCommandAck) {
+                ESP_LOGE(TAG, "%s: Couldn't clear calibration!", calibration_state_to_string(ctx));
+                return;
             }
-
-            ctx->Flags |= CAL_FLAG_DONE;
+        } else {
+            ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
         }
+
+        ctx->Flags |= CAL_FLAG_DONE;
     }
 
     calibration_turn_led_off(ctx);
