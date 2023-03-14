@@ -2256,6 +2256,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"PrintOffsLog") != NULL)
 			{
 				ESP_LOGW(TAG, "SequenceLog: \r\n%s", offlineSession_GetLog());
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
 				responseStatus = 200;
 			}
 			else if(strstr(commandString,"GetNrOfSessionsFiles") != NULL)
