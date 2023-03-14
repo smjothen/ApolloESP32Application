@@ -329,6 +329,9 @@ void sessionHandler_CheckAndSendOfflineSessions()
 		else
 		{
 			sessionLength = strlen(completedSessionString);
+			if(sessionLength < 30)
+				publish_debug_message_event("Short CompletedSession", cloud_event_level_warning);
+
 			offlineSession_AppendLogStringWithInt("3 CSessLen: ", sessionLength);
 		}
 
@@ -340,7 +343,7 @@ void sessionHandler_CheckAndSendOfflineSessions()
 			offlineSession_AppendLogString("3 CS sent OK");
 			offlineSession_AppendLogLength();
 
-			if((storage_Get_DiagnosticsMode() == eALWAYS_SEND_SESSION_DIAGNOSTICS) || (completedSessionString == NULL))
+			if((storage_Get_DiagnosticsMode() == eALWAYS_SEND_SESSION_DIAGNOSTICS) || (completedSessionString == NULL) || (sessionLength < 30))
 			{
 				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
 			}
