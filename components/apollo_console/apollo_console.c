@@ -14,6 +14,8 @@
 #include "i2cDevices.h"
 #include "eeprom_wp.h"
 #include "EEPROM.h"
+#include "zaptec_cloud_listener.h"
+#include "offline_log.h"
 
 static const char *TAG = "CONSOLE";
 static const char *REPLY_TAG = ">>>>>>";
@@ -161,6 +163,127 @@ int register_prodtest_write_cmd(void){
     return 0;
 }
 
+static int offline_log_cmd(int argc, char **argv){
+    if (argc > 1) {
+        char *cmd = argv[1];
+
+        time_t ts = time(NULL);
+        double energy = 0.1;
+
+        if (strcmp(cmd, "append") == 0) {
+            if (argc > 2) {
+                ts = strtoll(argv[2], NULL, 10);
+            }
+            if (argc > 3) {
+                energy = atof(argv[3]);
+            }
+            offline_log_append_energy(ts, energy);
+            ESP_LOGI(TAG, "offline_log_append_energy(%llu, %f)", ts, energy);
+        } else if (strcmp(cmd, "lappend") == 0) {
+            if (argc > 2) {
+                ts = strtoll(argv[2], NULL, 10);
+            }
+            if (argc > 3) {
+                energy = atof(argv[3]);
+            }
+            offline_log_append_energy_legacy(ts, energy);
+            ESP_LOGI(TAG, "offline_log_append_energy_legacy(%llu, %f)", ts, energy);
+        } else if (strcmp(cmd, "send") == 0) {
+            int ret = offline_log_attempt_send();
+            ESP_LOGI(TAG, "offline_log_attempt_send() = %d", ret);
+        }
+    }
+    return 0;
+}
+
+static int register_offline_log_cmd(void){
+    const esp_console_cmd_t cmd = {
+        .command = "offline_log",
+        .help = "test offline log",
+        .hint = NULL,
+        .func = &offline_log_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+static int sim_offline_cmd(int argc, char **argv) {
+    static bool enabled = true;
+
+    ESP_LOGI(TAG, "Setting simulated offline %s", enabled ? "ON" : "OFF");
+
+    MqttSetSimulatedOffline(enabled);
+    enabled = !enabled;
+
+    return 0;
+}
+
+static int register_sim_offline_cmd(void) {
+    const esp_console_cmd_t cmd = {
+        .command = "sim_offline",
+        .help = "simulate offline",
+        .hint = NULL,
+        .func = sim_offline_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+
+#include "esp_heap_trace.h"
+
+#define NUM_RECORDS 256
+
+static heap_trace_record_t trace_record[NUM_RECORDS]; 
+
+static int heap_toggle_cmd(int argc, char **argv) {
+    static bool heap_inited = false;
+    static bool heap_start = true; 
+
+    if (!heap_inited) {
+        ESP_LOGI(TAG, "Initializing heap records...");
+
+        ESP_ERROR_CHECK(heap_trace_init_standalone(trace_record, NUM_RECORDS));
+        heap_inited = true;
+    }
+
+
+    if (heap_start) {
+        ESP_LOGI(TAG, "Starting heap trace...");
+        ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
+
+        heap_start = false;
+    } else {
+        ESP_LOGI(TAG, "Stopping heap trace...");
+        ESP_ERROR_CHECK(heap_trace_stop());
+        heap_trace_dump();
+
+        heap_start = true;
+    }
+
+    return 0;
+}
+
+static int register_heap_toggle_cmd(void){
+    const esp_console_cmd_t cmd = {
+        .command = "heap",
+        .help = "toggle heap leak debugging",
+        .hint = NULL,
+        .func = heap_toggle_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+#endif
+
 //based on https://github.com/espressif/esp-idf/blob/6e776946d01ec0d081d09000c36d23ec1d318c06/examples/system/console/main/console_example_main.c
 static void initialize_console(void)
 {
@@ -272,6 +395,13 @@ void apollo_console_init(void){
     register_reboot_cmd();
     register_new_id_cmd();
     register_clear_energy_cmd();
+    register_offline_log_cmd();
+
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+    register_heap_toggle_cmd();
+#endif
+
+    register_sim_offline_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }

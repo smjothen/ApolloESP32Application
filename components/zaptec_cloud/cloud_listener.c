@@ -2136,7 +2136,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
 				{
-					int ret = deleteOfflineLog();
+					int ret = offline_log_delete();
 					if(ret == 1)
 						publish_debug_telemetry_observation_Diagnostics("Delete OK");
 					else

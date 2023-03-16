@@ -12,10 +12,16 @@
 #include "zaptec_protocol_serialisation.h"
 
 static const char *tmp_path = "/tmp";
-static const char *log_path = "/tmp/log554.bin";
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
-
 static const int max_log_items = 1000;
+
+#define OFFLINE_LOG_FLAG_64BIT (1 << 0)
+
+struct LogFile {
+    const char *path;
+    uint32_t flags;
+    size_t entry_size;
+};
 
 struct LogHeader {
     int start;
@@ -24,11 +30,30 @@ struct LogHeader {
     // dont keep version, use other file name for versioning
 };
 
-
 struct LogLine {
     int timestamp;
     double energy;
     uint32_t crc;
+};
+
+struct LogLine64 {
+    time_t timestamp;
+    double energy;
+    uint32_t crc;
+};
+
+static const struct LogFile log32 = {
+    .path = "/tmp/log554.bin",
+    .flags = 0,
+    .entry_size = sizeof (struct LogLine),
+};
+
+// If sizeof (time_t) == 64 this will be used for logging, while the file above will be
+// only sent to the cloud and cleared.
+static const struct LogFile log64 = {
+    .path = "/tmp/log64.bin",
+    .flags = OFFLINE_LOG_FLAG_64BIT,
+    .entry_size = sizeof (struct LogLine64),
 };
 
 bool mount_tmp()
@@ -114,7 +139,7 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
 
 }
 
-FILE * init_log(int *start, int *end){
+FILE * init_log(const struct LogFile *file, int *start, int *end){
     bool mounted = mount_tmp();
 
     if(!mounted){
@@ -122,13 +147,13 @@ FILE * init_log(int *start, int *end){
         return NULL;
     }
 
-    FILE *fp = fopen(log_path, "wb+");
+    FILE *fp = fopen(file->path, "wb+");
     if(fp==NULL){
-        ESP_LOGE(TAG, "failed to open file ");
+        ESP_LOGE(TAG, "failed to open file %s", file->path);
         return NULL;
     }
 
-    size_t log_size = sizeof(struct LogHeader) + (sizeof(struct LogLine)*max_log_items);
+    size_t log_size = sizeof (struct LogHeader) + file->entry_size * max_log_items;
 
     int seek_res = fseek(
         fp,
@@ -155,13 +180,15 @@ FILE * init_log(int *start, int *end){
     return fp;
 }
 
+#ifdef OFFLINE_LOG_LEGACY_LOGGING
 
-void append_offline_energy(int timestamp, double energy){
-    ESP_LOGI(TAG, "saving offline energy %fWh@%d", energy, timestamp);
+void offline_log_append_energy_legacy(time_t timestamp, double energy){
+    ESP_LOGI(TAG, "saving offline energy %fWh@%lld", energy, timestamp);
 
     int log_start;
     int log_end;
-    FILE *fp = init_log(&log_start, &log_end);
+
+    FILE *fp = init_log(&log32, &log_start, &log_end);
 
     if(fp==NULL)
         return;
@@ -175,7 +202,48 @@ void append_offline_energy(int timestamp, double energy){
 
     struct LogLine line = {.energy = energy, .timestamp = timestamp, .crc = 0};
 
-    uint32_t crc = crc32_normal(0, &line, sizeof(struct LogLine));
+    uint32_t crc = crc32_normal(0, &line, sizeof(line));
+    line.crc = crc;
+
+    ESP_LOGI(TAG, "writing to file with crc=%" PRIu32 "", line.crc);
+
+    int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_end);
+    fseek(fp, start_of_line, SEEK_SET);
+    int bytes_written = fwrite(&line, 1, sizeof(line), fp);
+
+    update_header(fp, log_start, new_log_end);
+    ESP_LOGI(TAG, "wrote %d bytes @ %d; updated header to (%d, %d)",
+        bytes_written, start_of_line, log_start, new_log_end
+    );
+
+    int close_result = fclose(fp);
+    ESP_LOGI(TAG, "closed log file %d", close_result);
+}
+
+#endif
+
+void offline_log_append_energy(time_t timestamp, double energy){
+    ESP_LOGI(TAG, "saving offline energy %fWh@%lld", energy, timestamp);
+
+    int log_start;
+    int log_end;
+
+    // Always append to 64bit path for future energy
+    FILE *fp = init_log(&log64, &log_start, &log_end);
+
+    if(fp==NULL)
+        return;
+
+    int new_log_end = (log_end+1) % max_log_items;
+    if(new_log_end == log_start){
+        // insertion would fill the buffer, and cant tell if it is full or empty
+        // move first item idx to compensate
+        log_start = (log_start+1) % max_log_items;
+    }
+
+    struct LogLine64 line = {.energy = energy, .timestamp = timestamp, .crc = 0};
+
+    uint32_t crc = crc32_normal(0, &line, sizeof(line));
     line.crc = crc;
 
     ESP_LOGI(TAG, "writing to file with crc=%" PRIu32 "", line.crc);
@@ -194,14 +262,52 @@ void append_offline_energy(int timestamp, double energy){
     ESP_LOGI(TAG, "closed log file %d", close_result);
 }
 
-int attempt_log_send(void){
-    ESP_LOGI(TAG, "log data:");
+int _offline_log_read_line(FILE *fp, int index, int *line_start, double *line_energy,
+        time_t *line_ts, uint32_t *line_crc, uint32_t *calc_crc) {
+
+    struct LogLine line;
+    *line_start = sizeof(struct LogHeader) + (sizeof(line) * index);
+
+    fseek(fp, *line_start, SEEK_SET);
+    int res = fread(&line, 1, sizeof(line),  fp);
+
+    *line_energy = line.energy;
+    *line_ts = line.timestamp;
+    *line_crc = line.crc;
+
+    line.crc = 0;
+    *calc_crc = crc32_normal(0, &line, sizeof(line));
+
+    return res;
+}
+
+int _offline_log_read_line64(FILE *fp, int index, int *line_start, double *line_energy,
+        time_t *line_ts, uint32_t *line_crc, uint32_t *calc_crc) {
+
+    struct LogLine64 line;
+    *line_start = sizeof(struct LogHeader) + (sizeof(line) * index);
+
+    fseek(fp, *line_start, SEEK_SET);
+    int res = fread(&line, 1, sizeof(line),  fp);
+
+    *line_energy = line.energy;
+    *line_ts = line.timestamp;
+    *line_crc = line.crc;
+
+    line.crc = 0;
+    *calc_crc = crc32_normal(0, &line, sizeof(line));
+
+    return res;
+}
+
+int _offline_log_attempt_send(const struct LogFile *file) {
+    ESP_LOGI(TAG, "log data (%s):", file->path);
 
     int result = -1;
     
     int log_start;
     int log_end;
-    FILE *fp = init_log(&log_start, &log_end);
+    FILE *fp = init_log(file, &log_start, &log_end);
 
     //If file or partition is now available, indicate empty file
     if(fp == NULL)
@@ -210,27 +316,27 @@ int attempt_log_send(void){
     char ocmf_text[200] = {0};
 
     while(log_start!=log_end){
-        struct LogLine line;
-        int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_start);
-        fseek(fp, start_of_line, SEEK_SET);
-        int read_result = fread(&line, 1,sizeof(line),  fp);
+        int read_result, start_of_line;
+        uint32_t crc_on_file, calculated_crc;
+        double energy;
+        time_t timestamp;
 
-        uint32_t crc_on_file = line.crc;
-        line.crc = 0;
-        uint32_t calculated_crc = crc32_normal(0, &line, sizeof(line));
-
-
-        ESP_LOGI(TAG, "LogLine@%d>%d: E=%f, t=%d, crc=%" PRId32 ", valid=%d, read=%d", 
+        if (file->flags & OFFLINE_LOG_FLAG_64BIT) {
+            read_result = _offline_log_read_line64(fp, log_start, &start_of_line, &energy, &timestamp, &crc_on_file, &calculated_crc);
+        } else {
+            read_result = _offline_log_read_line(fp, log_start, &start_of_line, &energy, &timestamp, &crc_on_file, &calculated_crc);
+        }
+ 
+        ESP_LOGI(TAG, "LogLine%d@%d>%d: E=%f, t=%lld, crc=%" PRId32 ", valid=%d, read=%d", 
+            (file->flags & OFFLINE_LOG_FLAG_64BIT) ? 64 : 32,
             log_start, start_of_line,
-            line.energy, line.timestamp,
+            energy, timestamp,
             crc_on_file, crc_on_file==calculated_crc, read_result
         );
 
         if(crc_on_file==calculated_crc){
-            OCMF_SignedMeterValue_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
-            int publish_result = publish_string_observation_blocked(
-			    SignedMeterValue, ocmf_text, 2000
-		    );
+            OCMF_SignedMeterValue_CreateMessageFromLog(ocmf_text, timestamp, energy);
+            int publish_result = publish_string_observation_blocked(SignedMeterValue, ocmf_text, 2000);
 
             if(publish_result<0){
                 ESP_LOGI(TAG, "publishing line failed, aborting log dump");
@@ -240,12 +346,9 @@ int attempt_log_send(void){
             int new_log_start = (log_start + 1) % max_log_items;
             update_header(fp, new_log_start, log_end);
             fflush(fp);
-            
 
             ESP_LOGI(TAG, "line published");
-
-
-        }else{
+        } else {
             ESP_LOGI(TAG, "skipped corrupt line");
         }
 
@@ -258,13 +361,38 @@ int attempt_log_send(void){
             update_header(fp, 0, 0);
     }
     
-	int close_result = fclose(fp);
+    int close_result = fclose(fp);
     ESP_LOGI(TAG, "closed log file %d", close_result);
     return result;
 }
 
+int offline_log_attempt_send(void) {
+    // If old 32 bit file exists, attempt to send it and then remove the file if successful
+    if (access(log32.path, R_OK) == 0) {
+        ESP_LOGI(TAG, "Found legacy log file %s, attempting send", log32.path);
 
-int deleteOfflineLog()
+        int ret = _offline_log_attempt_send(&log32);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "Attempted send of legacy log failed!");
+            return ret;
+        }
+
+        ret = remove(log32.path);
+        ESP_LOGI(TAG, "Deleting legacy log %s = %d", log32.path, ret);
+    }
+
+    // Always attempt to send 64-bit log
+    int ret = _offline_log_attempt_send(&log64);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Attempted send of log failed!");
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Attempted send of log successful!");
+    return ret;
+}
+
+int offline_log_delete(void)
 {
 	int ret = 0;
 
@@ -273,29 +401,35 @@ int deleteOfflineLog()
 		return ret;
 	}
 
-	FILE *fp = fopen(log_path, "r");
-	if(fp==NULL)
-		ESP_LOGE(TAG, "Before remove: logfile can't be opened ");
-	else
-		ESP_LOGE(TAG, "Before remove: logfile can be opened ");
+  const struct LogFile files[] = { log32, log64 };
 
-	fclose(fp);
+  for (size_t i = 0; i < sizeof (files) / sizeof (files[0]); i++) {
+      const struct LogFile *file = &files[i];
 
-	remove(log_path);
+      FILE *fp = fopen(file->path, "r");
 
-	fp = fopen(log_path, "r");
-	if(fp==NULL)
-	{
-		ESP_LOGE(TAG, "After remove: logfile can't be opened ");
-		ret = 1;
-	}
-	else
-	{
-		ESP_LOGE(TAG, "After remove: logfile can be opened ");
-		ret = 2;
-	}
+      if(fp==NULL) {
+        ESP_LOGE(TAG, "Before remove: logfile %s can't be opened ", file->path);
+      } else {
+        ESP_LOGE(TAG, "Before remove: logfile %s can be opened ", file->path);
+        fclose(fp);
+      }
 
-	fclose(fp);
+      remove(file->path);
+
+      fp = fopen(file->path, "r");
+      if(fp==NULL)
+      {
+        ESP_LOGE(TAG, "After remove: logfile %s can't be opened ", file->path);
+        ret = 1;
+      }
+      else
+      {
+        ESP_LOGE(TAG, "After remove: logfile %s can be opened ", file->path);
+        fclose(fp);
+        ret = 2;
+      }
+  }
 
 	return ret;
 }

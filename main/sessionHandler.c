@@ -80,7 +80,7 @@ void on_send_signed_meter_value()
 
 	if(!isMqttConnected()){
 		// Do not attempt sending data when we know that the system is offline
-	}else if(attempt_log_send()==0){
+	}else if(offline_log_attempt_send()==0){
 		ESP_LOGI(TAG, "energy log empty");
 		state_log_empty = true;
 	}
@@ -91,12 +91,12 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
-			append_offline_energy(timeSec, energy);
+			offline_log_append_energy(timeSec, energy);
 		}
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
-		append_offline_energy(timeSec, energy);
+		offline_log_append_energy(timeSec, energy);
 	}
 
 
