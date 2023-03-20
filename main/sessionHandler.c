@@ -187,8 +187,9 @@ void log_task_info(void){
 
 
 
-bool startupSent = false;
-bool setTimerSyncronization = false;
+static bool startupSent = false;
+static bool setTimerSyncronization = false;
+static bool reportChargingStateCommandSent = false;
 
 //static bool stoppedByCloud = false;
 
@@ -1203,6 +1204,13 @@ static void sessionHandler_task()
 					storage_Clear_And_Save_DiagnosticsLog();
 				}
 
+				if(reportChargingStateCommandSent == true)
+				{
+					ReInitParametersForCloud();
+					publish_debug_telemetry_observation_PulseInterval(recordedPulseInterval);
+					reportChargingStateCommandSent = false;
+				}
+
 				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
 				//publish_debug_telemetry_observation_cloud_settings();
 
@@ -1721,6 +1729,7 @@ void StackDiagnostics(bool state)
 void ClearStartupSent()
 {
 	startupSent = false;
+	reportChargingStateCommandSent = true;
 }
 
 

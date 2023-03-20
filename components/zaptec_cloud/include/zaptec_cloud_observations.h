@@ -78,6 +78,7 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
 int publish_debug_telemetry_observation_Calibration(char *calibrationJSON);
 
 void SetClearSessionFlag();
+void ReInitParametersForCloud();
 
 int publish_telemetry_observation_on_change();
 

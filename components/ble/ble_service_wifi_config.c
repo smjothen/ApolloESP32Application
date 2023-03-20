@@ -150,6 +150,8 @@ const uint8_t Phase_Rotation_uid128[ESP_UUID_LEN_128] 	= {0x08, 0xfe, 0xb5, 0xc0
 //static const uint8_t Phase_Rotation_descr[]   			= "Phase Rotation";
 //static uint8_t Phase_Rotation_val[1]          			= {0x0};
 
+const uint8_t IT3Optimization_uid128[ESP_UUID_LEN_128] 	= {0x09, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+
 //Location 10492c5a-deec-4577-a25a-6950c0b5fcdf
 const uint8_t Location_uid128[ESP_UUID_LEN_128] 		= {0xdf, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
@@ -306,6 +308,11 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	[CHARGER_PHASE_ROTATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Phase_Rotation_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	//[CHARGER_PHASE_ROTATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
+	[CHARGER_IT3_OPTIMIZATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_IT3_OPTIMIZATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &IT3Optimization_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+	//[CHARGER_IT3_OPTIMIZATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
+
+
 	[CHARGER_LOCATION_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_LOCATION_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Location_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 	//[CHARGER_LOCATION_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
@@ -385,6 +392,7 @@ uint16_t getAttributeIndexByWifiHandle(uint16_t attributeHandle)
 static float hmiBrightness = 0.0;
 static char nrTostr[11] = {0};
 static char charBuf[SCHEDULE_SIZE] = {0};
+static char writeGridtype[5] = {0};
 
 static bool configSession = false;
 static int statusSegmentCount = 0;
@@ -1077,6 +1085,23 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
 		break;
 
+    case CHARGER_IT3_OPTIMIZATION_UUID:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		//Reads from MCU
+		MCU_UpdateIT3OptimizationState();
+		uint8_t enabled = MCU_GetIT3OptimizationState();
+
+		memset(nrTostr, 0, sizeof(nrTostr));
+		sprintf(nrTostr, "%i", enabled);
+
+		ESP_LOGI(TAG, "Read IT3 optimization %i from MCU", enabled);
+
+		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
+		rsp->attr_value.len = strlen(nrTostr);
+
+		break;
+
     case CHARGER_LOCATION_UUID:
 
     	memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -1437,6 +1462,61 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
    		break;
 
 
+    case CHARGER_NETWORK_TYPE_UUID:
+
+    	//Purpose - allow override network/grid type during installation process
+    	//This parameter is saved on MCU side when written here. No ESP saveConfiguration is needed.
+
+    	//Don't allow wiring to this on Go UK - is always TN_1
+    	if(IsUKOPENPowerBoardRevision())
+		{
+			break;
+		}
+
+    	if(param->write.len <= 4)
+    	{
+    		int newNetworkType = 0;
+    		memcpy(writeGridtype, param->write.value, param->write.len);
+
+    		if(strstr(writeGridtype,"IT_1") != NULL)
+				newNetworkType = NETWORK_1P3W;
+			else if(strstr(writeGridtype,"IT_3") != NULL)
+				newNetworkType = NETWORK_3P3W;
+			else if(strstr(writeGridtype,"TN_1") != NULL)
+				newNetworkType = NETWORK_1P4W;
+			else if(strstr(writeGridtype,"TN_3") != NULL)
+				newNetworkType = NETWORK_3P4W;
+			else
+				newNetworkType = NETWORK_NONE;
+
+			//Sanity check
+			if((4 >= newNetworkType) && (newNetworkType >= 0))
+			{
+				ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
+
+				MessageType ret = MCU_SendUint8Parameter(ParamGridTypeOverride, newNetworkType);
+				if(ret == MsgWriteAck)
+				{
+					int ret = (int)MCU_UpdateOverrideGridType();
+
+					if(ret == newNetworkType)
+					{
+						ESP_LOGI(TAG, "Set OverrideNetworkType %i=%s OK", newNetworkType, writeGridtype);
+					}
+					else
+					{
+						ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 1");
+					}
+				}
+				else
+				{
+					ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 2");
+				}
+			}
+    	}
+
+		break;
+
     case CHARGER_STANDALONE_UUID:
 
     	ESP_LOGI(TAG, "Standalone received %02x", param->write.value[0]);
@@ -1608,6 +1688,34 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     	}
 
    		break;
+
+    case CHARGER_IT3_OPTIMIZATION_UUID:
+    	ESP_LOGI(TAG, "IT3 optimization received %c", param->write.value[0]);
+
+    	uint8_t doEnable = 0;
+    	if((param->write.value[0] == '0') || (param->write.value[0] == '1'))
+    	{
+    		if(param->write.value[0] == '1')
+    			doEnable = 1;
+
+    		ESP_LOGI(TAG, "IT3 optimization to MCU %i", doEnable);
+
+			MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, doEnable);
+			if(ret == MsgWriteAck)
+			{
+				uint8_t ret = MCU_UpdateIT3OptimizationState();
+				if(ret == 0)
+				{
+					ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
+				}
+				else
+				{
+					ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 1");
+				}
+			}
+    	}
+
+ 		break;
 
 
     case CHARGER_RUN_COMMAND_UUID:
