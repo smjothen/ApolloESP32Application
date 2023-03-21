@@ -184,7 +184,7 @@ struct Configuration
 	// ocpp core profile settings ((commented out settings are optional AND currently not in use) OR superseded by other settings)
 	// See Open charge point protocol 1.6 section 9.1 for more information
 
-	//configurationStruct.ocpp_authorization_cache_enabled = false;
+	bool ocpp_authorization_cache_enabled;
 	char url_ocpp[URL_OCPP_MAX_LENGTH];
 	bool ocpp_allow_offline_tx_for_unknown_id;
 	bool ocpp_authorize_remote_tx_requests;

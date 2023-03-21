@@ -464,6 +464,11 @@ enum ocpp_cp_status_id last_known_state = -1;
 void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important){
 	ESP_LOGI(TAG, "Preparing status notification");
 
+	if(new_state == -1){
+		ESP_LOGW(TAG, "Status notification has no known state using last state");
+		new_state = last_known_state;
+	}
+
 	const char * state = ocpp_cp_status_from_id(new_state);
 
 	if(new_state == last_known_state && strcmp(error_code, OCPP_CP_ERROR_NO_ERROR) == 0 && info == NULL && important == false){
@@ -613,9 +618,7 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 		if(call->call->error_cb != NULL){
 			call->call->error_cb(unique_id, error_code, error_description, error_details, call->call->cb_data);
 		}else{
-			const char * action = ocppj_get_action_from_call(call->call->call_message);
-			ESP_LOGE(TAG, "Failed: (%s) [%s]: %s", action != NULL ? action : "NULL", unique_id != NULL ? unique_id : "NULL",
-				error_code != NULL ? error_code : "NULL");
+			error_logger(unique_id, error_code, error_description, error_details, call->call->cb_data);
 		}
 		free_call_with_cb(call->call);
 	}

@@ -88,7 +88,7 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_connection_timeout = 60;
 	configurationStruct.ocpp_heartbeat_interval = 86400;
 	configurationStruct.ocpp_local_authorize_offline = true;
-	configurationStruct.ocpp_local_pre_authorize = false;
+	configurationStruct.ocpp_local_pre_authorize = true;
 	configurationStruct.ocpp_message_timeout = 10;
 	strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
 	strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
@@ -101,7 +101,7 @@ void storage_Init_Configuration()
 	strcpy(configurationStruct.ocpp_stop_txn_sampled_data, "");
 	configurationStruct.ocpp_transaction_message_attempts = 3;
 	configurationStruct.ocpp_transaction_message_retry_interval = 60;
-	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = false;
+	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = true;
 
 	// ocpp local auth list profile settings
 	configurationStruct.ocpp_local_auth_list_enabled = true;
@@ -244,6 +244,11 @@ void storage_Set_session_controller(enum session_controller newValue)
 void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue)
 {
 	configurationStruct.ocpp_allow_offline_tx_for_unknown_id = newValue;
+}
+
+void storage_Set_ocpp_authorization_cache_enabled(bool newValue)
+{
+	configurationStruct.ocpp_authorization_cache_enabled = newValue;
 }
 
 void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue)
@@ -598,6 +603,10 @@ bool storage_Get_ocpp_allow_offline_tx_for_unknown_id()
 	return configurationStruct.ocpp_allow_offline_tx_for_unknown_id;
 }
 
+bool storage_Get_ocpp_authorization_cache_enabled(){
+	return configurationStruct.ocpp_authorization_cache_enabled;
+}
+
 bool storage_Get_ocpp_authorize_remote_tx_requests()
 {
 	return configurationStruct.ocpp_authorize_remote_tx_requests;
@@ -906,7 +915,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
 	err += nvs_set_u8(configuration_handle, "sessionCtrl", configurationStruct.session_controller);
 	err += nvs_set_u8(configuration_handle, "oAllowTxUnknown", configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
-	//err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
+	err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
 	err += nvs_set_u8(configuration_handle, "oAuthRemoteTx", configurationStruct.ocpp_authorize_remote_tx_requests);
 	//err += nvs_set_u8(configuration_handle, "oBlinkRequest", configurationStruct.ocpp_blink_repeats);
 	err += nvs_set_u32(configuration_handle, "oClockAligned", configurationStruct.ocpp_clock_aligned_data_interval);
@@ -996,7 +1005,8 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_u8(configuration_handle, "sessionCtrl", (uint8_t *)&configurationStruct.session_controller);
 	if(nvs_get_u8(configuration_handle, "oAllowTxUnknown", (uint8_t *)&configurationStruct.ocpp_allow_offline_tx_for_unknown_id) != 0)
 		configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
-	//err += nvs_get_u8(configuration_handle, "oAuthCachEnable", &configurationStruct.ocpp_authorization_cache_enabled);
+	if(nvs_get_u8(configuration_handle, "oAuthCachEnable", (uint8_t *)&configurationStruct.ocpp_authorization_cache_enabled) != 0)
+		configurationStruct.ocpp_authorization_cache_enabled = true;
 	err += nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests);
 	//err += nvs_get_u8(configuration_handle, "oBlinkRequest", &configurationStruct.ocpp_blink_repeats);
 	err += nvs_get_u32(configuration_handle, "oClockAligned", &configurationStruct.ocpp_clock_aligned_data_interval);

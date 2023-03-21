@@ -229,7 +229,7 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		if(call.call->result_cb != NULL){
 			call.call->result_cb(unique_id, payload, call.call->cb_data);
 		}else{
-			ESP_LOGD(TAG, "Finished call %s", unique_id);
+			result_logger(unique_id, payload, call.call->cb_data);
 		}
 
 		free_call_with_cb(call.call);

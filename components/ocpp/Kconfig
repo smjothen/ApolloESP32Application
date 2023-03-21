@@ -2,6 +2,19 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_AUTH_CACHE_MAX_LENGTH
+       int "Equivalent to LocalAuthListMaxLength for auth cache"
+       help
+	Maximum number of identifications that can be stored in the Authorization Cache
+       default 128
+
+config OCPP_FILE_PATH
+       string "File path for local storage"
+       help
+	Base path where ocpp component can store both necessary and optional files like smart charging
+	profiles, authorization cache and authorization list.
+       default "/files"
+
 config OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH # 9.1.8
        int "ConnectorPhaseRotationMaxLength"
        help
@@ -107,12 +120,6 @@ config OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED # 9.3.1
 endmenu
 
 menu "Smart Charging Profile"
-
-config OCPP_SMART_PATH
-       string "Profile path"
-       help
-	"Base path where ocpp smart charging will store charging profiles"
-       default "/files"
 
 config OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL # 9.4.1
        int "ChargeProfileMaxStackLevel"

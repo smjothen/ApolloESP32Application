@@ -34,6 +34,7 @@
 
 #include "ocpp_task.h"
 #include "ocpp_smart_charging.h"
+#include "ocpp_auth.h"
 #include "ocpp.h"
 #include "ocpp_json/ocppj_validation.h"
 #include "messages/call_messages/ocpp_call_cb.h"
@@ -456,18 +457,6 @@ void sessionHandler_OcppStopTransaction(const char * reason){
 	chargeSession_SetStoppedReason(reason);
 }
 
-static void notify_if_local_list_mismatch(const char * id_token, const struct ocpp_id_tag_info * id_tag_info){
-	struct ocpp_authorization_data local_id_tag;
-
-	if(fat_ReadAuthData(id_token, &local_id_tag)){
-		if(id_tag_info->expiry_date == local_id_tag.id_tag_info.expiry_date
-			|| strcmp(id_tag_info->parent_id_tag, local_id_tag.id_tag_info.parent_id_tag)
-			|| strcmp(id_tag_info->status, local_id_tag.id_tag_info.status)){
-				ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT, NULL, true);
-			}
-	}
-}
-
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 
 	bool is_current_transaction = false;
@@ -527,10 +516,10 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 			valid = false;
 		}else{
 			if(chargeSession_GetAuthenticationCode()[0] != '\0')
-				notify_if_local_list_mismatch(chargeSession_GetAuthenticationCode(), &id_tag_info);
+				ocpp_on_id_tag_info_recieved(chargeSession_GetAuthenticationCode(), &id_tag_info);
 
-			ESP_LOGI(TAG, "Central system returned status %s", id_tag_info.status);
-			valid = strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0;
+			ESP_LOGI(TAG, "Central system returned status %s", ocpp_authorization_status_from_id(id_tag_info.status));
+			valid = id_tag_info.status == eOCPP_AUTHORIZATION_STATUS_ACCEPTED;
 		}
 
 		if(id_tag_info.parent_id_tag[0] != '\0'){
@@ -574,7 +563,7 @@ static void stop_transaction_response_cb(const char * unique_id, cJSON * payload
 			ESP_LOGE(TAG, "Received idTagInfo in stop transaction is invalid: %s", err_str);
 		}else{
 			if(cb_data != NULL)
-				notify_if_local_list_mismatch((const char *)cb_data, &id_tag_info);
+				ocpp_on_id_tag_info_recieved((const char *)cb_data, &id_tag_info);
 		}
 	}
 
@@ -584,30 +573,9 @@ static void stop_transaction_response_cb(const char * unique_id, cJSON * payload
 bool pending_ocpp_authorize = false;
 char pending_ocpp_id_tag[21] = {0};
 
-static void error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-	const char * action = (cb_data != NULL) ? (const char *) cb_data : "No cb";
-
-	if(strcmp(action, "authorize"))
-		pending_ocpp_authorize = false;
-
-	if(unique_id != NULL && error_code != NULL && error_description != NULL){
-		if(error_details == NULL){
-			ESP_LOGE(TAG, "[%s|%s]: (%s) '%s'", action, unique_id, error_code, error_description);
-		}else{
-			char * details = cJSON_Print(error_details);
-			if(details != NULL){
-				ESP_LOGE(TAG, "[%s|%s]: (%s) '%s' \nDetails:\n %s", action, unique_id, error_code, error_description, details);
-				free(details);
-			}
-		}
-	}else{
-		ESP_LOGE(TAG, "Error reply from ocpp '%s' call", action);
-	}
-}
-
 static void stop_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
 	free(cb_data);
-	error_cb(unique_id, error_code, error_description, error_details, "stop");
+	error_logger(unique_id, error_code, error_description, error_details, "stop");
 }
 
 static void start_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
@@ -881,255 +849,23 @@ void start_transaction(){
 		start_sample_interval();
 }
 
-enum tag_origin{
-	eTAG_ORIGIN_NON,
-	eTAG_ORIGIN_LOCAL_LIST,
-	eTAG_ORIGIN_CS,
-};
-
-struct authorize_comparison_data{
-	char id_tag[21];
-	char parent_id[21];
-	enum tag_origin origin; // Highest authority where parent_id has been queried (even unsucessfully)
-};
-
-void (*authorize_compare_on_accept)(const char *, const char *);
-void (*authorize_compare_on_deny)(const char *, const char *);
-
-struct authorize_comparison_data comparison_data[2] = {0};
-
-static void authorize_compare_parent();
-
-void authorize_compare_cb(const char * unique_id, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Recieved authorize confirmation for parent comparison");
-
-	pending_ocpp_authorize = false;
-
-	struct authorize_comparison_data * data = cb_data;
-
-	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		char error_str[64];
-		struct ocpp_id_tag_info id_tag_info;
-
-		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
-			!= eOCPPJ_NO_ERROR){
-
-			ESP_LOGE(TAG, "Invalid idTagInfo: %s", error_str);
-		}else{
-			if(data->origin == eTAG_ORIGIN_CS)
-				notify_if_local_list_mismatch(data->id_tag, &id_tag_info);
-
-			strcpy(data->parent_id, id_tag_info.parent_id_tag);
-		}
-	}else{
-		ESP_LOGE(TAG, "Authorize confirmation lacks idTagInfo");
-	}
-
-	data->origin = eTAG_ORIGIN_CS;
-
-	authorize_compare_parent();
-}
-
-void authorize_compare_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-
-	error_cb(unique_id, error_code, error_description, error_details, "authorize");
-
-	pending_ocpp_authorize = false;
-
-	struct authorize_comparison_data * data = cb_data;
-	data->origin = eTAG_ORIGIN_CS;
-	authorize_compare_parent();
-}
-
-static void authorize_compare_parent(){
-	ESP_LOGI(TAG, "Authorizing by comparing parent");
-
-	while(comparison_data[0].parent_id[0] == '\0' || comparison_data[1].parent_id[0] == '\0'
-		|| strcasecmp(comparison_data[0].parent_id, comparison_data[1].parent_id) != 0){
-
-		// Active tag is the tag that needs to be updated by a more authoritative origin/source.
-		struct authorize_comparison_data * active_tag = NULL;
-
-		for(size_t i = 0; i < 2; i++){
-			if(comparison_data[i].parent_id[0] == '\0'){
-				active_tag = &comparison_data[i];
-				break;
-			}
-		}
-
-		if(active_tag == NULL){
-			if(comparison_data[0].origin <= comparison_data[1].origin){
-				active_tag = &comparison_data[0];
-			}else{
-				active_tag = &comparison_data[1];
-			}
-		}
-
-
-		if(active_tag->origin == eTAG_ORIGIN_NON){
-			struct ocpp_authorization_data auth_data = {0};
-			if(storage_Get_ocpp_local_auth_list_enabled() &&
-				(storage_Get_ocpp_local_pre_authorize() ||
-					(storage_Get_ocpp_local_authorize_offline() && ocpp_is_connected() == false))){
-
-				if(fat_ReadAuthData(active_tag->id_tag, &auth_data)){
-					strcpy(active_tag->parent_id, auth_data.id_tag_info.parent_id_tag);
-				}
-			}
-			active_tag->origin = eTAG_ORIGIN_LOCAL_LIST;
-
-		}else if(active_tag->origin == eTAG_ORIGIN_LOCAL_LIST){
-			cJSON * authorization = ocpp_create_authorize_request(active_tag->id_tag);
-
-			if(authorization == NULL){
-				ESP_LOGE(TAG, "Unable to create authorization request");
-			}else{
-				int err = enqueue_call(authorization, authorize_compare_cb, authorize_compare_error_cb,
-						active_tag, eOCPP_CALL_GENERIC);
-				if(err != 0){
-					cJSON_Delete(authorization);
-					ESP_LOGE(TAG, "Unable to enqueue authorization request");
-
-				}else{
-					pending_ocpp_authorize = true;
-					strcpy(pending_ocpp_id_tag, active_tag->id_tag);
-					return;
-				}
-			}
-			active_tag->origin = eTAG_ORIGIN_CS;
-
-		}else if(active_tag->origin == eTAG_ORIGIN_CS){
-			ESP_LOGW(TAG, "Parent comparison: Authorization denied");
-			if(authorize_compare_on_deny != NULL){
-				authorize_compare_on_deny(comparison_data[0].id_tag, comparison_data[1].id_tag);
-				return;
-			}
-		}
-	}
-
-	ESP_LOGI(TAG, "Parent comparison: Authorization accepted");
-	authorize_compare_on_accept(comparison_data[0].id_tag, comparison_data[1].id_tag);
-}
-
-static void authorize_begin_compare_id_token(const char * id_token_1, const char * id_parent_1,
-					const char * id_token_2, const char * id_parent_2,
-					void (*on_accept)(const char *, const char *), void (*on_deny)(const char *, const char *)){
-
-	if(strcasecmp(id_token_1, id_token_2) == 0){
-		on_accept(id_token_1, id_token_2);
-	}else{
-		memset(&comparison_data, 0, sizeof(comparison_data));
-
-		strcpy(comparison_data[0].id_tag, id_token_1);
-		if(id_parent_1 != NULL){
-			strcpy(comparison_data[0].parent_id, id_parent_1);
-		}else{
-			comparison_data[0].parent_id[0] = '\0';
-		}
-		comparison_data[0].origin = eTAG_ORIGIN_NON;
-
-		strcpy(comparison_data[1].id_tag, id_token_2);
-		if(id_parent_2 != NULL){
-			strcpy(comparison_data[1].parent_id, id_parent_2);
-		}else{
-			comparison_data[1].parent_id[0] = '\0';
-		}
-		comparison_data[1].origin = eTAG_ORIGIN_NON;
-
-		authorize_compare_on_accept = on_accept;
-		authorize_compare_on_deny = on_deny;
-
-		authorize_compare_parent(id_parent_1, id_parent_2);
-	}
-}
-
-void(*authorize_on_accept)(const char * tag);
-void(*authorize_on_deny)(const char * tag);
-
-static void authorize_cb(const char * unique_id, cJSON * payload, void * cb_data){
-	ESP_LOGI(TAG, "Got auth response");
-	pending_ocpp_authorize = false;
-
-	if(cJSON_HasObjectItem(payload, "idTagInfo")){
-		char error_str[64];
-		struct ocpp_id_tag_info id_tag_info = {0};
-		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
-			!= eOCPPJ_NO_ERROR){
-			ESP_LOGE(TAG, "Received idTagInfo is invalid: %s", error_str);
-
-		}else{
-			notify_if_local_list_mismatch(pending_ocpp_id_tag, &id_tag_info);
-
-			if(strcmp(id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0){
-				ESP_LOGI(TAG, "Authorization status accepted");
-				authorize_on_accept(pending_ocpp_id_tag);
-				return;
-
-			}else{
-				ESP_LOGW(TAG, "Authorization status is %s", id_tag_info.status);
-			}
-		}
-	}else{
-		ESP_LOGE(TAG, "Authorize response lacks required 'idTagInfo'");
-	}
-
-	authorize_on_deny(pending_ocpp_id_tag);
-}
-
-static void authorize_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-	error_cb(unique_id, error_code, error_description, error_details, "authorize");
-
-	pending_ocpp_authorize = false;
-	authorize_on_deny(pending_ocpp_id_tag);
-}
-
 void authorize(struct TagInfo tag, void (*on_accept)(const char *), void (*on_deny)(const char *)){
-	strcpy(pending_ocpp_id_tag, tag.idAsString);
+	pending_ocpp_authorize = true;
 
-	if(storage_Get_ocpp_local_auth_list_enabled() &&
-		(storage_Get_ocpp_local_pre_authorize() ||
-			(storage_Get_ocpp_local_authorize_offline() && ocpp_is_connected() == false))){
+	MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+	if(ret == MsgWriteAck)
+		ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+	else
+		ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
-		ESP_LOGI(TAG, "Attempting local authorization");
-
-		if(authentication_CheckId(tag) == 1){
-			on_accept(tag.idAsString);
-			return;
-		}
-	}
-
-	ESP_LOGI(TAG, "Authenticating with central system");
-
-	cJSON * authorization = ocpp_create_authorize_request(tag.idAsString);
-	if(authorization == NULL){
-		ESP_LOGE(TAG, "Unable to create authorization request");
-		on_deny(tag.idAsString);
-	}else{
-		authorize_on_accept = on_accept;
-		authorize_on_deny = on_deny;
-
-		int err = enqueue_call(authorization, authorize_cb, authorize_error_cb, NULL, eOCPP_CALL_GENERIC);
-		if(err != 0){
-			cJSON_Delete(authorization);
-			ESP_LOGE(TAG, "Unable to enqueue authorization request");
-			on_deny(tag.idAsString);
-		}else{
-			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
-			if(ret == MsgWriteAck)
-				ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
-			else
-				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
-
-			strcpy(pending_ocpp_id_tag, tag.idAsString);
-			pending_ocpp_authorize = true;
-		}
-	}
+	ocpp_authorize(tag.idAsString, on_accept, on_deny);
 }
 
 static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
 
 void start_charging_on_tag_accept(const char * tag){
 	ESP_LOGI(TAG, "Start transaction accepted for %s", tag);
+	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_accepted();
 	MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
@@ -1143,11 +879,11 @@ void start_charging_on_tag_accept(const char * tag){
 		SetPendingRFIDTag(tag);
 		SetAuthorized(true);
 	}
-
 }
 
 void start_charging_on_tag_deny(const char * tag){
 	ESP_LOGW(TAG, "Start transaction denied for %s", tag);
+	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_denied();
 	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
@@ -2059,8 +1795,10 @@ static void handle_preparing(){
 }
 
 static void handle_charging(){
+	ESP_LOGW(TAG, "pending: %s, new id: %s", pending_ocpp_authorize ? "true" : "false", has_new_id_token() ? "true" : "false");
 	if(!pending_ocpp_authorize && has_new_id_token()){
-		authorize_begin_compare_id_token(NFCGetTagInfo().idAsString, NULL,
+		ESP_LOGW(TAG, "STARTING COMPARISON");
+		ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
 						chargeSession_Get().AuthenticationCode, chargeSession_Get().parent_id,
 						stop_charging_on_tag_accept, stop_charging_on_tag_deny);
 		NFCTagInfoClearValid();
@@ -2084,7 +1822,7 @@ static void handle_reserved(){
 		else
 			ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
-		authorize_begin_compare_id_token(NFCGetTagInfo().idAsString, NULL,
+		ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
 						reservation_info->id_tag, reservation_info->parent_id_tag,
 						reserved_on_tag_accept, reserved_on_tag_deny);
 		NFCTagInfoClearValid();
@@ -2335,9 +2073,9 @@ static void sessionHandler_task()
 
     offlineSession_Init();
     ocpp_set_offline_functions(offlineSession_PeekNextMessageTimestamp_ocpp, offlineSession_ReadNextMessage_ocpp,
-			    start_transaction_response_cb, error_cb, "start",
-			    NULL, error_cb, "stop",
-			    NULL, error_cb, "meter");
+			    start_transaction_response_cb, NULL, "start",
+			    NULL, NULL, "stop",
+			    NULL, NULL, "meter");
 
 	while (1)
 	{

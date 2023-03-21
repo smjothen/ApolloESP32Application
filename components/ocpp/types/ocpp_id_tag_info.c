@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "types/ocpp_id_tag_info.h"
 #include "types/ocpp_enum.h"
@@ -27,7 +28,8 @@ enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_inf
 		snprintf(error_description, description_length, "Expected 'status' to be a valid AuthorizationStatus");
 		return 	eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
 	}
-	strcpy(id_tag_out->status, status_json->valuestring);
+
+	id_tag_out->status = ocpp_authorization_status_to_id(status_json->valuestring);
 
 	if(cJSON_HasObjectItem(idTagInfo, "parentIdTag")){
 		cJSON * parent_id_tag_json = cJSON_GetObjectItem(idTagInfo, "parentIdTag");
@@ -37,10 +39,14 @@ enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_inf
 			return eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
 
 		}else{
-			strcpy(id_tag_out->parent_id_tag, parent_id_tag_json->valuestring);
+			id_tag_out->parent_id_tag = strdup(parent_id_tag_json->valuestring);
+			if(id_tag_out->parent_id_tag == NULL){
+				snprintf(error_description, description_length, "Unable to allocate memory for 'parentIdTag'");
+				return eOCPPJ_ERROR_INTERNAL;
+			}
 		}
 	}else{
-		id_tag_out->parent_id_tag[0] = '\0';
+		id_tag_out->parent_id_tag = NULL;
 	}
 
 	if(cJSON_HasObjectItem(idTagInfo, "expiryDate")){
@@ -62,4 +68,11 @@ enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_inf
 	}
 
 	return eOCPPJ_NO_ERROR;
+}
+
+void free_id_tag_info(struct ocpp_id_tag_info * id_tag_info){
+	if(id_tag_info != NULL){
+		free(id_tag_info->parent_id_tag);
+		free(id_tag_info);
+	}
 }

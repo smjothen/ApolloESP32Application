@@ -234,7 +234,7 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 
 /**
  * @brief allocates a buffer and copies the period_list into the new buffer
- * @description Caller is responsible for freeing the returned pointer.
+ * @note Caller is responsible for freeing the returned pointer.
  *
  * @param period_list original period_list to duplicate
  */
@@ -242,7 +242,7 @@ struct ocpp_charging_schedule_period_list * ocpp_duplicate_charging_schedule_per
 
 /**
  * @brief allocates a buffer and copies the profile into the new buffer
- * @description Caller is responsible for freeing the returned pointer.
+ * @note Caller is responsible for freeing the returned pointer.
  *
  * @param profile original profile to duplicate
  */
@@ -296,7 +296,7 @@ bool ocpp_period_is_equal_charge(const struct ocpp_charging_schedule_period * p1
 /**
  * @brief converts configuration version of allowed charging rate units to type version used in ocpp calls.
  *
- * @description OCPP 1.5 Errata sheet mentions that ChargingScheduleAllowedChargingRateUnit should have had allowed
+ * @note OCPP 1.5 Errata sheet mentions that ChargingScheduleAllowedChargingRateUnit should have had allowed
  * values 'A' and 'W'. This is the case in 2.0.1. But to not break compatibility with pre errata v4.0 'Current' and
  * 'Power' remains as the allowed values. This function converts 'Current' to 'A' and 'Power' to 'W' as a csl.
  * The function uses a static buffer for the result and only writes the buffer during the first call. Any new

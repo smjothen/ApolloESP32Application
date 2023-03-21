@@ -1,4 +1,3 @@
-#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -9,9 +8,7 @@
 #include "../../main/chargeSession.h"
 #include "../zaptec_protocol/include/protocol_task.h"
 #include "cJSON.h"
-#include "../../main/fat.h"
-#include "types/ocpp_authorization_status.h"
-#include "ocpp_listener.h"
+
 static const char *TAG = "AUTH     ";
 
 int nrOfUsedTags = 0;
@@ -30,32 +27,6 @@ uint8_t authentication_CheckId(struct TagInfo tagInfo)
 {
 	uint8_t match = 0;
 
-	struct ocpp_authorization_data auth_data = {0};
-	if(storage_Get_ocpp_local_auth_list_enabled()){
-		ESP_LOGI(TAG, "Attempting to match tag with local authorization list");
-		if(!tagInfo.tagIsValid){
-			ESP_LOGW(TAG, "Invalid tag, igoring local auth list");
-		}else{
-			if(fat_ReadAuthData(tagInfo.idAsString, &auth_data)){
-				if(strcmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0 &&
-					(time(NULL) < auth_data.id_tag_info.expiry_date || auth_data.id_tag_info.expiry_date == (time_t)-1)){
-					ESP_LOGI(TAG, "Tag is accepted and not expired");
-					return 1;
-				}else{
-					ESP_LOGI(TAG, "Tag is either expired or not accepted");
-				}
-			}else{
-				ESP_LOGI(TAG, "Tag does not match any tag in local auth list");
-
-				if(!ocpp_is_connected() && storage_Get_ocpp_allow_offline_tx_for_unknown_id()){
-					ESP_LOGI(TAG, "Offline accepting unknown id");
-
-					return 1;
-				}
-			}
-		}
-	}
-
 	storage_lookupRFIDTagInList(tagInfo.idAsString, &match);
 	
 	if(match == 1)
@@ -66,25 +37,6 @@ uint8_t authentication_CheckId(struct TagInfo tagInfo)
 	return match;
 }
 
-bool authentication_check_parent(const char * id_tag, const char * parent_id)
-{
-	if(storage_Get_ocpp_local_auth_list_enabled()){
-		ESP_LOGI(TAG, "Attempting parent id tag comparison");
-
-		struct ocpp_authorization_data auth_data = {0};
-		if(!fat_ReadAuthData(id_tag, &auth_data)){
-			return false;
-		}
-
-		if(strcasecmp(auth_data.id_tag_info.status, OCPP_AUTHORIZATION_STATUS_ACCEPTED) == 0
-			&& strcmp(auth_data.id_tag_info.parent_id_tag, parent_id) == 0){
-
-			return true;
-		}
-	}
-
-	return false;
-}
 
 uint8_t authentication_CheckBLEId(char * bleUUID)
 {

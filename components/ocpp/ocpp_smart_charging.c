@@ -26,7 +26,7 @@
 #include "wpa_supplicant/base64.h"
 
 static const char * TAG = "OCPP SMART     ";
-static const char * base_path = CONFIG_OCPP_SMART_PATH;
+static const char * base_path = CONFIG_OCPP_FILE_PATH;
 
 static SemaphoreHandle_t file_lock = NULL;
 

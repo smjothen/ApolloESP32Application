@@ -20,6 +20,7 @@
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "ocpp_smart_charging.h"
+#include "ocpp_auth.h"
 
 #include "messages/call_messages/ocpp_call_request.h"
 #include "messages/call_messages/ocpp_call_cb.h"
@@ -31,6 +32,7 @@
 #include "types/ocpp_reset_type.h"
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_key_value.h"
+#include "types/ocpp_clear_cache_status.h"
 #include "types/ocpp_configuration_status.h"
 #include "types/ocpp_authorization_data.h"
 #include "types/ocpp_authorization_status.h"
@@ -235,7 +237,6 @@ static int populate_sample_current_import(char * phase, enum ocpp_reading_contex
 	return new_values_count;
 }
 
-//TODO: consider changing from using standalone current and if value should be changed as offered changes and prsence of car
 static int populate_sample_current_offered(enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 
 	struct ocpp_sampled_value new_value = {
@@ -991,7 +992,16 @@ esp_err_t add_configuration_ocpp_allow_offline_tx_for_unknown_id(cJSON * key_lis
 }
 
 esp_err_t add_configuration_ocpp_authorization_cache_enabled(cJSON * key_list){
-	return ESP_ERR_NOT_SUPPORTED;
+	char * value;
+	if(allocate_and_write_configuration_bool(storage_Get_ocpp_authorization_cache_enabled(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED, false, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
 }
 
 esp_err_t add_configuration_ocpp_authorize_remote_tx_requests(cJSON * key_list){
@@ -1251,7 +1261,7 @@ esp_err_t add_configuration_ocpp_number_of_connectors(cJSON * key_list){
 
 esp_err_t add_configuration_ocpp_reset_retries(cJSON * key_list){
 	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_reset_retries(), &value) != 0)
+	if(allocate_and_write_configuration_u8(storage_Get_ocpp_reset_retries(), &value) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESET_RETRIES, false, value);
@@ -2124,10 +2134,15 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
 	int err = -1;
-	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0)
+	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0){
 		err = set_config_bool(storage_Set_ocpp_allow_offline_tx_for_unknown_id, value, NULL);
+		ocpp_change_allow_offline_for_unknown(storage_Get_ocpp_allow_offline_tx_for_unknown_id());
 
-	if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED) == 0){
+		err = set_config_bool(storage_Set_ocpp_authorization_cache_enabled, value, NULL);
+		ocpp_change_auth_cache_enabled(storage_Get_ocpp_authorization_cache_enabled());
+
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS) == 0){
 		err = set_config_bool(storage_Set_ocpp_authorize_remote_tx_requests, value, NULL);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL) == 0){
@@ -2281,9 +2296,11 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_authorize_offline, value, NULL);
+		ocpp_change_authorize_offline(storage_Get_ocpp_local_authorize_offline());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_pre_authorize, value, NULL);
+		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
 		err = set_config_u16(storage_Set_ocpp_message_timeout, value);
@@ -2379,6 +2396,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
+		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
 
 	}else if(is_configuration_key(key)){
 		ESP_LOGW(TAG, "Change configuration request rejected due to rejected key: '%s'", key);
@@ -2468,7 +2486,7 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 			for(size_t i = 0; i < auth_list_length; i++){
 				err = ocpp_authorization_data_from_json(cJSON_GetArrayItem(local_auth_list_json, i), &auth_list[i], err_str, sizeof(err_str));
 
-				if(err == eOCPPJ_NO_ERROR && is_update_full && strcmp(auth_list[i].id_tag_info.status, "DELETE") == 0){
+				if(err == eOCPPJ_NO_ERROR && is_update_full && auth_list[i].id_tag_info == NULL){
 					err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
 					strcpy(err_str, "'idTagInfo' is missing and required for Full update");
 				}
@@ -2485,28 +2503,11 @@ static void send_local_list_cb(const char * unique_id, const char * action, cJSO
 		}
 	}
 
-	int update_err = 0;
-	if(is_update_full){
-		update_err = fat_UpdateAuthListFull(list_version, auth_list, auth_list_length);
-
-	}else{
-		if(fat_ReadAuthListVersion() >= list_version){
-			cJSON * response = ocpp_create_send_local_list_confirmation(unique_id, OCPP_UPDATE_STATUS_VERSION_MISMATCH);
-			if(response == NULL){
-				ESP_LOGE(TAG, "Unable to create send local list confirmation VERSION_MISMATCH");
-			}else{
-				send_call_reply(response);
-			}
-			free(auth_list);
-			return;
-		}
-
-		update_err = fat_UpdateAuthListDifferential(list_version, auth_list, auth_list_length);
-	}
+	enum ocpp_update_status_id update_status = ocpp_update_auth_list(list_version, is_update_full, auth_list, auth_list_length);
 
 	free(auth_list);
 
-	cJSON * response = ocpp_create_send_local_list_confirmation(unique_id, (update_err == 0) ? OCPP_UPDATE_STATUS_ACCEPTED : OCPP_UPDATE_STATUS_FAILED);
+	cJSON * response = ocpp_create_send_local_list_confirmation(unique_id, ocpp_update_status_from_id(update_status));
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create change configuration confirmation");
 	}else{
@@ -2532,7 +2533,7 @@ error:
 
 static void get_local_list_version_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Got request for local auth list version");
-	int version = fat_ReadAuthListVersion();
+	int version = ocpp_get_auth_list_version();
 
 	if(version == -1){
 		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to read version from local list", NULL);
@@ -2547,6 +2548,23 @@ static void get_local_list_version_cb(const char * unique_id, const char * actio
 	cJSON * response = ocpp_create_get_local_list_version_confirmation(unique_id, version);
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create get local list confirmation");
+	}else{
+		send_call_reply(response);
+	}
+}
+
+static void clear_cache_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGI(TAG, "Got request to clear authorization cache");
+
+	cJSON * response;
+	if(ocpp_auth_clear_cache() == 0){
+		response = ocpp_create_clear_cache_confirmation(unique_id, OCPP_CLEAR_CACHE_STATUS_ACCEPTED);
+	}else{
+		response = ocpp_create_clear_cache_confirmation(unique_id, OCPP_CLEAR_CACHE_STATUS_REJECTED);
+	}
+
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create clear cache confirmation");
 	}else{
 		send_call_reply(response);
 	}
@@ -3073,7 +3091,7 @@ static void ocpp_task(){
 
 		//Indicate features that are not supported
 		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
-		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, not_supported_cb, "Does not support authorization cache");
+		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, clear_cache_cb, NULL);
 
 		//Handle ocpp related configurations
 		attach_call_cb(eOCPP_ACTION_GET_CONFIGURATION_ID, get_configuration_cb, NULL);
@@ -3121,6 +3139,15 @@ static void ocpp_task(){
 		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
 
 		connected = true;
+
+		if(ocpp_auth_init() != 0)
+			ESP_LOGE(TAG, "Unable to initialize ocpp authorization, local authorization will not work");
+
+		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
+		ocpp_change_authorize_offline(storage_Get_ocpp_local_authorize_offline());
+		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
+		ocpp_change_auth_cache_enabled(storage_Get_ocpp_authorization_cache_enabled());
+		ocpp_change_allow_offline_for_unknown(storage_Get_ocpp_allow_offline_tx_for_unknown_id());
 
 		retry_attempts = 0;
 		retry_delay = 5;

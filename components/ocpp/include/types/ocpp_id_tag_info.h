@@ -6,6 +6,7 @@
 #include "cJSON.h"
 
 #include "../ocpp_json/ocppj_message_structure.h"
+#include "ocpp_authorization_status.h"
 
 /** @file
 * @brief Contains the OCPP type IdTagInfo and helper functions
@@ -18,8 +19,8 @@
  */
 struct ocpp_id_tag_info{
 	time_t expiry_date; ///< "Optional. This contains the date at which idTag should be removed from the Authorization Cache."
-	char parent_id_tag[21]; ///< "Optional. This contains the parent-identifier."
-	char status[16]; ///< "Required. This contains whether the idTag has been accepted or not by the Central System."
+	char * parent_id_tag; ///< "Optional. This contains the parent-identifier."
+	enum ocpp_authorization_status_id status; ///< "Required. This contains whether the idTag has been accepted or not by the Central System."
 };
 
 /**
@@ -33,4 +34,10 @@ struct ocpp_id_tag_info{
 enum ocppj_err_t id_tag_info_from_json(cJSON * idTagInfo, struct ocpp_id_tag_info * id_tag_out,
 				char * error_description, size_t description_length);
 
+/**
+ * @brief Free allocated idTagInfo and its parent id
+ *
+ * @param id_tag_info idTagInfo to free
+ */
+void free_id_tag_info(struct ocpp_id_tag_info * id_tag_info);
 #endif /*OCPP_ID_TAG_INFO_H*/

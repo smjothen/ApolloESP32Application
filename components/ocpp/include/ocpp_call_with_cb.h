@@ -37,4 +37,19 @@ void free_call_with_cb(struct ocpp_call_with_cb * call);
  * @return true if call is valid, false if not
  */
 bool check_call_with_cb_validity(struct ocpp_call_with_cb * call);
+
+/**
+ * @brief Default error_cb used if error_cb is set to NULL.
+ *
+ * @details Logs the id, error code and description if not NULL. If cb_data is not null then it is expected to be a const char * with a tag used for logging
+ */
+void error_logger(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data);
+
+/**
+ * @brief Default result_logger used if result_cb is set to NULL.
+ *
+ * @details Logs the id. If cb_data is not null then it is expected to be a const char * with a tag used for logging
+ */
+void result_logger(const char * unique_id, cJSON * payload, void * cb_data);
+
 #endif /*OCPP_CALL_WITH_CB_H*/
