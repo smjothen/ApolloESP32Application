@@ -25,9 +25,11 @@ static const char *TAG = "FAT            ";
 
 // Handle of the wear levelling library instance
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+#define PARTITION_COUNT 2
+const char * base_paths[PARTITION_COUNT] = {"/disk","/files"}; // partition label with '/' prefix
+const int max_files[PARTITION_COUNT] = {256, 256};
+bool disable_mount[PARTITION_COUNT] = {false, false};
 
-// Mount path for the partition
-const char *base_path = "/spiflash";
 /* For testing
 void fat_make()
 {
@@ -89,55 +91,101 @@ void fat_make()
 }*/
 
 
+esp_err_t fat_mount(enum fat_id id){
 
-static bool mounted = false;
-bool fat_static_mount()
-{
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "FAT filesystem is already mounted");
-		return mounted;
+	if(id > PARTITION_COUNT){
+		ESP_LOGE(TAG, "Invalid fat_id for mount");
+		return ESP_ERR_INVALID_ARG;
 	}
 
-    ESP_LOGI(TAG, "Mounting FAT filesystem");
-    // To mount device we need name of device partition, define base_path
-    // and allow format partition in case if it is new one and was not formated before
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = 4,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "disk", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
+	if(disable_mount[id]){
+		ESP_LOGW(TAG, "Mounting disabled for requested partition");
+		return ESP_ERR_INVALID_STATE;
 	}
 
-	mounted = true;
+	ESP_LOGI(TAG, "Mounting %s", base_paths[id]);
 
-	ESP_LOGI(TAG, "Mounted");
+	esp_vfs_fat_mount_config_t mount_config = {
+		.max_files = max_files[id],
+		.format_if_mount_failed = true,
+		.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
+	};
 
-	return mounted;
+	return esp_vfs_fat_spiflash_mount(base_paths[id], base_paths[id]+1, &mount_config, &s_wl_handle);
 }
 
-bool fatIsMounted()
+void fat_static_mount(void)
 {
-	return mounted;
+	ESP_LOGI(TAG, "Mounting FAT partitions");
+	ESP_LOGI(TAG, "=======================");
+
+	for(size_t i = 0; i < PARTITION_COUNT; i++){
+		ESP_LOGI(TAG, "%s partition:", base_paths[i]+1); // skip path prefix ('/')
+
+		if(stat(base_paths[i], NULL) == 0){
+			ESP_LOGW(TAG, "\tAlready mounted");
+			break;
+		}
+
+		if(errno != ENOENT && errno != ENODEV){
+			ESP_LOGE(TAG, "\tUnexpected stat error: %s", strerror(errno));
+		}
+
+		esp_err_t err = fat_mount(i);
+		if (err != ESP_OK) {
+			ESP_LOGE(TAG, "\tMount failed: (%s)", esp_err_to_name(err));
+		}else{
+			ESP_LOGI(TAG, "\tMount success");
+		}
+	}
 }
 
+void fat_disable_mounting(enum fat_id id, bool disable){
+	disable_mount[id] = disable;
+}
+
+void fat_static_unmount(void)
+{
+	ESP_LOGI(TAG, "Unmounting FAT partitions");
+	ESP_LOGI(TAG, "=======================");
+
+	for(size_t i = 0; i < PARTITION_COUNT; i++){
+		ESP_LOGI(TAG, "%s partition:", base_paths[i]+1);
+		if(esp_vfs_fat_spiflash_unmount(base_paths[i], s_wl_handle) != ESP_OK){
+			ESP_LOGE(TAG, "\tUnmount failed");
+		}else{
+			ESP_LOGI(TAG, "\tUnmount success");
+		}
+	}
+}
+
+esp_err_t fat_unmount(enum fat_id id){
+	if(id >= PARTITION_COUNT){
+		ESP_LOGE(TAG, "Invalid fat_id to unmount");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	ESP_LOGI(TAG, "Unmounting %s", base_paths[id]);
+
+	return esp_vfs_fat_spiflash_unmount(base_paths[id], s_wl_handle);
+}
+
+bool fatIsMounted(void)
+{
+	struct stat st;
+	return stat("/disk", &st) == 0;
+}
 
 void fat_WriteCertificateBundle(char * newCertificateBundle)
 {
-	if(mounted == false)
+	if(!fatIsMounted())
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
 
-
     ESP_LOGI(TAG, "Opening file");
-    FILE *f = fopen("/spiflash/cert.txt", "wb");
+    FILE *f = fopen("/disk/cert.txt", "wb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
@@ -154,16 +202,15 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
 
 void fat_ReadCertificateBundle(char * readCertificateBundle)
 {
-
-	if(mounted == false)
+	if(!fatIsMounted())
 	{
-		ESP_LOGE(TAG, "Partition not mounted for reading");
+		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
 
     // Open file for reading
     ESP_LOGI(TAG, "Reading file");
-    FILE *f = fopen("/spiflash/cert.txt", "rb");
+    FILE *f = fopen("/disk/cert.txt", "rb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
@@ -175,74 +222,66 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
     //ESP_LOGW(TAG, "Read cert: %d: %s ", strlen(readCertificateBundle), readCertificateBundle);
 }
 
-void fat_DeleteCertificateBundle()
+void fat_DeleteCertificateBundle(void)
 {
-
-	if(mounted == false)
+	if(!fatIsMounted())
 	{
-		ESP_LOGE(TAG, "Partition not mounted for reading");
+		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
 
     // Open file for reading
     ESP_LOGI(TAG, "Reading file");
-    int ret = remove("/spiflash/cert.txt");
+    int ret = remove("/disk/cert.txt");
 
     ESP_LOGI(TAG, "Removed cert file returned: %d", ret);
-}
-
-
-void fat_static_unmount()
-{
-	// Unmount FATFS
-	ESP_LOGI(TAG, "Unmounting FAT filesystem");
-	esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle);
-
-	mounted = false;
-	ESP_LOGI(TAG, "Done unmounting");
 }
 
 #define FAT_DIAG_BUF_SIZE 150
 static char fatDiagnostics[FAT_DIAG_BUF_SIZE] = {0};
 
-void fat_ClearDiagnostics()
+void fat_ClearDiagnostics(void)
 {
 	memset(fatDiagnostics, 0, FAT_DIAG_BUF_SIZE);
 }
 
-char * fat_GetDiagnostics()
+char * fat_GetDiagnostics(void)
 {
 	return fatDiagnostics;
 }
 
-bool fat_eraseAndRemountPartition()
+esp_err_t fat_eraseAndRemountPartition(enum fat_id id)
 {
+	if(id >= PARTITION_COUNT)
+		return ESP_ERR_INVALID_ARG;
+
 	esp_err_t err = ESP_FAIL;
 
 	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
 
 	if(part != NULL)
 	{
-		fat_static_unmount();
-
+		fat_unmount(id);
 		err = esp_partition_erase_range(part, 0, part->size);
 	}
+	else
+	{
+		return ESP_ERR_NOT_FOUND;
+	}
 
-	mounted = false;
-
-	fat_static_mount();
+	fat_mount(id);
 
 	int fatDiagLen = 0;
 	if(fatDiagnostics != NULL)
 		fatDiagLen = strlen(fatDiagnostics);
 
-	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk erase err: %i ,M: %i", err, mounted);
+	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk erase err: %i ,M: %i", err, fatIsMounted());
 
-	return mounted;
+	return err;
 }
 
 
-bool fat_CheckFilesSystem()
+bool fat_CheckFilesSystem(void)
 {
 	bool deletedOK = false;
 	bool createdOK = fat_Factorytest_CreateFile();
@@ -258,21 +297,21 @@ bool fat_CheckFilesSystem()
 	return deletedOK; //True if both bools are OK
 }
 
-bool fat_CorrectFilesystem()
+bool fat_CorrectFilesystem(void)
 {
-	return fat_eraseAndRemountPartition();
+	return fat_eraseAndRemountPartition(eFAT_ID_DISK);
 }
 
 
 static FILE *testDiskFile = NULL;
-bool fat_Factorytest_CreateFile()
+bool fat_Factorytest_CreateFile(void)
 {
-	if(!fat_static_mount()){
+	if (!fatIsMounted()) {
 		ESP_LOGE(TAG, "failed to mount disk");
 		return false;
 	}
 
-	testDiskFile = fopen("/spiflash/testdisk.bin", "wb+");
+	testDiskFile = fopen("/disk/testdisk.bin", "wb+");
 
 	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
 
@@ -296,12 +335,12 @@ bool fat_Factorytest_CreateFile()
 
 bool fat_Factorytest_DeleteFile()
 {
-	if(!fat_static_mount()){
+	if (!fatIsMounted()) {
 		ESP_LOGE(TAG, "failed to mount disk");
 		return false;
 	}
 
-	int status = remove("/spiflash/testdisk.bin");
+	int status = remove("/disk/testdisk.bin");
 	ESP_LOGW(TAG, "Status from remove: %i", status);
 
 	if(status == 0)

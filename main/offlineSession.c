@@ -8,6 +8,7 @@
 #include "esp_vfs_fat.h"
 #include "ff.h"
 #include "base64.h"
+#include "fat.h"
 
 #include "OCMF.h"
 #include "zaptec_cloud_observations.h"
@@ -16,9 +17,7 @@
 #include "../components/ntp/zntp.h"
 #include "../components/i2c/include/i2cDevices.h"
 
-static const char *tmp_path = "/offs";
-
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static char tmp_path[] = "/files";
 
 static const int max_offline_session_files = 100;
 static const int max_offline_signed_values = 100;
@@ -51,9 +50,10 @@ static bool offlineSessionOpen = false;
 static bool mounted = false;
 
 static int activeFileNumber = -1;
-static char activePathString[22] = {0};
+static char activePathString[32] = {0};
 static FILE *sessionFile = NULL;
 static int maxOfflineSessionsCount = 0;
+
 
 #define FILE_DIAG_BUF_SIZE 150
 static char fileDiagnostics[FILE_DIAG_BUF_SIZE] = {0};
@@ -61,14 +61,38 @@ static char fileDiagnostics[FILE_DIAG_BUF_SIZE] = {0};
 #define MAX_SEQ_DIAG_LEN 250
 static char sequenceDiagnostics[MAX_SEQ_DIAG_LEN] = {0};
 
+bool offlineSession_select_folder()
+{
+	struct stat st;
+	if(stat("/files", &st) == 0){
+		if(tmp_path[1] != 'f')
+			sprintf(tmp_path, "/files");
+
+		ESP_LOGI(TAG, "'%s' already mounted", tmp_path);
+		return true;
+	}
+
+	//If failing to mount, try using partition for chargers numbers below ~ZAP000150
+	if((errno == ENOENT && errno == ENODEV) && (i2cCheckSerialForDiskPartition() == true)){
+		if(stat("/disk", &st) == 0){
+			if(tmp_path[1] != 'd')
+				sprintf(tmp_path, "/disk");
+
+			ESP_LOGI(TAG, "'%s' already mounted", tmp_path);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void offlineSession_Init()
 {
 	offs_lock = xSemaphoreCreateMutex();
 	xSemaphoreGive(offs_lock);
 
-	offlineSession_mount_folder();
+	offlineSession_select_folder();
 }
-
 
 void offlineSession_AppendLogString(char * stringToAdd)
 {
@@ -148,15 +172,28 @@ bool offlineSession_CheckFilesSystem()
 }
 
 
+bool offlineSession_is_mounted(void) {
+	struct stat st;
+	return stat(tmp_path, &st) == 0;
+}
+
+
+
+
+
+
+
+
+
 static FILE *testFile = NULL;
 bool offlineSession_test_CreateFile()
 {
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return false;
 	}
 
-	testFile = fopen("/offs/testfile.bin", "wb+");
+	testFile = fopen("/files/testfile.bin", "wb+");
 
 	if((testFile == NULL) || (errno != 0))
 		ESP_LOGE(TAG, "#### Create file errno: fp: 0x%p %i: %s", testFile, errno, strerror(errno));
@@ -214,7 +251,7 @@ bool offlineSession_test_CreateFile()
 		return false;
 	}
 
-	FILE *fp = fopen("/offs/testfile.bin", "r");
+	FILE *fp = fopen("/files/testfile.bin", "r");
 	if(fp==NULL)
 	{
 		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File can't be opened,");
@@ -229,9 +266,9 @@ bool offlineSession_test_CreateFile()
 
 	fclose(fp);
 
-	remove("/offs/testfile.bin");
+	remove("/files/testfile.bin");
 
-	fp = fopen("/offs/testfile.bin", "r");
+	fp = fopen("/files/testfile.bin", "r");
 	if(fp==NULL)
 	{
 		snprintf(fileDiagnostics + strlen(fileDiagnostics), FILE_DIAG_BUF_SIZE, " File deleted OK");
@@ -251,12 +288,12 @@ bool offlineSession_test_CreateFile()
 
 bool offlineSession_test_DeleteFile()
 {
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return false;
 	}
 
-	int status = remove("/offs/testfile.bin");
+	int status = remove("/files/testfile.bin");
 	ESP_LOGW(TAG, "Status from remove: %i", status);
 	if(status == 0)
 	{
@@ -330,7 +367,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 			if(fileDiagnostics != NULL)
 				fileDiagLen = strlen(fileDiagnostics);
 
-			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " M: %i,", mounted);
+			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " M: %i,", offlineSession_is_mounted());
 
 			isFileSystemOK = offlineSession_test_CreateFile();
 			if(isFileSystemOK)
@@ -369,7 +406,6 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 	return isFileSystemOK;
 }
-
 
 bool offlineSession_eraseAndRemountPartition()
 {
@@ -508,19 +544,21 @@ bool offlineSession_mount_folder()
  */
 int offlineSession_FindNewFileNumber()
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return -1;
+	}
 
 	int fileNo = 0;
 	FILE *file;
-	char buf[22] = {0};
+	char buf[32] = {0};
 
 	ESP_LOGW(TAG, "Searching for first unused OfflineSession file...");
 
 	//for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
 	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo--)
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -554,16 +592,18 @@ int offlineSession_FindNewFileNumber()
  */
 int offlineSession_FindOldestFile()
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return -1;
+	}
 
 	int fileNo = 0;
 	FILE *file;
-	char buf[22] = {0};
+	char buf[32] = {0};
 
 	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++ )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -584,17 +624,19 @@ int offlineSession_FindOldestFile()
  */
 int offlineSession_FindNrOfFiles()
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return -1;
+	}
 
 	int fileNo = 0;
 	FILE *file;
-	char buf[22] = {0};
+	char buf[32] = {0};
 	int fileCount = 0;
 
 	for (fileNo = 0; fileNo < max_offline_session_files; fileNo++ )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		file = fopen(buf, "r");
 		if(file != NULL)
@@ -622,15 +664,17 @@ int offlineSession_GetMaxSessionCount()
 
 int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incompleteSession)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return -1;
+	}
 
 	int fileNo = 0;
 	FILE *lastUsedFile;
-	char buf[22] = {0};
+	char buf[32] = {0};
 
 	/// First check file 0 to see if there are any offlineSession files
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	lastUsedFile = fopen(buf, "r");
 	if(lastUsedFile == NULL)
 	{
@@ -647,7 +691,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 	/// Then perform search from top to see if there are later files
 	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo-- )
 	{
-		sprintf(buf,"/offs/%d.bin", fileNo);
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 		lastUsedFile = fopen(buf, "r");
 		if(lastUsedFile != NULL)
@@ -703,7 +747,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 					/// Must set activeFileNumber, path and offlineSessionOpen to allow new SignedValues entries
 					activeFileNumber = fileNo;
-					sprintf(activePathString,"/offs/%d.bin", activeFileNumber);
+					sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 					offlineSessionOpen = true;
 				}
 			}
@@ -745,8 +789,10 @@ void offlineSession_DeleteLastUsedFile()
 
 void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return;
+	}
 
 	if(activeFileNumber < 0)
 		return;
@@ -823,8 +869,10 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return -1;
+	}
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
@@ -832,8 +880,8 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 		return -1;
 	}
 
-	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	char buf[32] = {0};
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	sessionFile = fopen(buf, "r");
 
 	if(sessionFile == NULL)
@@ -973,8 +1021,10 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return NULL;
+	}
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
@@ -983,8 +1033,8 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 		return NULL;
 	}
 
-	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	char buf[32] = {0};
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	sessionFile = fopen(buf, "r");
 
 	if(sessionFile == NULL)
@@ -1099,8 +1149,10 @@ double GetEnergySigned()
 
 cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "files is not mounted!");
 		return NULL;
+	}
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
@@ -1108,8 +1160,8 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 		return NULL;
 	}
 
-	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	char buf[32] = {0};
+	sprintf(buf,"/files/%d.bin", fileNo);
 	sessionFile = fopen(buf, "r");
 
 	cJSON * entryArray = cJSON_CreateArray();
@@ -1239,7 +1291,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 {
 	int ret = 0;
 
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return ret;
 	}
@@ -1254,7 +1306,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 		return ESP_FAIL;
 	}
 
-	sprintf(activePathString,"/offs/%d.bin", activeFileNumber);
+	sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 
 	//Save the session structure to the file including the start 'B' message
 	offlineSession_UpdateSessionOnFile(sessionData, true);
@@ -1267,8 +1319,10 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 
 void offlineSession_append_energy(char label, int timestamp, double energy)
 {
-	if(mounted == false)
+	if (!offlineSession_is_mounted()) {
+		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return;
+	}
 
 	if(activeFileNumber < 0)
 		return;
@@ -1490,7 +1544,7 @@ int offlineSession_delete_session(int fileNo)
 {
 	int ret = 0;
 
-	if(!offlineSession_mount_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
 		return ret;
 	}
@@ -1501,8 +1555,8 @@ int offlineSession_delete_session(int fileNo)
 		return -1;
 	}
 
-	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	char buf[32] = {0};
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 
 	FILE *fp = fopen(buf, "r");
 	if(fp==NULL)

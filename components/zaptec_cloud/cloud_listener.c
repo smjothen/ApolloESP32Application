@@ -2703,7 +2703,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString, "FixPartitionDiskErase"))
 				{
 					fat_ClearDiagnostics();
-					fat_eraseAndRemountPartition();
+					fat_eraseAndRemountPartition(eFAT_ID_DISK);
 					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
 					responseStatus = 200;
 				}

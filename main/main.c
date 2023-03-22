@@ -36,6 +36,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "offlineSession.h"
+#include "offline_log.h"
 #include "zaptec_cloud_observations.h"
 #ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	#include "apollo_console.h"
@@ -538,6 +539,7 @@ void app_main(void)
 	#endif
 
 	fat_static_mount();
+	setup_offline_log();
 
 	i2cReadDeviceInfoFromEEPROM();
 	I2CDevicesStartTask();
