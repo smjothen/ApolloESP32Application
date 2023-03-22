@@ -24,6 +24,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "zaptec_cloud_observations.h"
 #include "offlineSession.h"
+#include "offline_log.h"
 
 #include "calibration_crc.h"
 #include "calibration_util.h"
@@ -149,8 +150,10 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     // Disable cloud communication (exception for uploading calibration data)
     cloud_observations_disable(true);
+
     // Disable offline sessions as well, chargers should be online during calibration but just in case...
     offlineSession_disable();
+    offlineLog_disable();
 
     if (!calibration_turn_led_off(ctx)) {
         return -5;
