@@ -3112,12 +3112,14 @@ static void ocpp_task(){
 		int err = -1;
 		unsigned int retry_attempts = 0;
 		unsigned int retry_delay = 5;
+
+		const char * cbid = storage_Get_chargebox_identity_ocpp();
 		do{
 			if(should_run == false || should_restart)
 				goto clean;
 
 			err = start_ocpp(storage_Get_url_ocpp(),
-					i2cGetLoadedDeviceInfo().serialNumber,
+					(cbid[0] == '\0') ? i2cGetLoadedDeviceInfo().serialNumber : cbid,
 					storage_Get_ocpp_heartbeat_interval(),
 					storage_Get_ocpp_transaction_message_attempts(),
 					storage_Get_ocpp_transaction_message_retry_interval());

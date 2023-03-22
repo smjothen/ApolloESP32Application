@@ -2426,6 +2426,44 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						}
 					}
 				}
+				// Set cbid (ChargeBox identity) for ocpp url
+				else if(strstr(commandString, "set ocpp cbid") != NULL){
+
+					char * cbid_begin = strstr(commandString, "set ocpp cbid") + strlen("set ocpp cbid");
+					bool cbid_is_valid = (cbid_begin != NULL);
+					size_t cbid_length = 0;
+
+					if(cbid_is_valid)
+						while(isspace(cbid_begin[0]))
+							cbid_begin++;
+
+					while(cbid_is_valid){
+						if(isspace(cbid_begin[cbid_length]) || cbid_begin[cbid_length] == '\0' || cbid_begin[cbid_length] == '"'){
+							break;
+
+						}else if(iscntrl(cbid_begin[cbid_length]) || cbid_length >= CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
+							cbid_is_valid = false;
+						}else{
+							cbid_length++;
+						}
+					}
+
+					if(cbid_is_valid){
+						char tmp_char = cbid_begin[cbid_length];
+						cbid_begin[cbid_length] = '\0';
+
+						storage_Set_chargebox_identity_ocpp(cbid_begin);
+						storage_SaveConfiguration();
+
+						cbid_begin[cbid_length] = tmp_char;
+
+						ESP_LOGI(TAG, "Set CBID to %s", storage_Get_chargebox_identity_ocpp());
+						responseStatus = 200;
+					}else{
+						ESP_LOGW(TAG, "CBID is not valid. Parsed '%s' to index %ul", cbid_begin, cbid_length);
+						responseStatus = 400;
+					}
+				}
 
 				/*else if(strstr(commandString,"StartTimer") != NULL)
 				{

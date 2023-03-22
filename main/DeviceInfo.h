@@ -104,6 +104,7 @@ typedef enum {
 #define DIAGNOSTICS_STRING_SIZE 100
 
 #define URL_OCPP_MAX_LENGTH 128
+#define CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH 32
 #define DEFAULT_CSL_LENGTH 6//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
 
@@ -186,6 +187,7 @@ struct Configuration
 
 	bool ocpp_authorization_cache_enabled;
 	char url_ocpp[URL_OCPP_MAX_LENGTH];
+	char chargebox_identity_ocpp[CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH];
 	bool ocpp_allow_offline_tx_for_unknown_id;
 	bool ocpp_authorize_remote_tx_requests;
 	//int configurationStruct.ocpp_blink_repeats;

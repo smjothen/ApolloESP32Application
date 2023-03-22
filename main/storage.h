@@ -34,6 +34,7 @@ void storage_Set_TransmitChangeLevel(float newValue);
 
 //Set OCPP settings
 void storage_Set_url_ocpp(const char * newValue);
+void storage_Set_chargebox_identity_ocpp(const char * newValue);
 void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue);
 void storage_Set_ocpp_authorization_cache_enabled(bool newValue);
 void storage_Set_ocpp_authorize_remote_tx_requests(bool newValue);
@@ -98,6 +99,7 @@ uint32_t storage_Get_MaxStartDelay();
 
 //Get OCPP settings
 const char * storage_Get_url_ocpp();
+const char * storage_Get_chargebox_identity_ocpp();
 bool storage_Get_ocpp_allow_offline_tx_for_unknown_id();
 bool storage_Get_ocpp_authorization_cache_enabled();
 bool storage_Get_ocpp_authorize_remote_tx_requests();
