@@ -61,7 +61,6 @@ StackType_t task_ocpp_stack[TASK_OCPP_STACK_SIZE];
 
 static bool should_run = false;
 static bool should_restart = false;
-static bool pending_reset = false;
 static bool graceful_exit = false;
 static bool connected = false;
 
@@ -110,9 +109,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			else{
 				send_call_reply(conf);
 			}
-			pending_reset = true;
-			should_run = false;
-			graceful_exit = true;
+			ocpp_restart(true);
 			return;
 		}
 		else if(strcmp(reset_type, OCPP_RESET_TYPE_HARD) == 0){
@@ -3305,7 +3302,7 @@ clean:
 				ESP_LOGI(TAG, "Checking connector %d", i);
 				if(sessionHandler_OcppTransactionIsActive(i)){
 					ESP_LOGI(TAG, "Active transaction on connector %d", i);
-					if(pending_reset){
+					if(should_restart){
 						sessionHandler_OcppStopTransaction(OCPP_REASON_SOFT_RESET);
 					}else{
 						sessionHandler_OcppStopTransaction(OCPP_REASON_OTHER);
@@ -3349,10 +3346,9 @@ clean:
 		stop_ocpp();
 
 		ESP_LOGI(TAG, "Teardown complete");
-		should_restart = false;
 	}
 
-	if(pending_reset){
+	if(should_restart){
 		ESP_LOGI(TAG, "Resetting due to reset request");
 		reset();
 	}
@@ -3379,14 +3375,14 @@ bool ocpp_task_exists(){
 
 void ocpp_end(bool graceful){
 	should_run = false;
-	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 	graceful_exit = graceful;
+	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }
 
 void ocpp_restart(bool graceful){
 	should_restart = true;
-	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 	graceful_exit = graceful;
+	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }
 
 void ocpp_init(){

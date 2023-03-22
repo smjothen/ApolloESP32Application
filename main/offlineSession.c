@@ -595,8 +595,8 @@ static esp_err_t offlineSession_UpdateSessionOnFile_Ocpp(const unsigned char * s
 	bool is_init = false;
 
 	errno = 0;
-	char file_path[19];
-	int written_length = snprintf(file_path, sizeof(file_path), "/offs/%.8lx.bin", start_transaction_timestamp);
+	char file_path[20];
+	int written_length = snprintf(file_path, sizeof(file_path), "%s/%.8lx.bin", tmp_path, start_transaction_timestamp);
 	if(written_length < 0 || written_length >= sizeof(file_path)){
 		ESP_LOGE(TAG, "Unable to write active path");
 		goto error;
@@ -1430,10 +1430,8 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 	}
 
 	char buf[22] = {0};
-	sprintf(buf,"/offs/%d.bin", fileNo);
+	sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
 	sessionFile = fopen(buf, "r");
-
-	cJSON * entryArray = cJSON_CreateArray();
 
 	if(sessionFile == NULL)
 	{
@@ -1441,6 +1439,8 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 		xSemaphoreGive(offs_lock);
 		return NULL;
 	}
+
+	cJSON * entryArray = cJSON_CreateArray();
 
 	uint8_t fileVersion = 0;
 	fread(&fileVersion, 1, 1, sessionFile);

@@ -113,7 +113,13 @@ FILE * init_and_lock_log(int *start, int *end){
 		return NULL;
 	}
 
-    FILE *fp = fopen(log_path, "rb+");
+	FILE *fp = NULL;
+	if(stat(log_path, &st) != 0){
+		fp = fopen(log_path, "w+b");
+	}else{
+		fp = fopen(log_path, "r+b");
+	}
+
     if(fp==NULL){
         ESP_LOGE(TAG, "failed to open file ");
         return NULL;

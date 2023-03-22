@@ -385,7 +385,7 @@ SemaphoreHandle_t status_notification_lock = NULL;
 cJSON * awaiting_status_notification = NULL;
 
 static void send_status_notification(cJSON * status_notification){
-	ESP_LOGW(TAG, "Sending status notification to queue");
+	ESP_LOGI(TAG, "Sending status notification to queue");
 	if(enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC) != 0){
 		ESP_LOGE(TAG, "Unable to enqueue status notification");
 		cJSON_Delete(status_notification);

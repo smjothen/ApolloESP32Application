@@ -977,10 +977,7 @@ cleanup:
 	if(fp != NULL){
 		if(ferror(fp)){
 			ESP_LOGE(TAG, "Ferror set during differential update cleanup. errno set to: %s", strerror(errno));
-		}else{
-			ESP_LOGI(TAG, "Differential update cleanup without file error");
 		}
-
 		fclose(fp);
 	}
 	xSemaphoreGive(file_lock);
@@ -1236,7 +1233,7 @@ cleanup:
 }
 
 void ocpp_on_id_tag_info_recieved(const char * id_token, struct ocpp_id_tag_info * id_tag_info){
-	ESP_LOGE(TAG, "Recieved id tag info");
+	ESP_LOGI(TAG, "Recieved id tag info");
 
 	struct ocpp_authorization_data auth_data;
 	strcpy(auth_data.id_tag, id_token);
