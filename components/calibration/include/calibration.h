@@ -276,5 +276,9 @@ bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw);
 void calibration_task_start(void);
 void calibration_task_stop(void);
 int calibration_task_watermark(void);
+
+void calibration_set_simulation(bool sim);
+bool calibration_is_simulation(void);
+ 
  
 #endif

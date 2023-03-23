@@ -891,6 +891,9 @@ uint32_t storage_Get_MaxStartDelay()
 
 uint16_t storage_Get_cover_on_value()
 {
+	//Change default value on existing chargers (from 160-130)
+	if(configurationStruct.cover_on_value == 0xd0)
+		return DEFAULT_COVER_ON_VALUE;
 
 	return configurationStruct.cover_on_value;
 }
@@ -1620,13 +1623,6 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()){
-#ifdef CONFIG_CAL_SIMULATION
-		ESP_LOGI(TAG, "Using calibration SSID and PSK!");
-		strcpy(SSID, CONFIG_CAL_SSID);
-		strcpy(PSK, CONFIG_CAL_PSK);
-		return 0;
-#endif
-
 		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
 		// strcpy(SSID, "arntnett");
 		// strcpy(PSK, "4703c87e817842c4ce6b167d43701b7685693846db");

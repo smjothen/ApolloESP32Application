@@ -75,31 +75,6 @@ bool simulateTlsError = false;
 static int rfidListIsUpdated = -1;
 
 
-/*const char cert[] =
-"-----BEGIN CERTIFICATE-----\r\n"
-"MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\r\n"
-"RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\r\n"
-"VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX\r\n"
-"DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y\r\n"
-"ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy\r\n"
-"VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr\r\n"
-"mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr\r\n"
-"IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK\r\n"
-"mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu\r\n"
-"XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy\r\n"
-"dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye\r\n"
-"jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1\r\n"
-"BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3\r\n"
-"DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92\r\n"
-"9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx\r\n"
-"jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0\r\n"
-"Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz\r\n"
-"ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\r\n"
-"R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\r\n"
-"-----END CERTIFICATE-----\r\n"
-;*/
-
-
 void MqttSetDisconnected()
 {
 	mqttConnected = false;
@@ -1449,7 +1424,18 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		//Only in system mode
 		if(storage_Get_Standalone() == 0)
 		{
-			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+
+			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_NOT_AUTHORIZED);
+			if(ret == MsgWriteAck)
+			{
+				ESP_LOGI(TAG, "Ack on SESSION_NOT_AUTHORIZED");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "NACK on SESSION_NOT_AUTHORIZED");
+			}
+
+			ret = MCU_SendCommandId(CommandAuthorizationDenied);
 			if(ret == MsgCommandAck)
 			{
 				responseStatus = 200;
@@ -1476,246 +1462,275 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/800/"))
 	{
 
-			if(commandEvent->data_len > 4)
+		if(commandEvent->data_len > 4)
+		{
+			// Ensure to use a string with proper ending
+			char commandString[commandEvent->data_len+1];
+			commandString[commandEvent->data_len] = '\0';
+			strncpy(commandString, commandEvent->data, commandEvent->data_len);
+
+			ESP_LOGI(TAG, "Debug command: %s", commandString);
+
+			//DiagnosticsModes
+			if(strstr(commandString,"DiagnosticsMode 0") != NULL)
 			{
-				// Ensure to use a string with proper ending
-				char commandString[commandEvent->data_len+1];
-				commandString[commandEvent->data_len] = '\0';
-				strncpy(commandString, commandEvent->data, commandEvent->data_len);
+				storage_Set_DiagnosticsMode(eCLEAR_DIAGNOSTICS_MODE);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"DiagnosticsMode 1") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eNFC_ERROR_COUNT);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"DiagnosticsMode 6") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ONCE);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"DiagnosticsMode 7") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"Restart ESP") != NULL)
+			{
+				restartCmdReceived = true;
 
-				ESP_LOGI(TAG, "Debug command: %s", commandString);
+				storage_Set_And_Save_DiagnosticsLog("#11 Cloud Restart ESP command");
+				responseStatus = 200;
+			}
 
-				//DiagnosticsModes
-				if(strstr(commandString,"DiagnosticsMode 0") != NULL)
+			// Connectivity
+			else if(strstr(commandString,"Set LTE") != NULL)
+			{
+				storage_Set_CommunicationMode(eCONNECTION_LTE);
+				storage_SaveConfiguration();
+				ESP_LOGI(TAG, "Restarting on LTE");
+				restartCmdReceived = true;
+				responseStatus = 200;
+				//esp_restart();
+			}
+			else if(strstr(commandString,"Set Wifi") != NULL)
+			{
+				if(network_CheckWifiParameters())
 				{
-					storage_Set_DiagnosticsMode(eCLEAR_DIAGNOSTICS_MODE);
+					storage_Set_CommunicationMode(eCONNECTION_WIFI);
 					storage_SaveConfiguration();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"DiagnosticsMode 1") != NULL)
-				{
-					storage_Set_DiagnosticsMode(eNFC_ERROR_COUNT);
-					storage_SaveConfiguration();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"DiagnosticsMode 6") != NULL)
-				{
-					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ONCE);
-					storage_SaveConfiguration();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"DiagnosticsMode 7") != NULL)
-				{
-					storage_Set_DiagnosticsMode(eDISABLE_CERTIFICATE_ALWAYS);
-					storage_SaveConfiguration();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"Restart ESP") != NULL)
-				{
-					restartCmdReceived = true;
 
-					storage_Set_And_Save_DiagnosticsLog("#11 Cloud Restart ESP command");
-					responseStatus = 200;
-				}
-
-				// Connectivity
-				else if(strstr(commandString,"Set LTE") != NULL)
-				{
-					storage_Set_CommunicationMode(eCONNECTION_LTE);
-					storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Restarting on LTE");
+					ESP_LOGI(TAG, "Restarting on Wifi");
 					restartCmdReceived = true;
 					responseStatus = 200;
 					//esp_restart();
 				}
-				else if(strstr(commandString,"Set Wifi") != NULL)
+				else
 				{
-					if(network_CheckWifiParameters())
-					{
-						storage_Set_CommunicationMode(eCONNECTION_WIFI);
-						storage_SaveConfiguration();
-
-						ESP_LOGI(TAG, "Restarting on Wifi");
-						restartCmdReceived = true;
-						responseStatus = 200;
-						//esp_restart();
-					}
-					else
-					{
-						ESP_LOGI(TAG, "No valid Wifi parameters");
-					}
+					ESP_LOGI(TAG, "No valid Wifi parameters");
 				}
-				else if(strstr(commandString,"Clear Wifi") != NULL)
+			}
+			else if(strstr(commandString,"Clear Wifi") != NULL)
+			{
+				storage_clearWifiParameters();
+
+				ESP_LOGI(TAG, "Cleared Wifi parameters");
+				responseStatus = 200;
+			}
+
+
+			// Configuration reset
+			else if(strstr(commandString,"Configuration reset") != NULL)
+			{
+				responseStatus = 400;
+
+				MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
+				if(ret == MsgWriteAck)
 				{
-					storage_clearWifiParameters();
-
-					ESP_LOGI(TAG, "Cleared Wifi parameters");
-					responseStatus = 200;
-				}
-
-
-				// Configuration reset
-				else if(strstr(commandString,"Configuration reset") != NULL)
-				{
-					responseStatus = 400;
-
-					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
+					MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
 					if(ret == MsgWriteAck)
 					{
-						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
-						if(ret == MsgWriteAck)
-						{
-							storage_Init_Configuration();
-							storage_SaveConfiguration();
-							responseStatus = 200;
-						}
-					}
-
-					ESP_LOGI(TAG, "Configuration reset");
-				}
-
-
-				// Installation reset
-				else if(strstr(commandString,"Installation reset") != NULL)
-				{
-					responseStatus = 400;
-
-					MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
-					if(ret == MsgWriteAck)
-					{
-						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
-						if(ret == MsgWriteAck)
-						{
-							storage_Set_StandaloneCurrent(6.0);
-							storage_Set_MaxInstallationCurrentConfig(0.0);
-							storage_Set_PhaseRotation(0);
-							storage_SaveConfiguration();
-							ESP_LOGI(TAG, "Installation reset");
-							responseStatus = 200;
-						}
-					}
-				}
-
-
-				// Factory reset
-				else if(strstr(commandString,"Factory reset") != NULL)
-				{
-
-					MessageType ret = MCU_SendUint8Parameter(CommandFactoryReset, 0);
-					if(ret == MsgWriteAck) {
-						ESP_LOGI(TAG, "MCU Factory Reset OK");
-						storage_clearWifiParameters();
 						storage_Init_Configuration();
 						storage_SaveConfiguration();
 						responseStatus = 200;
-						ESP_LOGI(TAG, "Factory reset complete");
 					}
-					else {
-						ESP_LOGE(TAG, "MCU Factory Reset FAILED");						
-						responseStatus=400;
-					}
-				}else if(strstr(commandString, "segmentota") != NULL){
-
-					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-					if(ret == MsgCommandAck)
-						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
-					else
-						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
-
-					//start_segmented_ota();
-					start_ota();
-				}else if(strstr(commandString, "multiblockota") != NULL){
-
-					MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
-					if(ret == MsgCommandAck)
-						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
-					else
-						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
-
-					start_segmented_ota();
 				}
 
+				ESP_LOGI(TAG, "Configuration reset");
+			}
 
-				// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
-				else if(strstr(commandString,"LogInterval ") != NULL)
+
+			// Installation reset
+			else if(strstr(commandString,"Installation reset") != NULL)
+			{
+				responseStatus = 400;
+
+				MessageType ret = MCU_SendFloatParameter(StandAloneCurrent, 0.0);
+				if(ret == MsgWriteAck)
 				{
-					char *endptr;
-					uint32_t interval = (uint32_t)strtol(commandString+14, &endptr, 10);
-					if(((86400 >= interval) && (interval > 10)) || (interval == 0))
+					MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, 0.0);
+					if(ret == MsgWriteAck)
 					{
-						//SetDataInterval(interval);
-						storage_Set_TransmitInterval(interval);
+						storage_Set_StandaloneCurrent(6.0);
+						storage_Set_MaxInstallationCurrentConfig(0.0);
+						storage_Set_PhaseRotation(0);
 						storage_SaveConfiguration();
-						ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+						ESP_LOGI(TAG, "Installation reset");
 						responseStatus = 200;
 					}
-					else
-					{
-						responseStatus = 400;
-					}
 				}
-				// Logging interval
-				/*else if(strstr(commandString,"LogInterval") != NULL)
-				{
-					//SetDataInterval(0);
-					storage_Set_TransmitInterval(3600);
-					ESP_LOGI(TAG, "Using default LogInterval");
-					responseStatus = 200;
-				}*/
-				else if(strstr(commandString,"ClearServoCalibration") != NULL)
-				{
-					ESP_LOGI(TAG, "ClearServoCalibration");
-					MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
-					if(ret == MsgCommandAck)
-					{
-						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU cleared servo");
-					}
-					else
-					{
-						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU servo clear FAILED");
-					}
-				}
+			}
 
-				// Update certificate (without clearing old directly)
-				else if(strstr(commandString,"Update certificate") != NULL)
+
+			// Factory reset
+			else if(strstr(commandString,"Factory reset") != NULL)
+			{
+
+				MessageType ret = MCU_SendUint8Parameter(CommandFactoryReset, 0);
+				if(ret == MsgWriteAck) {
+					ESP_LOGI(TAG, "MCU Factory Reset OK");
+					storage_clearWifiParameters();
+					storage_Init_Configuration();
+					storage_SaveConfiguration();
+					responseStatus = 200;
+					ESP_LOGI(TAG, "Factory reset complete");
+				}
+				else {
+					ESP_LOGE(TAG, "MCU Factory Reset FAILED");
+					responseStatus=400;
+				}
+			}else if(strstr(commandString, "segmentota") != NULL){
+
+				MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+				if(ret == MsgCommandAck)
+					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+				else
+					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+
+				//start_segmented_ota();
+				start_ota();
+			}else if(strstr(commandString, "multiblockota") != NULL){
+
+				MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
+				if(ret == MsgCommandAck)
+					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
+				else
+					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
+
+				start_segmented_ota();
+			}
+
+
+			// Logging interval, with space expects number in seconds: "LogInterval 60". This is not yet saved.
+			else if(strstr(commandString,"LogInterval ") != NULL)
+			{
+				char *endptr;
+				uint32_t interval = (uint32_t)strtol(commandString+14, &endptr, 10);
+				if(((86400 >= interval) && (interval > 10)) || (interval == 0))
 				{
-					certifcate_setBundleVersion(0); //Fake old version for test
+					//SetDataInterval(interval);
+					storage_Set_TransmitInterval(interval);
+					storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+					responseStatus = 200;
+				}
+				else
+				{
+					responseStatus = 400;
+				}
+			}
+			// Logging interval
+			/*else if(strstr(commandString,"LogInterval") != NULL)
+			{
+				//SetDataInterval(0);
+				storage_Set_TransmitInterval(3600);
+				ESP_LOGI(TAG, "Using default LogInterval");
+				responseStatus = 200;
+			}*/
+			else if(strstr(commandString,"ClearServoCalibration") != NULL)
+			{
+				ESP_LOGI(TAG, "ClearServoCalibration");
+				MessageType ret = MCU_SendCommandId(CommandServoClearCalibration);
+				if(ret == MsgCommandAck)
+				{
+					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU cleared servo");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU servo clear FAILED");
+				}
+			}
+
+			// Update certificate (without clearing old directly)
+			else if(strstr(commandString,"Update certificate") != NULL)
+			{
+				certifcate_setBundleVersion(0); //Fake old version for test
+				certificate_update(0);
+
+				ESP_LOGI(TAG, "Update certificate");
+				responseStatus = 200;
+			}
+			// Clear certificate (results in new update on next start)
+			else if(strstr(commandString,"Clear certificate") != NULL)
+			{
+				certificate_clear();
+
+				ESP_LOGI(TAG, "Clear certificate");
+				responseStatus = 200;
+			}
+
+			// Set tls error
+			else if(strstr(commandString,"Set tls error") != NULL)
+			{
+				simulateTlsError = true;
+
+				ESP_LOGI(TAG, "Set tls error");
+				responseStatus = 200;
+			}
+
+
+			else if(strstr(commandString,"Override ") != NULL)
+			{
+				char *endptr;
+				int overrideVersion = strtol(commandString+11, &endptr, 10);
+				if((1000 > overrideVersion) && (overrideVersion >=0))
+				{
+					certifcate_setOverrideVersion(overrideVersion); //Fake old version for test
 					certificate_update(0);
 
-					ESP_LOGI(TAG, "Update certificate");
+					ESP_LOGI(TAG, "Update to override version: %d", overrideVersion);
 					responseStatus = 200;
 				}
-				// Clear certificate (results in new update on next start)
-				else if(strstr(commandString,"Clear certificate") != NULL)
+				else
 				{
-					certificate_clear();
-
-					ESP_LOGI(TAG, "Clear certificate");
-					responseStatus = 200;
+					responseStatus = 400;
 				}
+			}
 
-				// Set tls error
-				else if(strstr(commandString,"Set tls error") != NULL)
+			else if(strstr(commandString,"SetMaxInstallationCurrent ") != NULL)
+			{
+				char *endptr;
+				int maxInt = (int)strtol(commandString+28, &endptr, 10);
+
+				float maxInstCurrentConfig = maxInt * 1.0;
+
+				//Sanity check
+				if((40.0 >= maxInstCurrentConfig) && (maxInstCurrentConfig >= 0.0))
 				{
-					simulateTlsError = true;
+					float limitedMaxInst = maxInstCurrentConfig;
+					if(maxInstCurrentConfig > 32.0)
+						limitedMaxInst = 32.0;
 
-					ESP_LOGI(TAG, "Set tls error");
-					responseStatus = 200;
-				}
-
-
-				else if(strstr(commandString,"Override ") != NULL)
-				{
-					char *endptr;
-					int overrideVersion = strtol(commandString+11, &endptr, 10);
-					if((1000 > overrideVersion) && (overrideVersion >=0))
+					//Never send higher than 32 to MCU
+					MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, limitedMaxInst);
+					if(ret == MsgWriteAck)
 					{
-						certifcate_setOverrideVersion(overrideVersion); //Fake old version for test
-						certificate_update(0);
-
-						ESP_LOGI(TAG, "Update to override version: %d", overrideVersion);
+						storage_Set_MaxInstallationCurrentConfig(maxInstCurrentConfig);
+						ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrentConfig);
+						storage_SaveConfiguration();
 						responseStatus = 200;
 					}
 					else
@@ -1723,118 +1738,82 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
-
-				else if(strstr(commandString,"SetMaxInstallationCurrent ") != NULL)
+				else
 				{
-					char *endptr;
-					int maxInt = (int)strtol(commandString+28, &endptr, 10);
+					responseStatus = 400;
+				}
+			}
 
-					float maxInstCurrentConfig = maxInt * 1.0;
+			else if(strstr(commandString,"SetPhaseRotation ") != NULL)
+			{
+				char *endptr;
+				int newPhaseRotation = (int)strtol(commandString+19, &endptr, 10);
 
-					//Sanity check
-					if((40.0 >= maxInstCurrentConfig) && (maxInstCurrentConfig >= 0.0))
+				//Sanity check
+				if((18 >= newPhaseRotation) && (newPhaseRotation >= 0))
+				{
+						storage_Set_PhaseRotation(newPhaseRotation);
+						ESP_LOGI(TAG, "Set PhaseRotation: %i", newPhaseRotation);
+						storage_SaveConfiguration();
+						responseStatus = 200;
+				}
+				else
+				{
+					responseStatus = 400;
+				}
+			}
+
+			// GetInstallationConfigOnFile
+			else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
+			{
+
+				reportInstallationConfigOnFile = true;
+				ESP_LOGI(TAG, "Getting installationConfigOnFile");
+				responseStatus = 200;
+			}
+
+			// SetNewWifi
+			else if(strstr(commandString,"SetNewWifi:") != NULL)
+			{
+				char * start = strstr(commandString,"{");
+				commandString[commandEvent->data_len-1] = '\0';
+
+				char wifiString[commandEvent->data_len-1];
+				int nextChar = 0;
+				for (int i = 0; i < commandEvent->data_len-2; i++)
+				{
+					if(start[i] != '\\')
 					{
-						float limitedMaxInst = maxInstCurrentConfig;
-						if(maxInstCurrentConfig > 32.0)
-							limitedMaxInst = 32.0;
-
-						//Never send higher than 32 to MCU
-						MessageType ret = MCU_SendFloatParameter(ChargeCurrentInstallationMaxLimit, limitedMaxInst);
-						if(ret == MsgWriteAck)
-						{
-							storage_Set_MaxInstallationCurrentConfig(maxInstCurrentConfig);
-							ESP_LOGI(TAG, "Set MaxInstallationCurrentConfig to MCU: %f", maxInstCurrentConfig);
-							storage_SaveConfiguration();
-							responseStatus = 200;
-						}
-						else
-						{
-							responseStatus = 400;
-						}
-					}
-					else
-					{
-						responseStatus = 400;
+						wifiString[nextChar] = start[i];
+						nextChar++;
 					}
 				}
+				wifiString[nextChar] = '\0';
 
-				else if(strstr(commandString,"SetPhaseRotation ") != NULL)
-				{
-					char *endptr;
-					int newPhaseRotation = (int)strtol(commandString+19, &endptr, 10);
-
-					//Sanity check
-					if((18 >= newPhaseRotation) && (newPhaseRotation >= 0))
-					{
-							storage_Set_PhaseRotation(newPhaseRotation);
-							ESP_LOGI(TAG, "Set PhaseRotation: %i", newPhaseRotation);
-							storage_SaveConfiguration();
-							responseStatus = 200;
-					}
-					else
-					{
-						responseStatus = 400;
-					}
-				}
-
-				// GetInstallationConfigOnFile
-				else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
-				{
-
-					reportInstallationConfigOnFile = true;
-					ESP_LOGI(TAG, "Getting installationConfigOnFile");
-					responseStatus = 200;
-				}
-
-				// SetNewWifi
-				else if(strstr(commandString,"SetNewWifi:") != NULL)
-				{
-					char * start = strstr(commandString,"{");
-					commandString[commandEvent->data_len-1] = '\0';
-
-					char wifiString[commandEvent->data_len-1];
-					int nextChar = 0;
-					for (int i = 0; i < commandEvent->data_len-2; i++)
-					{
-						if(start[i] != '\\')
+				cJSON *body = cJSON_Parse(wifiString);
+				if(body!=NULL){
+					if(cJSON_HasObjectItem(body, "Pin")){
+						char * pin = cJSON_GetObjectItem(body, "Pin")->valuestring;
+						if(strcmp(pin,i2cGetLoadedDeviceInfo().Pin) == 0)
 						{
-							wifiString[nextChar] = start[i];
-							nextChar++;
-						}
-					}
-					wifiString[nextChar] = '\0';
+							if(cJSON_HasObjectItem(body, "SSID")){
 
-					cJSON *body = cJSON_Parse(wifiString);
-					if(body!=NULL){
-						if(cJSON_HasObjectItem(body, "Pin")){
-							char * pin = cJSON_GetObjectItem(body, "Pin")->valuestring;
-							if(strcmp(pin,i2cGetLoadedDeviceInfo().Pin) == 0)
-							{
-								if(cJSON_HasObjectItem(body, "SSID")){
-
-									char * ssid = cJSON_GetObjectItem(body, "SSID")->valuestring;
-									ESP_LOGW(TAG, "SSID: %s", ssid);
+								char * ssid = cJSON_GetObjectItem(body, "SSID")->valuestring;
+								ESP_LOGW(TAG, "SSID: %s", ssid);
 
 
-									if(cJSON_HasObjectItem(body, "PSK")){
+								if(cJSON_HasObjectItem(body, "PSK")){
 
-										char * psk = cJSON_GetObjectItem(body, "PSK")->valuestring;
-										ESP_LOGW(TAG, "Psk: %s", psk);
+									char * psk = cJSON_GetObjectItem(body, "PSK")->valuestring;
+									ESP_LOGW(TAG, "Psk: %s", psk);
 
-										storage_SaveWifiParameters(ssid, psk);
-										if(network_CheckWifiParameters())
-										{
-											network_updateWifi();
-											ESP_LOGW(TAG, "Updated Wifi");
-											responseStatus = 200;
-										}
-									}
-									else
+									storage_SaveWifiParameters(ssid, psk);
+									if(network_CheckWifiParameters())
 									{
-										responseStatus = 400;
-										return false;
+										network_updateWifi();
+										ESP_LOGW(TAG, "Updated Wifi");
+										responseStatus = 200;
 									}
-
 								}
 								else
 								{
@@ -1843,819 +1822,900 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 								}
 
 							}
-						}
-						else
-						{
-							//Do not continue invalid content
-							responseStatus = 400;
-							return false;
-						}
-
-					}
-
-					cJSON_Delete(body);
-
-
-					ESP_LOGI(TAG, "Setting new Wifi");
-				}
-
-				else if(strstr(commandString,"SwapCommunicationMode") != NULL)
-				{
-					if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
-						storage_Set_CommunicationMode(eCONNECTION_LTE);
-					else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
-						storage_Set_CommunicationMode(eCONNECTION_WIFI);
-
-					storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE);
-					storage_SaveConfiguration();
-
-					ESP_LOGI(TAG, "SwapCommunicationMode");
-					responseStatus = 200;
-
-					restartCmdReceived = true;
-					responseStatus = 200;
-					//esp_restart();
-				}
-
-				else if(strstr(commandString,"ActivateLogging") != NULL)
-				{
-					esp_log_level_set("*", ESP_LOG_INFO);
-					storage_Set_DiagnosticsMode(eACTIVATE_LOGGING);
-					storage_SaveConfiguration();
-
-					ESP_LOGI(TAG, "ActivateLogging");
-					responseStatus = 200;
-
-				}
-				else if(strstr(commandString,"Simulate offline ") != NULL)
-				{
-					char *endptr;
-					int offlineTime = (int)strtol(commandString+19, &endptr, 10);
-					if((offlineTime <= 86400) && (offlineTime > 0))
-						offlineHandler_SimulateOffline(offlineTime);
-
-					ESP_LOGI(TAG, "Simulate offline %d", offlineTime);
-					responseStatus = 200;
-				}
-
-				if(strstr(commandString,"Activate TCP") != NULL)
-				{
-					storage_Set_DiagnosticsMode(eACTIVATE_TCP_PORT);
-					storage_SaveConfiguration();
-					responseStatus = 200;
-				}
-
-				else if(strstr(commandString,"OverrideNetworkType") != NULL)
-				{
-					//char *endptr;
-					int newNetworkType = 0;//(int)strtol(commandString+22, &endptr, 10);
-					if(strstr(commandString,"IT1") != NULL)
-						newNetworkType = NETWORK_1P3W;
-					else if(strstr(commandString,"IT3") != NULL)
-						newNetworkType = NETWORK_3P3W;
-					else if(strstr(commandString,"TN1") != NULL)
-						newNetworkType = NETWORK_1P4W;
-					else if(strstr(commandString,"TN3") != NULL)
-						newNetworkType = NETWORK_3P4W;
-
-					//Sanity check
-					if(IsUKOPENPowerBoardRevision())
-					{
-						responseStatus = 400;
-					}
-					else if((4 >= newNetworkType) && (newNetworkType >= 0))
-					{
-						ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
-
-						MessageType ret = MCU_SendUint8Parameter(ParamGridTypeOverride, newNetworkType);
-						if(ret == MsgWriteAck)
-						{
-							int ret = (int)MCU_UpdateOverrideGridType();
-
-							if(ret == newNetworkType)
-							{
-								ESP_LOGI(TAG, "Set OverrideNetworkType OK");
-								responseStatus = 200;
-							}
 							else
 							{
-								ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 1");
 								responseStatus = 400;
+								return false;
 							}
-						}
-						else
-						{
-							ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 2");
-						}
 
-						responseStatus = 200;
+						}
 					}
 					else
 					{
+						//Do not continue invalid content
 						responseStatus = 400;
+						return false;
 					}
+
 				}
 
-				else if(strstr(commandString,"IT3 enable") != NULL)
+				cJSON_Delete(body);
+
+
+				ESP_LOGI(TAG, "Setting new Wifi");
+			}
+
+			else if(strstr(commandString,"SwapCommunicationMode") != NULL)
+			{
+				if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+					storage_Set_CommunicationMode(eCONNECTION_LTE);
+				else if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+					storage_Set_CommunicationMode(eCONNECTION_WIFI);
+
+				storage_Set_DiagnosticsMode(eSWAP_COMMUNICATION_MODE);
+				storage_SaveConfiguration();
+
+				ESP_LOGI(TAG, "SwapCommunicationMode");
+				responseStatus = 200;
+
+				restartCmdReceived = true;
+				responseStatus = 200;
+				//esp_restart();
+			}
+
+			else if(strstr(commandString,"ActivateLogging") != NULL)
+			{
+				esp_log_level_set("*", ESP_LOG_INFO);
+				storage_Set_DiagnosticsMode(eACTIVATE_LOGGING);
+				storage_SaveConfiguration();
+
+				ESP_LOGI(TAG, "ActivateLogging");
+				responseStatus = 200;
+
+			}
+			else if(strstr(commandString,"Simulate offline ") != NULL)
+			{
+				char *endptr;
+				int offlineTime = (int)strtol(commandString+19, &endptr, 10);
+				if((offlineTime <= 86400) && (offlineTime > 0))
+					offlineHandler_SimulateOffline(offlineTime);
+
+				ESP_LOGI(TAG, "Simulate offline %d", offlineTime);
+				responseStatus = 200;
+			}
+
+			if(strstr(commandString,"Activate TCP") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eACTIVATE_TCP_PORT);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+			if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
+			{
+				storage_Set_DiagnosticsMode(eALWAYS_SEND_SESSION_DIAGNOSTICS);
+				storage_SaveConfiguration();
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"OverrideNetworkType") != NULL)
+			{
+				//char *endptr;
+				int newNetworkType = 0;//(int)strtol(commandString+22, &endptr, 10);
+				if(strstr(commandString,"IT1") != NULL)
+					newNetworkType = NETWORK_1P3W;
+				else if(strstr(commandString,"IT3") != NULL)
+					newNetworkType = NETWORK_3P3W;
+				else if(strstr(commandString,"TN1") != NULL)
+					newNetworkType = NETWORK_1P4W;
+				else if(strstr(commandString,"TN3") != NULL)
+					newNetworkType = NETWORK_3P4W;
+
+				//Sanity check
+				if(IsUKOPENPowerBoardRevision())
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 1);
+					responseStatus = 400;
+				}
+				else if((4 >= newNetworkType) && (newNetworkType >= 0))
+				{
+					ESP_LOGI(TAG, "Override Network type to set: %i", newNetworkType);
+
+					MessageType ret = MCU_SendUint8Parameter(ParamGridTypeOverride, newNetworkType);
 					if(ret == MsgWriteAck)
 					{
-						uint8_t ret = MCU_UpdateIT3OptimizationState();
-						if(ret == 0)
+						int ret = (int)MCU_UpdateOverrideGridType();
+
+						if(ret == newNetworkType)
 						{
-							ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
+							ESP_LOGI(TAG, "Set OverrideNetworkType OK");
 							responseStatus = 200;
 						}
 						else
 						{
-							ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 1");
+							ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 1");
 							responseStatus = 400;
 						}
 					}
 					else
 					{
-						ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 2");
-						responseStatus = 400;
+						ESP_LOGE(TAG, "Set OverrideNetworkType FAILED 2");
 					}
+
+					responseStatus = 200;
 				}
-				else if(strstr(commandString,"IT3 disable") != NULL)
+				else
 				{
-					MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 0);
-					if(ret == MsgWriteAck)
-					{
-
-						uint8_t ret = MCU_UpdateIT3OptimizationState();
-						if(ret == 0)
-						{
-							ESP_LOGI(TAG, "Set IT3 optimization disabled OK");
-							responseStatus = 200;
-						}
-						else
-						{
-							ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 1");
-							responseStatus = 400;
-						}
-					}
-					else
-					{
-						ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 2");
-						responseStatus = 400;
-					}
+					responseStatus = 400;
 				}
+			}
 
-
-				else if(strstr(commandString,"ITStart") != NULL)
+			else if(strstr(commandString,"IT3 enable") != NULL)
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 1);
+				if(ret == MsgWriteAck)
 				{
-					ESP_LOGI(TAG, "IT diagnostics stop");
-					MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStart);
-					if(ret == MsgCommandAck)
+					uint8_t ret = MCU_UpdateIT3OptimizationState();
+					if(ret == 0)
 					{
-						MCUDiagnosticsResults = true;
+						ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
 						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU IT diag ON");
 					}
 					else
 					{
+						ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 1");
 						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU IT diag FAILED");
 					}
 				}
-				else if(strstr(commandString,"ITStop") != NULL)
+				else
 				{
-					ESP_LOGI(TAG, "IT diagnostics stop");
-					MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStop);
-					if(ret == MsgCommandAck)
+					ESP_LOGE(TAG, "Set IT3 optimization enabled FAILED 2");
+					responseStatus = 400;
+				}
+			}
+			else if(strstr(commandString,"IT3 disable") != NULL)
+			{
+				MessageType ret = MCU_SendUint8Parameter(ParamIT3OptimizationEnabled, 0);
+				if(ret == MsgWriteAck)
+				{
+
+					uint8_t ret = MCU_UpdateIT3OptimizationState();
+					if(ret == 0)
 					{
-						MCUDiagnosticsResults = false;
+						ESP_LOGI(TAG, "Set IT3 optimization disabled OK");
 						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU IT mode switched");
 					}
 					else
 					{
+						ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 1");
 						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU IT switch FAILED");
 					}
 				}
-				else if(strstr(commandString,"GetDiagnostics") != NULL)
+				else
 				{
-					ESP_LOGI(TAG, "GetDiagnostics");
+					ESP_LOGE(TAG, "Set IT3 optimization disabled FAILED 2");
+					responseStatus = 400;
+				}
+			}
+
+
+			else if(strstr(commandString,"ITStart") != NULL)
+			{
+				ESP_LOGI(TAG, "IT diagnostics stop");
+				MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStart);
+				if(ret == MsgCommandAck)
+				{
 					MCUDiagnosticsResults = true;
 					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU IT diag ON");
 				}
-				else if(strstr(commandString,"GetRFIDList") != NULL)
+				else
 				{
-					ESP_LOGI(TAG, "GetRFIDList");
-					storage_CreateRFIDbuffer();
-					storage_printRFIDTagsOnFile(true);
-					ESPDiagnosticsResults = true;
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU IT diag FAILED");
+				}
+			}
+			else if(strstr(commandString,"ITStop") != NULL)
+			{
+				ESP_LOGI(TAG, "IT diagnostics stop");
+				MessageType ret = MCU_SendCommandId(CommandITDiagnosticsStop);
+				if(ret == MsgCommandAck)
+				{
+					MCUDiagnosticsResults = false;
+					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU IT mode switched");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU IT switch FAILED");
+				}
+			}
+			else if(strstr(commandString,"GetDiagnostics") != NULL)
+			{
+				ESP_LOGI(TAG, "GetDiagnostics");
+				MCUDiagnosticsResults = true;
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetRFIDList") != NULL)
+			{
+				ESP_LOGI(TAG, "GetRFIDList");
+				storage_CreateRFIDbuffer();
+				storage_printRFIDTagsOnFile(true);
+				ESPDiagnosticsResults = true;
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"RTC ") != NULL)
+			{
+				char *endptr;
+				int rtc = (int)strtol(commandString+5, &endptr, 10);
+
+				ESP_LOGI(TAG, "RTC %i -> 0x%X", rtc, rtc);
+				RTCWriteControl(rtc);
+
+				responseStatus = 200;
+
+			}
+			else if(strstr(commandString,"RTC") != NULL)
+			{
+				SetSendRTC();
+			}
+			else if(strstr(commandString,"PulseInterval ") != NULL)
+			{
+				char *endptr;
+				uint32_t interval = (uint32_t)strtol(commandString+16, &endptr, 10);
+				if((3600 >= interval) && (interval >= 10))
+				{
+					storage_Set_PulseInterval(interval);
+					storage_SaveConfiguration();
+					ESP_LOGI(TAG, "Setting Pulse interval %d", interval);
 					responseStatus = 200;
 				}
-				else if(strstr(commandString,"RTC ") != NULL)
+				else
 				{
-					char *endptr;
-					int rtc = (int)strtol(commandString+5, &endptr, 10);
+					responseStatus = 400;
+				}
+			}
+			else if(strstr(commandString,"PowerOff4GAndReset") != NULL)
+			{
+				cellularPinsOff();
 
-					ESP_LOGI(TAG, "RTC %i -> 0x%X", rtc, rtc);
-					RTCWriteControl(rtc);
+				//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
+				//The 4G module will be powered on automatically if 4G is active communication mode
+				restartCmdReceived = true;
+				responseStatus = 200;
+				//esp_restart();
+			}
 
+			//For testing AT on BG while on Wifi
+			else if(strstr(commandString,"PowerToggle4G") != NULL)
+			{
+				cellularPinsOff();
+			}
+
+			//For testing AT on BG while on Wifi
+			else if(strstr(commandString,"PowerOn4G") != NULL)
+			{
+				cellularPinsOn();
+				ATOnly();
+			}
+
+			//AT command tunneling - do not change command mode
+			else if(strstr(commandString,"AT") != NULL)
+			{
+				//Don't change data mode when on wifi
+				if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
+					TunnelATCommand(commandString, 0);
+
+				//Change data mode when on LTE
+				if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
+					TunnelATCommand(commandString, 1);
+			}
+			//AT command tunneling - do change command mode
+			else if(strstr(commandString,"OnlineWD") != NULL)
+			{
+				SetOnlineWatchdog();
+			}
+			//AT command tunneling - do change command mode
+			else if(strstr(commandString,"ClearNotifications") != NULL)
+			{
+				ClearNotifications();
+			}
+
+			else if(strstr(commandString,"PrintStat") != NULL)
+			{
+				char stat[100] = {0};
+				storage_GetStats(stat);
+				publish_debug_telemetry_observation_Diagnostics(stat);
+			}
+
+			else if(strstr(commandString,"DeleteOfflineLog") != NULL)
+			{
+				int ret = deleteOfflineLog();
+				if(ret == 1)
+					publish_debug_telemetry_observation_Diagnostics("Delete OK");
+				else
+					publish_debug_telemetry_observation_Diagnostics("Delete failed");
+			}
+			else if(strstr(commandString,"StartStack") != NULL)
+			{
+				//Also send instantly when activated
+				SendStacks();
+				StackDiagnostics(true);
+			}
+			else if(strstr(commandString,"StopStack") != NULL)
+			{
+				StackDiagnostics(false);
+			}
+			else if(strstr(commandString,"OCMFHigh") != NULL)
+			{
+				SessionHandler_SetOCMFHighInterval();
+			}
+			else if(strstr(commandString,"LogCurrent") != NULL)
+			{
+				int interval = 0;
+				sscanf(&commandString[12], "%d", &interval);
+
+				ESP_LOGI(TAG, "Interval: %i", interval);
+
+				if((interval >= 0) && (interval <= 86400))
+				{
+					SessionHandler_SetLogCurrents(interval);
+				}
+			}
+			else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
+			{
+				MessageType ret = MCU_SendCommandId(MCUCommandRestartCarInterface);
+				if(ret == MsgCommandAck)
+				{
 					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU Restart car OK");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGI(TAG, "MCU Restart car FAILED");
+				}
+			}
+			else if(strstr(commandString,"ServoCheck") != NULL)
+			{
+				MCU_PerformServoCheck();
+			}
+			else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
+			{
+				char msg[60] = {0};
+				sprintf(msg, "eMeter HW Current limit: %f / %f A", MCU_GetHWCurrentActiveLimit(), MCU_GetHWCurrentMaxLimit());
+				publish_debug_telemetry_observation_Diagnostics(msg);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"blockreq") != NULL)
+			{
+				blockStartToTestPingReply = true;
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"blockall") != NULL)
+			{
+				blockStartToTestPingReply = true;
+				blockPingReply = true;
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"unblock") != NULL)
+			{
+				blockStartToTestPingReply = false;
+				blockPingReply = false;
+				responseStatus = 200;
+			}
 
-				}
-				else if(strstr(commandString,"RTC") != NULL)
+
+			else if(strstr(commandString,"pr on") != NULL)
+			{
+				offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"pr off") != NULL)
+			{
+				offlineHandler_UpdatePingReplyState(PING_REPLY_OFFLINE);
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"datalog on") != NULL)
+			{
+				datalog = true;
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"datalog off") != NULL)
+			{
+				datalog = false;
+				responseStatus = 200;
+			}
+			/// This command may not be required, only for troubleshooting if MCU does not respond. Has never happened.
+			else if(strstr(commandString,"OTA no MCU") != NULL)
+			{
+				//Here no command is sent to stop MCU directly.
+				ble_interface_deinit();
+				start_segmented_ota();
+				responseStatus = 200;
+			}
+			//Run factory test function - dev - disable socket connection
+			else if(strstr(commandString,"factest") != NULL)
+			{
+				run_component_tests();
+				responseStatus = 200;
+			}
+
+
+			///OfflineSessions
+
+			else if(strstr(commandString,"GetOfflineSessions") != NULL)
+			{
+				sessionHandler_SetOfflineSessionFlag();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"DeleteOfflineSessions") != NULL)
+			{
+				offlineSession_DeleteAllFiles();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"PrintOffsLog") != NULL)
+			{
+				ESP_LOGW(TAG, "SequenceLog: \r\n%s", offlineSession_GetLog());
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetNrOfSessionsFiles") != NULL)
+			{
+				char sbuf[12] = {0};
+				snprintf(sbuf, 12,"Files: %i", offlineSession_FindNrOfFiles());
+				publish_debug_telemetry_observation_Diagnostics(sbuf);
+
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetOfflineFile ") != NULL)
+			{
+				int fileNo = -1;
+				sscanf(&commandString[17], "%d", &fileNo);
+				if((fileNo >= 0) && (fileNo < 100))
 				{
-					SetSendRTC();
-				}
-				else if(strstr(commandString,"PulseInterval ") != NULL)
-				{
-					char *endptr;
-					uint32_t interval = (uint32_t)strtol(commandString+16, &endptr, 10);
-					if((3600 >= interval) && (interval >= 10))
+					cJSON * csObject = offlineSession_ReadChargeSessionFromFile(fileNo);
+					if(csObject == NULL)
 					{
-						storage_Set_PulseInterval(interval);
-						storage_SaveConfiguration();
-						ESP_LOGI(TAG, "Setting Pulse interval %d", interval);
-						responseStatus = 200;
+						publish_debug_telemetry_observation_Diagnostics("csObject == NULL");
 					}
 					else
 					{
-						responseStatus = 400;
+						char *buf = cJSON_PrintUnformatted(csObject);
+						publish_debug_telemetry_observation_Diagnostics(buf);
+						free(csObject);
+
 					}
 				}
-				else if(strstr(commandString,"PowerOff4GAndReset") != NULL)
-				{
-					cellularPinsOff();
 
-					//Restart must be done to ensure that we don't remain offline if communication mode is set to 4G.
-					//The 4G module will be powered on automatically if 4G is active communication mode
-					restartCmdReceived = true;
-					responseStatus = 200;
-					//esp_restart();
-				}
-
-				//For testing AT on BG while on Wifi
-				else if(strstr(commandString,"PowerToggle4G") != NULL)
+				responseStatus = 200;
+			}
+			//Test Offline Sessions
+			else if(strstr(commandString,"tos ") != NULL)
+			{
+				char *endptr;
+				uint32_t nrOfSessions = (uint32_t)strtol(commandString+6, &endptr, 10);
+				if(nrOfSessions <= 110)
 				{
-					cellularPinsOff();
-				}
-
-				//For testing AT on BG while on Wifi
-				else if(strstr(commandString,"PowerOn4G") != NULL)
-				{
-					cellularPinsOn();
-					ATOnly();
-				}
-
-				//AT command tunneling - do not change command mode
-				else if(strstr(commandString,"AT") != NULL)
-				{
-					//Don't change data mode when on wifi
-					if(storage_Get_CommunicationMode() == eCONNECTION_WIFI)
-						TunnelATCommand(commandString, 0);
-
-					//Change data mode when on LTE
-					if(storage_Get_CommunicationMode() == eCONNECTION_LTE)
-						TunnelATCommand(commandString, 1);
-				}
-				//AT command tunneling - do change command mode
-				else if(strstr(commandString,"OnlineWD") != NULL)
-				{
-					SetOnlineWatchdog();
-				}
-				//AT command tunneling - do change command mode
-				else if(strstr(commandString,"ClearNotifications") != NULL)
-				{
-					ClearNotifications();
-				}
-
-				else if(strstr(commandString,"PrintStat") != NULL)
-				{
-					char stat[100] = {0};
-					storage_GetStats(stat);
-					publish_debug_telemetry_observation_Diagnostics(stat);
-				}
-
-				else if(strstr(commandString,"DeleteOfflineLog") != NULL)
-				{
-					int ret = deleteOfflineLog();
-					if(ret == 0){
-						publish_debug_telemetry_observation_Diagnostics("Delete OK");
-					}else{
-						char description[64];
-						snprintf(description, sizeof(description), "Delete failed: %s", strerror(ret));
-						publish_debug_telemetry_observation_Diagnostics(description);
-					}
-				}
-				else if(strstr(commandString,"StartStack") != NULL)
-				{
-					//Also send instantly when activated
-					SendStacks();
-					StackDiagnostics(true);
-				}
-				else if(strstr(commandString,"StopStack") != NULL)
-				{
-					StackDiagnostics(false);
-				}
-				else if(strstr(commandString,"OCMFHigh") != NULL)
-				{
-					SessionHandler_SetOCMFHighInterval();
-				}
-				else if(strstr(commandString,"LogCurrent") != NULL)
-				{
-					int interval = 0;
-					sscanf(&commandString[12], "%d", &interval);
-
-					ESP_LOGI(TAG, "Interval: %i", interval);
-
-					if((interval >= 0) && (interval <= 86400))
+					char *sec = strchr(commandString, '|');
+					if(sec != NULL)
 					{
-						SessionHandler_SetLogCurrents(interval);
-					}
-				}
-				else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
-				{
-					MessageType ret = MCU_SendCommandId(MCUCommandRestartCarInterface);
-					if(ret == MsgCommandAck)
-					{
-						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU Restart car OK");
-					}
-					else
-					{
-						responseStatus = 400;
-						ESP_LOGI(TAG, "MCU Restart car FAILED");
-					}
-				}
-				else if(strstr(commandString,"ServoCheck") != NULL)
-				{
-					MCU_PerformServoCheck();
-				}
-				else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
-				{
-					char msg[60] = {0};
-					sprintf(msg, "eMeter HW Current limit: %f / %f A", MCU_GetHWCurrentActiveLimit(), MCU_GetHWCurrentMaxLimit());
-					publish_debug_telemetry_observation_Diagnostics(msg);
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"blockreq") != NULL)
-				{
-					blockStartToTestPingReply = true;
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"blockall") != NULL)
-				{
-					blockStartToTestPingReply = true;
-					blockPingReply = true;
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"unblock") != NULL)
-				{
-					blockStartToTestPingReply = false;
-					blockPingReply = false;
-					responseStatus = 200;
-				}
-
-
-				else if(strstr(commandString,"pr on") != NULL)
-				{
-					offlineHandler_UpdatePingReplyState(PING_REPLY_ONLINE);
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"pr off") != NULL)
-				{
-					offlineHandler_UpdatePingReplyState(PING_REPLY_OFFLINE);
-					responseStatus = 200;
-				}
-
-				else if(strstr(commandString,"datalog on") != NULL)
-				{
-					datalog = true;
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"datalog off") != NULL)
-				{
-					datalog = false;
-					responseStatus = 200;
-				}
-				/// This command may not be required, only for troubleshooting if MCU does not respond. Has never happened.
-				else if(strstr(commandString,"OTA no MCU") != NULL)
-				{
-					//Here no command is sent to stop MCU directly.
-					ble_interface_deinit();
-					start_segmented_ota();
-					responseStatus = 200;
-				}
-				//Run factory test function - dev - disable socket connection
-				else if(strstr(commandString,"factest") != NULL)
-				{
-					run_component_tests();
-					responseStatus = 200;
-				}
-
-
-				///OfflineSessions
-
-				else if(strstr(commandString,"GetOfflineSessions") != NULL)
-				{
-					sessionHandler_SetOfflineSessionFlag();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"DeleteOfflineSessions") != NULL)
-				{
-					offlineSession_DeleteAllFiles();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"DeleteOcppOfflineSessions") != NULL)
-				{
-					if(offlineSession_DeleteAllFiles_ocpp() == 0){
-						responseStatus = 200;
-					}else{
-						return 500;
-					}
-				}
-
-				//Test Offline Sessions
-				else if(strstr(commandString,"tos ") != NULL)
-				{
-					char *endptr;
-					uint32_t nrOfSessions = (uint32_t)strtol(commandString+6, &endptr, 10);
-					if(nrOfSessions <= 110)
-					{
-						char *sec = strchr(commandString, '|');
-						if(sec != NULL)
+						uint32_t nrOfSignedValues = (uint32_t)strtol(sec+1, &endptr, 10);
+						if(nrOfSignedValues <= 110)
 						{
-							uint32_t nrOfSignedValues = (uint32_t)strtol(sec+1, &endptr, 10);
-							if(nrOfSignedValues <= 110)
-							{
-								ESP_LOGW(TAG, "NrSess: %i NrSV: %i", nrOfSessions, nrOfSignedValues);
-								sessionHandler_TestOfflineSessions(nrOfSessions, nrOfSignedValues);
-							}
+							ESP_LOGW(TAG, "NrSess: %i NrSV: %i", nrOfSessions, nrOfSignedValues);
+							sessionHandler_TestOfflineSessions(nrOfSessions, nrOfSignedValues);
 						}
 					}
-					responseStatus = 200;
 				}
+				responseStatus = 200;
+			}
 
-				// ocpp url
-				else if(strstr(commandString, "set ocpp url") != NULL)
-				{
-					ESP_LOGI(TAG, "Recieved set ocpp url command");
+			// ocpp url
+			else if(strstr(commandString, "set ocpp url") != NULL)
+			{
+				ESP_LOGI(TAG, "Recieved set ocpp url command");
 
-					char * cmd_begin = strstr(commandString, "set ocpp url");
-					char * url = strstr(cmd_begin, "ws");
+				char * cmd_begin = strstr(commandString, "set ocpp url");
+				char * url = strstr(cmd_begin, "ws");
 
-					size_t url_length = 0;
-					bool url_is_valid = true;
-					char url_buffer[URL_OCPP_MAX_LENGTH];
-					if(url != NULL){
-						if(strncmp(url, "ws://", 5) == 0){
-							url_length += 5;
-						}else if(strncmp(url, "wss://", 6) == 0){
-							url_length += 6;
-						}else{
-							ESP_LOGW(TAG, "Recieved invalid url '%s' for ocpp", url);
-							url_is_valid = false;
-						}
-
-						if(url_is_valid){
-							size_t scheme_length = url_length;
-							for(;url_length < URL_OCPP_MAX_LENGTH; url_length++){
-								if(isspace(url[url_length]) || url[url_length] == '\0' || url[url_length] == '"'){
-									break;
-
-								}else if(iscntrl(url[url_length])){
-									url_is_valid = false;
-									break;
-								}
-							}
-
-							if(scheme_length == url_length){
-								ESP_LOGW(TAG, "Recived url did only contain scheme and no path");
-								url_is_valid = false;
-							}
-						}
+				size_t url_length = 0;
+				bool url_is_valid = true;
+				char url_buffer[URL_OCPP_MAX_LENGTH];
+				if(url != NULL){
+					if(strncmp(url, "ws://", 5) == 0){
+						url_length += 5;
+					}else if(strncmp(url, "wss://", 6) == 0){
+						url_length += 6;
 					}else{
-						ESP_LOGW(TAG, "Attempt to set ocpp url failed due to invalid or no url");
+						ESP_LOGW(TAG, "Recieved invalid url '%s' for ocpp", url);
 						url_is_valid = false;
 					}
 
 					if(url_is_valid){
-						strncpy(url_buffer, url, url_length);
-						url_buffer[url_length] = '\0';
+						size_t scheme_length = url_length;
+						for(;url_length < URL_OCPP_MAX_LENGTH; url_length++){
+							if(isspace(url[url_length]) || url[url_length] == '\0' || url[url_length] == '"'){
+								break;
 
-						ESP_LOGI(TAG, "Writing ocpp url: '%s'", url_buffer);
-						storage_Set_url_ocpp(url_buffer);
-						storage_SaveConfiguration();
-
-						if(ocpp_is_running()){
-							ocpp_restart(true);
-						}
-
-						responseStatus = 200;
-					}else{
-						ESP_LOGW(TAG, "Rejecting setting ocpp url");
-						responseStatus = 400;
-					}
-				}
-				// Select session type [ocpp | zaptec_cloud | standalone]
-				else if(strstr(commandString, "set session type") != NULL)
-				{
-					ESP_LOGI(TAG, "Received request to change session type");
-					responseStatus = 200;
-
-					char * cmd_begin = strstr(commandString, "set session type");
-
-					enum session_controller controller = ~eSESSION_STANDALONE;
-					if(strstr(cmd_begin, "ocpp") != NULL){
-						ESP_LOGI(TAG, "Requested type: ocpp");
-
-						controller = eSESSION_OCPP;
-
-					}else if(strstr(cmd_begin, "zaptec_cloud") != NULL){
-						ESP_LOGI(TAG, "Requested type: zaptec_cloud");
-
-						controller = eSESSION_ZAPTEC_CLOUD;
-
-					}else if(strstr(cmd_begin, "standalone") != NULL){
-						ESP_LOGI(TAG, "Requested type: standalone");
-
-						controller = eSESSION_STANDALONE;
-					}
-
-					if(controller == ~eSESSION_STANDALONE){
-						ESP_LOGE(TAG, "Invalid session");
-						responseStatus = 400;
-					}
-
-					if(responseStatus == 200 && !(controller & eCONTROLLER_OCPP_STANDALONE) && !(strlen(storage_Get_url_ocpp()) > 0)){
-						ESP_LOGE(TAG, "Requested ocpp controller, but ocpp url is not set");
-						responseStatus = 400;
-					}
-
-					if(responseStatus == 200){
-						MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
-						if(ret == MsgWriteAck)
-						{
-							ESP_LOGW(TAG, "mcu Standalone set to %s\n", (eSESSION_OCPP & eCONTROLLER_MCU_STANDALONE) ? "on" : "off");
-							storage_Set_session_controller(controller);
-							storage_SaveConfiguration();
-
-							cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
-
-							responseStatus = 200;
-						}
-						else
-						{
-							ESP_LOGE(TAG, "MCU standalone parameter error");
-							responseStatus = 500;
-						}
-					}
-
-
-					if(responseStatus == 200){
-
-						if(storage_Get_session_controller() & eCONTROLLER_OCPP_STANDALONE){
-							ocpp_end(true);
-
-						}else{
-
-							if(!ocpp_is_running()){
-								ocpp_init();
-							}else{
-								ESP_LOGW(TAG, "Ocpp is already running");
+							}else if(iscntrl(url[url_length])){
+								url_is_valid = false;
+								break;
 							}
 						}
-					}
-				}
-				// Set cbid (ChargeBox identity) for ocpp url
-				else if(strstr(commandString, "set ocpp cbid") != NULL){
 
-					char * cbid_begin = strstr(commandString, "set ocpp cbid") + strlen("set ocpp cbid");
-					bool cbid_is_valid = (cbid_begin != NULL);
-					size_t cbid_length = 0;
-
-					if(cbid_is_valid)
-						while(isspace(cbid_begin[0]))
-							cbid_begin++;
-
-					while(cbid_is_valid){
-						if(isspace(cbid_begin[cbid_length]) || cbid_begin[cbid_length] == '\0' || cbid_begin[cbid_length] == '"'){
-							break;
-
-						}else if(iscntrl(cbid_begin[cbid_length]) || cbid_length >= CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
-							cbid_is_valid = false;
-						}else{
-							cbid_length++;
+						if(scheme_length == url_length){
+							ESP_LOGW(TAG, "Recived url did only contain scheme and no path");
+							url_is_valid = false;
 						}
 					}
+				}else{
+					ESP_LOGW(TAG, "Attempt to set ocpp url failed due to invalid or no url");
+					url_is_valid = false;
+				}
 
-					if(cbid_is_valid){
-						char tmp_char = cbid_begin[cbid_length];
-						cbid_begin[cbid_length] = '\0';
+				if(url_is_valid){
+					strncpy(url_buffer, url, url_length);
+					url_buffer[url_length] = '\0';
 
-						storage_Set_chargebox_identity_ocpp(cbid_begin);
+					ESP_LOGI(TAG, "Writing ocpp url: '%s'", url_buffer);
+					storage_Set_url_ocpp(url_buffer);
+					storage_SaveConfiguration();
+
+					if(ocpp_is_running()){
+						ocpp_restart(true);
+					}
+
+					responseStatus = 200;
+				}else{
+					ESP_LOGW(TAG, "Rejecting setting ocpp url");
+					responseStatus = 400;
+				}
+			}
+			// Select session type [ocpp | zaptec_cloud | standalone]
+			else if(strstr(commandString, "set session type") != NULL)
+			{
+				ESP_LOGI(TAG, "Received request to change session type");
+				responseStatus = 200;
+
+				char * cmd_begin = strstr(commandString, "set session type");
+
+				enum session_controller controller = ~eSESSION_STANDALONE;
+				if(strstr(cmd_begin, "ocpp") != NULL){
+					ESP_LOGI(TAG, "Requested type: ocpp");
+
+					controller = eSESSION_OCPP;
+
+				}else if(strstr(cmd_begin, "zaptec_cloud") != NULL){
+					ESP_LOGI(TAG, "Requested type: zaptec_cloud");
+
+					controller = eSESSION_ZAPTEC_CLOUD;
+
+				}else if(strstr(cmd_begin, "standalone") != NULL){
+					ESP_LOGI(TAG, "Requested type: standalone");
+
+					controller = eSESSION_STANDALONE;
+				}
+
+				if(controller == ~eSESSION_STANDALONE){
+					ESP_LOGE(TAG, "Invalid session");
+					responseStatus = 400;
+				}
+
+				if(responseStatus == 200 && !(controller & eCONTROLLER_OCPP_STANDALONE) && !(strlen(storage_Get_url_ocpp()) > 0)){
+					ESP_LOGE(TAG, "Requested ocpp controller, but ocpp url is not set");
+					responseStatus = 400;
+				}
+
+				if(responseStatus == 200){
+					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
+					if(ret == MsgWriteAck)
+					{
+						ESP_LOGW(TAG, "mcu Standalone set to %s\n", (eSESSION_OCPP & eCONTROLLER_MCU_STANDALONE) ? "on" : "off");
+						storage_Set_session_controller(controller);
 						storage_SaveConfiguration();
 
-						cbid_begin[cbid_length] = tmp_char;
+						cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
 
-						ESP_LOGI(TAG, "Set CBID to %s", storage_Get_chargebox_identity_ocpp());
 						responseStatus = 200;
+					}
+					else
+					{
+						ESP_LOGE(TAG, "MCU standalone parameter error");
+						responseStatus = 500;
+					}
+				}
+
+
+				if(responseStatus == 200){
+
+					if(storage_Get_session_controller() & eCONTROLLER_OCPP_STANDALONE){
+						ocpp_end(true);
+
 					}else{
-						ESP_LOGW(TAG, "CBID is not valid. Parsed '%s' to index %ul", cbid_begin, cbid_length);
-						responseStatus = 400;
+
+						if(!ocpp_is_running()){
+							ocpp_init();
+						}else{
+							ESP_LOGW(TAG, "Ocpp is already running");
+						}
+					}
+				}
+			}
+			// Set cbid (ChargeBox identity) for ocpp url
+			else if(strstr(commandString, "set ocpp cbid") != NULL){
+
+				char * cbid_begin = strstr(commandString, "set ocpp cbid") + strlen("set ocpp cbid");
+				bool cbid_is_valid = (cbid_begin != NULL);
+				size_t cbid_length = 0;
+
+				if(cbid_is_valid)
+					while(isspace(cbid_begin[0]))
+						cbid_begin++;
+
+				while(cbid_is_valid){
+					if(isspace(cbid_begin[cbid_length]) || cbid_begin[cbid_length] == '\0' || cbid_begin[cbid_length] == '"'){
+						break;
+
+					}else if(iscntrl(cbid_begin[cbid_length]) || cbid_length >= CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
+						cbid_is_valid = false;
+					}else{
+						cbid_length++;
 					}
 				}
 
-				/*else if(strstr(commandString,"StartTimer") != NULL)
-				{
-					//chargeController_SetStartTimer();
-					chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
-					responseStatus = 200;
-				}*/
+				if(cbid_is_valid){
+					char tmp_char = cbid_begin[cbid_length];
+					cbid_begin[cbid_length] = '\0';
 
-
-				else if(strstr(commandString,"Loc ") != NULL)
-				{
-					//Remove end of string formatting
-					int end = strlen(commandString);
-					commandString[end-2] = '\0';
-
-					storage_Set_Location(&commandString[6]);
+					storage_Set_chargebox_identity_ocpp(cbid_begin);
 					storage_SaveConfiguration();
-					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 
+					cbid_begin[cbid_length] = tmp_char;
+
+					ESP_LOGI(TAG, "Set CBID to %s", storage_Get_chargebox_identity_ocpp());
+					responseStatus = 200;
+				}else{
+					ESP_LOGW(TAG, "CBID is not valid. Parsed '%s' to index %ul", cbid_begin, cbid_length);
+					responseStatus = 400;
+				}
+			}
+
+			/*else if(strstr(commandString,"StartTimer") != NULL)
+			{
+				//chargeController_SetStartTimer();
+				chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+				responseStatus = 200;
+			}*/
+
+
+			else if(strstr(commandString,"Loc ") != NULL)
+			{
+				//Remove end of string formatting
+				int end = strlen(commandString);
+				commandString[end-2] = '\0';
+
+				storage_Set_Location(&commandString[6]);
+				storage_SaveConfiguration();
+				publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+				chargeController_Activation();
+
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"Tz ") != NULL)
+			{
+				//Remove end of string formatting
+				int end = strlen(commandString);
+				commandString[end-2] = '\0';
+
+				storage_Set_Timezone(&commandString[5]);
+				storage_SaveConfiguration();
+				publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"SS") != NULL)
+			{
+				if (strstr(commandString,"SSID")) {
+					// Probably SetNewWifi should handle this..
+					return responseStatus;
+				}
+
+				//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+
+				//Remove end of string formatting
+				int end = strlen(commandString);
+				commandString[end-2] = '\0';
+				if(end >= 19)
+				{
+					chargeController_WriteNewTimeSchedule(&commandString[4]);
 					chargeController_Activation();
-
-					responseStatus = 200;
-				}
-
-				else if(strstr(commandString,"Tz ") != NULL)
-				{
-					//Remove end of string formatting
-					int end = strlen(commandString);
-					commandString[end-2] = '\0';
-
-					storage_Set_Timezone(&commandString[5]);
 					storage_SaveConfiguration();
-					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+					chargeController_SetRandomStartDelay();
+				}
+				else
+				{
+					char* p = "";
+					chargeController_WriteNewTimeSchedule(p);
+					chargeController_Activation();
+					storage_SaveConfiguration();
+					chargeController_ClearRandomStartDelay();
+					chargeController_ClearNextStartTime();
+					chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
+				}
+				//chargeController_SetTimes();
 
+
+
+				publish_debug_telemetry_observation_TimeAndSchedule(0x7);
+				//chargeController_SetStartTimer();
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"NT") != NULL)
+			{
+				//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+
+				//Remove end of string formatting
+				int end = strlen(commandString);
+				commandString[end-2] = '\0';
+
+				chargeController_SetNowTime(&commandString[4]);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"SIMSTOP") != NULL)
+			{
+				//505
+				sessionHandler_InitiateResetChargeSession();
+
+				//504
+				sessionHandler_InitiateResetChargeSession();
+				chargeSession_HoldUserUUID();
+
+				//502
+				MessageType ret = MCU_SendCommandId(CommandStopCharging);
+				if(ret == MsgCommandAck)
+				{
 					responseStatus = 200;
+					ESP_LOGI(TAG, "MCU Stop command OK");
+				}
+				else
+				{
+					responseStatus = 400;
+					ESP_LOGE(TAG, "MCU Stop command FAILED");
 				}
 
-				else if(strstr(commandString,"SS") != NULL)
-				{
-					if (strstr(commandString,"SSID")) {
-						// Probably SetNewWifi should handle this..
-						return responseStatus;
-					}
-					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"StartNow") != NULL)
+			{
+				chargeController_Override();
 
-					//Remove end of string formatting
-					int end = strlen(commandString);
-					commandString[end-2] = '\0';
-					if(end >= 19)
-					{
-						chargeController_WriteNewTimeSchedule(&commandString[4]);
-						chargeController_Activation();
-						storage_SaveConfiguration();
-						chargeController_SetRandomStartDelay();
-					}
-					else
-					{
-						char* p = "";
-						chargeController_WriteNewTimeSchedule(p);
-						chargeController_Activation();
-						storage_SaveConfiguration();
-						chargeController_ClearRandomStartDelay();
-						chargeController_ClearNextStartTime();
-						chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_NO_SCHEDULE);
-					}
-					//chargeController_SetTimes();
+				responseStatus = 200;
+			}
 
+			else if(strstr(commandString,"SchedDiag") != NULL)
+			{
+				chargeController_SetSendScheduleDiagnosticsFlag();
 
+				responseStatus = 200;
+			}
 
-					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
-					//chargeController_SetStartTimer();
-					responseStatus = 200;
-				}
+			/*else if(strstr(commandString,"ClearSchedule") != NULL)
+			{
+				storage_Initialize_ScheduleParameteres();
+				storage_SaveConfiguration();
+				publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 
-				else if(strstr(commandString,"NT") != NULL)
-				{
-					//chargeController_SendStartCommandToMCU(eCHARGE_SOURCE_SCHEDULE);
+				chargeController_Activation();
 
-					//Remove end of string formatting
-					int end = strlen(commandString);
-					commandString[end-2] = '\0';
+				chargeController_ClearNextStartTime();
 
-					chargeController_SetNowTime(&commandString[4]);
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"SIMSTOP") != NULL)
-				{
-					//505
-					sessionHandler_InitiateResetChargeSession();
-
-					//504
-					sessionHandler_InitiateResetChargeSession();
-					chargeSession_HoldUserUUID();
-
-					//502
-					MessageType ret = MCU_SendCommandId(CommandStopCharging);
-					if(ret == MsgCommandAck)
-					{
-						responseStatus = 200;
-						ESP_LOGI(TAG, "MCU Stop command OK");
-					}
-					else
-					{
-						responseStatus = 400;
-						ESP_LOGE(TAG, "MCU Stop command FAILED");
-					}
-
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"StartNow") != NULL)
-				{
-					chargeController_Override();
-
-					responseStatus = 200;
-				}
-
-				else if(strstr(commandString,"SchedDiag") != NULL)
-				{
-					chargeController_SetSendScheduleDiagnosticsFlag();
-
-					responseStatus = 200;
-				}
-
-				/*else if(strstr(commandString,"ClearSchedule") != NULL)
-				{
+				responseStatus = 200;
+			}*/
+			else if(strstr(commandString,"SetSchedule") != NULL)
+			{
+				if(strstr(commandString,"SetScheduleUK") != NULL)
+					storage_Initialize_UK_TestScheduleParameteres();
+				else if(strstr(commandString,"SetScheduleNO") != NULL)
+					storage_Initialize_NO_TestScheduleParameteres();
+				else
 					storage_Initialize_ScheduleParameteres();
-					storage_SaveConfiguration();
-					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 
-					chargeController_Activation();
+				storage_SaveConfiguration();
+				publish_debug_telemetry_observation_TimeAndSchedule(0x7);
 
-					chargeController_ClearNextStartTime();
+				chargeController_Activation();
 
-					responseStatus = 200;
-				}*/
-				else if(strstr(commandString,"SetSchedule") != NULL)
+				chargeController_ClearNextStartTime();
+
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"SetMaxStartDelay ") != NULL)
+			{
+				int newMaxValue = 0;
+				sscanf(&commandString[19], "%d", &newMaxValue);
+				if((newMaxValue >= 0) && (newMaxValue <= 3600))
 				{
-					if(strstr(commandString,"SetScheduleUK") != NULL)
-						storage_Initialize_UK_TestScheduleParameteres();
-					else if(strstr(commandString,"SetScheduleNO") != NULL)
-						storage_Initialize_NO_TestScheduleParameteres();
-					else
-						storage_Initialize_ScheduleParameteres();
-
+					storage_Set_MaxStartDelay(newMaxValue);
 					storage_SaveConfiguration();
-					publish_debug_telemetry_observation_TimeAndSchedule(0x7);
-
-					chargeController_Activation();
-
-					chargeController_ClearNextStartTime();
-
-					responseStatus = 200;
+					chargeController_SetRandomStartDelay();
 				}
 
-				else if(strstr(commandString,"SetMaxStartDelay ") != NULL)
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetMCUSettings") != NULL)
+			{
+				sessionHandler_SendMCUSettings();
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString,"GetOPENSamples") != NULL)
+			{
+				char samples[161] = {0};
+				MCU_GetOPENSamples(samples);
+				publish_debug_telemetry_observation_Diagnostics(samples);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"AbortOTA") != NULL)
+			{
+				do_segment_ota_abort();
+				do_safe_ota_abort();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"GetRelayStates") != NULL)
+			{
+				sessionHandler_SendRelayStates();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "CoverProximity"))
+			{
+				if(strstr(commandString, "SetCoverProximity "))
 				{
-					int newMaxValue = 0;
-					sscanf(&commandString[19], "%d", &newMaxValue);
-					if((newMaxValue >= 0) && (newMaxValue <= 3600))
+					int newProxValue = 0;
+					sscanf(&commandString[20], "%d", &newProxValue);
+					if((newProxValue >= 0) && (newProxValue <= 1000))
 					{
-						storage_Set_MaxStartDelay(newMaxValue);
+
+						storage_Set_cover_on_value((uint16_t)newProxValue);
 						storage_SaveConfiguration();
-						chargeController_SetRandomStartDelay();
 					}
+				}
+				else if(strstr(commandString, "GetCoverProximity"))
+				{
 
-					responseStatus = 200;
-				}
-				else if(strstr(commandString,"GetMCUSettings") != NULL)
-				{
-					sessionHandler_SendMCUSettings();
-					responseStatus = 200;
-				}
+					char buf[50];
+					snprintf(buf, 50, "CoverPriximity: %i", storage_Get_cover_on_value());
 
-				else if(strstr(commandString,"GetOPENSamples") != NULL)
-				{
-					char samples[161] = {0};
-					MCU_GetOPENSamples(samples);
-					publish_debug_telemetry_observation_Diagnostics(samples);
+					publish_debug_telemetry_observation_Diagnostics(buf);
 					responseStatus = 200;
 				}
-				else if(strstr(commandString,"AbortOTA") != NULL)
+				else if(strstr(commandString, "PrintCoverProximity"))
 				{
-					do_segment_ota_abort();
-					do_safe_ota_abort();
+					tamper_PrintProximity();
 					responseStatus = 200;
 				}
-				else if(strstr(commandString,"GetRelayStates") != NULL)
+				else if(strstr(commandString, "SendCoverProximity "))
 				{
-					sessionHandler_SendRelayStates();
-					responseStatus = 200;
-				}
+					int duration = 0;
+					sscanf(&commandString[21], "%d", &duration);
 
+					ESP_LOGW(TAG, "Setting duration %i", duration);
+
+					if((duration >= 0) && (duration <= 300000))
+					{
+						tamper_SendProximity(duration);
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
 				else if(strstr(commandString, "CalibrateCoverProximity"))
 				{
 					esp_err_t err = I2CCalibrateCoverProximity();
@@ -2672,128 +2732,200 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						break;
 					}
 				}
-				else if(strstr(commandString, "pppoff"))
+			}
+			else if(strstr(commandString, "pppoff"))
+			{
+				ppp_disconnect();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString,"SetOTAChunkSize ") != NULL)
+			{
+				int newSize = 0;
+				sscanf(&commandString[18], "%d", &newSize);
+				if((newSize > 64) && (newSize <= (65536*2)))
 				{
-					ppp_disconnect();
+					ota_set_chunk_size(newSize);
+				}
+
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "GetFPGAInfo"))
+			{
+				sessionHandler_SendFPGAInfo();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "GetFailedRFID"))
+			{
+				char atqa[12] = {0};
+				uint16_t value = NFCGetLastFailedATQA();
+				snprintf(atqa, 12,"ATQA: %02X %02X", ((value>>8) & 0xff), (value & 0xff));
+				publish_debug_telemetry_observation_Diagnostics(atqa);
+				responseStatus = 200;
+			}
+			/*else if(strstr(commandString, "getpartitions"))
+			{
+				char buf[351]={0};
+				offlineSession_test_GetPartitions(buf);
+				ESP_LOGW(TAG, "Part buf len: %i", strlen(buf));
+				publish_debug_telemetry_observation_Diagnostics(buf);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "erasefilespartition"))
+			{
+				esp_partition_t *part  = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+
+				esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+
+				char partbuf[50];
+				snprintf(partbuf, 50, "ErasePartitionResult: %i", err);
+
+				publish_debug_telemetry_observation_Diagnostics(partbuf);
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "getaccenergy"))
+			{
+				double accumulated_energy = OCMF_Write_Read_accumulated_energy(0.0);
+				ESP_LOGW(TAG, "Read accumulated energy: %f", accumulated_energy);
+				char accbuf[50];
+				snprintf(accbuf, 40, "ReadEnergy: %f", accumulated_energy);
+				publish_debug_telemetry_observation_Diagnostics(accbuf);
+			}
+			else if(strstr(commandString, "setaccenergy"))
+			{
+				float newEnergy = 0;
+				sscanf(&commandString[14], "%f", &newEnergy);
+
+				double accumulated_energy = OCMF_Write_Read_accumulated_energy(newEnergy);
+				ESP_LOGW(TAG, "Wrote accumulated energy: %f", accumulated_energy);
+				char accbuf[50];
+				snprintf(accbuf, 40, "WroteEnergy: %f", accumulated_energy);
+				publish_debug_telemetry_observation_Diagnostics(accbuf);
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+
+			else if(strstr(commandString, "getmount"))
+			{
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "testmount"))
+			{
+				offlineSession_mount_folder();
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}*/
+			/*else if(strstr(commandString, "testcreate"))
+			{
+				offlineSession_test_Createfile();
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "testwrite"))
+			{
+				offlineSession_test_Writefile();
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "testread"))
+			{
+				offlineSession_test_Readfile();
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "testdelete"))
+			{
+				offlineSession_test_Deletefile();
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "readsessionfile"))
+			{
+				offlineSession_Diagnostics_ReadFileContent(0);
+
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
+				responseStatus = 200;
+			}*/
+			else if(strstr(commandString, "FixPartition"))
+			{
+				if(strstr(commandString, "FixPartitionFilesCheck"))
+				{
+					offlineSession_ClearDiagnostics();
+					offlineSession_CheckFilesSystem();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 					responseStatus = 200;
 				}
-				else if(strstr(commandString,"SetOTAChunkSize ") != NULL)
+				else if(strstr(commandString, "FixPartitionFilesErase"))
 				{
-					int newSize = 0;
-					sscanf(&commandString[18], "%d", &newSize);
-					if((newSize > 64) && (newSize <= (65536*2)))
-					{
-						ota_set_chunk_size(newSize);
+					offlineSession_ClearDiagnostics();
+					offlineSession_eraseAndRemountPartition();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "FixPartitionFilesCorrect"))
+				{
+					offlineSession_ClearDiagnostics();
+					offlineSession_CheckAndCorrectFilesSystem();
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "FixPartitionDiskCheck"))
+				{
+					fat_ClearDiagnostics();
+					fat_CheckFilesSystem();
+					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "FixPartitionDiskErase"))
+				{
+					fat_ClearDiagnostics();
+					fat_eraseAndRemountPartition(eFAT_ID_DISK);
+					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "listdirectory")){
+					char * directory_path = index(commandString, '/');
+					if(directory_path != NULL && strlen(directory_path) > 0){
+
+						for(size_t i = strlen(directory_path)-1; i > 0; i--){
+							if(isspace(directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+								|| directory_path[i] == '"'){
+								directory_path[i] = '\0';
+							}
+						}
+
+						ESP_LOGI(TAG, "Listing directory: '%s'", directory_path);
+
+						cJSON * result = cJSON_CreateObject();
+						if(result == NULL){
+							responseStatus = 500;
+						}else{
+							fat_list_directory(directory_path, result);
+							char * result_str = cJSON_PrintUnformatted(result);
+							cJSON_Delete(result);
+
+							if(result_str != NULL){
+								responseStatus = 200;
+								publish_debug_telemetry_observation_Diagnostics(result_str);
+								free(result_str);
+							}else{
+								responseStatus = 500;
+							}
+						}
+					}else{
+						ESP_LOGW(TAG, "listdirectory requested with missing path");
+						responseStatus = 400;
 					}
-
-					responseStatus = 200;
 				}
-				else if(strstr(commandString, "GetFPGAInfo"))
-				{
-					sessionHandler_SendFPGAInfo();
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "GetFailedRFID"))
-				{
-					char atqa[12] = {0};
-					uint16_t value = NFCGetLastFailedATQA();
-					snprintf(atqa, 12,"ATQA: %02X %02X", ((value>>8) & 0xff), (value & 0xff));
-					publish_debug_telemetry_observation_Diagnostics(atqa);
-					responseStatus = 200;
-				}
-				/*else if(strstr(commandString, "getpartitions"))
-				{
-					char buf[351]={0};
-					offlineSession_test_GetPartitions(buf);
-					ESP_LOGW(TAG, "Part buf len: %i", strlen(buf));
-					publish_debug_telemetry_observation_Diagnostics(buf);
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "erasefilespartition"))
-				{
-					esp_partition_t *part  = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
-
-					esp_err_t err = esp_partition_erase_range(part, 0, part->size);
-
-					char partbuf[50];
-					snprintf(partbuf, 50, "ErasePartitionResult: %i", err);
-
-					publish_debug_telemetry_observation_Diagnostics(partbuf);
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "getaccenergy"))
-				{
-					double accumulated_energy = OCMF_Write_Read_accumulated_energy(0.0);
-					ESP_LOGW(TAG, "Read accumulated energy: %f", accumulated_energy);
-					char accbuf[50];
-					snprintf(accbuf, 40, "ReadEnergy: %f", accumulated_energy);
-					publish_debug_telemetry_observation_Diagnostics(accbuf);
-				}
-				else if(strstr(commandString, "setaccenergy"))
-				{
-					float newEnergy = 0;
-					sscanf(&commandString[14], "%f", &newEnergy);
-
-					double accumulated_energy = OCMF_Write_Read_accumulated_energy(newEnergy);
-					ESP_LOGW(TAG, "Wrote accumulated energy: %f", accumulated_energy);
-					char accbuf[50];
-					snprintf(accbuf, 40, "WroteEnergy: %f", accumulated_energy);
-					publish_debug_telemetry_observation_Diagnostics(accbuf);
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-
-				else if(strstr(commandString, "getmount"))
-				{
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "testmount"))
-				{
-					offlineSession_mount_folder();
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}*/
-				/*else if(strstr(commandString, "testcreate"))
-				{
-					offlineSession_test_Createfile();
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "testwrite"))
-				{
-					offlineSession_test_Writefile();
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "testread"))
-				{
-					offlineSession_test_Readfile();
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "testdelete"))
-				{
-					offlineSession_test_Deletefile();
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}
-				else if(strstr(commandString, "readsessionfile"))
-				{
-					offlineSession_Diagnostics_ReadFileContent(0);
-
-					publish_debug_telemetry_observation_Diagnostics(offlineSession_test_GetFileDiagnostics());
-					responseStatus = 200;
-				}*/
-				else if(strstr(commandString, "fixpartition"))
+				else if(strstr(commandString, "FixPartitionAndLog"))
 				{
 					char partbuf[150] = {0};
 					enum fat_id partition_id = -1;
-					if(strstr(commandString, "fixpartitionfiles"))
+					if(strstr(commandString, "FixPartitionAndLogFiles"))
 					{
 						partition_id = eFAT_ID_FILES;
 					}
-					else if(strstr(commandString, "fixpartitiondisk"))
+					else if(strstr(commandString, "FixPartitionAndLogDisk"))
 					{
 						partition_id = eFAT_ID_DISK;
 					}
@@ -2809,7 +2941,36 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
+				else
+				{
+					responseStatus = 400;
+				}
 			}
+			else if(strstr(commandString, "GetFileDiagnostics"))
+			{
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "RunRCDTest"))
+			{
+				MessageType ret = MCU_SendCommandId(CommandRunRCDTest);
+				if(ret == MsgCommandAck)
+				{
+
+					ESP_LOGW(TAG, "MCU RunRCDTest command OK");
+					if(isMqttConnected())
+					{
+						publish_debug_telemetry_observation_Diagnostics("Cloud: RCD button test run");
+					}
+					responseStatus = 200;
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU RunRCDTest command FAILED");
+					responseStatus = 400;
+				}
+			}
+		}
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/804/"))
 	{

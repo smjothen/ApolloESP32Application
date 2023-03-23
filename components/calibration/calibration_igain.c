@@ -109,7 +109,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
                     if (error < max_error) {
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f  < %f", calibration_state_to_string(ctx), phase, error, max_error);
                     } else {
-                        calibration_fail(ctx, "Current gain too large for L%d: %f >= %f", phase + 1, average, max_error);
+                        calibration_fail(ctx, "Current gain too large for L%d: Ref: %f / eMeter: %f: Err %f >= %f", phase + 1, reference, average, error, max_error);
                         return false;
                     }
                 }

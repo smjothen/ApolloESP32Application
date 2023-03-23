@@ -25,6 +25,9 @@ bool i2cRTCChecked();
 float I2CGetSHT30Temperature();
 float I2CGetSHT30Humidity();
 
+void tamper_PrintProximity();
+void tamper_SendProximity();
+void tamper_set_new_limit(uint16_t newLimit);
 esp_err_t I2CCalibrateCoverProximity();
 
 int I2CGetStackWatermark();

@@ -114,7 +114,7 @@ esp_err_t fat_mount(enum fat_id id){
 	return esp_vfs_fat_spiflash_mount(base_paths[id], base_paths[id]+1, &mount_config, &s_wl_handle);
 }
 
-void fat_static_mount()
+void fat_static_mount(void)
 {
 	ESP_LOGI(TAG, "Mounting FAT partitions");
 	ESP_LOGI(TAG, "=======================");
@@ -144,7 +144,7 @@ void fat_disable_mounting(enum fat_id id, bool disable){
 	disable_mount[id] = disable;
 }
 
-void fat_static_unmount()
+void fat_static_unmount(void)
 {
 	ESP_LOGI(TAG, "Unmounting FAT partitions");
 	ESP_LOGI(TAG, "=======================");
@@ -170,15 +170,19 @@ esp_err_t fat_unmount(enum fat_id id){
 	return esp_vfs_fat_spiflash_unmount(base_paths[id], s_wl_handle);
 }
 
-void fat_WriteCertificateBundle(char * newCertificateBundle)
+bool fatIsMounted(void)
 {
 	struct stat st;
-	if(stat("/disk", &st) != 0)
+	return stat("/disk", &st) == 0;
+}
+
+void fat_WriteCertificateBundle(char * newCertificateBundle)
+{
+	if(!fatIsMounted())
 	{
 		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
-
 
     ESP_LOGI(TAG, "Opening file");
     FILE *f = fopen("/disk/cert.txt", "wb");
@@ -198,11 +202,9 @@ void fat_WriteCertificateBundle(char * newCertificateBundle)
 
 void fat_ReadCertificateBundle(char * readCertificateBundle)
 {
-
-	struct stat st;
-	if(stat("/disk", &st) != 0)
+	if(!fatIsMounted())
 	{
-		ESP_LOGE(TAG, "Partition not mounted for reading");
+		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
 
@@ -220,13 +222,11 @@ void fat_ReadCertificateBundle(char * readCertificateBundle)
     //ESP_LOGW(TAG, "Read cert: %d: %s ", strlen(readCertificateBundle), readCertificateBundle);
 }
 
-void fat_DeleteCertificateBundle()
+void fat_DeleteCertificateBundle(void)
 {
-
-	struct stat st;
-	if(stat("/disk", &st) != 0)
+	if(!fatIsMounted())
 	{
-		ESP_LOGE(TAG, "Partition not mounted for reading");
+		ESP_LOGE(TAG, "Partition not mounted for writing");
 		return;
 	}
 
@@ -237,14 +237,27 @@ void fat_DeleteCertificateBundle()
     ESP_LOGI(TAG, "Removed cert file returned: %d", ret);
 }
 
+#define FAT_DIAG_BUF_SIZE 150
+static char fatDiagnostics[FAT_DIAG_BUF_SIZE] = {0};
+
+void fat_ClearDiagnostics(void)
+{
+	memset(fatDiagnostics, 0, FAT_DIAG_BUF_SIZE);
+}
+
+char * fat_GetDiagnostics(void)
+{
+	return fatDiagnostics;
+}
+
 esp_err_t fat_eraseAndRemountPartition(enum fat_id id)
 {
 	if(id >= PARTITION_COUNT)
 		return ESP_ERR_INVALID_ARG;
 
-	esp_err_t err = ESP_OK;
+	esp_err_t err = ESP_FAIL;
 
-	const esp_partition_t * part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, base_paths[id]+1);
+	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
 
 	if(part != NULL)
 	{
@@ -257,6 +270,13 @@ esp_err_t fat_eraseAndRemountPartition(enum fat_id id)
 	}
 
 	fat_mount(id);
+
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
+	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk erase err: %i ,M: %i", err, fatIsMounted());
+
 	return err;
 }
 
@@ -390,4 +410,122 @@ esp_err_t fat_fix_and_log_result(enum fat_id id, char * result_log, size_t log_s
 	}
 
 	return esp_err;
+}
+
+bool fat_CheckFilesSystem(void)
+{
+	bool deletedOK = false;
+	bool createdOK = fat_Factorytest_CreateFile();
+	if(createdOK)
+		deletedOK = fat_Factorytest_DeleteFile();
+
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
+	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
+
+	return deletedOK; //True if both bools are OK
+}
+
+bool fat_CorrectFilesystem(void)
+{
+	return fat_eraseAndRemountPartition(eFAT_ID_DISK);
+}
+
+
+static FILE *testDiskFile = NULL;
+bool fat_Factorytest_CreateFile(void)
+{
+	if (!fatIsMounted()) {
+		ESP_LOGE(TAG, "failed to mount disk");
+		return false;
+	}
+
+	testDiskFile = fopen("/disk/testdisk.bin", "wb+");
+
+	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
+
+	int fatDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fatDiagLen = strlen(fatDiagnostics);
+
+	if(testDiskFile == NULL)
+	{
+		snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file = NULL, %i:%s,", errno, strerror(errno));
+		return false;
+	}
+	else
+	{
+		snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file = 0x%08x", (unsigned int)testDiskFile);
+		fclose(testDiskFile);
+	}
+
+	return true;
+}
+
+bool fat_Factorytest_DeleteFile()
+{
+	if (!fatIsMounted()) {
+		ESP_LOGE(TAG, "failed to mount disk");
+		return false;
+	}
+
+	int status = remove("/disk/testdisk.bin");
+	ESP_LOGW(TAG, "Status from remove: %i", status);
+
+	if(status == 0)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+int fat_list_directory(const char * directory_path, cJSON * result){
+	if(directory_path == NULL || result == NULL)
+		return EINVAL;
+
+	char result_line[128];
+
+	DIR * dir = opendir(directory_path);
+	if(dir == NULL){
+		snprintf(result_line, sizeof(result_line), "Unable to open '%s' directory: %s", directory_path, strerror(errno));
+		cJSON_AddStringToObject(result, "error", result_line);
+		return errno;
+	}
+
+	errno = 0;
+
+	struct dirent * dp = readdir(dir);
+	cJSON * list = cJSON_CreateArray();
+	if(list == NULL){
+		ESP_LOGE(TAG, "Unable to create directory list");
+		return ENOMEM;
+	}
+
+	while(dp != NULL){
+		if(dp->d_type == DT_REG || dp->d_type == DT_DIR){
+			snprintf(result_line, sizeof(result_line), "%-9s: %.12s", (dp->d_type == DT_REG) ? "File" : "Directory", dp->d_name);
+			if(cJSON_AddItemToArray(list, cJSON_CreateString(result_line)) != true){
+				ESP_LOGE(TAG, "Unable to add entry to directory listing");
+			}
+		}
+		dp = readdir(dir);
+	}
+
+	if(errno != 0){
+		snprintf(result_line, sizeof(result_line), "Unable to get next directory entry: %s", strerror(errno));
+		cJSON_AddStringToObject(result, "error", result_line);
+	}
+
+	closedir(dir);
+	if(cJSON_AddItemReferenceToObject(result, "entries", list) != true){
+		ESP_LOGE(TAG, "Unable to add directory list to result");
+
+		cJSON_Delete(list);
+		return ENOMEM;
+	}
+
+	return 0;
 }

@@ -219,8 +219,9 @@ void log_task_info(void){
 
 
 
-bool startupSent = false;
-bool setTimerSyncronization = false;
+static bool startupSent = false;
+static bool setTimerSyncronization = false;
+static bool reportChargingStateCommandSent = false;
 
 //static bool stoppedByCloud = false;
 
@@ -1940,6 +1941,7 @@ void sessionHandler_ClearCarInterfaceResetConditions()
 void sessionHandler_CheckAndSendOfflineSessions()
 {
 	int nrOfOfflineSessionFiles = offlineSession_FindNrOfFiles();
+	offlineSession_AppendLogStringWithInt("3 NrOfFiles: ", nrOfOfflineSessionFiles);
 	int nrOfSentSessions = 0;
 	int fileNo;
 	for (fileNo = 0; fileNo < nrOfOfflineSessionFiles; fileNo++)
@@ -1947,19 +1949,54 @@ void sessionHandler_CheckAndSendOfflineSessions()
 		memset(completedSessionString,0, LOG_STRING_SIZE);
 
 		int fileToUse = offlineSession_FindOldestFile();
+		offlineSession_AppendLogStringWithInt("3 fileToUse: ", fileToUse);
+
 		OCMF_CompletedSession_CreateNewMessageFile(fileToUse, completedSessionString);
 
-		//Try sending 3 times. This transmission has been made a blocking call
+		int sessionLength = 0;
+		if(completedSessionString == NULL)
+		{
+			offlineSession_AppendLogString("3 CSess = NULL");
+			publish_debug_message_event("Empty CompletedSession", cloud_event_level_warning);
+		}
+		else
+		{
+			sessionLength = strlen(completedSessionString);
+			if(sessionLength < 30)
+				publish_debug_message_event("Short CompletedSession", cloud_event_level_warning);
+
+			offlineSession_AppendLogStringWithInt("3 CSessLen: ", sessionLength);
+		}
+
+
+		/// This transmission has been made a blocking call
 		int ret = publish_debug_telemetry_observation_CompletedSession(completedSessionString);
 		if (ret == 0)
 		{
+			offlineSession_AppendLogString("3 CS sent OK");
+			offlineSession_AppendLogLength();
+
+			if((storage_Get_DiagnosticsMode() == eALWAYS_SEND_SESSION_DIAGNOSTICS) || (completedSessionString == NULL) || (sessionLength < 30))
+			{
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+			}
+
 			nrOfSentSessions++;
 			/// Sending succeeded -> delete file from flash
 			offlineSession_delete_session(fileToUse);
+
 			ESP_LOGW(TAG,"Sent CompletedSession: %i/%i", nrOfSentSessions, nrOfOfflineSessionFiles);
 		}
 		else
 		{
+			publish_debug_message_event("Failed sending CompletedSession", cloud_event_level_warning);
+
+			offlineSession_AppendLogString("3 CS send FAIL");
+			offlineSession_AppendLogLength();
+			publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+
+			/// Send to Diagnostics
+			publish_debug_telemetry_observation_Diagnostics(completedSessionString);
 			ESP_LOGE(TAG,"Sending CompletedSession failed! Aborting.");
 			break;
 		}
@@ -1983,6 +2020,9 @@ static uint8_t chargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
 static bool isOnline = false;
 static bool previousIsOnline = true;
 static uint32_t pulseCounter = PULSE_INIT_TIME;
+
+static uint16_t autoClearLastCount = 0;
+static uint32_t autoClearLastTimeout = 0;
 
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 {
@@ -2036,6 +2076,8 @@ static void sessionHandler_task()
 	//Used to ensure eMeter alarm source is only read once per occurence
     bool eMeterAlarmBlock = false;
 
+    bool fileSystemOk = false;
+
     uint32_t previousWarnings = 0;
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
@@ -2075,6 +2117,11 @@ static void sessionHandler_task()
 			    start_transaction_response_cb, NULL, "start",
 			    NULL, NULL, "stop",
 			    NULL, NULL, "meter");
+
+    /// Check for corrupted "files"-partition
+    fileSystemOk = offlineSession_CheckAndCorrectFilesSystem();
+
+    ESP_LOGW(TAG, "FileSystemOk: %i Correction needed: %i", fileSystemOk, offlineSession_FileSystemCorrected());
 
 	while (1)
 	{
@@ -2381,9 +2428,16 @@ static void sessionHandler_task()
 
 
 		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED))
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
 		{
+			offlineSession_ClearLog();
 			chargeSession_Start();
+
+			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
+			if(isOnline && (OCMF_GetEnergyFault() == true))
+			{
+				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
+			}
 		}
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
@@ -2405,7 +2459,7 @@ static void sessionHandler_task()
 
 			if((NFCGetTagInfo().tagIsValid == true) && (stoppedByRfid == false))
 			{
-				if(isOnline)
+				if((isOnline) && (chargeSession_IsAuthenticated() == false))
 				{
 					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 					if(ret == MsgWriteAck)
@@ -2784,6 +2838,18 @@ static void sessionHandler_task()
 
 
 				sessionHandler_SendFPGAInfo();
+				sessionHandler_SendMIDStatus();
+
+				if(offlineSession_FileSystemCorrected() == true)
+				{
+					ESP_LOGW(TAG,"Event content: %s", offlineSession_GetDiagnostics());
+					if(offlineSession_FileSystemVerified())
+						publish_debug_message_event("File system corrected OK", cloud_event_level_warning);
+					else
+						publish_debug_message_event("File system correction FAILED", cloud_event_level_warning);
+
+					publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
+				}
 
 				/// If we start up after an unexpected reset. Send and clear the diagnosticsLog.
 				if(storage_Get_DiagnosticsLogLength() > 0)
@@ -2792,12 +2858,21 @@ static void sessionHandler_task()
 					storage_Clear_And_Save_DiagnosticsLog();
 				}
 
+				if(reportChargingStateCommandSent == true)
+				{
+					ReInitParametersForCloud();
+					publish_debug_telemetry_observation_PulseInterval(recordedPulseInterval);
+					reportChargingStateCommandSent = false;
+				}
+
 				//Since they are synced on start they no longer need to be sent at every startup. Can even cause inconsistency.
 				//publish_debug_telemetry_observation_cloud_settings();
 
 				startupSent = true;
 			}
 
+			// Send MID status update if status changed
+			sessionHandler_SendMIDStatusUpdate();
 
 			if(CloudSettingsAreUpdated() == true)
 			{
@@ -3020,15 +3095,31 @@ static void sessionHandler_task()
 			{
 				eMeterAlarmBlock = false;
 			}
-			
 
+			uint32_t acTimeout = 0;
+			uint16_t acCount = 0, acTotalCount = 0;
+			
+			// Send event log entry if auto clear on MCU occurs or if a reset of the timeout occurs
+			if (MCU_GetAutoClearStatus(&acTimeout, &acCount, &acTotalCount) && 
+					(acTotalCount != autoClearLastCount || acTimeout < autoClearLastTimeout)) {
+
+				char buf[64];
+				snprintf(buf, sizeof (buf), "AutoClear: %d / %d / %d", acTimeout, acCount, acTotalCount);
+
+				publish_debug_message_event(buf, cloud_event_level_warning);
+
+				ESP_LOGI(TAG, "AutoClear Timeout: %d CurrenTime: %d TotalClears: %d", acTimeout, acCount, acTotalCount);
+
+				autoClearLastTimeout = acTimeout;
+				autoClearLastCount = acTotalCount;
+			}
 
 			if(onTime % 15 == 0)//15
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
 				snprintf(buf, sizeof(buf), "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
-				ESP_LOGI(TAG, "**** %s ****", buf);
+				//ESP_LOGI(TAG, "**** %s ****", buf);
 
 				if(onTime % 7200 == 0)
 				{
@@ -3155,7 +3246,7 @@ void sessionHandler_StopAndResetChargeSession()
 		MessageType ret = MCU_SendCommandId(CommandResetSession);
 		if(ret == MsgCommandAck)
 		{
-			ESP_LOGI(TAG, "MCU ResetSession command OK");
+			ESP_LOGW(TAG, "******** MCU ResetSession command OK *********");
 
 			//return 200;
 		}
@@ -3165,15 +3256,27 @@ void sessionHandler_StopAndResetChargeSession()
 			//return 400;
 		}
 
-		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
-		sessionResetMode = eSESSION_RESET_NONE;
+		//SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+		sessionResetMode = eSESSION_RESET_WAIT;
 		ESP_LOGI(TAG, "Transition state STOP");
 	}
 
 	//Any failed or final state - cleare opModeOverride
-	if(sessionResetMode == eSESSION_RESET_NONE)
+	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() == 0.0))
+	{
+		MCU_ClearMaximumEnergy();
+		ESP_LOGI(TAG, "sessionReset: Energy cleared");
+		sessionResetMode = eSESSION_RESET_NONE;
+	}
+	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() != 0.0))
+	{
+		ESP_LOGW(TAG, "sessionReset: MCU_GetEnergy() = %f > 0.0", MCU_GetEnergy());
+	}
+
+	if((sessionResetMode == eSESSION_RESET_NONE) )
 	{
 		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_UNINITIALIZED);
+		ESP_LOGW(TAG, "eSESSION_RESET_NONE");
 	}
 
 	ESP_LOGE(TAG, "sessionResetMode: %i cnt %i", sessionResetMode, waitForCarCountDown);
@@ -3225,6 +3328,38 @@ void sessionHandler_SendFPGAInfo()
 
 }
 
+static uint32_t calibrationId = 0;
+
+void sessionHandler_SendMIDStatus(void) {
+	if (MCU_GetMidStoredCalibrationId(&calibrationId) && calibrationId != 0) {
+		uint32_t midStatus = 0;
+		MCU_GetMidStatus(&midStatus);
+
+		char buf[64];
+		snprintf(buf, sizeof (buf), "MID Calibration ID: %d Status: 0x%08X", calibrationId, midStatus);
+
+		publish_debug_telemetry_observation_Diagnostics(buf);
+	}
+}
+
+void sessionHandler_SendMIDStatusUpdate(void) {
+	if (!calibrationId) {
+		return;
+	}
+
+	static uint32_t lastMidStatus = 0;
+	uint32_t midStatus = 0;
+
+	if (MCU_GetMidStatus(&midStatus) && midStatus != lastMidStatus) {
+		char buf[48];
+		snprintf(buf, sizeof (buf), "MID Status: 0x%08X -> 0x%08X", lastMidStatus, midStatus);
+
+		publish_debug_telemetry_observation_Diagnostics(buf);
+
+		lastMidStatus = midStatus;
+	}
+}
+
 
 /*
  * If we have received an already set SessionId from Cloud while in CHARGE_OPERATION_STATE_CHARGING
@@ -3248,6 +3383,7 @@ void StackDiagnostics(bool state)
 void ClearStartupSent()
 {
 	startupSent = false;
+	reportChargingStateCommandSent = true;
 }
 
 

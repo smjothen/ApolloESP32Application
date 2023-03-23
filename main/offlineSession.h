@@ -8,6 +8,25 @@
 #include "chargeSession.h"
 
 void offlineSession_Init();
+void offlineSession_AppendLogString(char * stringToAdd);
+void offlineSession_AppendLogStringWithInt(char * stringToAdd, int value);
+void offlineSession_AppendLogStringWithIntInt(char * stringToAdd, int value1, int value2);
+void offlineSession_AppendLogStringErr();
+void offlineSession_AppendLogLength();
+char * offlineSession_GetLog();
+void offlineSession_ClearLog();
+
+bool offlineSession_CheckFilesSystem();
+bool offlineSession_test_CreateFile();
+bool offlineSession_test_DeleteFile();
+void offlineSession_ClearDiagnostics();
+char * offlineSession_GetDiagnostics();
+bool offlineSession_FileSystemVerified();
+bool offlineSession_CheckAndCorrectFilesSystem();
+bool offlineSession_FileSystemCorrected();
+bool offlineSession_eraseAndRemountPartition();
+bool offlineSession_mount_folder();
+void offlineSession_disable(void);
 
 int offlineSession_FindNewFileNumber();
 int offlineSession_FindOldestFile();

@@ -752,6 +752,26 @@ static int8_t sendUpdateInSeconds = 0;
 static bool sendPower = false;
 static float powerLimit = 0.0;
 
+/*
+ * Calling this resets the previous values,
+ * causing the current value to be retransmitted.
+ */
+void ReInitParametersForCloud()
+{
+	previousMaxInstallationCurrentConfig = -1.0;
+	previousMaxInstallationCurrentOnFile = -1.0;
+
+	previousSwitchState = 0xff;
+	previousPermanentLock = 0xff;
+
+	previousFinalStopActiveStatus = 0xff;
+	previousCableType = 0xff;
+
+	previousTransmitInterval = 0;
+	previousOverrideGridType = 0xff;
+	previousIT3OptimizationEnabled = 0xff;
+}
+
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
 

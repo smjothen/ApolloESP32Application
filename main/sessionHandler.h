@@ -46,7 +46,8 @@ enum SessionResetMode
 	eSESSION_RESET_INITIATED = 1,
 	eSESSION_RESET_STOP_SENT = 2,
 	eSESSION_RESET_FINALIZE  = 3,
-	eSESSION_RESET_DO_RESET	 = 4
+	eSESSION_RESET_DO_RESET	 = 4,
+	eSESSION_RESET_WAIT	 	 = 5,
 };
 
 void sessionHandler_init();
@@ -76,6 +77,10 @@ void ChargeModeUpdateToCloudNeeded();
 void sessionHandler_SendMCUSettings();
 void sessionHandler_SendRelayStates();
 void sessionHandler_SendFPGAInfo();
+
+void sessionHandler_SendMIDStatus(void);
+void sessionHandler_SendMIDStatusUpdate(void);
+	
 void StackDiagnostics(bool state);
 void ClearStartupSent();
 void SetPendingRFIDTag(const char * pendingTag);

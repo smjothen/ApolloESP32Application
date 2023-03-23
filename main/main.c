@@ -36,6 +36,7 @@
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
 #include "offlineSession.h"
+#include "offline_log.h"
 #include "zaptec_cloud_observations.h"
 #include "offline_log.h"
 #include "calibration.h"
@@ -51,7 +52,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.0.0.187";//"2.0.0.404";
+char softwareVersion[] = "2.1.0.100";
 
 uint8_t GetEEPROMFormatVersion()
 {

@@ -70,6 +70,8 @@
         ParamLedOverride = 290,
         ParamLedOverrideClear = 291,
 
+		RCDButtonTestState = 402,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -184,6 +186,8 @@
 		ESPResetSource = 815,
 		MCUFaultPins	= 816,
 		RelayStates		= 817,
+    ParamAutoClearState = 818,
+
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,
@@ -306,6 +310,7 @@
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,
 		CommandITDiagnosticsStop = 807,
+		CommandRunRCDTest = 808,
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
 		CommandGetOPENSamples = 812,

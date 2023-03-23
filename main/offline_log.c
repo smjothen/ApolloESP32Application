@@ -33,6 +33,7 @@ static const char *log_path = "/files/log554.bin";
 static SemaphoreHandle_t log_lock = NULL;
 
 static const int max_log_items = 1000;
+static bool disabledForCalibration = false;
 
 struct LogHeader {
     int start;
@@ -47,6 +48,10 @@ struct LogLine {
     double energy;
     uint32_t crc;
 };
+
+void offlineLog_disable(void) {
+    disabledForCalibration = true;
+}
 
 int update_header(FILE *fp, int start, int end){
     struct LogHeader new_header = {.start=start, .end=end, .crc=0};
@@ -75,7 +80,9 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     ESP_LOGI(TAG, "header on disk %d %d %u (s:%d, res:%d)    <<<   ", 
     head_in_file.start, head_in_file.end, head_in_file.crc, sizeof(head_in_file), read_result);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-    perror("read perror: ");
+    if (read_result < sizeof (head_in_file)) {
+        ESP_LOGE(TAG, "fread errno %d: %s", errno, strerror(errno));
+    }
     uint32_t crc_in_file = head_in_file.crc;
     head_in_file.crc = 0;
 
@@ -102,26 +109,40 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
 }
 
 FILE * init_and_lock_log(int *start, int *end){
+
+  if (disabledForCalibration) {
+    ESP_LOGI(TAG, "Blocking offline log during calibration!");
+    return NULL;
+  }
+
 	struct stat st;
 	if(stat(tmp_path, &st) != 0){
 		ESP_LOGE(TAG, "'%s' not mounted, offline log will not work", tmp_path);
 		return NULL;
 	}
 
-	if(log_lock == NULL || xSemaphoreTake(log_lock, pdMS_TO_TICKS(5000)) != pdTRUE){
+  if (log_lock == NULL) {
+      ESP_LOGE(TAG, "No allocated mutex for offline log!");
+      return NULL;
+  }
+
+	if (xSemaphoreTake(log_lock, pdMS_TO_TICKS(5000)) != pdTRUE) {
 		ESP_LOGE(TAG, "Failed to aquire mutex lock for offline log");
 		return NULL;
 	}
 
-	FILE *fp = NULL;
-	if(stat(log_path, &st) != 0){
-		fp = fopen(log_path, "w+b");
-	}else{
-		fp = fopen(log_path, "r+b");
-	}
+  FILE *fp = NULL;
+  if (stat(log_path, &st) != 0){
+      // Doesn't exist, w+ will create
+      fp = fopen(log_path, "w+b");
+  }else{
+      // Does exist, r+ will allow updating
+      fp = fopen(log_path, "r+b");
+  }
 
     if(fp==NULL){
         ESP_LOGE(TAG, "failed to open file ");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
 
@@ -134,7 +155,7 @@ FILE * init_and_lock_log(int *start, int *end){
     );
 
     if(seek_res < 0){
-        ESP_LOGE(TAG, "seek failed");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
     ESP_LOGI(TAG, "expanded log to %d(%d)", log_size, seek_res);
@@ -143,6 +164,7 @@ FILE * init_and_lock_log(int *start, int *end){
 
     if(ensure_valid_header(fp, start, end)<0){
         ESP_LOGE(TAG, "failed to create log header");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
 
@@ -169,8 +191,9 @@ void append_offline_energy(int timestamp, double energy){
     int log_end;
     FILE *fp = init_and_lock_log(&log_start, &log_end);
 
-    if(fp==NULL)
+    if(fp==NULL) {
         return;
+    }
 
     int new_log_end = (log_end+1) % max_log_items;
     if(new_log_end == log_start){

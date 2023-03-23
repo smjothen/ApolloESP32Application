@@ -24,6 +24,8 @@
 #include "zaptec_protocol_serialisation.h"
 #include "zaptec_cloud_observations.h"
 #include "fat.h"
+#include "offlineSession.h"
+#include "offline_log.h"
 
 #include "calibration_crc.h"
 #include "calibration_util.h"
@@ -39,21 +41,31 @@
 
 static const char *TAG = "CALIBRATION    ";
 
-TaskHandle_t handle = NULL;
+static TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
-char raddr_name[32] = { 0 };
-char buf[256] = { 0 };
-char recvbuf[128] = { 0 };
-char hexbuf[256] = { 0 };
+static char raddr_name[32] = { 0 };
+static char buf[256] = { 0 };
+static char recvbuf[128] = { 0 };
+static char hexbuf[256] = { 0 };
 
-CalibrationCtx ctx = { 0 };
-CalibrationServer serv = { 0 };
-CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
+static CalibrationCtx ctx = { 0 };
+static CalibrationServer serv = { 0 };
+static CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
 
-fd_set fds = { 0 };
+static fd_set fds = { 0 };
 
 struct DeviceInfo devInfo;
+
+static bool calibration_is_simulated = false;
+
+void calibration_set_simulation(bool sim) {
+    calibration_is_simulated = sim;
+}
+
+bool calibration_is_simulation(void) {
+    return calibration_is_simulated;
+}
 
 bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     CalibrationHeader header = { 0 };
@@ -97,9 +109,11 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode) {
     if (mode == ctx->Mode) {
+        ctx->ReqMode = mode;
         return true;
     }
 
+    ESP_LOGI(TAG, "Mode requested: %d", mode);
     ctx->ReqMode = mode;
     return false;
 }
@@ -137,9 +151,17 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     // Disable cloud communication (exception for uploading calibration data)
     cloud_observations_disable(true);
-    // Disable writing to offline sessions as well, chargers should be online during calibration but just in case...
+
+    // Disable offline sessions as well, chargers should be online during calibration but just in case...
     fat_disable_mounting(eFAT_ID_FILES, true);
     fat_unmount(eFAT_ID_FILES);
+
+    offlineSession_disable();
+    offlineLog_disable();
+
+    if (!calibration_turn_led_off(ctx)) {
+        return -5;
+    }
 
     if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
         return -4;
@@ -157,10 +179,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
             ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
             ctx->Flags |= CAL_FLAG_UPLOAD_VER;
         }
-    }
-
-    if (!calibration_set_blinking(ctx, 1)) {
-        return -5;
     }
 
     /* Should be standalone already?
@@ -187,17 +205,17 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
         case InProgress: {
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
 
+                // Turn off LED, etc
                 if (calibration_tick_starting_init(ctx) < 0) {
                     return false;
                 }
 
                 ctx->Flags |= CAL_FLAG_INIT;
-            } else {
+            }
 
-                if (calibration_set_mode(ctx, Closed)) {
-                    CAL_CSTATE(ctx) = Complete;
-                }
-
+            // Enter MID mode
+            if (calibration_set_mode(ctx, Closed)) {
+                CAL_CSTATE(ctx) = Complete;
             }
 
             break;
@@ -245,9 +263,10 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-#ifdef CONFIG_CAL_SIMULATION
-    return 3;
-#endif
+    if (calibration_is_simulation()) { 
+        return 3;
+    }
+
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 
@@ -493,15 +512,19 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         }
 
         ctx->Flags |= CAL_FLAG_WROTE_PARAMS;
+        ctx->Flags &= ~CAL_FLAG_INIT;
         ctx->Ticks[WRITE_TICK] = 0;
 
         return false;
 
     } else {
+        // Rebooted, turn LED off, standalone current, etc. again!
+        if (!(ctx->Flags & CAL_FLAG_INIT)) {
+            if (calibration_tick_starting_init(ctx) < 0) {
+                return false;
+            }
 
-        // Turn off LED upon boot
-        if (!calibration_turn_led_off(ctx)) {
-            return false;
+            ctx->Flags |= CAL_FLAG_INIT;
         }
 
         // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
@@ -516,12 +539,10 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
+        // Enter MID mode
         if (!calibration_set_mode(ctx, Closed)) {
             return false;
         }
-
-        // Rebooted, set standalone current, etc again
-        calibration_tick_starting_init(ctx);
 
         CAL_CSTATE(ctx) = Complete;
 
@@ -748,20 +769,27 @@ int calibration_send_state(CalibrationCtx *ctx) {
 }
 
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
-    if (!(ctx->Flags & CAL_FLAG_DONE)) {
-
-        if (calibration_set_mode(ctx, Idle)) {
-            if (failed) {
-                ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
-            } else {
-                ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
-            }
-
-            ctx->Flags |= CAL_FLAG_DONE;
-        }
+    if (!calibration_set_mode(ctx, Idle)) {
+        ESP_LOGI(TAG, "Waiting for charger to go idle...");
+        return;
     }
 
-    calibration_set_blinking(ctx, 0);
+    if (!(ctx->Flags & CAL_FLAG_DONE)) {
+        if (failed) {
+            ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
+
+            // If failed, then maybe got a bad calibration, allow rewriting?
+            if (MCU_SendCommandId(CommandMidClearCalibration) != MsgCommandAck) {
+                ESP_LOGE(TAG, "%s: Couldn't clear calibration!", calibration_state_to_string(ctx));
+                return;
+            }
+        } else {
+            ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
+        }
+
+        ctx->Flags |= CAL_FLAG_DONE;
+    }
+
     calibration_turn_led_off(ctx);
 
     static int blinkDelay = 0;
@@ -769,8 +797,10 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
     if (blinkDelay % 5 == 0) {
         // Indicate PASS/FAIL with by blinking green/red every tick
         if (failed) {
+            ESP_LOGE(TAG, "Blink!");
             calibration_blink_led_red(ctx);
         } else {
+            ESP_LOGI(TAG, "Blink!");
             calibration_blink_led_green(ctx);
         }
     }
@@ -800,6 +830,23 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // Need to have received message from server in last 20 seconds, otherwise fail
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[ALIVE_TICK]) > 20000) {
         calibration_fail(ctx, "No message from server in last 20 seconds");
+        return;
+    }
+
+    bool verPass = false;
+
+    uint32_t speedVer = MCU_GetHwIdMCUSpeed();
+    switch (speedVer) {
+        case 5:
+        case 7:
+            verPass = true;
+            break;
+        default:
+            break;
+    }
+
+    if (!verPass) {
+        calibration_fail(ctx, "Can only calibrate MID/EU Speed boards, detected Speed v%d", speedVer);
         return;
     }
 
@@ -1012,6 +1059,16 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
             ctx->Position = testPos;
             ESP_LOGI(TAG, "Starting run %d in position %d", ctx->Run, ctx->Position);
         }
+
+        if (strcmp(msg->Run.SetupName, "dev") == 0) {
+            ESP_LOGI(TAG, "Run is a simulation, uploading disabled!");
+            ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
+            calibration_set_simulation(true);
+        } else {
+            calibration_set_simulation(false);
+        }
+
+
     }
 
     if (msg->Sequence < ctx->LastSeq) {
