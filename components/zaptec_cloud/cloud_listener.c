@@ -2703,7 +2703,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString, "FixPartitionDiskErase"))
 				{
 					fat_ClearDiagnostics();
-					fat_eraseAndRemountPartition(eFAT_ID_DISK);
+					fat_CorrectFilesystem(); //Erases Disk partition
 					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
 					responseStatus = 200;
 				}
@@ -2735,6 +2735,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGE(TAG, "MCU RunRCDTest command FAILED");
 					responseStatus = 400;
 				}
+			}
+			else if(strstr(commandString, "GetMemoryStatus"))
+			{
+				if(strstr(commandString, "GetMemoryStatus1"))
+					SetMemoryDiagnosticsFrequency(1);
+				else if(strstr(commandString, "GetMemoryStatus3600"))
+					SetMemoryDiagnosticsFrequency(3600);
+				else
+					SetMemoryDiagnosticsFrequency(0);
 			}
 		}
 	}

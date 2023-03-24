@@ -2,6 +2,7 @@
 #define FAT_H
 
 #include <stdbool.h>
+#include "cJSON.h"
 #include "esp_err.h"
 
 enum fat_id{
@@ -23,12 +24,13 @@ void fat_static_unmount(void);
 void fat_ClearDiagnostics(void);
 char * fat_GetDiagnostics(void);
 bool fat_CheckFilesSystem(void);
+bool fat_CorrectFilesystem(void);
 bool fat_Factorytest_CreateFile(void);
 bool fat_Factorytest_DeleteFile(void);
 int fat_list_directory(const char * directory_path, cJSON * result);
 
 void fat_disable_mounting(enum fat_id id, bool disable);
 
-esp_err_t fat_eraseAndRemountPartition(enum fat_id id);
+esp_err_t fat_eraseAndRemountPartition(enum fat_id id, char * diagBuf, int diagBufMaxSize, int diagBufUsedLen);
 
 #endif

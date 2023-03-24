@@ -47,7 +47,6 @@ static SemaphoreHandle_t offs_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
 
 static bool offlineSessionOpen = false;
-static bool mounted = false;
 
 static int activeFileNumber = -1;
 static char activePathString[32] = {0};
@@ -355,7 +354,6 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 	///Test file system by creating one test-file
 	isFileSystemOK = offlineSession_test_CreateFile();
-	//bool deletedOK = false;
 
 	if(isFileSystemOK == false)
 	{
@@ -366,8 +364,6 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 		{
 			if(fileDiagnostics != NULL)
 				fileDiagLen = strlen(fileDiagnostics);
-
-			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " M: %i,", offlineSession_is_mounted());
 
 			isFileSystemOK = offlineSession_test_CreateFile();
 			if(isFileSystemOK)
@@ -409,97 +405,10 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 bool offlineSession_eraseAndRemountPartition()
 {
-	esp_err_t err = ESP_OK;
-	bool status = false;
-
-	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
-
-	if(part != NULL)
-	{
-		ESP_LOGI(TAG, "Unmounting files-filesystem");
-		err = esp_vfs_fat_spiflash_unmount(tmp_path, s_wl_handle);
-
-		int fileDiagLen = 0;
-		if(fileDiagnostics != NULL)
-			fileDiagLen = strlen(fileDiagnostics);
-
-		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " UnmErr: %i,", err);
-
-		if(err != ESP_OK)
-			ESP_LOGE(TAG, "Unmounting failed: %i", err);
-
-		err = esp_partition_erase_range(part, 0, part->size);
-
-		if(fileDiagnostics != NULL)
-			fileDiagLen = strlen(fileDiagnostics);
-
-		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " EraseErr: %i,", err);
-
-		if(err != ESP_OK)
-		{
-			ESP_LOGE(TAG, "Erase failed: %i", err);
-			return false;
-		}
-		else
-		{
-			ESP_LOGI(TAG, "Erase files-partition OK");
-		}
-
-		mounted = false;
-
-		status = offlineSession_mount_folder();
-	}
-	else
-	{
-		return false;
-	}
-
-	return status;
+	int fileDiagLen = strlen(fileDiagnostics);
+	return fat_eraseAndRemountPartition(eFAT_ID_FILES, fileDiagnostics, FILE_DIAG_BUF_SIZE, fileDiagLen) == ESP_OK;
 }
 
-
-bool offlineSession_mount_folder()
-{
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "/offs already mounted");
-		return mounted;
-	}
-
-    ESP_LOGI(TAG, "Mounting /offs");
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = max_offline_session_files,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount(tmp_path, "files", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-
-		//If failing to mount, try using partition for chargers numbers below ~ZAP000150
-		if((err == ESP_ERR_NOT_FOUND) && (i2cCheckSerialForDiskPartition() == true))
-		{
-			err = esp_vfs_fat_spiflash_mount(tmp_path, "disk", &mount_config, &s_wl_handle);
-			if (err != ESP_OK) {
-				ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-
-				return mounted;
-			}
-
-		}
-		else
-		{
-			return mounted;
-		}
-	}
-
-	mounted = true;
-
-	ESP_LOGI(TAG, "offs mounted");
-
-	return mounted;
-}
 
 
 

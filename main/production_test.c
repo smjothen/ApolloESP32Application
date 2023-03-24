@@ -1114,7 +1114,7 @@ int test_disk_partition(){
 	if((created == false) || (deleted == false))
 	{
 		/// File system not behaving as expected
-		fat_eraseAndRemountPartition(eFAT_ID_DISK);
+		fat_CorrectFilesystem();
 
 		created = fat_Factorytest_CreateFile();
 
