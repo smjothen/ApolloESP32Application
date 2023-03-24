@@ -367,33 +367,41 @@ void ocpp_authorize(const char * id_token, authorize_cb on_accept, authorize_cb 
 
 		on_accept(id_token);
 
-	}else if(!ocpp_is_connected()){
-		on_deny(id_token);
 	}else{
-		ESP_LOGI(TAG, "Authenticating with central system");
 
-		struct auth_cb_data * cb_data = malloc(sizeof(struct auth_cb_data));
-		if(cb_data == NULL){
-			ESP_LOGE(TAG, "Unable to allocate memory for callback data");
+		if(auth_data.id_tag_info != NULL){
+			ESP_LOGW(TAG, "Local authorization not accepted: %s", ocpp_authorization_status_from_id(ocpp_get_status_from_id_tag_info(auth_data.id_tag_info)));
+		}
+
+		if(!ocpp_is_connected()){
 			on_deny(id_token);
 		}else{
 
-			strcpy(cb_data->id_token, id_token);
-			cb_data->on_accept = on_accept;
-			cb_data->on_deny = on_deny;
+			ESP_LOGI(TAG, "Authenticating with central system");
 
-			cJSON * authorization = ocpp_create_authorize_request(id_token);
-			if(authorization == NULL){
-				ESP_LOGE(TAG, "Unable to create authorization request");
-				free(cb_data);
+			struct auth_cb_data * cb_data = malloc(sizeof(struct auth_cb_data));
+			if(cb_data == NULL){
+				ESP_LOGE(TAG, "Unable to allocate memory for callback data");
 				on_deny(id_token);
 			}else{
-				int err = enqueue_call(authorization, authorize_response_cb, authorize_error_cb, cb_data, eOCPP_CALL_GENERIC);
-				if(err != 0){
-					ESP_LOGE(TAG, "Unable to enqueue authorization request");
-					cJSON_Delete(authorization);
+
+				strcpy(cb_data->id_token, id_token);
+				cb_data->on_accept = on_accept;
+				cb_data->on_deny = on_deny;
+
+				cJSON * authorization = ocpp_create_authorize_request(id_token);
+				if(authorization == NULL){
+					ESP_LOGE(TAG, "Unable to create authorization request");
 					free(cb_data);
 					on_deny(id_token);
+				}else{
+					int err = enqueue_call(authorization, authorize_response_cb, authorize_error_cb, cb_data, eOCPP_CALL_GENERIC);
+					if(err != 0){
+						ESP_LOGE(TAG, "Unable to enqueue authorization request");
+						cJSON_Delete(authorization);
+						free(cb_data);
+						on_deny(id_token);
+					}
 				}
 			}
 		}

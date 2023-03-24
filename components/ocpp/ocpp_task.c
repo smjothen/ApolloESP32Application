@@ -111,6 +111,14 @@ void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON
 	meter_error_cb = meter_transaction_error_cb;
 
 	offline_enabled = true;
+
+	if(oldest_non_enqueued_timestamp() != LONG_MAX && task_to_notify != NULL)
+		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
+}
+
+void ocpp_notify_offline_enqueued(){
+	if(task_to_notify != NULL)
+		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
 }
 
 void ocpp_change_message_timeout(uint16_t timeout){
@@ -680,10 +688,10 @@ BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t w
 
 			call_with_cb->call_message = non_enqueued_message(&call_with_cb->cb_data);
 
-			if(check_call_with_cb_validity(call->call) == false){
+			if(check_call_with_cb_validity(call_with_cb) == false){
 				ESP_LOGE(TAG, "Invalid message on file");
 			}else{
-				const char * action = ocppj_get_action_from_call(call->call->call_message);
+				const char * action = ocppj_get_action_from_call(call_with_cb->call_message);
 				if(strcmp(action, OCPPJ_ACTION_START_TRANSACTION) == 0){
 					call_with_cb->result_cb = start_result_cb;
 					call_with_cb->error_cb = start_error_cb;
@@ -718,6 +726,8 @@ BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t w
 
 	return pdFALSE;
 }
+
+bool last_failed = false;
 
 int send_next_call(){
 
@@ -871,16 +881,20 @@ int send_next_call(){
 	const char * active_call_id = ocppj_get_unique_id_from_call(call.call->call_message);
 	ESP_LOGI(TAG, "Sending next call (%s) [%s]", action, active_call_id != NULL ? active_call_id : "NULL");
 
+	ESP_LOGD(TAG, "websocket sending with client: %p, message (%p size %ul): '%s', wait: %d", client, message_string, (message_string != NULL) ? strlen(message_string) : 0, (message_string != NULL) ? message_string : "", WEBSOCKET_WRITE_TIMEOUT);
 	err = esp_websocket_client_send_text(client, message_string, strlen(message_string), pdMS_TO_TICKS(WEBSOCKET_WRITE_TIMEOUT));
 	free(message_string);
 
 	if(err == -1){
 		ESP_LOGE(TAG, "Got websocket error when sending ocpp message");
+		last_failed = true;
 
 		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP unable to send", NULL);
 		xQueueReset(ocpp_active_call_queue);
 
 		return total_count;
+	}else{
+		last_failed = false;
 	}
 
 	reset_heartbeat_timer();
@@ -1253,8 +1267,10 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	}
 
 	ESP_LOGI(TAG, "Sending boot notification message");
-	if(send_next_call() != 0){
-		ESP_LOGE(TAG, "Unable to send message");
+	send_next_call();
+
+	if(last_failed){
+		ESP_LOGE(TAG, "Unable to send boot message");
 		return -1;
 	}
 
@@ -1280,7 +1296,8 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 				heartbeat_interval = -1;
 
 				ESP_LOGI(TAG, "Sending new boot notification message");
-				if(send_next_call() == -1){
+				send_next_call();
+				if(last_failed){
 					ESP_LOGE(TAG, "Unable to send new boot notification message");
 					return -1;
 				}

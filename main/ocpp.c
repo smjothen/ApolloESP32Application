@@ -3200,7 +3200,7 @@ static void ocpp_task(){
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
-		uint enqueued_calls = 0;
+		uint enqueued_calls = enqueued_call_count();;
 
 		while(should_run && should_restart == false){
 			uint32_t data = 0;

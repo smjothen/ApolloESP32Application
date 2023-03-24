@@ -135,6 +135,13 @@ void ocpp_set_offline_functions(time_t (*oldest_non_enqueued_timestamp)(), cJSON
 				ocpp_result_callback meter_transaction_result_cb, ocpp_error_callback meter_transaction_error_cb, void * meter_transaction_cb_data);
 
 /**
+ * @brief Indicate that a call was saved to file and accessible with the offline functions
+ *
+ * @todo It would probably be better if the ocpp offline transaction messages were part of ocpp component and automatically saved during enqueue
+ */
+void ocpp_notify_offline_enqueued();
+
+/**
  * @brief starts ocpp connection with CS
  *
  * @param url the base URL address for the websocket request.

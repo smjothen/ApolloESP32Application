@@ -19,9 +19,10 @@
 #include "../components/ntp/zntp.h"
 #include "../components/i2c/include/i2cDevices.h"
 
-#include "../components/ocpp/include/messages/call_messages/ocpp_call_request.h"
-#include "../components/ocpp/include/types/ocpp_reason.h"
-#include "../components/ocpp/include/types/ocpp_meter_value.h"
+#include "messages/call_messages/ocpp_call_request.h"
+#include "types/ocpp_reason.h"
+#include "types/ocpp_meter_value.h"
+#include "ocpp_task.h"
 
 static char tmp_path[] = "/files";
 
@@ -510,8 +511,7 @@ int offlineSession_FindOldestFile()
 
 long offlineSession_FindOldestFile_ocpp()
 {
-	struct stat st;
-	if(stat(tmp_path, &st) != 0)
+	if(!offlineSession_is_mounted())
 		return LONG_MAX;
 
 	ESP_LOGI(TAG, "Attempting to find oldest file (ocpp)");
@@ -581,8 +581,7 @@ int offlineSession_FindNrOfFiles()
 
 int offlineSession_FindNrOfFiles_ocpp()
 {
-	struct stat st;
-	if(stat(tmp_path, &st) != 0)
+	if(!offlineSession_is_mounted())
 		return -1;
 
 	ESP_LOGI(TAG, "Attemting to find nr of files (ocpp)");
@@ -896,8 +895,7 @@ time_t peeked_timestamp = LONG_MAX;
  */
 static esp_err_t offlineSession_UpdateSessionOnFile_Ocpp(const unsigned char * sessionData, size_t data_length, int transaction_id, time_t start_transaction_timestamp, long offset, int whence, bool append)
 {
-	struct stat st;
-	if(stat(tmp_path, &st) != 0 || start_transaction_timestamp < OCPP_MIN_TIMESTAMP)
+	if(!offlineSession_is_mounted() || start_transaction_timestamp < OCPP_MIN_TIMESTAMP)
 		return ESP_FAIL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -988,6 +986,10 @@ static esp_err_t offlineSession_UpdateSessionOnFile_Ocpp(const unsigned char * s
 		ftell(fp) - offset);
 	fclose(fp);
 	xSemaphoreGive(offs_lock);
+
+	if(err == ESP_OK){
+		ocpp_notify_offline_enqueued();
+	}
 
 	return err;
 error:
@@ -1264,8 +1266,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 }
 
 time_t offlineSession_PeekNextMessageTimestamp_ocpp(){
-	struct stat st;
-	if(stat(tmp_path, &st) != 0)
+	if(!offlineSession_is_mounted())
 		return LONG_MAX;
 
 	if(!peek_tainted)
@@ -1477,8 +1478,7 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 	FILE * fp = NULL;
 	bool should_delete = false;
 
-	struct stat st;
-	if(stat(tmp_path, &st) != 0)
+	if(!offlineSession_is_mounted())
 		return NULL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
@@ -1556,7 +1556,9 @@ cJSON * offlineSession_ReadNextMessage_ocpp(void ** cb_data){
 		}
 		else{
 			time_t start_transaction_timestamp = LONG_MAX;
-			sscanf(readingPath_ocpp, "%s/%lx.bin", tmp_path, &start_transaction_timestamp);
+			char path_fmt[32];
+			snprintf(path_fmt, sizeof(path_fmt), "%s/%%lx.bin", tmp_path);
+			sscanf(readingPath_ocpp, path_fmt, &start_transaction_timestamp);
 			message = ocpp_create_start_transaction_request(connector_id, id_tag, meter_start,
 									(valid_reservation) ? &reservation_id : NULL,
 									start_transaction_timestamp);
@@ -1948,7 +1950,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, int connector_id,
 						const char * id_tag, int meter_start, int * reservation_id)
 {
-	if(!offlineSession_select_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL; //NOTE: The Save*_ocppx functions return ESP_FAIL when unable to mount SaveSession returns 0 (ESP_OK)
 	}
@@ -1981,7 +1983,7 @@ esp_err_t offlineSession_SaveStartTransaction_ocpp(int transaction_id, time_t tr
 esp_err_t offlineSession_SaveStopTransaction_ocpp(int transaction_id, time_t transaction_start_timestamp, const char * id_tag,
 						int meter_stop, time_t timestamp, const char * reason)
 {
-	if(!offlineSession_select_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL;
 	}
@@ -2010,7 +2012,7 @@ esp_err_t offlineSession_SaveStopTransaction_ocpp(int transaction_id, time_t tra
 
 esp_err_t offlineSession_SaveNewMeterValue_ocpp(int transaction_id, time_t transaction_start_timestamp, const unsigned char * meter_data, size_t buffer_length)
 {
-	if(!offlineSession_select_folder()){
+	if(!offlineSession_is_mounted()){
 		ESP_LOGE(TAG, "failed to mount /tmp, offline ocpp log will not work");
 		return ESP_FAIL;
 	}
@@ -2020,8 +2022,7 @@ esp_err_t offlineSession_SaveNewMeterValue_ocpp(int transaction_id, time_t trans
 }
 
 esp_err_t offlineSession_UpdateTransactionId_ocpp(int old_transaction_id, int new_transaction_id){
-	struct stat st;
-	if(stat(tmp_path, &st) != 0)
+	if(!offlineSession_is_mounted())
 		return ESP_FAIL;
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
