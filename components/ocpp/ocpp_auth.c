@@ -349,7 +349,7 @@ void ocpp_read_local(struct ocpp_authorization_data * auth_data){
 		}
 
 		if(auth_data->id_tag_info == NULL && auth_cache_enabled){
-			ESP_LOGI(TAG, "Attempting local authorization wuth Authorization cache");
+			ESP_LOGI(TAG, "Attempting local authorization auth Authorization cache");
 			read_auth_data(auth_data, false);
 		}
 	}

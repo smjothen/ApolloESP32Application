@@ -3200,7 +3200,7 @@ static void ocpp_task(){
 
 		unsigned int problem_count = 0;
 		time_t last_problem_timestamp = time(NULL);
-		uint enqueued_calls = enqueued_call_count();;
+		int enqueued_calls = enqueued_call_count();;
 
 		while(should_run && should_restart == false){
 			uint32_t data = 0;
@@ -3270,12 +3270,13 @@ static void ocpp_task(){
 
 			}
 
+			if(task_event & eOCPP_TASK_CALL_TIMEOUT){
+				timeout_active_call();
+			}
+
 			if(enqueued_calls > 0 || task_event & eOCPP_TASK_CALL_ENQUEUED){
 				if(connected){
-					int remaining = handle_ocpp_call();
-					if(remaining != -1){
-						enqueued_calls = remaining;
-					}else{
+					if(handle_ocpp_call(&enqueued_calls) != 0){
 						ESP_LOGE(TAG, "Unable to handle ocpp call");
 						problem_count++; //TODO: integrate with problem count restart
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
@@ -3319,19 +3320,17 @@ clean:
 
 			time_t exit_start = time(NULL);
 			uint exit_duration = 0;
-			size_t message_count = enqueued_call_count();
+			int message_count = enqueued_call_count();
 
 			while(message_count > 0 && exit_duration < OCPP_EXIT_TIMEOUT){
 				ESP_LOGW(TAG, "Remaining messages to send: %d. timeout: (%d/%d sec)",
 					message_count, exit_duration, OCPP_EXIT_TIMEOUT);
 
-				err = handle_ocpp_call();
-				if(err < 0){
+				if(handle_ocpp_call(&message_count) != 0){
 					ESP_LOGE(TAG, "Error sending message during graceful exit. Exiting non gracefully");
 					break;
 				}
 
-				message_count = enqueued_call_count();
 				exit_duration = time(NULL) - exit_start;
 			}
 

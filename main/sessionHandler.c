@@ -390,7 +390,7 @@ uint8_t ocpp_active_phases = 0;
 uint8_t ocpp_requested_phases = 0;
 
 void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases){
-	ESP_LOGI(TAG, "Got new charging valiables: minimum: %f -> %f, maximum: %f -> %f, phases %d -> %d",
+	ESP_LOGI(TAG, "Got new charging variables: minimum: %f -> %f, maximum: %f -> %f, phases %d -> %d",
 		ocpp_min_limit, min_charging_limit, ocpp_max_limit, max_charging_limit, ocpp_requested_phases, number_phases);
 
 	if(ocpp_min_limit == -1){
@@ -519,8 +519,9 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 			if(chargeSession_GetAuthenticationCode()[0] != '\0')
 				ocpp_on_id_tag_info_recieved(chargeSession_GetAuthenticationCode(), &id_tag_info);
 
-			ESP_LOGI(TAG, "Central system returned status %s", ocpp_authorization_status_from_id(id_tag_info.status));
-			valid = id_tag_info.status == eOCPP_AUTHORIZATION_STATUS_ACCEPTED;
+			enum ocpp_authorization_status_id status_id = ocpp_get_status_from_id_tag_info(&id_tag_info);
+			ESP_LOGI(TAG, "Central system returned status %s", ocpp_authorization_status_from_id(status_id));
+			valid = (status_id == eOCPP_AUTHORIZATION_STATUS_ACCEPTED);
 		}
 
 		if(id_tag_info.parent_id_tag[0] != '\0'){

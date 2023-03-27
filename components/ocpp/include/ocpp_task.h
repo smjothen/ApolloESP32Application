@@ -190,11 +190,18 @@ BaseType_t take_active_call_if_match(struct ocpp_active_call * call, const char 
 void fail_active_call(struct ocpp_active_call * call, const char * error_code, const char * error_description, cJSON * error_details);
 
 /**
+ * @brief calls fail_active_call with timeout description for active call
+ */
+void timeout_active_call();
+
+/**
  * @brief Sends the next message of type CALL (.req) if any exists
  *
- * @return Positive number if messages are still waiting to be sent, O if no messages are waiting or -1 on error.
+ * @param remaining_call_count_out number of enqueued messages or positive number if transactions exist on file.
+ *
+ * @return 0 on success -1 on failure.
  */
-int handle_ocpp_call();
+int handle_ocpp_call(int * remaining_call_count_out);
 
 /**
  * @brief blocks dequeueing and sending calls when using handle_ocpp_call.
@@ -277,7 +284,8 @@ enum ocpp_registration_status get_registration_status(void);
  */
 enum ocpp_task_event{
 	eOCPP_TASK_CALL_ENQUEUED = 1<<0, ///< A new message has been prepared to be sendt to CS.
-	eOCPP_TASK_FAILURE = 1<<1 ///< A fault has been detected in the ocpp task.
+	eOCPP_TASK_CALL_TIMEOUT = 1<<1,
+	eOCPP_TASK_FAILURE = 1<<2 ///< A fault has been detected in the ocpp task.
 };
 
 #endif /* OCPP_TASK_H */

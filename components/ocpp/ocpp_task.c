@@ -69,6 +69,8 @@ TimerHandle_t heartbeat_handle = NULL;
 static uint16_t ocpp_call_timeout = 10;
 static uint32_t ocpp_minimum_status_duration = 3;
 
+TimerHandle_t message_timeout_handle = NULL;
+
 static uint8_t transaction_message_attempts = 3;
 static uint8_t transaction_message_retry_interval = 60;
 
@@ -123,6 +125,9 @@ void ocpp_notify_offline_enqueued(){
 
 void ocpp_change_message_timeout(uint16_t timeout){
 	ocpp_call_timeout = timeout;
+	if(message_timeout_handle != NULL){
+		xTimerChangePeriod(message_timeout_handle, pdMS_TO_TICKS(ocpp_call_timeout * 1000), pdMS_TO_TICKS(1000));
+	}
 }
 
 void ocpp_change_minimum_status_duration(uint32_t duration){
@@ -363,6 +368,28 @@ static void reset_heartbeat_timer(void){
 	}
 }
 
+void message_timeout(){
+	if(uxQueueMessagesWaiting(ocpp_active_call_queue) > 0)
+		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_TIMEOUT << task_notify_offset, eSetBits);
+}
+
+static void reset_message_timeout(){
+	if(message_timeout_handle != NULL){
+		xTimerReset(message_timeout_handle, pdMS_TO_TICKS(100));
+	}else{
+		message_timeout_handle = xTimerCreate("Ocpp message timeout",
+						pdMS_TO_TICKS(ocpp_call_timeout * 1000),
+						pdFALSE, NULL, message_timeout);
+
+		if(message_timeout_handle == NULL){
+			ESP_LOGE(TAG, "Unable to create message timeout timer");
+
+		}else if(xTimerStart(message_timeout_handle, 1000) != pdPASS){
+			ESP_LOGE(TAG, "Unable to start created message timout timer");
+		}
+	}
+}
+
 int send_call_reply(cJSON * call){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call reply: NULL");
@@ -595,6 +622,22 @@ BaseType_t take_active_call_if_match(struct ocpp_active_call * call, const char 
 	return ret;
 }
 
+void timeout_active_call(){
+	xSemaphoreTake(ocpp_active_call_lock_1, portMAX_DELAY);
+
+	ESP_LOGE(TAG, "Unable to send to ocpp_active_call_queue: active timed out");
+	struct ocpp_active_call timed_out_call;
+	if(xQueueReceive(ocpp_active_call_queue, &timed_out_call, 0) == pdTRUE){
+		fail_active_call(&timed_out_call, OCPPJ_ERROR_INTERNAL, "CP timeout", NULL);
+	}else{
+		ESP_LOGE(TAG, "Unable to take timed out call, Did listener just receive it?");
+	}
+
+	// Remove the timed out call if we were not able to take it, ensuring that we should be able to send the next call
+	xQueueReset(ocpp_active_call_queue); // At the time of writing; xQueueReset may only return pdTRUE
+
+	xSemaphoreGive(ocpp_active_call_lock_1);
+}
 // Used if the active call was sendt or attempted to be sendt to allow retrying transaction related messages. Returns true if needs retries.
 void fail_active_call(struct ocpp_active_call * call, const char * error_code, const char * error_description, cJSON * error_details){
 	if(call != NULL && call->call != NULL){
@@ -727,9 +770,7 @@ BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t w
 	return pdFALSE;
 }
 
-bool last_failed = false;
-
-int send_next_call(){
+int send_next_call(int * remaining_call_count_out){
 
 	struct ocpp_active_call call = {0};
 
@@ -746,7 +787,7 @@ int send_next_call(){
 	if(!(call_blocking_mask & eOCPP_CALL_GENERIC))
 		generic_count = uxQueueMessagesWaiting(ocpp_call_queue);
 
-	int total_count = blocking_count + transaction_count + generic_count;
+	*remaining_call_count_out = blocking_count + transaction_count + generic_count;
 
 	BaseType_t call_aquired  = pdFALSE;
 	if(blocking_count > 0)
@@ -765,9 +806,9 @@ int send_next_call(){
 		call_aquired = xQueueReceive(ocpp_call_queue, &call.call, pdMS_TO_TICKS(2500));
 
 	if(!call_aquired){
-		return total_count;
+		return 0;
 	}else{
-		total_count--; // We removed call from queue or file
+		(*remaining_call_count_out)--; // We removed call from queue or file
 
 		if(call.timestamp == 0) // If the call does not have a previous timestamp, then it was created now
 			call.timestamp = time(NULL);
@@ -777,27 +818,8 @@ int send_next_call(){
 	BaseType_t activated = xQueueSendToBack(ocpp_active_call_queue, &call, pdMS_TO_TICKS(ocpp_call_timeout * 1000));
 
 	if(activated == pdFALSE){
-		/*
-		 * We lock access to the active call to prevent a race condition where the listener
-		 * checks a response unique id against the active call before it timed out and
-		 * takes the active call after we replace it with the new one.
-		 */
-		xSemaphoreTake(ocpp_active_call_lock_1, portMAX_DELAY);
-
-		ESP_LOGE(TAG, "Unable to send to ocpp_active_call_queue: active timed out");
-		struct ocpp_active_call timed_out_call;
-		if(xQueueReceive(ocpp_active_call_queue, &timed_out_call, 0) == pdTRUE){
-			fail_active_call(&timed_out_call, OCPPJ_ERROR_INTERNAL, "CP timeout", NULL);
-		}else{
-			ESP_LOGE(TAG, "Unable to take timed out call, Did listener just receive it?");
-		}
-
-		// Remove the timed out call if we were not able to take it, ensuring that we should be able to send the new call
-		xQueueReset(ocpp_active_call_queue); // At the time of writing; xQueueReset may only return pdTRUE
-
+		timeout_active_call();
 		activated = xQueueSendToBack(ocpp_active_call_queue, &call, 0);
-
-		xSemaphoreGive(ocpp_active_call_lock_1);
 
 		if(!activated){
 			/*
@@ -805,7 +827,7 @@ int send_next_call(){
 			 * Then somthing is dreadfully wrong and we discard the call we are trying to send.
 			 */
 			ESP_LOGE(TAG, "Unable to set new call as active despite queue reset");
-			return total_count;
+			return -1;
 		}
 	}
 
@@ -835,15 +857,15 @@ int send_next_call(){
 
 						if(xQueueSend(ocpp_active_call_queue, &call, pdMS_TO_TICKS(2500)) != pdTRUE){
 							fail_active_call(&call, OCPPJ_ERROR_INTERNAL,"CP unable to set active call after transaction was blocked by failed transaction", NULL);
-							return total_count;
+							return -1;
 						}
 					}else{
 						ESP_LOGE(TAG, "Unable to aquire next non transaction call");
-						return total_count;
+						return -1;
 					}
 				}else{
 					ESP_LOGW(TAG, "No alternative call to send");
-					return total_count;
+					return 0;
 				}
 			}
 		}
@@ -854,7 +876,7 @@ int send_next_call(){
 
 		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP call invalid when set as active", NULL);
 		xQueueReset(ocpp_active_call_queue);
-		return total_count;
+		return -1;
 	}
 
 	const char * action = ocppj_get_action_from_call(call.call->call_message);
@@ -866,7 +888,7 @@ int send_next_call(){
 
 		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP call prohibited by state", NULL);
 		xQueueReset(ocpp_active_call_queue);
-		return total_count;
+		return -1;
 	}
 
 	char * message_string = cJSON_Print(call.call->call_message);
@@ -875,7 +897,7 @@ int send_next_call(){
 
 		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP unable to serialize", NULL);
 		xQueueReset(ocpp_active_call_queue);
-		return total_count;
+		return -1;
 	}
 
 	const char * active_call_id = ocppj_get_unique_id_from_call(call.call->call_message);
@@ -887,18 +909,17 @@ int send_next_call(){
 
 	if(err == -1){
 		ESP_LOGE(TAG, "Got websocket error when sending ocpp message");
-		last_failed = true;
 
 		fail_active_call(&call, OCPPJ_ERROR_INTERNAL, "CP unable to send", NULL);
 		xQueueReset(ocpp_active_call_queue);
 
-		return total_count;
-	}else{
-		last_failed = false;
+		return -1;
 	}
 
 	reset_heartbeat_timer();
-	return total_count;
+	reset_message_timeout();
+
+	return 0;
 }
 
 
@@ -1267,9 +1288,8 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	}
 
 	ESP_LOGI(TAG, "Sending boot notification message");
-	send_next_call();
-
-	if(last_failed){
+	int remaining_call_count;
+	if(send_next_call(&remaining_call_count) != 0){
 		ESP_LOGE(TAG, "Unable to send boot message");
 		return -1;
 	}
@@ -1296,8 +1316,7 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 				heartbeat_interval = -1;
 
 				ESP_LOGI(TAG, "Sending new boot notification message");
-				send_next_call();
-				if(last_failed){
+				if(send_next_call(&remaining_call_count) != 0){
 					ESP_LOGE(TAG, "Unable to send new boot notification message");
 					return -1;
 				}
@@ -1353,6 +1372,14 @@ void stop_ocpp(void){
 		status_notification_lock = NULL;
 	}
 
+	if(message_timeout_handle != NULL){
+		if(xTimerDelete(message_timeout_handle, pdMS_TO_TICKS(500)) != pdTRUE){
+			ESP_LOGE(TAG, "Unable to stop heartbeat timer");
+		}else{
+			message_timeout_handle = NULL;
+		}
+	}
+
 	clean_listener();
 
 	block_enqueue_call(0);
@@ -1362,6 +1389,6 @@ void stop_ocpp(void){
 	return;
 }
 
-int handle_ocpp_call(){
-	return send_next_call();
+int handle_ocpp_call(int * remaining_call_count_out){
+	return send_next_call(remaining_call_count_out);
 }
