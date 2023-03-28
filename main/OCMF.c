@@ -329,9 +329,9 @@ void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double e
 
 		if(valueB == valueE)
 		{
-			ESP_LOGW(TAG, "");
-			ESP_LOGW(TAG, "*****************  OK: %f == %f (E=B)  *****************", valueE, valueB);
-			ESP_LOGW(TAG, "");
+			ESP_LOGI(TAG, "");
+			ESP_LOGI(TAG, "*****************  OK: %f == %f (E=B)  *****************", valueE, valueB);
+			ESP_LOGI(TAG, "");
 		}
 		else
 		{

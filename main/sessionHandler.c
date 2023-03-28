@@ -392,6 +392,12 @@ static uint32_t pulseCounter = PULSE_INIT_TIME;
 static uint16_t autoClearLastCount = 0;
 static uint32_t autoClearLastTimeout = 0;
 
+static uint16_t memoryDiagnosticsFrequency = 0;
+void SetMemoryDiagnosticsFrequency(uint16_t freq)
+{
+	memoryDiagnosticsFrequency = freq;
+}
+
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 {
 	return chargeOperatingMode;
@@ -1478,6 +1484,24 @@ static void sessionHandler_task()
 				}
 			}
 
+			/// Send available DMA memory once or hourly
+			if (memoryDiagnosticsFrequency > 0)
+			{
+				if(onTime % memoryDiagnosticsFrequency == 0)
+				{
+					if(memoryDiagnosticsFrequency == 1)
+						memoryDiagnosticsFrequency = 0;
+
+					char membuf[70];
+
+					size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+					size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+					size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+					snprintf(membuf, 70, "DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+					publish_debug_telemetry_observation_Diagnostics(membuf);
+				}
+			}
 
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
