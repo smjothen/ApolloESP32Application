@@ -282,10 +282,6 @@ esp_err_t fat_eraseAndRemountPartition(enum fat_id id, char * diagBuf, int diagB
 
 	fat_mount(id);
 
-	int fatDiagLen = 0;
-	if(fatDiagnostics != NULL)
-		fatDiagLen = strlen(fatDiagnostics);
-
 	snprintf(diagBuf + diagBufUsedLen, diagBufMaxSize - diagBufUsedLen, " Part %i erase err: %i ,M: %i", id, err, fatIsMounted());
 
 	return err;
@@ -310,7 +306,10 @@ bool fat_CheckFilesSystem(void)
 
 bool fat_CorrectFilesystem(void)
 {
-	int fileDiagLen = strlen(fatDiagnostics);
+	int fileDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fileDiagLen = strlen(fatDiagnostics);
+
 	return fat_eraseAndRemountPartition(eFAT_ID_DISK, fatDiagnostics, FAT_DIAG_BUF_SIZE, fileDiagLen);
 }
 
