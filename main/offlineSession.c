@@ -373,7 +373,6 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 	///Test file system by creating one test-file
 	isFileSystemOK = offlineSession_test_CreateFile();
-	//bool deletedOK = false;
 
 	if(isFileSystemOK == false)
 	{
@@ -427,7 +426,11 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 bool offlineSession_eraseAndRemountPartition()
 {
-	return fat_eraseAndRemountPartition(eFAT_ID_FILES) == ESP_OK;
+	int fileDiagLen = 0;
+	if(fileDiagnostics != NULL)
+		fileDiagLen = strlen(fileDiagnostics);
+
+	return fat_eraseAndRemountPartition(eFAT_ID_FILES, fileDiagnostics, FILE_DIAG_BUF_SIZE, fileDiagLen) == ESP_OK;
 }
 
 /*

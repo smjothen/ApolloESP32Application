@@ -250,14 +250,25 @@ char * fat_GetDiagnostics(void)
 	return fatDiagnostics;
 }
 
-esp_err_t fat_eraseAndRemountPartition(enum fat_id id)
+esp_err_t fat_eraseAndRemountPartition(enum fat_id id, char * diagBuf, int diagBufMaxSize, int diagBufUsedLen)
 {
 	if(id >= PARTITION_COUNT)
 		return ESP_ERR_INVALID_ARG;
 
 	esp_err_t err = ESP_FAIL;
 
-	const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
+
+	const esp_partition_t *part = NULL;
+	if(id == eFAT_ID_DISK)
+	{
+		part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "disk");
+		ESP_LOGI(TAG, "Erasing disk, part = 0x%X", (unsigned int)part);
+	}
+	else if(id == eFAT_ID_FILES)
+	{
+		part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "files");
+		ESP_LOGI(TAG, "Erasing files, part = 0x%X", (unsigned int)part);
+	}
 
 	if(part != NULL)
 	{
@@ -271,11 +282,7 @@ esp_err_t fat_eraseAndRemountPartition(enum fat_id id)
 
 	fat_mount(id);
 
-	int fatDiagLen = 0;
-	if(fatDiagnostics != NULL)
-		fatDiagLen = strlen(fatDiagnostics);
-
-	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk erase err: %i ,M: %i", err, fatIsMounted());
+	snprintf(diagBuf + diagBufUsedLen, diagBufMaxSize - diagBufUsedLen, " Part %i erase err: %i ,M: %i", id, err, fatIsMounted());
 
 	return err;
 }
@@ -430,7 +437,11 @@ bool fat_CheckFilesSystem(void)
 
 bool fat_CorrectFilesystem(void)
 {
-	return fat_eraseAndRemountPartition(eFAT_ID_DISK);
+	int fileDiagLen = 0;
+	if(fatDiagnostics != NULL)
+		fileDiagLen = strlen(fatDiagnostics);
+
+	return fat_eraseAndRemountPartition(eFAT_ID_DISK, fatDiagnostics, FAT_DIAG_BUF_SIZE, fileDiagLen);
 }
 
 
