@@ -536,16 +536,8 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 	if(storage_Get_ocpp_stop_transaction_on_invalid_id() && !valid){
 		ESP_LOGW(TAG, "Transaction not Autorized");
 		if(is_current_transaction){
-			MessageType ret = MCU_SendCommandId(CommandStopCharging);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU stop charging command OK");
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU stop charging final command FAILED");
-				//TODO: Handle error. If this occurs there might be charging without valid token or payment
-			}
+			ESP_LOGE(TAG, "Attempting to stop (deauthorized) transaction");
+			sessionHandler_InitiateResetChargeSession();
 			chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
 			SetAuthorized(false);
 		}else{
@@ -908,26 +900,9 @@ void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
 	ESP_LOGI(TAG, "Authorized to stop transaction");
 
 	audio_play_nfc_card_accepted();
-	MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "Authorization granted ok");
-	}
-	else{
-		ESP_LOGE(TAG, "Unable to grant authorization to MCU");
-	}
 
-	ret = MCU_SendCommandId(CommandStopCharging);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "MCU stop charging OK");
-		sessionResetMode = eSESSION_RESET_STOP_SENT;
-	}
-	else
-	{
-		ESP_LOGE(TAG, "MCU stop charging Failed");
-	}
 	chargeSession_SetStoppedByRFID(true, tag_1);
+	sessionHandler_InitiateResetChargeSession();
 }
 
 void stop_charging_on_tag_deny(const char * tag_1, const char * tag_2){
@@ -1000,6 +975,9 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 	}else if(ocpp_old_state == eOCPP_CP_STATUS_FAULTED){
 		return ocpp_faulted_exit_state;
 	}
+
+	if(sessionResetMode != eSESSION_RESET_NONE)
+		return eOCPP_CP_STATUS_FINISHING;
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first.
 	// We also require the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
@@ -1399,19 +1377,6 @@ error:
 	}
 }
 
-static void stop_charging(){
-	ESP_LOGI(TAG, "Sending stop charging command");
-	MessageType ret = MCU_SendCommandId(CommandStopCharging);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "MCU stop charging OK");
-		sessionResetMode = eSESSION_RESET_STOP_SENT;
-	}
-	else
-	{
-		ESP_LOGE(TAG, "MCU stop charging Failed");
-	}
-}
 static void remote_stop_transaction_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Request to remote stop transaction");
 	if(payload == NULL || !cJSON_HasObjectItem(payload, "transactionId")){
@@ -1445,7 +1410,9 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
 	}
 	else{
-		ESP_LOGW(TAG, "Stop request id does not match any ongoing transaction id");
+		ESP_LOGW(TAG, "Stop request id does not match any ongoing transaction id. ongoing: %d requested: %d", transaction_id != NULL ? *transaction_id : -1,
+			transaction_id_json->valueint);
+
 		response = ocpp_create_remote_stop_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_REJECTED);
 	}
 
@@ -1457,7 +1424,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	}
 
 	if(stop_charging_accepted){
-		stop_charging();
+	        sessionHandler_InitiateResetChargeSession();
 		SetAuthorized(false);
 		chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
 	}
@@ -1782,6 +1749,7 @@ static void handle_preparing(){
 				ESP_LOGI(TAG, "MCU authorization denied command FAILED");
 			}
 			SetAuthorized(false);
+			sessionHandler_InitiateResetChargeSession();
 			chargeSession_ClearAuthenticationCode();
 
 			if(reservation_info != NULL){
