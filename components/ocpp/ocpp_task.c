@@ -29,7 +29,7 @@ static const char *TAG = "OCPP_TASK";
 // to prevent use of DMA. esp_websocket_client allocates this twice (for rx_buffer and tx_buffer)
 #define WEBSOCKET_BUFFER_SIZE 2048
 
-esp_websocket_client_handle_t client;
+esp_websocket_client_handle_t client = NULL;
 
 SemaphoreHandle_t ocpp_active_call_lock_1 = NULL;
 
@@ -916,6 +916,8 @@ int send_next_call(int * remaining_call_count_out){
 		return -1;
 	}
 
+	last_call_timestamp = time(NULL);
+
 	reset_heartbeat_timer();
 	reset_message_timeout();
 
@@ -1329,6 +1331,30 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	}
 	ESP_LOGE(TAG, "Boot status not updated");
 	return -1;
+}
+
+cJSON * ocpp_task_get_diagnostics(){
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics for task");
+		return res;
+	}
+
+	cJSON_AddStringToObject(res, "b_chargebox_nr", boot_parameter_chargebox_nr);
+	cJSON_AddStringToObject(res, "b_charge_point_model", boot_parameter_charge_point_model);
+	cJSON_AddStringToObject(res, "b_cp_nr", boot_parameter_cp_nr);
+	cJSON_AddStringToObject(res, "b_rcp_vendor", boot_parameter_cp_vendor);
+	cJSON_AddStringToObject(res, "b_firm_ver", boot_parameter_firm_ver);
+	cJSON_AddStringToObject(res, "b_iccid", boot_parameter_iccid);
+	cJSON_AddStringToObject(res, "b_imsi", boot_parameter_imsi);
+	cJSON_AddStringToObject(res, "b_meter_nr", boot_parameter_meter_nr);
+	cJSON_AddStringToObject(res, "b_meter_type", boot_parameter_meter_type);
+
+	cJSON_AddBoolToObject(res, "active_call", (ocpp_active_call_queue != NULL && !uxQueueSpacesAvailable(ocpp_active_call_queue)));
+	cJSON_AddNumberToObject(res, "last_call_time", last_call_timestamp);
+	cJSON_AddBoolToObject(res, "offline_enabled", offline_enabled);
+
+	return res;
 }
 
 void stop_ocpp(void){

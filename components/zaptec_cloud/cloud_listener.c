@@ -2480,6 +2480,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 400;
 				}
 			}
+			// Get general ocpp diagnostics
+			else if(strstr(commandString, "get ocpp diagnostics") != NULL){
+				ESP_LOGI(TAG, "Got request for ocpp diagnostics");
+
+				cJSON * result = ocpp_get_diagnostics();
+				if(result == NULL){
+					responseStatus = 500;
+				}else{
+					char * result_str = cJSON_PrintUnformatted(result);
+					if(result_str == NULL){
+						responseStatus = 500;
+					} else {
+						publish_debug_telemetry_observation_Diagnostics(result_str);
+						cJSON_Delete(result);
+						free(result_str);
+						responseStatus = 200;
+					}
+				}
+			}
 
 			/*else if(strstr(commandString,"StartTimer") != NULL)
 			{

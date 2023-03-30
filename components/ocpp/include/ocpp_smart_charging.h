@@ -51,4 +51,10 @@ void ocpp_set_transaction_is_active(bool active);
  * @brief on_new_period callback function to set
  */
 void ocpp_set_on_new_period_cb(void (* on_new_period)(float min_charging_limit, float max_charging_limit, uint8_t number_phases));
+
+/**
+ * @brief get a json object containing information about the ocpp smart charging state.
+ */
+cJSON * ocpp_smart_get_diagnostics();
+
 #endif /* OCPP_SMART_CHARGING_H */

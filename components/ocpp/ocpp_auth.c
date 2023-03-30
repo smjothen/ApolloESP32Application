@@ -1361,6 +1361,27 @@ cleanup:
 	return ret;
 }
 
+cJSON * ocpp_auth_get_diagnostics(){
+
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics for auth");
+		return res;
+	}
+
+	cJSON_AddBoolToObject(res, "local_pre_authorize", local_pre_authorize);
+	cJSON_AddBoolToObject(res, "authorize_offline", authorize_offline);
+	cJSON_AddBoolToObject(res, "auth_list_enabled", auth_list_enabled);
+	cJSON_AddBoolToObject(res, "auth_cache_enabled", auth_cache_enabled);
+	cJSON_AddBoolToObject(res, "allow_offline_for_unknown", allow_offline_for_unknown);
+
+	struct stat st;
+	cJSON_AddBoolToObject(res, "cache_exists", stat(auth_list_path, &st) != 0);
+	cJSON_AddBoolToObject(res, "list_exists", stat(auth_cache_path, &st) != 0);
+
+	return res;
+}
+
 int ocpp_auth_init(){
 	ESP_LOGI(TAG, "Initializing ocpp authorization");
 

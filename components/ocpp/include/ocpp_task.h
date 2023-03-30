@@ -275,6 +275,11 @@ void update_heartbeat_timer(uint sec);
 void update_transaction_message_related_config(uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
 
 /**
+ * @brief get a json object containing information about the ocpp task state.
+ */
+cJSON * ocpp_task_get_diagnostics();
+
+/**
  * @brief gets the latest result of BootNotification request
  */
 enum ocpp_registration_status get_registration_status(void);

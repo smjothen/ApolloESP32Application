@@ -2104,3 +2104,27 @@ esp_err_t ocpp_smart_charging_init(){
 void ocpp_set_on_new_period_cb(void (* on_new_period)(float min_charging_limit, float max_charging_limit, uint8_t number_phases)){
 	charge_value_cb = on_new_period;
 }
+
+cJSON * ocpp_smart_get_diagnostics(){
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics");
+		return res;
+	}
+
+	cJSON_AddNumberToObject(res, "active_transaction_id", active_transaction_id != NULL ? *active_transaction_id : -2);
+
+	if(tx_profiles != NULL){
+		cJSON * active_tx_profile_indexes = cJSON_CreateArray();
+		if(active_tx_profile_indexes != NULL){
+			for(size_t i = 0; i < CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL+1; i++){
+				if(tx_profiles[i] != NULL){
+					cJSON_AddItemToArray(active_tx_profile_indexes, cJSON_CreateNumber(i));
+				}
+			}
+			cJSON_AddItemToObject(res, "tx_profiles", active_tx_profile_indexes);
+		}
+	}
+
+	return NULL;
+}

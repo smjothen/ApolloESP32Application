@@ -3042,6 +3042,37 @@ uint8_t previous_enqueue_mask = 0;
 
 time_t last_online_timestamp = 0;
 
+cJSON * ocpp_get_diagnostics(){
+
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics");
+		return res;
+	}
+
+	cJSON * main_res = cJSON_CreateObject();
+
+	if(main_res != NULL){
+		cJSON_AddBoolToObject(main_res, "shoudl_run", should_run);
+		cJSON_AddBoolToObject(main_res, "shoudl_restart", should_restart);
+		cJSON_AddBoolToObject(main_res, "graceful_exit", graceful_exit);
+		cJSON_AddBoolToObject(main_res, "connected", connected);
+		cJSON_AddNumberToObject(main_res, "stack_watermark", ocpp_get_stack_watermark());
+		cJSON_AddNumberToObject(main_res, "previous mask", previous_enqueue_mask);
+		cJSON_AddNumberToObject(main_res, "last_online", last_online_timestamp);
+		cJSON_AddStringToObject(main_res, "stored_url", storage_Get_url_ocpp());
+		cJSON_AddStringToObject(main_res, "stored_cbid", storage_Get_chargebox_identity_ocpp());
+		cJSON_AddItemToObject(res, "main", main_res);
+	}
+
+	cJSON_AddItemToObject(res, "task", ocpp_task_get_diagnostics());
+	cJSON_AddItemToObject(res, "listener", ocpp_listener_get_diagnostics());
+	cJSON_AddItemToObject(res, "smart", ocpp_smart_get_diagnostics());
+	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
+
+	return res;
+}
+
 static void transition_online(){
 	ESP_LOGW(TAG, "Restoring previous mask: %d", previous_enqueue_mask);
 	block_enqueue_call(previous_enqueue_mask);

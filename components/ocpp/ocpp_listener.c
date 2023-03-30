@@ -253,6 +253,17 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 	cJSON_Delete(ocpp_request);
 }
 
+cJSON * ocpp_listener_get_diagnostics(){
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics for listener");
+		return res;
+	}
+
+	cJSON_AddBoolToObject(res, "is_connected", is_connected);
+	return res;
+}
+
 void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data){
 	esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
 	esp_websocket_client_handle_t client = (esp_websocket_client_handle_t)handler_args;

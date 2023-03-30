@@ -111,25 +111,17 @@ bool storage_Get_ocpp_local_pre_authorize();
 uint16_t storage_Get_ocpp_message_timeout();
 const char * storage_Get_ocpp_meter_values_aligned_data();
 const char * storage_Get_ocpp_meter_values_sampled_data();
-uint8_t storage_Get_ocpp_meter_values_sampled_data_max_length();
 uint32_t storage_Get_ocpp_meter_value_sample_interval();
 uint32_t storage_Get_ocpp_minimum_status_duration();
-uint8_t storage_Get_ocpp_number_of_connectors();
 uint8_t storage_Get_ocpp_reset_retries();
 bool storage_Get_ocpp_stop_transaction_on_ev_side_disconnect();
 bool storage_Get_ocpp_stop_transaction_on_invalid_id();
 const char * storage_Get_ocpp_stop_txn_aligned_data();
-uint8_t storage_Get_ocpp_stop_txn_aligned_data_max_length();
 const char * storage_Get_ocpp_stop_txn_sampled_data();
-uint8_t storage_Get_ocpp_stop_txn_sampled_data_max_length();
-const char * storage_Get_ocpp_supported_feature_profiles();
-uint8_t storage_Get_ocpp_supported_feature_profiles_max_length();
 uint8_t storage_Get_ocpp_transaction_message_attempts();
 uint16_t storage_Get_ocpp_transaction_message_retry_interval();
 bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect();
 bool storage_Get_ocpp_local_auth_list_enabled();
-uint16_t storage_Get_ocpp_local_auth_list_max_length();
-uint8_t storage_Get_ocpp_send_local_list_max_length();
 bool storage_Get_reserve_connector_zero_supported();
 
 //Get Local settings

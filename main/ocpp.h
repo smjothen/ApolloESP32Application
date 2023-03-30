@@ -6,7 +6,9 @@ extern "C" {
 #endif
 
 #include "types/ocpp_meter_value.h"
+#include "cJSON.h"
 
+cJSON * ocpp_get_diagnostics();
 int ocpp_get_stack_watermark();
 void init_interval_measurands(enum ocpp_reading_context_id context);
 void save_interval_measurands(enum ocpp_reading_context_id context);

@@ -44,6 +44,11 @@ void clean_listener();
 bool ocpp_is_connected();
 
 /**
+ * @brief get a json object containing information about the ocpp listener state.
+ */
+cJSON * ocpp_listener_get_diagnostics();
+
+/**
  * @brief events that the listener can send with xTaskNotify
  */
 enum ocpp_websocket_event{

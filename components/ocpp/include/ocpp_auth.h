@@ -128,6 +128,11 @@ int ocpp_auth_clear_cache();
 int ocpp_get_auth_list_version();
 
 /**
+ * @brief get a json object containing information about the ocpp authorization state.
+ */
+cJSON * ocpp_auth_get_diagnostics();
+
+/**
  * @brief creates directory structure if not pressent and prepares for file synchronization.
  */
 int ocpp_auth_init();
