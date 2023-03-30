@@ -484,8 +484,8 @@ error:
 }
 
 static void stop_awaiting_status_notification(){
-	if(status_notification_lock == NULL || xSemaphoreTake(status_notification_lock, 0) == pdTRUE){
-		if(status_notification_handle == NULL || xTimerStop(status_notification_handle, 500) == pdTRUE){
+	if(status_notification_lock != NULL && xSemaphoreTake(status_notification_lock, 0) == pdTRUE){
+		if(status_notification_handle != NULL && xTimerStop(status_notification_handle, 500) == pdTRUE){
 			cJSON_Delete(awaiting_status_notification);
 			awaiting_status_notification = NULL;
 		}
