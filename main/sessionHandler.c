@@ -1855,6 +1855,12 @@ static void handle_state(enum ocpp_cp_status_id state){
 	}
 }
 
+bool weak_connection = false;
+time_t weak_connection_timestamp = 0;
+time_t weak_connection_check_timestamp = 0;
+
+#define WEAK_CONNECTION_SEND_INTERVAL 300 // The minimum duration between two status notifications with weak signal warning
+#define WEAK_CONNECTION_CHECK_INTERVAL 10 // The minimum duration between each check for weak signal
 static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mask){
 	uint32_t new_warning = warning_mask & ~ocpp_notified_warnings;
 	ocpp_notified_warnings = warning_mask; // Allow new notification for warnings that has now been cleared
@@ -1892,6 +1898,27 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		}
 		if(new_warning & eOCPP_MCU_UNDER_VOLTAGE){
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true);
+		}
+	}
+
+	time_t now = time(NULL);
+	if((!weak_connection || now > weak_connection_timestamp + WEAK_CONNECTION_SEND_INTERVAL)
+		&& now > weak_connection_check_timestamp + WEAK_CONNECTION_CHECK_INTERVAL){
+
+		weak_connection_check_timestamp = now;
+
+		if((storage_Get_CommunicationMode() == eCONNECTION_WIFI && network_WifiSignalStrength() <= -80)
+			|| storage_Get_CommunicationMode() == eCONNECTION_LTE || GetCellularQuality() <= 20){
+
+			weak_connection = true;
+		}else{
+			weak_connection = false;
+		}
+
+		if(weak_connection){
+			ESP_LOGW(TAG, "Weak wireless");
+			weak_connection_timestamp = now;
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, true);
 		}
 	}
 }
