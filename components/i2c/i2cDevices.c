@@ -261,8 +261,16 @@ bool i2cRTCChecked()
 	return RTCchecked;
 }
 
+bool newReaderFailure = false;
 uint32_t passedDetectedCounter = 0;
 uint32_t failedDetectedCounter = 0;
+
+bool GetNewReaderFailure()
+{
+	bool tmp = newReaderFailure;
+	newReaderFailure = false;
+	return tmp;
+}
 
 uint32_t GetPassedDetectedCounter()
 {
@@ -777,6 +785,8 @@ static void i2cDevice_task(void *pvParameters)
 					}
 				}
 
+			}else if(nfcCardDetected < 0 && storage_Get_session_controller() & eSESSION_OCPP){
+				newReaderFailure = true;
 			}
 
 		}

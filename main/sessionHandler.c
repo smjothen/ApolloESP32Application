@@ -1921,6 +1921,10 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, true);
 		}
 	}
+
+	if(GetNewReaderFailure()){
+		ocpp_send_status_notification(*state, OCPP_CP_ERROR_READER_FAILURE, NULL, true);
+	}
 }
 
 static bool carInterfaceRestartTried = false;
