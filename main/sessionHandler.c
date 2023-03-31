@@ -1280,9 +1280,9 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 
 	int connector_id;
 	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", false, &connector_id, err_str, sizeof(err_str));
-	if(err != eOCPPJ_NO_ERROR){
+	if(err != eOCPPJ_NO_VALUE){
 
-		if(err != eOCPPJ_NO_VALUE){
+		if(err != eOCPPJ_NO_ERROR){
 			goto error;
 		}else{
 			if(connector_id <= 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
