@@ -3179,6 +3179,17 @@ static void ocpp_task(){
 		ocpp_change_auth_cache_enabled(storage_Get_ocpp_authorization_cache_enabled());
 		ocpp_change_allow_offline_for_unknown(storage_Get_ocpp_allow_offline_tx_for_unknown_id());
 
+		uint8_t mcu_is_enabled = (storage_Get_IsEnabled() == 1 && storage_Get_availability_ocpp()) ? 1 : 0;
+		MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, mcu_is_enabled);
+		if(ret == MsgWriteAck)
+		{
+			ESP_LOGI(TAG, "MCU IsEnabled set successfully for ocpp");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Unable to set MCU IsEnabled for ocpp");
+		}
+
 		retry_attempts = 0;
 		retry_delay = 5;
 		do{

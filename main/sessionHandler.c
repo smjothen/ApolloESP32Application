@@ -350,7 +350,7 @@ bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
 bool ocpp_faulted = false; // Used to differentiate between faulted state and any other state with same features
 enum ocpp_cp_status_id ocpp_faulted_exit_state = eOCPP_CP_STATUS_UNAVAILABLE; // ocpp only allows transitioning from faulted to pre-faulted state
-uint8_t pending_change_availability_state;
+bool pending_change_availability_state;
 time_t preparing_started = 0;
 
 struct ocpp_reservation_info {
@@ -950,21 +950,38 @@ void sessionHandler_OcppSendState(){
 	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, true);
 }
 
-static int change_availability(uint8_t is_operative){
-	MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, is_operative);
-	if(ret == MsgWriteAck)
-	{
-		storage_Set_IsEnabled(is_operative);
-		storage_SaveConfiguration();
+static int change_availability(bool new_available){
 
-		ESP_LOGW(TAG, "Availability changed successfully to %d", is_operative);
+	bool old_available = storage_Get_availability_ocpp();
+
+	if(old_available == new_available)
 		return 0;
+
+	storage_Set_availability_ocpp(new_available);
+	ESP_LOGI(TAG, "Set availability to %s", new_available ? "operative" : "inoperative");
+
+	if(new_available && storage_Get_IsEnabled() == 0){
+		ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_OTHER_ERROR, "Availability changed to operative, but chargepoint is not set to active in Zaptec cloud. Availability setting persisted, but will not have effect until activated in Zaptec cloud", true);
+
+	}else{
+
+		uint8_t mcu_new_enabled = (new_available && storage_Get_IsEnabled() == 1) ? 1 : 0;
+
+		MessageType ret = MCU_SendUint8Parameter(ParamIsEnabled, mcu_new_enabled);
+		if(ret == MsgWriteAck)
+		{
+			ESP_LOGW(TAG, "MCU IsEnabled changed successfully to %d", mcu_new_enabled);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Unable to change MCU IsEnabled to %d, reverting availability change", mcu_new_enabled);
+			storage_Set_availability_ocpp(old_available);
+			return -1;
+		}
 	}
-	else
-	{
-		ESP_LOGE(TAG, "Unable to change availability to %d", is_operative);
-		return -1;
-	}
+
+	storage_SaveConfiguration();
+	return 0;
 }
 
 // See transition table in section on Status notification in ocpp 1.6 specification
@@ -981,7 +998,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 
 	// The state returned by MCU does not by itself indicate if it isEnabled/operable, so we check storage first.
 	// We also require the charger to be 'Accepted by central system' (optional) see 4.2.1. of the ocpp 1.6 specification
-	if(storage_Get_IsEnabled() == 0 || get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
+	if(storage_Get_IsEnabled() == 0 || !storage_Get_availability_ocpp() || get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 	}
 
@@ -1435,88 +1452,88 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 	ESP_LOGI(TAG, "Request to change availability");
 	pending_change_availability = false;
 
-	if(payload == NULL || !cJSON_HasObjectItem(payload, "connectorId") || !cJSON_HasObjectItem(payload, "type")){
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' and 'type' fields", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for formation violation");
-		}else{
-			send_call_reply(ocpp_error);
-		}
-		return;
+	char err_str[128] = {0};
+
+	int connector_id;
+	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", true, &connector_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR)
+		goto error;
+
+	if(connector_id < 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+		err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+		strcpy(err_str, "Expected connectorId to name a valid connector");
+		goto error;
 	}
 
-	cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
-	cJSON * type_json = cJSON_GetObjectItem(payload, "type");
+	char * availability_type;
+	err = ocppj_get_string_field(payload, "type", true, &availability_type, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR)
+		goto error;
 
-	if(!cJSON_IsNumber(connector_id_json) || !cJSON_IsString(type_json) || !ocpp_validate_enum(type_json->valuestring, true, 2,
-													OCPP_AVAILABILITY_TYPE_INOPERATIVE,
-													OCPP_AVAILABILITY_TYPE_OPERATIVE) == 0){
-
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer and 'type' to be AvailabilityType", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-		}else{
-			send_call_reply(ocpp_error);
-		}
-		return;
+	if(ocpp_validate_enum(availability_type, true, 2,
+				OCPP_AVAILABILITY_TYPE_INOPERATIVE,
+				OCPP_AVAILABILITY_TYPE_OPERATIVE) != 0){
+		err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+		strcpy(err_str, "Expected 'type' to be a vaild AvailabilityType");
+		goto error;
 	}
 
-	if(connector_id_json->valueint < 0 || connector_id_json->valueint > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'connectorId' to identify a valid connector", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-		}else{
-			send_call_reply(ocpp_error);
-		}
-		return;
-	}
+	bool new_available = strcmp(availability_type, OCPP_AVAILABILITY_TYPE_OPERATIVE) == 0;
+	bool old_available = storage_Get_availability_ocpp();
 
-	uint8_t new_operative = (strcmp(type_json->valuestring, OCPP_AVAILABILITY_TYPE_INOPERATIVE) == 0) ? 0 : 1;
-	char availability_status[16] = "";
-	uint8_t old_is_enabled = storage_Get_IsEnabled();
-
-	if(new_operative != old_is_enabled)
+	cJSON * reply = NULL;
+	if(new_available != old_available)
 	{
 		enum ocpp_cp_status_id ocpp_state = get_ocpp_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode());
-		if((ocpp_state == eOCPP_CP_STATUS_AVAILABLE && new_operative == 0) || ocpp_state == eOCPP_CP_STATUS_UNAVAILABLE){
-			if(change_availability(new_operative) == 0)
+		if(new_available == true || (ocpp_state != eOCPP_CP_STATUS_CHARGING && ocpp_state != eOCPP_CP_STATUS_SUSPENDED_EV && ocpp_state != eOCPP_CP_STATUS_SUSPENDED_EVSE)){
+			if(change_availability(new_available) == 0)
 			{
-				strcpy(availability_status, OCPP_AVAILABILITY_STATUS_ACCEPTED);
+				reply = ocpp_create_change_availability_confirmation(unique_id, OCPP_AVAILABILITY_STATUS_ACCEPTED);
 			}
 			else
 			{
-				cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to update availability", NULL);
-				if(ocpp_error == NULL){
-					ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-				}else{
-					send_call_reply(ocpp_error);
-				}
-				return;
+				err = eOCPPJ_ERROR_INTERNAL;
+				strcpy(err_str, "Unable to update availability");
+				goto error;
 			}
 		}
 		// "When a transaction is in progress Charge Point SHALL respond with availability status 'Scheduled' to indicate that it is scheduled to occur after the transaction has finished"
 		else{
 			pending_change_availability = true;
-			pending_change_availability_state = new_operative;
-			strcpy(availability_status, OCPP_AVAILABILITY_STATUS_SCHEDULED);
+			pending_change_availability_state = new_available;
+			reply = ocpp_create_change_availability_confirmation(unique_id, OCPP_AVAILABILITY_STATUS_SCHEDULED);
 		}
 	}else{
-		strcpy(availability_status, OCPP_AVAILABILITY_STATUS_ACCEPTED);
+			reply = ocpp_create_change_availability_confirmation(unique_id, OCPP_AVAILABILITY_STATUS_ACCEPTED);
 	}
 
-	if(strlen(availability_status) != 0){
-		cJSON * response = ocpp_create_change_availability_confirmation(unique_id, availability_status);
-		if(response == NULL){
-			ESP_LOGE(TAG, "Unable to create accepted response");
-		}else{
-			send_call_reply(response);
-		}
+	if(reply == NULL){
+		ESP_LOGE(TAG, "Unable to create create .conf for change availability");
+	}else{
+		send_call_reply(reply);
 	}
-	ESP_LOGI(TAG, "Change availability complete %d->%d", old_is_enabled, storage_Get_IsEnabled());
+
+	ESP_LOGI(TAG, "Change availability .req complete %s->%s", old_available ? "operative" : "inoperative", new_available ? "operative" : "inoperative");
+	return;
+
+error:
+	if(err == eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Change availability reached error exit without error");
+		err = eOCPPJ_ERROR_INTERNAL;
+	}
+
+	const char * err_code = ocppj_error_code_from_id(err);
+	ESP_LOGE(TAG, "Change availability error: [%s] '%s'", err_code, err_str);
+
+	cJSON * ocpp_err = ocpp_create_call_error(unique_id, err_code, err_str, NULL);
+	if(ocpp_err == NULL){
+		ESP_LOGE(TAG, "Unable to create call error for change configuration");
+	}else{
+		send_call_reply(ocpp_err);
+	}
 }
 
-// TODO: ocpp status transition table transition description indicate that pending is used on end of transaction, not entry of new transaction
-bool change_availability_if_pending(const uint8_t allowed_new_state){
+bool change_availability_if_pending(bool allowed_new_state){
 	if(pending_change_availability && pending_change_availability_state == allowed_new_state){
 		change_availability(pending_change_availability_state);
 		pending_change_availability = false;
@@ -1533,8 +1550,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	case eOCPP_CP_STATUS_AVAILABLE:
 		ESP_LOGI(TAG, "OCPP STATE AVAILABLE");
 
-		if(change_availability_if_pending(0)) // TODO: check if needed elsewhere
-			break;
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
 			break;
@@ -1687,6 +1702,9 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	}
 
 	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, false);
+
+	if(new_state == eOCPP_CP_STATUS_AVAILABLE || new_state == eOCPP_CP_STATUS_FINISHING)
+		change_availability_if_pending(false);
 
 	ocpp_old_state = new_state;
 }
@@ -1884,7 +1902,7 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		if(new_warning & eOCPP_MCU_HIGH_TEMPERATURE){
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true);
 		}
-		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){
+		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){ //TODO: Consider hiding error caused by "inoperative"
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, NULL, true);
 		}
 		if(new_warning & eOCPP_MCU_OVER_CURRENT_FAILURE){
@@ -1908,7 +1926,7 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		weak_connection_check_timestamp = now;
 
 		if((storage_Get_CommunicationMode() == eCONNECTION_WIFI && network_WifiSignalStrength() <= -80)
-			|| storage_Get_CommunicationMode() == eCONNECTION_LTE || GetCellularQuality() <= 20){
+			|| (storage_Get_CommunicationMode() == eCONNECTION_LTE && GetCellularQuality() <= 20)){
 
 			weak_connection = true;
 		}else{
