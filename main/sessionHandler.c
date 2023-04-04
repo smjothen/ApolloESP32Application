@@ -443,6 +443,46 @@ void sessionHandler_OcppTransitionFromFaulted(){
 	ocpp_faulted = false;
 }
 
+/*
+ * ocpp describes preparing as:
+ * 'When a Connector becomes no longer available for a new user but there is no ongoing Transaction (yet). Typically a Connector
+ * is in preparing state when a user presents a tag, inserts a cable or a vehicle occupies the parking bay (Operative)'
+ *
+ * ocpp also defines 'ConnectionTimeOut' as:
+ * "Interval *from beginning of status: 'Preparing' until incipient Transaction is automatically canceled, due to failure of EV driver to
+ * (correctly) insert the charging cable connector(s) into the appropriate socket(s). The Charge Point SHALL go back to the original
+ * state, probably: 'Available'."
+ *
+ * Note that the ConnectionTimeOut only describes timeout for connecting cable and not for presenting idTag.
+ * We assume 'Original' in the description refers to the state prior to preparing
+ *
+ * Transition B1 refers to ConnectionTimeOut:
+ * 'Intended usage is ended (e.g. plug removed, bay no longer occupied, second presentation of idTag, time out (configured by the configuration
+ * key: ConnectionTimeOut) on expected user action)'
+ *
+ * Transition B6 also refers to a timeout, but is not a cable connection timeout:
+ * 'Timed out. Usage was initiated (e.g. insert plug, bay occupancy detection), but idTag not presented within timeout.'
+ *
+ * There are no other timeout configuration for preparing. If it is intended to use the ConnectionTimeOut for transition B6 then the 'Original state'
+ * transition requirement (SHALL) would be broken if prior state was the 'Available' described as probable by the ConnectionTimeOut definition.
+ * Transition back to Available instead would not be productive as the car is still connected and the CP would therefore not be available to other users.
+ * The transition table also defines transitions to preparing that can not be reversed. It is allowed to enter preparing from reserved, but not allowed to
+ * enter reserved from preparing.
+ *
+ * The approach taken is:
+ * 1. Reserved surpass preparing and available.
+ * 2. Reservations end when user is authorized (instead of new transaction), transitioning to faulted/unavailable or timed out.
+ * 2. Only timeout for preparing is when authorized and waiting for cable to connect.
+ * 3. Only result when connection times out is available.
+ *
+ * This approach should be acceptable as the CP does not detect parking bay occupancy and there are only two requirements for charging: authorization and cable connected.
+ * Only transition to preparing where ConnectionTimeOut is relevant is therefore from available.
+ * All other transitions from preparing are not considered timeouts.
+ */
+void transition_to_preparing(){
+	preparing_started = time(NULL);
+}
+
 void sessionHandler_OcppStopTransaction(const char * reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
@@ -1009,28 +1049,19 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 
 	case CHARGE_OPERATION_STATE_DISCONNECTED:
-		/*
-		 * TODO: The specification states:
-		 * "When a Charge Point is configured with StopTransactionOnEVSideDisconnect set to false,
-		 * a transaction is running and the EV becomes disconnected on EV side,
-		 * then a StatusNotification.req with the state: SuspendedEV SHOULD be send to the Central System,
-		 * with the 'errorCode' field set to: 'NoError'. The Charge Point SHOULD add additional information
-		 * in the 'info' field, Notifying the Central System with the reason of suspension:
-		 * 'EV side disconnected'. The current transaction is not stopped."
-		 */
 
-		if(isAuthorized || pending_ocpp_authorize){
-			return eOCPP_CP_STATUS_PREPARING;
-
-		}else if(reservation_info != NULL && reservation_info->is_reservation_state){
+		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
+
+		}else if(isAuthorized || pending_ocpp_authorize){
+			return eOCPP_CP_STATUS_PREPARING;
 
 		}else{
 			return eOCPP_CP_STATUS_AVAILABLE;
 		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING:
-		if(reservation_info != NULL && reservation_info->is_reservation_state){
+		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
 
 		}else if(ocpp_finishing_session // not transitioning away from FINISHED
@@ -1044,7 +1075,12 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_ACTIVE:
-		return eOCPP_CP_STATUS_AVAILABLE;
+		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
+			return eOCPP_CP_STATUS_RESERVED;
+
+		}else{
+			return eOCPP_CP_STATUS_AVAILABLE;
+		}
 
 	case CHARGE_OPERATION_STATE_CHARGING:
 		return eOCPP_CP_STATUS_CHARGING;
@@ -1196,24 +1232,24 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 	case eOCPP_CP_STATUS_AVAILABLE:
 		ESP_LOGI(TAG, "Available, accepting reservation request");
 
-		struct ocpp_reservation_info * tmp_reservation_info = malloc(sizeof(struct ocpp_reservation_info));
-		if(tmp_reservation_info == NULL){
+		if(reservation_info == NULL)
+			reservation_info = malloc(sizeof(struct ocpp_reservation_info));
+
+		if(reservation_info == NULL){
 			ESP_LOGE(TAG, "Unable to allocate space for reservation id");
 			reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to allocate memory for reservation", NULL);
 
 		}else{
-			tmp_reservation_info->connector_id = connector_id;
-			tmp_reservation_info->expiry_date = expiry_date;
-			strcpy(tmp_reservation_info->id_tag, id_tag);
+			reservation_info->connector_id = connector_id;
+			reservation_info->expiry_date = expiry_date;
+			strcpy(reservation_info->id_tag, id_tag);
 			if(id_parent != NULL){
-				strcpy(tmp_reservation_info->parent_id_tag, id_parent);
+				strcpy(reservation_info->parent_id_tag, id_parent);
 			}else{
-				tmp_reservation_info->parent_id_tag[0] = '\0';
+				reservation_info->parent_id_tag[0] = '\0';
 			}
-			tmp_reservation_info->reservation_id = reservation_id;
-			tmp_reservation_info->is_reservation_state = true;
-
-			reservation_info = tmp_reservation_info;
+			reservation_info->reservation_id = reservation_id;
+			reservation_info->is_reservation_state = true;
 
 			ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %ld seconds", connector_id, id_tag, expiry_date - time(NULL));
 			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
@@ -1573,7 +1609,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	case eOCPP_CP_STATUS_PREPARING:
 		ESP_LOGI(TAG, "OCPP STATE PREPARING");
 
-		preparing_started = time(NULL);
+		transition_to_preparing();
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -1675,7 +1711,10 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
+			break;
 		case eOCPP_CP_STATUS_RESERVED:
+			free(reservation_info);
+			reservation_info = NULL;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
@@ -1692,7 +1731,11 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
+			break;
 		case eOCPP_CP_STATUS_RESERVED:
+			free(reservation_info);
+			reservation_info = NULL;
+			break;
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 			break;
 		default:
