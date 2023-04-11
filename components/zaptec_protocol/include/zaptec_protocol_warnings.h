@@ -70,4 +70,22 @@
 // These warnings are continuously cleared when no car is connected
 #define WARNING_CLEAR_DISCONNECT    (WARNING_CHARGE_OVERCURRENT | WARNING_OVERCURRENT_INSTALLATION | WARNING_PILOT_STATE | WARNING_PILOT_LOW_LEVEL | WARNING_PILOT_NO_PROXIMITY | WARNING_MAX_SESSION_RESTART)
 
+#define EMETER_PARAM_STATUS_DRDY     (1l << 16) // New low rate results (data) ready
+#define EMETER_PARAM_STATUS_OV_FREQ  (1l << 15) // Frequency over High Limit
+#define EMETER_PARAM_STATUS_UN_FREQ  (1l << 14) // Under Low Frequency Limit
+#define EMETER_PARAM_STATUS_OV_TEMP  (1l << 13) // Temperature over High Limit
+#define EMETER_PARAM_STATUS_UN_TEMP  (1l << 12) // Under Low Temperature Limit
+#define EMETER_PARAM_STATUS_OV_VRMSC (1l << 11) // RMS Voltage C Over Limit
+#define EMETER_PARAM_STATUS_UN_VRMSC (1l << 10) // RMS Voltage C Under Limit
+#define EMETER_PARAM_STATUS_OV_VRMSB (1l << 9) // RMS Voltage B Over Limit
+#define EMETER_PARAM_STATUS_UN_VRMSB (1l << 8) // RMS Voltage B Under Limit
+#define EMETER_PARAM_STATUS_OV_VRMSA (1l << 7) // RMS Voltage A Over Limit
+#define EMETER_PARAM_STATUS_UN_VRMSA (1l << 6) // RMS Voltage A Under Limit
+#define EMETER_PARAM_STATUS_UN_PFC   (1l << 5) // Power Factor C Under Limit
+#define EMETER_PARAM_STATUS_UN_PFB   (1l << 4) // Power Factor B Under Limit
+#define EMETER_PARAM_STATUS_UN_PFA   (1l << 3) // Power Factor A Under Limit
+#define EMETER_PARAM_STATUS_OV_IRMSC (1l << 2) // RMS Current C Over Limit
+#define EMETER_PARAM_STATUS_OV_IRMSB (1l << 1) // RMS Current B Over Limit
+#define EMETER_PARAM_STATUS_OV_IRMSA (1l << 0) // RMS Current A Over Limit
+
 #endif /* ZAPTEC_PROTOCOL_WARNINGS_H */

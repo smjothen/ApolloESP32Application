@@ -1865,6 +1865,9 @@ static void handle_reserved(){
 }
 
 static uint32_t ocpp_notified_warnings = 0x00000000;
+static uint16_t last_emeter_alarm = 0x0000;
+static uint16_t ocpp_notified_emeter_alarm = 0x0000;
+
 // Masks used to convert an mcu warning to an ocpp ChargePointErrorCode
 enum ocpp_mcu_error_code{
 	/* WARNING_REBOOT*/
@@ -1959,6 +1962,28 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		}
 		if(new_warning & eOCPP_MCU_UNDER_VOLTAGE){
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true);
+		}
+	}
+
+	uint16_t new_emeter_alarm = last_emeter_alarm & ~ocpp_notified_emeter_alarm;
+	ocpp_notified_emeter_alarm = last_emeter_alarm;
+
+	//TODO: test with emeter alarm
+	if(new_emeter_alarm){
+		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_VRMSA | EMETER_PARAM_STATUS_OV_VRMSB | EMETER_PARAM_STATUS_OV_VRMSC)){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_VOLTAGE, "Reported by emeter", true);
+		}
+		if(new_emeter_alarm & (EMETER_PARAM_STATUS_UN_VRMSA | EMETER_PARAM_STATUS_UN_VRMSB | EMETER_PARAM_STATUS_UN_VRMSC)){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, "Reported by emeter", true);
+		}
+		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_IRMSA | EMETER_PARAM_STATUS_OV_IRMSB | EMETER_PARAM_STATUS_OV_IRMSC)){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, "Reported by emeter", true);
+		}
+		if(new_emeter_alarm & EMETER_PARAM_STATUS_OV_TEMP){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, "Reported by emeter", true);
+		}
+		if(new_emeter_alarm & EMETER_PARAM_STATUS_UN_TEMP){
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR, "Low temperature reported by emeter", true);
 		}
 	}
 
@@ -3150,6 +3175,8 @@ static void sessionHandler_task()
 					ZapMessage rxMsg = MCU_ReadParameter(ParamEmeterAlarm);
 					if((rxMsg.length == 2) && (rxMsg.identifier == ParamEmeterAlarm))
 					{
+						last_emeter_alarm = rxMsg.data[0] + (rxMsg.data[1] << 8);
+
 						char buf[50] = {0};
 						snprintf(buf, sizeof(buf), "eMeterAlarmSource: 0x%02X%02X", rxMsg.data[0], rxMsg.data[1]);
 						publish_debug_message_event(buf, cloud_event_level_warning);
