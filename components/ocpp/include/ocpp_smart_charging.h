@@ -22,6 +22,11 @@
 esp_err_t ocpp_smart_charging_init();
 
 /**
+ * @brief exits and frees memory allocated by the smart charging thread
+ */
+void ocpp_smart_charging_deinit();
+
+/**
  * @brief Used to inform smart charging of id in case new charging profile is transaction id specific.
  *
  * @param transaction_id id of new transaction or NULL if no transaction

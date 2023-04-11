@@ -672,6 +672,7 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 			error_logger(unique_id, error_code, error_description, error_details, call->call->cb_data);
 		}
 		free_call_with_cb(call->call);
+		call->call = NULL;
 	}
 }
 
@@ -1028,6 +1029,7 @@ void stop_ocpp_heartbeat(void){
 
 int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
+
 	default_heartbeat_interval = ocpp_heartbeat_interval;
 
 	transaction_message_attempts = ocpp_transaction_message_attempts;
@@ -1095,6 +1097,9 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 				ESP_LOGE(TAG, "Unable to open semaphore");
 				goto error;
 			}
+
+			block_enqueue_call(0);
+			block_sending_call(0);
 
 			return 0;
 		}
@@ -1357,8 +1362,65 @@ cJSON * ocpp_task_get_diagnostics(){
 	return res;
 }
 
+void fail_all_queued(const char * error_description){
+
+	struct ocpp_active_call call = {0};
+
+	if(ocpp_blocking_call_queue != NULL){
+		UBaseType_t enqueued_count = uxQueueMessagesWaiting(ocpp_blocking_call_queue);
+		for(size_t i = 0; i < enqueued_count; i++){
+			if(xQueueReceive(ocpp_blocking_call_queue, &call.call, pdMS_TO_TICKS(1000)) == pdTRUE){
+				call.retries = 0;
+				fail_active_call(&call, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+			}
+		}
+	}
+
+	if(ocpp_transaction_call_queue != NULL){
+		UBaseType_t enqueued_count = uxQueueMessagesWaiting(ocpp_transaction_call_queue);
+		for(size_t i = 0; i < enqueued_count; i++){
+			if(xQueueReceive(ocpp_transaction_call_queue, &call.call, pdMS_TO_TICKS(1000)) == pdTRUE){
+				call.retries = 0;
+				fail_active_call(&call, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+			}
+		}
+	}
+
+	if(ocpp_call_queue != NULL){
+		UBaseType_t enqueued_count = uxQueueMessagesWaiting(ocpp_call_queue);
+		for(size_t i = 0; i < enqueued_count; i++){
+			if(xQueueReceive(ocpp_call_queue, &call.call, pdMS_TO_TICKS(1000)) == pdTRUE){
+				call.retries = 0;
+				fail_active_call(&call, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+			}
+		}
+	}
+
+	if(ocpp_active_call_queue != NULL){
+		if(xQueueReceive(ocpp_active_call_queue, &call.call, 0) == pdTRUE){
+			call.retries = 0;
+			fail_active_call(&call, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+		}
+	}
+
+	if(failed_transaction_call != NULL){
+		failed_transaction_call->retries = 0;
+		fail_active_call(failed_transaction_call, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+	}
+
+	if(awaiting_failed != NULL){
+		awaiting_failed->retries = 0;
+		fail_active_call(awaiting_failed, OCPPJ_ERROR_INTERNAL, error_description, NULL);
+	}
+
+}
+
 void stop_ocpp(void){
 	ESP_LOGW(TAG, "Closing web socket");
+
+	block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
+	block_sending_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
+
 	/* if(esp_websocket_client_is_connected(client)){ */
 	/* 	//Only awailable in newer versions of esp-idf */
 	/* 	esp_websocket_client_close(client, pdMS_TO_TICKS(5000)); */
@@ -1367,6 +1429,8 @@ void stop_ocpp(void){
 		esp_websocket_client_destroy(client); // Calls esp_websocket_client_stop internaly
 		client = NULL;
 	}
+
+	fail_all_queued("Stopping ocpp");
 
 	if(ocpp_call_queue != NULL){
 		vQueueDelete(ocpp_call_queue);

@@ -16,10 +16,12 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 			int * transaction_id, uint * connectors, size_t connector_count);
 void ocpp_init();
 // When graceful is enabled, it will attempt to stop ongoing transactions and send any queued transaction related messages.
+// Note that all ocpp_end* functions prepares the ocpp thread and notifies it will therefore not exit imediatly.
 void ocpp_end(bool graceful);
 bool ocpp_is_running();
 bool ocpp_task_exists();
-void ocpp_restart(bool graceful);
+void ocpp_end_and_reboot(bool graceful);
+void ocpp_end_and_reconnect(bool graceful);
 
 #ifdef __cplusplus
 }

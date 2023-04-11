@@ -2363,7 +2363,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 
 					if(ocpp_is_running()){
-						ocpp_restart(true);
+						ocpp_end_and_reconnect(true);
 					}
 
 					responseStatus = 200;

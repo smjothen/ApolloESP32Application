@@ -60,7 +60,8 @@ StaticTask_t task_ocpp_buffer;
 StackType_t task_ocpp_stack[TASK_OCPP_STACK_SIZE];
 
 static bool should_run = false;
-static bool should_restart = false;
+static bool should_reboot = false;
+static bool should_reconnect = false;
 static bool graceful_exit = false;
 static bool connected = false;
 
@@ -79,8 +80,7 @@ void not_supported_cb(const char * unique_id, const char * action, cJSON * paylo
 	return;
 }
 
-//TODO: This is run in a timer. MCU_SendCommandId blocks on semaphore with non-zero timeout, this could cause deadlock.
-static void reset(){
+static void reboot_esp_mcu(){
 	ESP_LOGI(TAG, "Restarting MCU");
 	MessageType ret = MCU_SendCommandId(CommandReset);
 	if(ret == MsgCommandAck)
@@ -109,7 +109,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			else{
 				send_call_reply(conf);
 			}
-			ocpp_restart(true);
+			ocpp_end_and_reboot(true);
 			return;
 		}
 		else if(strcmp(reset_type, OCPP_RESET_TYPE_HARD) == 0){
@@ -151,11 +151,11 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 
 			bool delay = false;
 			if(ongoing_transaction){
-				TimerHandle_t reset_timer = xTimerCreate("reset", pdMS_TO_TICKS(2000), false, NULL, reset);
+				TimerHandle_t reset_timer = xTimerCreate("reset", pdMS_TO_TICKS(2000), false, NULL, reboot_esp_mcu);
 				if(reset_timer != NULL){
 					if(xTimerStart(reset_timer, 0) != pdPASS){
 						ESP_LOGE(TAG, "Unable to start reset timer, Resetting imediatly");
-						reset();
+						reboot_esp_mcu();
 					}else{
 						delay = true;
 					}
@@ -166,7 +166,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 
 			if(!delay){
 				vTaskDelay(pdMS_TO_TICKS(400)); // Allow time for websocket to send call reply
-				reset();
+				reboot_esp_mcu();
 			}
 		}
 		else{
@@ -2625,7 +2625,7 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 
 void ocpp_send_connector_zero_status(const char * error_code, char * info){
 
-	const char * state = (storage_Get_IsEnabled() && get_registration_status() == eOCPP_REGISTRATION_ACCEPTED) ? OCPP_CP_STATUS_AVAILABLE : OCPP_CP_STATUS_UNAVAILABLE;
+	const char * state = (storage_Get_IsEnabled() && storage_Get_availability_ocpp() && get_registration_status() == eOCPP_REGISTRATION_ACCEPTED) ? OCPP_CP_STATUS_AVAILABLE : OCPP_CP_STATUS_UNAVAILABLE;
 
 	cJSON * status_notification  = ocpp_create_status_notification_request(0, error_code, info, state, time(NULL), NULL, NULL);
 	if(status_notification == NULL){
@@ -3054,7 +3054,7 @@ cJSON * ocpp_get_diagnostics(){
 
 	if(main_res != NULL){
 		cJSON_AddBoolToObject(main_res, "shoudl_run", should_run);
-		cJSON_AddBoolToObject(main_res, "shoudl_restart", should_restart);
+		cJSON_AddBoolToObject(main_res, "shoudl_reboot", should_reboot);
 		cJSON_AddBoolToObject(main_res, "graceful_exit", graceful_exit);
 		cJSON_AddBoolToObject(main_res, "connected", connected);
 		cJSON_AddNumberToObject(main_res, "stack_watermark", ocpp_get_stack_watermark());
@@ -3110,7 +3110,7 @@ static void ocpp_task(){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
 		// TODO: see if there is a better way to check connectivity
 		while(connectivity_GetActivateInterface() == eCONNECTION_NONE){
-			if(should_run == false || should_restart)
+			if(should_run == false || should_reboot)
 				goto clean;
 
 			ESP_LOGI(TAG, "Waiting for connection...");
@@ -3143,7 +3143,7 @@ static void ocpp_task(){
 
 		const char * cbid = storage_Get_chargebox_identity_ocpp();
 		do{
-			if(should_run == false || should_restart)
+			if(should_run == false || should_reboot)
 				goto clean;
 
 			err = start_ocpp(storage_Get_url_ocpp(),
@@ -3155,7 +3155,7 @@ static void ocpp_task(){
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
-					vTaskDelay(pdMS_TO_TICKS(1000 * retry_delay));
+					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
 					retry_delay *= 5;
 
 				}else{
@@ -3194,7 +3194,7 @@ static void ocpp_task(){
 		retry_delay = 5;
 		do{
 
-			if(should_run == false || should_restart)
+			if(should_run == false || should_reboot)
 				goto clean;
 
 			err = complete_boot_notification_process(NULL, "Go", i2cGetLoadedDeviceInfo().serialNumber,
@@ -3203,7 +3203,7 @@ static void ocpp_task(){
 			if(err != 0){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to get accepted boot, retrying in %d sec", retry_delay);
-					vTaskDelay(pdMS_TO_TICKS(1000 * retry_delay));
+					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
 					retry_delay *= 5;
 
 				}else{
@@ -3244,7 +3244,7 @@ static void ocpp_task(){
 		time_t last_problem_timestamp = time(NULL);
 		int enqueued_calls = enqueued_call_count();;
 
-		while(should_run && should_restart == false){
+		while(should_run && should_reboot == false){
 			uint32_t data = 0;
 
 			if(connected && enqueued_calls > 0){ // Prevent blocking when calls are waiting
@@ -3337,6 +3337,8 @@ static void ocpp_task(){
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
 
+		ocpp_auth_deinit();
+		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
 
 		if(graceful_exit){
@@ -3345,7 +3347,7 @@ clean:
 				ESP_LOGI(TAG, "Checking connector %d", i);
 				if(sessionHandler_OcppTransactionIsActive(i)){
 					ESP_LOGI(TAG, "Active transaction on connector %d", i);
-					if(should_restart){
+					if(should_reboot){
 						sessionHandler_OcppStopTransaction(OCPP_REASON_SOFT_RESET);
 					}else{
 						sessionHandler_OcppStopTransaction(OCPP_REASON_OTHER);
@@ -3387,11 +3389,16 @@ clean:
 		stop_ocpp();
 
 		ESP_LOGI(TAG, "Teardown complete");
+
+		if(should_reconnect){
+			should_run = true;
+			should_reconnect =false;
+		}
 	}
 
-	if(should_restart){
-		ESP_LOGI(TAG, "Resetting due to reset request");
-		reset();
+	if(should_reboot){
+		ESP_LOGI(TAG, "Ocpp end complete rebooting device");
+		reboot_esp_mcu();
 	}
 
 	task_ocpp_handle = NULL;
@@ -3420,8 +3427,16 @@ void ocpp_end(bool graceful){
 	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }
 
-void ocpp_restart(bool graceful){
-	should_restart = true;
+void ocpp_end_and_reboot(bool graceful){
+	should_run = false;
+	should_reboot = true;
+	graceful_exit = graceful;
+	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
+}
+
+void ocpp_end_and_reconnect(bool graceful){
+	should_run = false;
+	should_reconnect = true;
 	graceful_exit = graceful;
 	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }

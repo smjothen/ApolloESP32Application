@@ -266,9 +266,9 @@ esp_err_t read_auth_data(struct ocpp_authorization_data * authorization_data, bo
 			ESP_LOGE(TAG, "Unable to allocate memory for parent tag during auth read");
 			err = ESP_ERR_NO_MEM;
 			goto cleanup;
-		}else{
-			authorization_data->id_tag_info->parent_id_tag = NULL;
 		}
+	}else{
+		authorization_data->id_tag_info->parent_id_tag = NULL;
 	}
 
 	err = ESP_OK;
@@ -1411,4 +1411,11 @@ int ocpp_auth_init(){
 
 	xSemaphoreGive(file_lock);
 	return 0;
+}
+
+void ocpp_auth_deinit(){
+	if(file_lock != NULL){
+		vSemaphoreDelete(file_lock);
+		file_lock = NULL;
+	}
 }

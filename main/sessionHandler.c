@@ -564,7 +564,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 			valid = (status_id == eOCPP_AUTHORIZATION_STATUS_ACCEPTED);
 		}
 
-		if(id_tag_info.parent_id_tag[0] != '\0'){
+		if(id_tag_info.parent_id_tag != NULL){
 			ESP_LOGI(TAG, "Adding parent id to current charge session");
 			chargeSession_SetParentId(id_tag_info.parent_id_tag);
 		}

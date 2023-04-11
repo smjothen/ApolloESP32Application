@@ -30,7 +30,7 @@ static const char * base_path = CONFIG_OCPP_FILE_PATH;
 
 static SemaphoreHandle_t file_lock = NULL;
 
-static TaskHandle_t ocpp_smart_task_handle;
+static TaskHandle_t ocpp_smart_task_handle = NULL;
 
 void (* charge_value_cb)(float min_charging_limit, float max_charging_limit, uint8_t number_phases) = NULL;
 /**
@@ -1976,7 +1976,7 @@ static void ocpp_smart_task(){
 
 				if(schedule == NULL){
 					ESP_LOGE(TAG, "Unable to allocate memory for composite schedule");
-					goto error;
+					goto cleanup;
 				}
 
 				time_t tmp_schedule_dt; // length of schedule to create
@@ -2051,11 +2051,15 @@ static void ocpp_smart_task(){
 		}
 	}
 
-error:
-	ESP_LOGE(TAG, "Smart charging exited with error");
+cleanup:
+	ESP_LOGW(TAG, "Smart charging exited");
 	ocpp_free_charging_profile(profile_tx); // tx or txDefault profile
 	ocpp_free_charging_profile(profile_max);
 	ocpp_free_charging_schedule(schedule, true);
+
+	ocpp_smart_task_handle = NULL;
+
+	vTaskDelete(NULL);
 }
 
 esp_err_t ocpp_smart_charging_init(){
@@ -2099,6 +2103,36 @@ esp_err_t ocpp_smart_charging_init(){
 	xSemaphoreGive(file_lock);
 
 	return ESP_OK;
+}
+
+#define MAX_DEINIT_WAIT 5000
+void ocpp_smart_charging_deinit(){
+
+	if(ocpp_smart_task_handle == NULL){
+		ESP_LOGW(TAG, "Requested to deinit ocpp smart charging, but no handle exists");
+		return;
+	}
+
+	time_t deinit_begin = time(NULL);
+
+	xTaskNotify(ocpp_smart_task_handle, eNOT_NEEDED, eSetBits);
+
+	bool complete = false;
+
+	while(deinit_begin + MAX_DEINIT_WAIT > time(NULL)){
+		if(ocpp_smart_task_handle == NULL){
+			complete = true;
+			break;
+		}
+
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+
+	if(complete){
+		ESP_LOGI(TAG, "ocpp smart charging task successfully removed");
+	}else{
+		ESP_LOGE(TAG, "Unable to remove ocpp smart charging task.");
+	}
 }
 
 void ocpp_set_on_new_period_cb(void (* on_new_period)(float min_charging_limit, float max_charging_limit, uint8_t number_phases)){

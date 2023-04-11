@@ -31,6 +31,7 @@ bool ocpp_is_connected(){
 }
 
 void clean_listener(){
+	is_connected = false;
 	task_to_notify = NULL;
 	notify_offset = 0;
 
@@ -48,7 +49,7 @@ void ocpp_configure_websocket_notification(TaskHandle_t task, uint offset){
 
 int attach_call_cb(enum ocpp_call_action_id action_id, ocpp_call_callback call_cb, void * cb_data){
 
-	if(callbacks[action_id].cb != NULL){
+	if(callbacks[action_id].cb != NULL && callbacks[action_id].cb != call_cb){
 		ESP_LOGE(TAG, "Unable to attach callback, other callback exists");
 		return -1;
 	}
