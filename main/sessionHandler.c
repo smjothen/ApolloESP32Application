@@ -933,6 +933,32 @@ void start_charging_on_tag_deny(const char * tag){
 	SetAuthorized(false);
 }
 
+void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
+	ESP_LOGI(TAG, "Cancel authorization for preparing token: %s comparable to %s", tag_1, tag_2);
+	pending_ocpp_authorize = false;
+
+	audio_play_nfc_card_accepted();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
+	SetAuthorized(false);
+	sessionHandler_InitiateResetChargeSession();
+	chargeSession_ClearAuthenticationCode();
+}
+
+void cancel_authorization_on_tag_deny(const char * tag_1, const char * tag_2){
+	ESP_LOGI(TAG, "Won't cancel authorization for preparing token: %s not comparable to %s", tag_1, tag_2);
+	pending_ocpp_authorize = false;
+
+	audio_play_nfc_card_denied();
+}
+
 void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
 	ESP_LOGI(TAG, "Stop transaction accepted for %s on charge session (id: %d) made by '%s'",
 		tag_1, (transaction_id != NULL) ? *transaction_id : -1, tag_2);
@@ -1802,7 +1828,22 @@ static void handle_preparing(){
 			sessionHandler_HoldParametersFromCloud(32.0f, 1);
 		}
 	}else if(has_new_id_token()){
-		authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
+
+		if(isAuthorized){
+			pending_ocpp_authorize = true;
+
+			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING); // TODO: Improve signaling to user.
+			if(ret == MsgWriteAck)
+				ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+			else
+				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
+			ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
+					chargeSession_GetAuthenticationCode(), chargeSession_Get().parent_id,
+					cancel_authorization_on_tag_accept, cancel_authorization_on_tag_deny);
+		}else{
+			authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
+		}
 		NFCTagInfoClearValid();
 
 	}else if(isAuthorized && MCU_GetChargeMode() == eCAR_DISCONNECTED){

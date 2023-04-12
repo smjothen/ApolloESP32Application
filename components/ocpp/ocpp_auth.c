@@ -502,6 +502,11 @@ static void authorize_compare_parents(struct comparison_data * cmp_data){
 
 			if(cmp_data->original_parent_1[0] != '\0'){
 
+				if(cmp_data->original_parent_2[0] != '\0' && strcmp(cmp_data->original_parent_1, cmp_data->original_parent_2) == 0){
+					accepted = true;
+					break;
+				}
+
 				if(cmp_data->auth_data_2.id_tag_info != NULL && cmp_data->auth_data_2.id_tag_info->parent_id_tag != NULL
 					&& strcmp(cmp_data->original_parent_1, cmp_data->auth_data_2.id_tag_info->parent_id_tag) == 0){
 					accepted = true;
@@ -517,7 +522,7 @@ static void authorize_compare_parents(struct comparison_data * cmp_data){
 				}
 
 				if(cmp_data->auth_data_2.id_tag_info != NULL && cmp_data->auth_data_2.id_tag_info->parent_id_tag != NULL
-					&& strcmp(cmp_data->original_parent_1, cmp_data->auth_data_2.id_tag_info->parent_id_tag) == 0){
+					&& strcmp(cmp_data->auth_data_1.id_tag_info->parent_id_tag, cmp_data->auth_data_2.id_tag_info->parent_id_tag) == 0){
 					accepted = true;
 					break;
 				}
