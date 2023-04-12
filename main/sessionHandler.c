@@ -968,6 +968,16 @@ void reserved_on_tag_accept(const char * tag_1, const char * tag_2){
 
 	reservation_info->is_reservation_state = false;
 	start_charging_on_tag_accept(tag_1);
+
+	//If car is connected then CommandAuthorizationGranted will start charging without a
+	// CommandStartCharging. Therefore accepting a tag while reserved may transition from
+	// reserved to charging. This is not allowed in ocpp without transitioning to preparing
+	// first. We fake this transition.
+	ocpp_old_state = eOCPP_CP_STATUS_PREPARING;
+	transition_to_preparing();
+
+	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, false);
+
 }
 
 void reserved_on_tag_deny(const char * tag_1, const char * tag_2){
@@ -1606,7 +1616,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 			ESP_LOGE(TAG, "Invalid state transition from %d to Available", old_state);
 		}
 		break;
-	case eOCPP_CP_STATUS_PREPARING:
+	case eOCPP_CP_STATUS_PREPARING: // When adding to Preparing transition, make sure to update reserved_on_tag_accept
 		ESP_LOGI(TAG, "OCPP STATE PREPARING");
 
 		transition_to_preparing();
