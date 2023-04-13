@@ -471,6 +471,9 @@ void uartSendTask(void *pvParameters){
 			case 23:
 				txMsg.identifier = StandAloneCurrent;
 				break;
+			case 24:
+				txMsg.identifier = Notifications;
+				break;
 
 
         	/*default:
@@ -586,6 +589,11 @@ void uartSendTask(void *pvParameters){
 			mcuStandAloneCurrent =  GetFloat(rxMsg.data);
 			isMCUReady = true;
 		}
+		else if(rxMsg.identifier == Notifications)
+		{
+			mcuNotifications = (rxMsg.data[0] << 8) | rxMsg.data[1];
+		}
+
 			//mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
 
 
@@ -612,13 +620,13 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(printCount >= 24 * 5)//15)
+        if(printCount >= 25 * 5)//15)
         {
-        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
         	printCount = 0;
         }
 
-        if(count >= 24)
+        if(count >= 25)
         {
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;

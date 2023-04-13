@@ -216,6 +216,39 @@ void on_ocmf_sync_time(TimerHandle_t xTimer){
 	xSemaphoreGive(ocmf_sync_semaphore);
 }
 
+
+static uint32_t previousNotificaiton = 0;
+void NotificationHandler()
+{
+	uint32_t combinedNotification = GetCombinedNotifications();
+
+	if(combinedNotification != previousNotificaiton)
+	{
+		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotificaiton, combinedNotification);
+
+		//Check for RCD error indication
+		if(combinedNotification & 0x1)
+		{
+			ZapMessage rxMsg = MCU_ReadParameter(RCDErrorCount);
+			uint8_t readErrorCount = 0;
+			if((rxMsg.length == 1) && (rxMsg.identifier == RCDErrorCount))
+				readErrorCount = rxMsg.data[0];
+
+			MCU_SendCommandId(CommandClearRCDNotification);
+
+			char noteBuf[25];
+			snprintf(noteBuf, 25, "RCD error count: %i", readErrorCount);
+			publish_debug_telemetry_observation_Diagnostics(noteBuf);
+			ESP_LOGW(TAG, "%s", noteBuf);
+
+			publish_debug_message_event("RCD error trig", cloud_event_level_warning);
+		}
+	}
+
+	previousNotificaiton = combinedNotification;
+}
+
+
 //For diagnostics and developement
 static float currentSetFromCloud = 0.0;
 static int phasesSetFromCloud = 0;
@@ -1464,6 +1497,10 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_Diagnostics(membuf);
 				}
 			}
+
+
+			NotificationHandler();
+
 
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
