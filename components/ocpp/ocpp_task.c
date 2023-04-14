@@ -586,7 +586,24 @@ int check_send_legality(const char * action, bool is_trigger_message){
 	return 0;
 }
 
-void update_transaction_id(struct ocpp_active_call * call){
+/*
+ * OCPP errata v4.0 states:
+ * "If the Charge Point was unable to deliver the StartTransaction.req despite repeated attempts, or if the Central System was
+ * unable to deliver the StartTransaction.conf response, then the Charge Point will not receive a transactionId.
+ *
+ * In that case, the Charge Point SHALL send any Transaction related messages for this transaction to the Central System with a
+ * transactionId = -1. The Central System SHALL respond as if these messages refer to a valid transactionId, so that the Charge
+ * Point is not blocked by this."
+ *
+ * To make sure that the temporary id assigned by the CP is not overwritten with -1 and possibly confuse two different transactions
+ * that both have id -1. We can only update set the id to -1 once it is being sent.
+ */
+enum transaction_id_update_strategy{
+	eOCPP_TRANSACTION_ID_RETAIN, // If a temporary ID does not match ID given by CS leave the ID unchanged
+	eOCPP_TRANSACTION_ID_FAIL // If a temporary ID does not match ID given by CS change the ID to -1
+};
+
+void update_transaction_id(struct ocpp_active_call * call, enum transaction_id_update_strategy strategy){
 	if(!check_active_call_validity(call)){
 		ESP_LOGE(TAG, "Unable to update tmp id: Invalid active call");
 		return;
@@ -599,13 +616,17 @@ void update_transaction_id(struct ocpp_active_call * call){
 	}
 	cJSON * transaction_id_json = cJSON_GetObjectItem(message_payload, "transactionId");
 	if(transaction_id_json == NULL){
-		ESP_LOGE(TAG, "Unable to update tmp id: No transactionId");
 		return;
 	}
 	int new_id;
 	if(convert_tmp_id(transaction_id_json->valueint, &new_id)){
 		ESP_LOGW(TAG, "Replacing tmp id '%d' with '%d'", transaction_id_json->valueint, new_id);
 		cJSON_SetNumberValue(transaction_id_json, new_id);
+	}
+
+	if(strategy == eOCPP_TRANSACTION_ID_FAIL && transaction_id_json->valueint < 0){
+		ESP_LOGE(TAG, "Failed transaction id. Setting to -1 per errata v4.0");
+		cJSON_SetNumberValue(transaction_id_json, -1);
 	}
 }
 
@@ -810,7 +831,7 @@ int send_next_call(int * remaining_call_count_out){
 		call_aquired = receive_transaction_call(&call, pdMS_TO_TICKS(2500), &min_wait);
 
 		if(call_aquired){
-			update_transaction_id(&call);
+			update_transaction_id(&call, eOCPP_TRANSACTION_ID_RETAIN);
 		}
 	}
 
@@ -902,6 +923,9 @@ int send_next_call(int * remaining_call_count_out){
 		xQueueReset(ocpp_active_call_queue);
 		return -1;
 	}
+
+	if(call.is_transaction_related)
+		update_transaction_id(&call, eOCPP_TRANSACTION_ID_FAIL); // In case StartTransaction.conf failed or id received after pushed to active queue
 
 	char * message_string = cJSON_Print(call.call->call_message);
 	if(message_string == NULL){

@@ -499,7 +499,7 @@ void sessionHandler_OcppStopTransaction(const char * reason){
 }
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
-
+	ESP_LOGI(TAG, "Received start transaction response");
 	bool is_current_transaction = false;
 	if(cJSON_HasObjectItem(payload, "transactionId")){
 		/*
@@ -864,7 +864,10 @@ void start_transaction(){
 		return;
 	}
 
-	*transaction_id = esp_random();
+	*transaction_id = -fabs(esp_random()); // Use negative number to indicate local
+	if(*transaction_id > -2){ // -1 has a special meaning in errata v4.0
+		*transaction_id = -2; // The chance of two transactions having the same ID is still negligible
+	}
 
 	if(start_transaction == NULL){
 		ESP_LOGE(TAG, "Unable to create start transaction request");
