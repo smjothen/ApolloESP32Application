@@ -26,7 +26,7 @@ void ocpp_change_message_timeout(uint16_t timeout);
 /**
  * @brief changes the minimum delay for certain StatusNotification.req calls
  *
- * @description This function is meant for implementation of MinimumStatusDuration described in OCPP spec section 9.1.20.
+ * @details This function is meant for implementation of MinimumStatusDuration described in OCPP spec section 9.1.20.
  * The duration given is the delay from a notification sent with ocpp_send_status_notification with important set to false,
  * to the notification is enqueued to be sent with handle_ocpp_call if there has not been any other call to
  * ocpp_send_status_notification. If another call to ocpp_send_status_notification is made, then the new call will replace
@@ -60,8 +60,11 @@ int send_call_reply(cJSON * call);
  * @param info "Optional. Additional free format information related to the error."
  * @param important if false the notification will wait for MinimumStatusDuration seconds and
  * not be sent if new notification is created within the duration.
+ * @param is_trigger should be true if initiated by a TriggerMessage.req
+ *
+ * @note is_trigger is ignored if important is false.
  */
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important);
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important, bool is_trigger);
 
 /**
  * @brief Prepares a CP initiated call (.req call)
@@ -81,6 +84,16 @@ int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callba
  * @see enqueue_call
  */
 int enqueue_call_immediate(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type);
+
+/**
+ * @brief Equivalent to enqueue_call*, but call is treated as the result of a TriggerMessage.req.
+ *
+ * @details Trigger messages are treated differently than normal calls as they may be sent without CP being accepted by CS.
+ * OCPP errata v4.0 recommend that trigger messages request for BootNotification.req is rejected if CP is already acceoted.
+ *
+ * @see enqueue_call
+ */
+int enqueue_trigger(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, bool immediate);
 
 /**
  * @brief Prevent calls from being enqueued using enqueue_call and similar functions.
@@ -233,6 +246,8 @@ void ocpp_configure_task_notification(TaskHandle_t task, uint offset);
  * @param meter_serial_number "Optional. This contains the serial number of the main electrical
  * meter of the Charge Point"
  * @param meter_type "Optional. This contains the type of the main electrical meter of the Charge Point"
+ *
+ * @note should only be called by a task set with ocpp_configure_task_notification
  */
 int complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
@@ -241,8 +256,10 @@ int complete_boot_notification_process(const char * charge_box_serial_number, co
 
 /**
  * @brief Used by complete_boot_notification_process and when requested with trigger message.
+ *
+ * @param is_trigger Should be true if initiated by a TriggerMessage.req
  */
-int enqueue_boot_notification();
+int enqueue_boot_notification(bool is_trigger);
 
 /**
  * @brief starts ocpp heartbeat
@@ -250,9 +267,9 @@ int enqueue_boot_notification();
 int start_ocpp_heartbeat(void);
 
 /**
- * @brief used to respond to a triggerMessage.req triggering a ocpp_heartbeat and by heartbeat interval
+ * @brief used to respond to a triggerMessage.req triggering a ocpp_heartbeat
  */
-void ocpp_heartbeat();
+void ocpp_trigger_heartbeat();
 
 /**
  * @brief stop ocpp heartbeat on interval
@@ -290,7 +307,8 @@ enum ocpp_registration_status get_registration_status(void);
 enum ocpp_task_event{
 	eOCPP_TASK_CALL_ENQUEUED = 1<<0, ///< A new message has been prepared to be sendt to CS.
 	eOCPP_TASK_CALL_TIMEOUT = 1<<1,
-	eOCPP_TASK_FAILURE = 1<<2 ///< A fault has been detected in the ocpp task.
+	eOCPP_TASK_FAILURE = 1<<2, ///< A fault has been detected in the ocpp task.
+	eOCPP_TASK_REGISTRATION_STATUS_CHANGED = 1<<3 ///< BootNotification.conf has been recieved and status updated
 };
 
 #endif /* OCPP_TASK_H */

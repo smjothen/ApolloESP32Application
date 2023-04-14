@@ -44,8 +44,6 @@ SemaphoreHandle_t ocpp_active_call_lock_1 = NULL;
  */
 QueueHandle_t ocpp_active_call_queue = NULL; // queue size 1
 
-bool is_trigger_message = false; // Will always be false until TriggerMessage is implemented
-
 time_t last_call_timestamp = {0};
 
 QueueHandle_t ocpp_call_queue = NULL; // For normal messages
@@ -292,7 +290,7 @@ uint8_t get_blocked_enqueue_mask(){
 	return enqueue_blocking_mask;
 }
 
-int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, TickType_t wait){
+int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, TickType_t wait, bool is_trigger){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
 		return -1;
@@ -313,6 +311,7 @@ int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_erro
 	message_with_cb->result_cb = result_cb;
 	message_with_cb->error_cb = error_cb;
 	message_with_cb->cb_data = cb_data;
+	message_with_cb->is_trigger_message = is_trigger;
 
 	int err = add_call(message_with_cb, type, wait);
 
@@ -328,11 +327,15 @@ int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_erro
 }
 
 int enqueue_call(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
-	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, pdMS_TO_TICKS(500));
+	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, pdMS_TO_TICKS(500), false);
 }
 
 int enqueue_call_immediate(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type){
-	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, 0);
+	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, 0, false);
+}
+
+int enqueue_trigger(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, bool immediate){
+	return enqueue_call_generic(call, result_cb, error_cb, cb_data, type, immediate ? 0 : pdMS_TO_TICKS(500), true);
 }
 
 static uint8_t call_blocking_mask = 0;
@@ -419,9 +422,17 @@ int send_call_reply(cJSON * call){
 SemaphoreHandle_t status_notification_lock = NULL;
 cJSON * awaiting_status_notification = NULL;
 
-static void send_status_notification(cJSON * status_notification){
+static void send_status_notification(cJSON * status_notification, bool is_trigger){
 	ESP_LOGI(TAG, "Sending status notification to queue");
-	if(enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC) != 0){
+
+	int err;
+	if(is_trigger){
+		err = enqueue_trigger(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC, false);
+	} else {
+		err = enqueue_call_immediate(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
+	}
+
+	if(err != 0){
 		ESP_LOGE(TAG, "Unable to enqueue status notification");
 		cJSON_Delete(status_notification);
 	}
@@ -436,7 +447,7 @@ static void send_and_clear_notification(){
 	}
 
 	if(awaiting_status_notification != NULL){
-		send_status_notification(awaiting_status_notification);
+		send_status_notification(awaiting_status_notification, false);
 		awaiting_status_notification = NULL;
 	}else{
 		ESP_LOGW(TAG, "Awaited status notification is NULL");
@@ -496,7 +507,7 @@ static void stop_awaiting_status_notification(){
 
 enum ocpp_cp_status_id last_known_state = -1;
 
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important){
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important, bool is_trigger){
 	ESP_LOGI(TAG, "Preparing status notification");
 
 	if(new_state == -1){
@@ -532,7 +543,7 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
 
 	}else{
 		stop_awaiting_status_notification();
-		send_status_notification(status_notification);
+		send_status_notification(status_notification, is_trigger);
 	}
 }
 
@@ -541,7 +552,7 @@ bool check_active_call_validity(struct ocpp_active_call * call){
 	return call != NULL && check_call_with_cb_validity(call->call);
 }
 
-int check_send_legality(const char * action){
+int check_send_legality(const char * action, bool is_trigger_message){
 	if(action == NULL)
 		return -1;
 
@@ -882,7 +893,7 @@ int send_next_call(int * remaining_call_count_out){
 
 	const char * action = ocppj_get_action_from_call(call.call->call_message);
 
-	int err = check_send_legality(action);
+	int err = check_send_legality(action, call.call->is_trigger_message);
 
 	if(err != 0){
 		ESP_LOGE(TAG, "Could not send '%s' now, specification prohibits it", action);
@@ -972,17 +983,33 @@ void update_heartbeat_timer(uint sec){
 	}
 }
 
-void ocpp_heartbeat(){
+void ocpp_heartbeat_generic(bool is_trigger){
 	cJSON * heartbeat_request = ocpp_create_heartbeat_request();
 	if(heartbeat_request == NULL){
 		ESP_LOGE(TAG, "Unable to create heartbeat");
 		return;
 	}
 
-	if(enqueue_call_immediate(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC) != 0){
+	int err;
+
+	if(is_trigger){
+		err = enqueue_call_immediate(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC);
+	}else{
+		err = enqueue_trigger(heartbeat_request, heartbeat_result_cb, heartbeat_error_cb, NULL, eOCPP_CALL_GENERIC, false);
+	}
+
+	if(err != 0){
 		ESP_LOGE(TAG, "Unable to send heartbeat");
 		cJSON_Delete(heartbeat_request);
 	}
+}
+
+void ocpp_heartbeat(){
+	ocpp_heartbeat_generic(false);
+}
+
+void ocpp_trigger_heartbeat(){
+	ocpp_heartbeat_generic(true);
 }
 
 int start_ocpp_heartbeat(void){
@@ -1138,15 +1165,12 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 		char * status_string = cJSON_GetObjectItem(payload, "status")->valuestring;
 
 		if(strcmp(status_string, OCPP_REGISTRATION_ACCEPTED) == 0){
-			ESP_LOGI(TAG, "Boot accepted");
 			registration_status = eOCPP_REGISTRATION_ACCEPTED;
 		}
 		else if(strcmp(status_string, OCPP_REGISTRATION_PENDING) == 0){
-			ESP_LOGW(TAG, "Boot still pending");
 			registration_status = eOCPP_REGISTRATION_PENDING;
 		}
 		else if(strcmp(status_string, OCPP_REGISTRATION_REJECTED) == 0){
-			ESP_LOGE(TAG, "Boot rejected");
 			registration_status = eOCPP_REGISTRATION_REJECTED;
 		}
 		else{
@@ -1157,6 +1181,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 
 	}else{
 		ESP_LOGE(TAG, "Boot result without error is lacking status, assuming REJECTED");
+		registration_status = eOCPP_REGISTRATION_REJECTED;
 	}
 
 	// The specification indicates that interval can be 0 and that its meaning depends on the given status:
@@ -1172,6 +1197,8 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 		// No recommendations are given for delay to next BootNotification request
 		heartbeat_interval = 10; // We use relatively short delay as the websocket is active anyway
 	}
+
+	xTaskNotify(task_to_notify, eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset, eSetBits);
 }
 
 void boot_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * data){
@@ -1182,6 +1209,7 @@ void boot_error_cb(const char * unique_id, const char * error_code, const char *
 		ESP_LOGE(TAG, "Error response from boot notification: [%s] %s", error_code, error_description);
 	}
 	registration_status = eOCPP_REGISTRATION_REJECTED;
+	xTaskNotify(task_to_notify, eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset, eSetBits);
 }
 
 char boot_parameter_chargebox_nr[26] = {0};
@@ -1194,7 +1222,7 @@ char boot_parameter_imsi[21] = {0};
 char boot_parameter_meter_nr[26] = {0};
 char boot_parameter_meter_type[26] = {0};
 
-int enqueue_boot_notification(){
+int enqueue_boot_notification(bool is_trigger){
 	if(boot_parameter_charge_point_model[0] == '\0' || boot_parameter_cp_vendor[0] == '\0'){
 		ESP_LOGE(TAG, "Boot notification can not be created due to missing model and/or vendor parameter");
 		return -1;
@@ -1226,13 +1254,37 @@ int enqueue_boot_notification(){
 		return -1;
 	}
 
-	if(enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING) != 0){
+	int err;
+	if(is_trigger){
+		err = enqueue_trigger(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING, false);
+	}else{
+		err = enqueue_call(boot_notification, boot_result_cb, boot_error_cb, NULL, eOCPP_CALL_BLOCKING);
+	}
+
+	if(err != 0){
 		ESP_LOGE(TAG, "Unable to equeue BootNotification");
 		cJSON_Delete(boot_notification);
 		return -1;
 	}
 
 	return 0;
+}
+
+void await_registration_status_change(uint32_t max_delay){
+	time_t end = time(NULL) + max_delay;
+	int call_count = 0;
+
+	while(true){
+		uint32_t data = ulTaskNotifyTake(pdTRUE, call_count > 0 ? 0 : pdMS_TO_TICKS((end - time(NULL)) * 1000));
+		if(data & (eOCPP_TASK_CALL_TIMEOUT << task_notify_offset))
+			timeout_active_call();
+
+		if(data & (eOCPP_TASK_CALL_ENQUEUED << task_notify_offset) || call_count > 0)
+			send_next_call(&call_count);
+
+		if(data & (eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset))
+			break;
+	}
 }
 
 int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
@@ -1286,56 +1338,61 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 		strcpy(boot_parameter_meter_type, meter_type);
 	}
 
-	registration_status = eOCPP_REGISTRATION_PENDING;
-	heartbeat_interval = -1;
+	// Trigger messages can only send generic and blocking calls, boot request is blocking
+	// To prevent stored transaction messages from being counted before accepted we block them.
+	uint8_t old_mask = call_blocking_mask;
+	call_blocking_mask = eOCPP_CALL_TRANSACTION_RELATED;
 
-	if(enqueue_boot_notification() != 0){
-		ESP_LOGE(TAG, "Failed boot notification");
-		return -1;
-	}
-
-	ESP_LOGI(TAG, "Sending boot notification message");
-	int remaining_call_count;
-	if(send_next_call(&remaining_call_count) != 0){
-		ESP_LOGE(TAG, "Unable to send boot message");
-		return -1;
-	}
-
+	int ret = -1;
 	ESP_LOGI(TAG, "Waiting for response to complete...");
-	bool is_retry = false;
 	for(int i = 0; i < 5; i++){
-		if(registration_status != eOCPP_REGISTRATION_PENDING || heartbeat_interval != -1){
 
-			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
-				return 0;
-			}else if(!is_retry){
-				// If boot is not accepted, a new boot notification should be sendt after given interval.
-				vTaskDelay(pdMS_TO_TICKS(heartbeat_interval * 1000));
-				is_retry = true;
+		registration_status = eOCPP_REGISTRATION_PENDING;
+		heartbeat_interval = -1;
 
-				if(enqueue_boot_notification() != 0){
-					ESP_LOGE(TAG, "Failed new boot notification");
-					return -1;
-
-				}
-
-				registration_status = eOCPP_REGISTRATION_PENDING;
-				heartbeat_interval = -1;
-
-				ESP_LOGI(TAG, "Sending new boot notification message");
-				if(send_next_call(&remaining_call_count) != 0){
-					ESP_LOGE(TAG, "Unable to send new boot notification message");
-					return -1;
-				}
-				i = 0;
-			}
-			return (registration_status == eOCPP_REGISTRATION_ACCEPTED) ? 0 : -1;
+		if(enqueue_boot_notification(false) != 0){
+			ESP_LOGE(TAG, "Failed boot notification");
+			goto cleanup;
 		}
-		ESP_LOGW(TAG, "WAITING...");
-		vTaskDelay(pdMS_TO_TICKS(1000));
+
+		ESP_LOGI(TAG, "Sending boot notification message");
+		int remaining_call_count;
+		if(send_next_call(&remaining_call_count) != 0){
+			ESP_LOGE(TAG, "Unable to send boot message");
+			goto cleanup;
+		}
+
+		await_registration_status_change(ocpp_call_timeout * 2);
+		if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
+			ESP_LOGI(TAG, "Registration status: accepted");
+			ret = 0;
+			goto cleanup;
+
+		}else if (registration_status == eOCPP_REGISTRATION_PENDING){
+			ESP_LOGW(TAG, "Registration status: pending");
+		}else{
+			ESP_LOGE(TAG, "Registration status: rejected");
+		}
+
+		if(heartbeat_interval < 1){ // If CS sets a heartbeat interval without accepting registration, then that SHULD be used as delay for next boot request.
+			heartbeat_interval = 180; // Else decide the delay to not flood the CS
+		}
+		ESP_LOGW(TAG, "Will atempt a new BootNotification.req in %ld sec if not accepted earlier", heartbeat_interval);
+		time_t start = time(NULL);
+		while(time(NULL) < start + heartbeat_interval){
+			await_registration_status_change(pdMS_TO_TICKS(heartbeat_interval * 1000));
+
+			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){ // Updated by TriggerMessage
+				ESP_LOGI(TAG, "Registration status set as accepted while waiting to for new BootNotification delay");
+				ret = 0;
+				goto cleanup;
+			}
+		}
 	}
-	ESP_LOGE(TAG, "Boot status not updated");
-	return -1;
+
+cleanup:
+	call_blocking_mask = old_mask;
+	return ret;
 }
 
 cJSON * ocpp_task_get_diagnostics(){

@@ -675,7 +675,7 @@ static void meter_values_error_cb(){
 }
 
 void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, const char * stoptxn_csl,
-			int * transaction_id, uint * connectors, size_t connector_count){
+			int * transaction_id, uint * connectors, size_t connector_count, bool is_trigger){
 
 	for(size_t i = 0; i < connector_count; i++){
 		uint connector = connectors[i];
@@ -703,8 +703,17 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				}
 
 				ESP_LOGI(TAG, "Sending meter values");
-				if(enqueue_call_immediate(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
-								(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC) != 0){
+				int err;
+
+				if(is_trigger){
+					err = enqueue_trigger(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
+							(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC, true);
+				}else{
+					err = enqueue_call_immediate(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
+								(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC);
+				}
+
+				if(err != 0){
 
 					ESP_LOGE(TAG, "Unable to send meter values");
 					cJSON_Delete(request);
@@ -764,7 +773,7 @@ static void clock_aligned_meter_values(){
 
 	handle_meter_value(eOCPP_CONTEXT_SAMPLE_CLOCK,
 			storage_Get_ocpp_meter_values_aligned_data(), storage_Get_ocpp_stop_txn_aligned_data(),
-			transaction_id, connectors, connector_count);
+			transaction_id, connectors, connector_count, false);
 
 	free(connectors);
 }
@@ -2623,7 +2632,7 @@ static void data_transfer_cb(const char * unique_id, const char * action, cJSON 
 	return;
 }
 
-void ocpp_send_connector_zero_status(const char * error_code, char * info){
+void ocpp_send_connector_zero_status(const char * error_code, char * info, bool is_trigger){
 
 	const char * state = (storage_Get_IsEnabled() && storage_Get_availability_ocpp() && get_registration_status() == eOCPP_REGISTRATION_ACCEPTED) ? OCPP_CP_STATUS_AVAILABLE : OCPP_CP_STATUS_UNAVAILABLE;
 
@@ -2631,7 +2640,13 @@ void ocpp_send_connector_zero_status(const char * error_code, char * info){
 	if(status_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create status notification request");
 	}else{
-		int err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
+		int err;
+		if(is_trigger){
+			err = enqueue_trigger(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC, false);
+		}else{
+			err = enqueue_call(status_notification, NULL, NULL, "status notification", eOCPP_CALL_GENERIC);
+		}
+
 		if(err != 0){
 			ESP_LOGE(TAG, "Unable to enqueue status notification");
 			cJSON_Delete(status_notification);
@@ -2683,20 +2698,25 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		}
 	}
 
-	cJSON * conf =  ocpp_create_trigger_message_confirmation(unique_id, OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED);
+	const char * requested_message = trigger_message_json->valuestring;
+
+	bool accept = !(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0 && get_registration_status() == eOCPP_REGISTRATION_ACCEPTED);
+
+	cJSON * conf =  ocpp_create_trigger_message_confirmation(unique_id, accept ? OCPP_TRIGGER_MESSAGE_STATUS_ACCEPTED : OCPP_TRIGGER_MESSAGE_STATUS_REJECTED);
 	if(conf == NULL){
 		ESP_LOGE(TAG, "Unable to create confirmation for trigger message");
 	}else{
 		send_call_reply(conf);
 	}
 
-	const char * requested_message = trigger_message_json->valuestring;
+	if(!accept)
+		return;
 
 	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0){
-		enqueue_boot_notification();
+		enqueue_boot_notification(true);
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION) == 0){
-		send_diagnostics_status_notification();
+		send_diagnostics_status_notification(true);
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
 		cJSON * call = NULL;
@@ -2710,14 +2730,14 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		if(call == NULL) {
 			ESP_LOGE(TAG, "Unable to create firmware status notification");
 		}else{
-			if(enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC) != 0){
+			if(enqueue_trigger(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC, false) != 0){
 				ESP_LOGE(TAG, "Unable to enqueue triggered firmware status notification");
 				cJSON_Delete(call);
 			}
 		}
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_HEARTBEAT) == 0){
-		ocpp_heartbeat();
+		ocpp_trigger_heartbeat();
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_METER_VALUES) == 0){
 		bool allocated = false;
@@ -2739,15 +2759,15 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		}
 
 		handle_meter_value(eOCPP_CONTEXT_TRIGGER, storage_Get_ocpp_meter_values_sampled_data(),
-				NULL, NULL, connector_id, connector_count);
+				NULL, NULL, connector_id, connector_count, true);
 
 		if(allocated)
 			free(connector_id);
 
 	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_STATUS_NOTIFICATION) == 0){
 		if(connector_id == NULL){
-			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
-			sessionHandler_OcppSendState();
+			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL, true);
+			sessionHandler_OcppSendState(true);
 
 		}else if(*connector_id == 0){
 			/*
@@ -2756,10 +2776,10 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 			 * is an integer greater than 0. This if clause should therefore never be executed and
 			 * the request can never be granted.
 			 */
-			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
+			ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL, true);
 
 		}else if(*connector_id == 1){
-			sessionHandler_OcppSendState();
+			sessionHandler_OcppSendState(true);
 
 		}else{
 			ESP_LOGE(TAG, "Unhandled connector id for status notification");
@@ -3078,7 +3098,7 @@ static void transition_online(){
 	block_enqueue_call(previous_enqueue_mask);
 
 	if(sessionHandler_OcppStateHasChanged()){
-		sessionHandler_OcppSendState();
+		sessionHandler_OcppSendState(false);
 	}
 
 	connected = true;
@@ -3218,8 +3238,8 @@ static void ocpp_task(){
 		 * "After the Central System accept a Charge Point by sending a BootNotification.conf with a status Accepted, the Charge Point
 		 * SHALL send a StatusNotification.req PDU for connectorId 0 and all connectors with the current status."
 		 */
-		ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL);
-		sessionHandler_OcppSendState();
+		ocpp_send_connector_zero_status(OCPP_CP_ERROR_NO_ERROR, NULL, false);
+		sessionHandler_OcppSendState(false);
 
 		ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 		ocpp_change_minimum_status_duration(storage_Get_ocpp_minimum_status_duration());

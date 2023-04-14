@@ -728,7 +728,7 @@ static void sample_meter_values(){
 	uint connector = 1;
 	handle_meter_value(eOCPP_CONTEXT_SAMPLE_PERIODIC,
 			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
-			transaction_id, &connector, 1);
+			transaction_id, &connector, 1, false);
 }
 
 static void start_sample_interval(){
@@ -763,7 +763,7 @@ static void stop_sample_interval(){
 	uint connector = 1;
 	handle_meter_value(eOCPP_CONTEXT_TRANSACTION_END,
 			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
-			transaction_id, &connector, 1);
+			transaction_id, &connector, 1, false);
 }
 
 void stop_transaction(){
@@ -789,7 +789,7 @@ void stop_transaction(){
 		 * Finishing seems to be intended for situation where user action is required before new transaction or new user, yet
 		 * we must inform CS of finishing before entering available.
 		 */
-		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected", true);
+		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected", true, false);
 	}
 
 	cJSON * response = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
@@ -1002,7 +1002,7 @@ void reserved_on_tag_accept(const char * tag_1, const char * tag_2){
 	ocpp_old_state = eOCPP_CP_STATUS_PREPARING;
 	transition_to_preparing();
 
-	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, false);
+	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, false, false);
 
 }
 
@@ -1022,8 +1022,8 @@ bool sessionHandler_OcppStateHasChanged(){
 	return saved_state != ocpp_old_state;
 }
 
-void sessionHandler_OcppSendState(){
-	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, true);
+void sessionHandler_OcppSendState(bool is_trigger){
+	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, true, is_trigger);
 }
 
 static int change_availability(bool new_available){
@@ -1037,7 +1037,7 @@ static int change_availability(bool new_available){
 	ESP_LOGI(TAG, "Set availability to %s", new_available ? "operative" : "inoperative");
 
 	if(new_available && storage_Get_IsEnabled() == 0){
-		ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_OTHER_ERROR, "Availability changed to operative, but chargepoint is not set to active in Zaptec cloud. Availability setting persisted, but will not have effect until activated in Zaptec cloud", true);
+		ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_OTHER_ERROR, "Availability changed to operative, but chargepoint is not set to active in Zaptec cloud. Availability setting persisted, but will not have effect until activated in Zaptec cloud", true, false);
 
 	}else{
 
@@ -1780,7 +1780,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		break;
 	}
 
-	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, false);
+	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, false, false);
 
 	if(new_state == eOCPP_CP_STATUS_AVAILABLE || new_state == eOCPP_CP_STATUS_FINISHING)
 		change_availability_if_pending(false);
@@ -1988,31 +1988,31 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		}
 
 		if(new_warning & eOCPP_MCU_CONNECTOR_LOCK_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_EV_COMMUNICATION_ERROR){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_GROUND_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_GROUND_FAILURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_GROUND_FAILURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_HIGH_TEMPERATURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){ //TODO: Consider hiding error caused by "inoperative"
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_OVER_CURRENT_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_POWER_METER_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_POWER_SWITCHFAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_SWITCH_FAILURE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_SWITCH_FAILURE, NULL, true, false);
 		}
 		if(new_warning & eOCPP_MCU_UNDER_VOLTAGE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true, false);
 		}
 	}
 
@@ -2022,19 +2022,19 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 	//TODO: test with emeter alarm
 	if(new_emeter_alarm){
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_VRMSA | EMETER_PARAM_STATUS_OV_VRMSB | EMETER_PARAM_STATUS_OV_VRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_VOLTAGE, "Reported by emeter", true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_VOLTAGE, "Reported by emeter", true, false);
 		}
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_UN_VRMSA | EMETER_PARAM_STATUS_UN_VRMSB | EMETER_PARAM_STATUS_UN_VRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, "Reported by emeter", true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, "Reported by emeter", true, false);
 		}
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_IRMSA | EMETER_PARAM_STATUS_OV_IRMSB | EMETER_PARAM_STATUS_OV_IRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, "Reported by emeter", true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, "Reported by emeter", true, false);
 		}
 		if(new_emeter_alarm & EMETER_PARAM_STATUS_OV_TEMP){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, "Reported by emeter", true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, "Reported by emeter", true, false);
 		}
 		if(new_emeter_alarm & EMETER_PARAM_STATUS_UN_TEMP){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR, "Low temperature reported by emeter", true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR, "Low temperature reported by emeter", true, false);
 		}
 	}
 
@@ -2055,12 +2055,12 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		if(weak_connection){
 			ESP_LOGW(TAG, "Weak wireless");
 			weak_connection_timestamp = now;
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, true);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, true, false);
 		}
 	}
 
 	if(GetNewReaderFailure()){
-		ocpp_send_status_notification(*state, OCPP_CP_ERROR_READER_FAILURE, NULL, true);
+		ocpp_send_status_notification(*state, OCPP_CP_ERROR_READER_FAILURE, NULL, true, false);
 	}
 }
 

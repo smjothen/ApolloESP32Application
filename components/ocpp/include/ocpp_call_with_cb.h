@@ -21,6 +21,7 @@ struct ocpp_call_with_cb{
 	ocpp_result_callback result_cb; ///< function to be called if a matching CallResult is recieved
 	ocpp_error_callback error_cb; ///< function to be called if a matching CallError is recieved
 	void * cb_data; ///< Data to be given as a parameter to the callback function
+	bool is_trigger_message; ///< True if message was created to respond to a TriggerMessage.req
 };
 
 /**
