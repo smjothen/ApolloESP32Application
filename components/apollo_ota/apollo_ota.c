@@ -268,6 +268,28 @@ static void ota_task(void *pvParameters){
         	}
         }
 
+        // For chargers that are MID calibrated, ensure that they can't be downgraded to previous non-MID firmware below 2.1.0.0
+        uint32_t MIDCharger = 0;
+        MCU_GetMidStoredCalibrationId(&MIDCharger);
+        ESP_LOGI(TAG, "MIDCharger: %i", MIDCharger);
+
+        if(MIDCharger != 0)
+        {
+			int a, b, c, d = 0;
+			int sscanfResult = sscanf(image_version, "%i.%i.%i.%i", &a, &b, &c, &d);
+			ESP_LOGI(TAG, "Parsed version number: %i.%i.%i.%i (Cnt:%d)", a, b, c, d, sscanfResult);
+			if((a >= 2) && (b >= 1))
+			{
+				ESP_LOGI(TAG, "MID Upgrade allowed");
+			}
+			else
+			{
+				log_message("Upgrade block due to non-MID version");
+				StopOTA(timeout_timer);
+				continue;
+			}
+        }
+
 
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
@@ -347,6 +369,14 @@ bool ota_CheckIfHasBeenUpdated()
 	return hasBeenUpdated;
 }
 
+static TaskHandle_t otaTaskHandle = NULL;
+int ota_GetStackWatermark()
+{
+	if(otaTaskHandle != NULL)
+		return uxTaskGetStackHighWaterMark(otaTaskHandle);
+	else
+		return -1;
+}
 
 void start_ota_task(void){
     ESP_LOGI(TAG, "starting ota task");
@@ -362,11 +392,11 @@ void start_ota_task(void){
     xEventGroupClearBits(event_group,SAFE_OTA_UNBLOCKED);
 
     static uint8_t ucParameterToPass = {0};
-    TaskHandle_t taskHandle = NULL;
+
     int stack_size = 4096*2;
     xTaskCreate( 
         ota_task, "otatask", stack_size, 
-        &ucParameterToPass, 7, &taskHandle
+        &ucParameterToPass, 7, &otaTaskHandle
     );
     ESP_LOGD(TAG, "...");
 }
