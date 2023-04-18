@@ -365,7 +365,7 @@ struct ocpp_reservation_info {
 struct ocpp_reservation_info * reservation_info = NULL;
 
 bool sessionHandler_OcppTransactionIsActive(uint connector_id){
-	if(connector_id == 1){
+	if(connector_id == 1 || connector_id == 0){
 		return (transaction_start != 0);
 	}else{
 		return false;
@@ -605,7 +605,6 @@ static void stop_transaction_response_cb(const char * unique_id, cJSON * payload
 }
 
 bool pending_ocpp_authorize = false;
-char pending_ocpp_id_tag[21] = {0};
 
 static void stop_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
 	free(cb_data);
@@ -842,15 +841,15 @@ void start_transaction(){
 
 	int meter_start = floor(get_accumulated_energy() * 1000);
 
-	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
-		if(pending_ocpp_id_tag[0] != 0){
-			ESP_LOGW(TAG, "charge session authentication code not set during start_transaction, using pending id");
-			chargeSession_SetAuthenticationCode(pending_ocpp_id_tag);
-		}else{
-			ESP_LOGE(TAG, "No id tag for charge session");
-		}
+	MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
+	if(ret != MsgWriteAck){
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR, "Unable to prepare UnlockConnectorOnEVSideDisconnect", true, false);
+		ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect on MCU");
 	}
-	pending_ocpp_id_tag[0] = '\0';
+
+	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
+		ESP_LOGE(TAG, "No id tag for charge session");
+	}
 
 	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start,
 									(reservation_info != NULL) ? &reservation_info->reservation_id : NULL, transaction_start);

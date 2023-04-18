@@ -2392,13 +2392,16 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT) == 0){
-		/*
-		 * NOTE: Current behaviour of mcu in regards to connector makes it impossible to connect/disconnect
-		 * connector from esp. 'true' is therefore the only value we accept. An alternative would be to
-		 * permanently lock the connector.
-		 * It is still read/write as required by ocpp 1.6.
-		 */
-		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value, is_true);
+		err = set_config_bool(storage_Set_ocpp_unlock_connector_on_ev_side_disconnect, value, NULL);
+		if(err == 0 && (sessionHandler_OcppTransactionIsActive(0) || storage_Get_ocpp_unlock_connector_on_ev_side_disconnect())){
+			MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
+			if(ret != MsgWriteAck){
+				ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR,
+							"Unable to set UnlockConnectorOnEVSideDisconnect for an active transaction or set to unlock while no transaction was active",
+							true, false);
+				ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect as a result of ChangeConfiguration.req");
+			}
+		}
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
@@ -3139,7 +3142,6 @@ static void ocpp_task(){
 
 		//Indicate features that are not supported
 		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
-		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, clear_cache_cb, NULL);
 
 		//Handle ocpp related configurations
 		attach_call_cb(eOCPP_ACTION_GET_CONFIGURATION_ID, get_configuration_cb, NULL);
@@ -3147,6 +3149,7 @@ static void ocpp_task(){
 
 		//Handle features that are not bether handled by other components
 		attach_call_cb(eOCPP_ACTION_RESET_ID, reset_cb, NULL);
+		attach_call_cb(eOCPP_ACTION_CLEAR_CACHE_ID, clear_cache_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_SEND_LOCAL_LIST_ID, send_local_list_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
