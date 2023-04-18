@@ -284,7 +284,6 @@
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
 		CommandGetOPENSamples = 812,
-		CommandClearRCDNotification = 813,
 
 		CommandDisableCertificateOnce = 820,
 		CommandDisableCertificateAlways = 821

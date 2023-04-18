@@ -218,6 +218,12 @@ void on_ocmf_sync_time(TimerHandle_t xTimer){
 
 
 static uint32_t previousNotificaiton = 0;
+
+static bool rcdBit0 = false;
+static bool previousRcdBit0 = false;
+
+static bool rcdBit1 = false;
+static bool previousRcdBit1 = false;
 void NotificationHandler()
 {
 	uint32_t combinedNotification = GetCombinedNotifications();
@@ -225,27 +231,52 @@ void NotificationHandler()
 	if(combinedNotification != previousNotificaiton)
 	{
 		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotificaiton, combinedNotification);
+	}
+	previousNotificaiton = combinedNotification;
 
+	/// Handle RCD notification in state A and B
+	previousRcdBit0 = rcdBit0;
+	rcdBit0 = (combinedNotification & 0x1);
+
+	if((rcdBit0 == true) && (previousRcdBit0 == false))
+	{
+		publish_debug_message_event("RCD error A/B trig", cloud_event_level_warning);
+		ESP_LOGW(TAG, "RCD error in state A/B");
+	}
+
+
+	/// Handle RCD notification in state C
+	previousRcdBit1 = rcdBit1;
+	rcdBit1 = (combinedNotification & 0x2);
+
+	if(rcdBit1 != previousRcdBit1)
+	{
 		//Check for RCD error indication
-		if(combinedNotification & 0x1)
+		if(rcdBit1)
 		{
 			ZapMessage rxMsg = MCU_ReadParameter(RCDErrorCount);
 			uint8_t readErrorCount = 0;
 			if((rxMsg.length == 1) && (rxMsg.identifier == RCDErrorCount))
 				readErrorCount = rxMsg.data[0];
 
-			MCU_SendCommandId(CommandClearRCDNotification);
 
 			char noteBuf[25];
 			snprintf(noteBuf, 25, "RCD error count: %i", readErrorCount);
 			publish_debug_telemetry_observation_Diagnostics(noteBuf);
 			ESP_LOGW(TAG, "%s", noteBuf);
 
-			publish_debug_message_event("RCD error trig", cloud_event_level_warning);
+			if(readErrorCount <= 4)
+				publish_debug_message_event("RCD error trig", cloud_event_level_warning);
+			else if(readErrorCount == 5)
+				publish_debug_message_event("RCD error trig 5", cloud_event_level_error);
+		}
+		else
+		{
+			///Ensure car is waked up if delay is so long it goes into sleep mode
+			sessionHandler_ClearCarInterfaceResetConditions();
 		}
 	}
 
-	previousNotificaiton = combinedNotification;
 }
 
 

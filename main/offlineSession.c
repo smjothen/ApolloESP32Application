@@ -760,17 +760,23 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	}*/
 
 	fseek(sessionFile, FILE_SESSION_ADDR_2, SEEK_SET);
-	fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
+	size_t wr1 = fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
 
 	///Write CRC at the end of the block
 	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
 	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
-	fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
+	size_t wr2 = fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
 
 	//ESP_LOGW(TAG, "Session CRC:: 0x%X", crcCalc);
 
 	free(base64SessionData);
 	fclose(sessionFile);
+
+	if(createNewFile)
+	{
+		//Added diagnostics to try and find cause of empty sessions.
+		offlineSession_AppendLogStringWithIntInt("1 sessionFile created", wr1, wr2);
+	}
 
 	xSemaphoreGive(offs_lock);
 }
@@ -1220,8 +1226,6 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 	//Save the session structure to the file including the start 'B' message
 	offlineSession_UpdateSessionOnFile(sessionData, true);
 
-	offlineSession_AppendLogString("1 sessionFile created");
-
 	return ret;
 }
 
@@ -1331,7 +1335,11 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 
 		/// Write new element
 		fseek(sessionFile, newElementPosition, SEEK_SET);
-		fwrite(&line, sizeof(struct LogOCMFData), 1, sessionFile);
+		size_t wrc = fwrite(&line, sizeof(struct LogOCMFData), 1, sessionFile);
+
+		/// Added for diagnostics of empty session
+		if(label == 'B')
+			offlineSession_AppendLogStringWithInt("1 B: wrc", wrc);
 
 		/// Update nr of elements @1000
 		fseek(sessionFile, FILE_NR_OF_OCMF_ADDR_1000, SEEK_SET);
