@@ -16,6 +16,7 @@
 #include "offline_log.h"
 #include "fat.h"
 #include "apollo_ota.h"
+#include "OCMF.h"
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
@@ -311,6 +312,21 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 	return 1;
 }
 
+static int populate_sample_energy_active_import_register(enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
+	struct ocpp_sampled_value new_value = {
+		.context = context,
+		.format = eOCPP_FORMAT_RAW,
+		.measurand = eOCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
+		.unit = eOCPP_UNIT_WH
+	};
+
+	sprintf(new_value.value, "%.0f", get_accumulated_energy() * 1000);
+	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
+		return 0;
+
+	return 1;
+}
+
 static time_t aligned_timestamp_begin = 0;
 static time_t aligned_timestamp_end = 0;
 static float aligned_energy_active_import_begin = 0;
@@ -516,7 +532,6 @@ void save_interval_measurands(enum ocpp_reading_context_id context){
 	};
 }
 
-// TODO: consider adding OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER
 int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connector_id, enum ocpp_reading_context_id context,
 		struct ocpp_sampled_value_list * value_list_out){
 	switch(measurand){
@@ -524,6 +539,8 @@ int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connect
 		return populate_sample_current_import(phase, context, value_list_out);
 	case eOCPP_MEASURAND_CURRENT_OFFERED:
 		return populate_sample_current_offered(context, value_list_out);
+	case eOCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER:
+		return populate_sample_energy_active_import_register(context, value_list_out);
 	case eOCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL:
 		return populate_sample_energy_active_import_interval(context, value_list_out);
 	case eOCPP_MEASURAND_POWER_ACTIVE_IMPORT:
@@ -2375,9 +2392,10 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
+		err = set_config_csl(storage_Set_ocpp_meter_values_aligned_data, value, DEFAULT_CSL_LENGTH, 7,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
 				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
 				OCPP_MEASURAND_TEMPERATURE,
@@ -2389,6 +2407,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
 				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
 				OCPP_MEASURAND_TEMPERATURE,
@@ -2422,6 +2441,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
 				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
 				OCPP_MEASURAND_TEMPERATURE,
@@ -2432,6 +2452,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
+				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_INTERVAL,
 				OCPP_MEASURAND_POWER_ACTIVE_IMPORT,
 				OCPP_MEASURAND_TEMPERATURE,
