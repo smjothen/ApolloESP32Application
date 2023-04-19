@@ -46,7 +46,7 @@ void chargeSession_Finalize();
 void chargeSession_Clear();
 bool chargeSession_IsLocalSession();
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud);
-void chargeSession_SetAuthenticationCode(char * idAsString);
+void chargeSession_SetAuthenticationCode(const char * idAsString);
 void chargeSession_SetParentId(const char * id_token);
 char* chargeSession_GetAuthenticationCode();
 void chargeSession_ClearAuthenticationCode();

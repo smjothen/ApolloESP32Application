@@ -360,6 +360,11 @@ void storage_Set_ocpp_local_auth_list_enabled(bool newValue)
 	configurationStruct.ocpp_local_auth_list_enabled = newValue;
 }
 
+void storage_Set_ocpp_default_id_token(const char * newValue)
+{
+	strcpy(configurationStruct.ocpp_default_id_token, newValue);
+}
+
 //Local settings
 
 
@@ -726,6 +731,11 @@ bool storage_Get_ocpp_local_auth_list_enabled()
 	return configurationStruct.ocpp_local_auth_list_enabled;
 }
 
+const char * storage_Get_ocpp_default_id_token()
+{
+	return configurationStruct.ocpp_default_id_token;
+}
+
 //Local settings
 
 uint8_t storage_Get_CommunicationMode()
@@ -966,6 +976,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "oUlockConEvDisc", configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_set_(configuration_handle, "oWebSockPingInt", configurationStruct.web_socket_ping_interval);
 	err += nvs_set_u8(configuration_handle, "oAuthLEnabled", configurationStruct.ocpp_local_auth_list_enabled);
+	err += nvs_set_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token);
 
 	//Local settings
 	err += nvs_set_u8(configuration_handle, "ComMode", configurationStruct.communicationMode);
@@ -1063,12 +1074,16 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_str(configuration_handle, "oStopTxnAlign", configurationStruct.ocpp_stop_txn_aligned_data, &readSize);
 	readSize = DEFAULT_CSL_SIZE;
 	err += nvs_get_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data, &readSize);
-	readSize = 128;
 	err += nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts);
 	err += nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval);
 	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_get_(configuration_handle, "oWebSockPingInt", &configurationStruct.web_socket_ping_interval);
 	err += nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled);
+	readSize = sizeof(configurationStruct.ocpp_default_id_token);
+	if(nvs_get_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token, &readSize) != ESP_OK)
+		configurationStruct.ocpp_default_id_token[0] = '\0';
+
+	readSize = 128;
 
 	//Local settings
 	err += nvs_get_u8(configuration_handle, "ComMode", &configurationStruct.communicationMode);

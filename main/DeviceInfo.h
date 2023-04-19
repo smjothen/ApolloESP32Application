@@ -220,6 +220,8 @@ struct Configuration
 	// ocpp local auth list profile settings
 	bool ocpp_local_auth_list_enabled;
 
+	// ocpp non-standard configuration keys
+	char ocpp_default_id_token[21];
 	//Standalone
     char installationId[DEFAULT_STR_SIZE];
     char routingId[DEFAULT_STR_SIZE];

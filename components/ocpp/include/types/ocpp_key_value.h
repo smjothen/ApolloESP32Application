@@ -64,6 +64,9 @@
 #define OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS "ChargingScheduleMaxPeriods"
 #define OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED "ConnectorSwitch3to1PhaseSupported"
 #define OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED "MaxChargingProfilesInstalled"
+
+// Non-standard configuration keys
+#define OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN "DefaultIdToken"
 ///@}
 
 /**

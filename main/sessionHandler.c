@@ -840,7 +840,8 @@ void start_transaction(){
 	}
 
 	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
-		ESP_LOGE(TAG, "No id tag for charge session");
+		ESP_LOGW(TAG, "No id tag for charge session. Using default value");
+		chargeSession_SetAuthenticationCode(storage_Get_ocpp_default_id_token());
 	}
 
 	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start,
@@ -912,7 +913,11 @@ void start_charging_on_tag_accept(const char * tag){
 	else{
 		ESP_LOGI(TAG, "Authorization granted ok");
 
-		SetPendingRFIDTag(tag);
+		if(tag != NULL && tag[0] != '\0'){
+			SetPendingRFIDTag(tag);
+		}else{
+			SetPendingRFIDTag(storage_Get_ocpp_default_id_token());
+		}
 		SetAuthorized(true);
 	}
 }

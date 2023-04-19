@@ -1630,7 +1630,7 @@ esp_err_t add_configuration_ocpp_connector_switch_3_to_1_phase_supported(cJSON *
 	if(allocate_and_write_configuration_bool(CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, &value) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, true, value);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
 		return ESP_FAIL;
 	}else{
@@ -1646,7 +1646,23 @@ esp_err_t add_configuration_ocpp_max_charging_profiles_installed(cJSON * key_lis
 	if(allocate_and_write_configuration_u8(CONFIG_OCPP_MAX_CHARGING_PROFILES_INSTALLED, &value) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED, true, value);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
+
+// Non-standard configuration keys
+
+esp_err_t add_configuration_ocpp_default_id_token(cJSON * key_list){
+	char * value;
+	if(allocate_and_write_configuration_str(storage_Get_ocpp_default_id_token(), &value) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN, false, value);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
 		return ESP_FAIL;
 	}else{
@@ -1793,6 +1809,12 @@ static esp_err_t get_ocpp_configuration(const char * key, cJSON * configuration_
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED) == 0){
 		return add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
+
+
+		// Non-standard configuration keys
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
+		return add_configuration_ocpp_default_id_token(configuration_out);
+
 	}else{
 		return ESP_ERR_NOT_SUPPORTED;
 	}
@@ -1845,6 +1867,9 @@ void get_all_ocpp_configurations(cJSON * configuration_out){
 	add_configuration_ocpp_charging_schedule_max_periods(configuration_out);
 	add_configuration_ocpp_connector_switch_3_to_1_phase_supported(configuration_out);
 	add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
+
+	// Non-standard configuration keys
+	add_configuration_ocpp_default_id_token(configuration_out);
 }
 
 static void get_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
@@ -2488,6 +2513,15 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
 		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
+
+		// Non-standard configuration keys
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
+		if(is_ci_string_type(value, 20)){
+			storage_Set_ocpp_default_id_token(value);
+			err = ESP_OK;
+		}else{
+			err = ESP_FAIL;
+		}
 
 	}else if(is_configuration_key(key)){
 		ESP_LOGW(TAG, "Change configuration request rejected due to rejected key: '%s'", key);

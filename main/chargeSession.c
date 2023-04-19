@@ -388,7 +388,7 @@ bool chargeSession_IsLocalSession()
 		return false;
 }
 
-void chargeSession_SetAuthenticationCode(char * idAsString)
+void chargeSession_SetAuthenticationCode(const char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
 
