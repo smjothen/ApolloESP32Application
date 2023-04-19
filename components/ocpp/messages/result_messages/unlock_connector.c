@@ -1,17 +1,13 @@
 #include "messages/result_messages/ocpp_call_result.h"
-#include "types/ocpp_firmware_status.h"
+#include "types/ocpp_unlock_status.h"
 #include "types/ocpp_enum.h"
 
 cJSON * ocpp_create_unlock_connector_confirmation(const char * unique_id, const char * status){
 
-	if(status == NULL || ocpp_validate_enum(status, true, 7,
-							OCPP_FIRMWARE_STATUS_DOWNLOADED,
-							OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED,
-							OCPP_FIRMWARE_STATUS_DOWNLOADING,
-							OCPP_FIRMWARE_STATUS_IDLE,
-							OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED,
-							OCPP_FIRMWARE_STATUS_INSTALLING,
-							OCPP_FIRMWARE_STATUS_INSTALLED) != 0)
+	if(status == NULL || ocpp_validate_enum(status, true, 3,
+							OCPP_UNLOCK_STATUS_UNLOCKED,
+							OCPP_UNLOCK_STATUS_UNLOCK_FAILED,
+							OCPP_UNLOCK_STATUS_NOT_SUPPORTED) != 0)
 	{
 		return NULL;
 	}

@@ -28,6 +28,7 @@
 #include "messages/error_messages/ocpp_call_error.h"
 #include "ocpp_json/ocppj_message_structure.h"
 #include "ocpp_json/ocppj_validation.h"
+#include "types/ocpp_unlock_status.h"
 #include "types/ocpp_reset_status.h"
 #include "types/ocpp_reset_type.h"
 #include "types/ocpp_ci_string_type.h"
@@ -192,6 +193,66 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 	}
 }
 
+void unlock_connector_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
+	ESP_LOGW(TAG, "Received unlock connector");
+
+	char err_str[128];
+
+	int connector_id;
+	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", true, &connector_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR)
+		goto error;
+
+	cJSON * response = NULL;
+
+	if(connector_id < 1 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+		ESP_LOGW(TAG, "Requested to unlock an unknown connector");
+		response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_NOT_SUPPORTED);
+	}else{
+
+		MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, true);
+		if(ret != MsgWriteAck){
+			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to set connector to locked to attempt unlock", true, false);
+			ESP_LOGE(TAG, "Unlock connector preparation failed");
+		}
+
+		ret = MCU_SendUint8Parameter(PermanentCableLock, false);
+		if(ret != MsgWriteAck){
+			ESP_LOGE(TAG, "Unlock connector failed");
+			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCK_FAILED);
+
+		}else{
+			if(sessionHandler_OcppTransactionIsActive(connector_id)){
+				sessionHandler_OcppStopTransaction(OCPP_REASON_UNLOCK_COMMAND);
+			}
+
+			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCKED);
+		}
+	}
+
+	if(response == NULL){
+		ESP_LOGE(TAG, "Unable to create unlock connector confirmation");
+	}else{
+		send_call_reply(response);
+	}
+
+	return;
+
+error:
+	if(err == eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "UnlockConnector.req callback reached error exit without error being set");
+		err = eOCPPJ_ERROR_INTERNAL;
+	}
+
+	ESP_LOGE(TAG, "UnlockConnector.req exited with error: [%s] '%s'", ocppj_error_code_from_id(err), err_str);
+	cJSON * ocpp_error = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	if(ocpp_error == NULL){
+		ESP_LOGE(TAG, "Unable to create call error for SendLocalList.req");
+	}else{
+		send_call_reply(ocpp_error);
+	}
+
+}
 
 static int populate_sample_current_import(char * phase, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	//Because the go only has 1 connector, we can get the current in the same way regardless of connector id
@@ -3141,7 +3202,7 @@ static void ocpp_task(){
 		}
 
 		//Indicate features that are not supported
-		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, not_supported_cb, "Connector may only be disconnected from EV side");
+		attach_call_cb(eOCPP_ACTION_UNLOCK_CONNECTOR_ID, unlock_connector_cb, NULL);
 
 		//Handle ocpp related configurations
 		attach_call_cb(eOCPP_ACTION_GET_CONFIGURATION_ID, get_configuration_cb, NULL);

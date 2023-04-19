@@ -486,15 +486,7 @@ void transition_to_preparing(){
 void sessionHandler_OcppStopTransaction(const char * reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
-	MessageType ret = MCU_SendCommandId(CommandStopCharging);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "MCU stop charging command OK");
-	}
-	else
-	{
-		ESP_LOGE(TAG, "MCU stop charging final command FAILED");
-	}
+	sessionHandler_InitiateResetChargeSession();
 	chargeSession_SetStoppedReason(reason);
 }
 
@@ -843,7 +835,7 @@ void start_transaction(){
 
 	MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
 	if(ret != MsgWriteAck){
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR, "Unable to prepare UnlockConnectorOnEVSideDisconnect", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to prepare UnlockConnectorOnEVSideDisconnect", true, false);
 		ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect on MCU");
 	}
 
