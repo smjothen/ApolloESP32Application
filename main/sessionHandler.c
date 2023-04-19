@@ -877,6 +877,14 @@ void start_transaction(){
 		start_sample_interval();
 }
 
+const char * id_token_from_tag(const char * tag_id){
+	if(tag_id != NULL && strncmp(tag_id, "nfc-", sizeof("nfc-")-1) == 0){
+		return tag_id + (sizeof("nfc-")-1);
+	}else{
+		return tag_id;
+	}
+}
+
 void authorize(struct TagInfo tag, void (*on_accept)(const char *), void (*on_deny)(const char *)){
 	pending_ocpp_authorize = true;
 
@@ -886,7 +894,7 @@ void authorize(struct TagInfo tag, void (*on_accept)(const char *), void (*on_de
 	else
 		ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
-	ocpp_authorize(tag.idAsString, on_accept, on_deny);
+	ocpp_authorize(id_token_from_tag(tag.idAsString), on_accept, on_deny);
 }
 
 static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
@@ -1832,7 +1840,7 @@ static void handle_preparing(){
 			else
 				ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
-			ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
+			ocpp_authorize_compare(id_token_from_tag(NFCGetTagInfo().idAsString), NULL,
 					chargeSession_GetAuthenticationCode(), chargeSession_Get().parent_id,
 					cancel_authorization_on_tag_accept, cancel_authorization_on_tag_deny);
 		}else{
@@ -1873,7 +1881,7 @@ static void handle_preparing(){
 static void handle_charging(){
 	if(!pending_ocpp_authorize && has_new_id_token()){
 		ESP_LOGI(TAG, "Checking if new tag is authorized to cancel charging");
-		ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
+		ocpp_authorize_compare(id_token_from_tag(NFCGetTagInfo().idAsString), NULL,
 						chargeSession_Get().AuthenticationCode, chargeSession_Get().parent_id,
 						stop_charging_on_tag_accept, stop_charging_on_tag_deny);
 		NFCTagInfoClearValid();
@@ -1897,7 +1905,7 @@ static void handle_reserved(){
 		else
 			ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
 
-		ocpp_authorize_compare(NFCGetTagInfo().idAsString, NULL,
+		ocpp_authorize_compare(id_token_from_tag(NFCGetTagInfo().idAsString), NULL,
 						reservation_info->id_tag, reservation_info->parent_id_tag,
 						reserved_on_tag_accept, reserved_on_tag_deny);
 		NFCTagInfoClearValid();
