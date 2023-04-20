@@ -823,16 +823,18 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
  */
 bool chargeController_SetStandaloneState(uint8_t isStandalone)
 {
+	enum session_controller controller = storage_Get_session_controller();
+
 	MessageType ret;
 	if(enforceScheduleAndDelay == true)
 		ret = MCU_SendUint8Parameter(ParamIsStandalone, 0); 	//MCU must be controlled by ESP due to schedule function
 	else
-		ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)isStandalone);
+		ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
 
 	if(ret == MsgWriteAck)
 	{
 		storage_Set_Standalone((uint8_t)isStandalone);
-		ESP_LOGI(TAG, "Set Standalone: MCU=%d ESP=%d\n", (enforceScheduleAndDelay ? 0 : isStandalone), isStandalone);
+		ESP_LOGI(TAG, "Set Standalone: MCU=%d ESP=%d\n", (enforceScheduleAndDelay ? 0 : (controller & eCONTROLLER_MCU_STANDALONE) ? 1 : 0), isStandalone);
 		return true;
 	}
 	else
