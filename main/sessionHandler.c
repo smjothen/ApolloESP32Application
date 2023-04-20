@@ -1717,6 +1717,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
 		ESP_LOGI(TAG, "OCPP STATE FINISHING");
+		ocpp_finishing_session = true;
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
@@ -1812,7 +1813,7 @@ static void handle_preparing(){
 	 * "Transaction starts at the point that all conditions for charging are met,
 	 * for instance, EV is connected to Charge Point and user has been authorized."
 	 */
-	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && isAuthorized){
+	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && (isAuthorized || !storage_Get_AuthenticationRequired())){
 		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
 
 		//Use standalone until changed by ocpp_smart_charging
