@@ -565,13 +565,29 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 		valid = false;
 	}
 
-	if(storage_Get_ocpp_stop_transaction_on_invalid_id() && !valid){
-		ESP_LOGW(TAG, "Transaction not Autorized");
+	if(!valid){
+
 		if(is_current_transaction){
-			ESP_LOGE(TAG, "Attempting to stop (deauthorized) transaction");
-			sessionHandler_InitiateResetChargeSession();
-			chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
+			ESP_LOGW(TAG, "Current transaction deauthorized");
 			SetAuthorized(false);
+
+			if(storage_Get_ocpp_stop_transaction_on_invalid_id()){
+				ESP_LOGW(TAG, "Attempting to stop transaction");
+				sessionHandler_InitiateResetChargeSession();
+				chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
+			}else{
+				ESP_LOGW(TAG, "Attempting to pause transaction");
+				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+				if(ret == MsgCommandAck)
+				{
+					ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK during deautorize");
+					SetFinalStopActiveStatus(1);
+				}
+				else
+				{
+					ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED during deautorize");
+				}
+			}
 		}else{
 			ESP_LOGE(TAG, "An inactive transaction was deauthorized");
 		}
@@ -1132,7 +1148,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		return eOCPP_CP_STATUS_FINISHING;
 
 	case CHARGE_OPERATION_STATE_PAUSED:
-		if(charge_mode == eCAR_CHARGING){
+		if(charge_mode == eCAR_CHARGING || GetFinalStopActiveStatus() == 1){
 
 			return eOCPP_CP_STATUS_SUSPENDED_EVSE;
 		}else{
