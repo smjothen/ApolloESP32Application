@@ -360,6 +360,10 @@ void storage_Set_ocpp_local_auth_list_enabled(bool newValue)
 	configurationStruct.ocpp_local_auth_list_enabled = newValue;
 }
 
+void storage_Set_ocpp_authorization_key(const char * newValue){
+	strcpy(configurationStruct.ocpp_authorization_key, newValue);
+}
+
 void storage_Set_ocpp_default_id_token(const char * newValue)
 {
 	strcpy(configurationStruct.ocpp_default_id_token, newValue);
@@ -731,6 +735,10 @@ bool storage_Get_ocpp_local_auth_list_enabled()
 	return configurationStruct.ocpp_local_auth_list_enabled;
 }
 
+const char * storage_Get_ocpp_authorization_key(){
+	return configurationStruct.ocpp_authorization_key;
+}
+
 const char * storage_Get_ocpp_default_id_token()
 {
 	return configurationStruct.ocpp_default_id_token;
@@ -976,6 +984,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "oUlockConEvDisc", configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_set_(configuration_handle, "oWebSockPingInt", configurationStruct.web_socket_ping_interval);
 	err += nvs_set_u8(configuration_handle, "oAuthLEnabled", configurationStruct.ocpp_local_auth_list_enabled);
+	err += nvs_set_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key);
 	err += nvs_set_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token);
 
 	//Local settings
@@ -1079,6 +1088,9 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
 	//err += nvs_get_(configuration_handle, "oWebSockPingInt", &configurationStruct.web_socket_ping_interval);
 	err += nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled);
+	readSize = sizeof(configurationStruct.ocpp_authorization_key);
+	if(nvs_get_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key, &readSize) != ESP_OK)
+		configurationStruct.ocpp_authorization_key[0] = '\0';
 	readSize = sizeof(configurationStruct.ocpp_default_id_token);
 	if(nvs_get_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token, &readSize) != ESP_OK)
 		configurationStruct.ocpp_default_id_token[0] = '\0';

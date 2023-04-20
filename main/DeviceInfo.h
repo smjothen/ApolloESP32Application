@@ -216,7 +216,7 @@ struct Configuration
 	uint16_t ocpp_transaction_message_retry_interval;
 	bool ocpp_unlock_connector_on_ev_side_disconnect;
 	//configurationStruct.web_socket_ping_interval; // Changing ping interval is not a feature of esp_websocket_client
-
+	char ocpp_authorization_key[41];
 	// ocpp local auth list profile settings
 	bool ocpp_local_auth_list_enabled;
 

@@ -58,6 +58,7 @@ void storage_Set_ocpp_transaction_message_attempts(uint8_t newValue);
 void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue);
 void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue);
 void storage_Set_ocpp_local_auth_list_enabled(bool newValue);
+void storage_Set_ocpp_authorization_key(const char * newValue);
 void storage_Set_ocpp_default_id_token(const char * newValue);
 
 //Set Local settings
@@ -125,6 +126,7 @@ uint8_t storage_Get_ocpp_transaction_message_attempts();
 uint16_t storage_Get_ocpp_transaction_message_retry_interval();
 bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect();
 bool storage_Get_ocpp_local_auth_list_enabled();
+const char * storage_Get_ocpp_authorization_key();
 const char * storage_Get_ocpp_default_id_token();
 
 //Get Local settings

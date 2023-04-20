@@ -1078,7 +1078,7 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
+int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
 
 	default_heartbeat_interval = ocpp_heartbeat_interval;
@@ -1097,6 +1097,7 @@ int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbea
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp1.6",
+		.password = authorization_key,
 		.task_stack = 4096,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 	};

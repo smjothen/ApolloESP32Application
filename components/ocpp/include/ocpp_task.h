@@ -158,12 +158,13 @@ void ocpp_notify_offline_enqueued();
  * @brief starts ocpp connection with CS
  *
  * @param url the base URL address for the websocket request.
+ * @param authorization_key password used for websocket http basic auth
  * @param charger_id the id appended to the websocket URL address for the CS to identify the CP.
  * @param ocpp_heartbeat_interval the default heatbeat interval used unless bootNotification.req specifies a different interval.
  * @param ocpp_transaction_message_attempts maximum number of retries for failed transaction related messages.
  * @param ocpp_transaction_message_retry_interval wait in seconds between each failed transaction related message retries.
  */
-int start_ocpp(const char * url, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
+int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
 
 /**
  * @brief stops ocpp connection with CS and cleans up resources.

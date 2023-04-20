@@ -2514,6 +2514,13 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
 		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
 
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_KEY) == 0){
+		if(is_ci_string_type(value, 40)){ // Type is string not ci_string, but validation should be same
+			storage_Set_ocpp_authorization_key(value);
+			err = ESP_OK;
+		}else{
+			err = ESP_FAIL;
+		}
 		// Non-standard configuration keys
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
 		if(is_ci_string_type(value, 20)){
@@ -3281,11 +3288,13 @@ static void ocpp_task(){
 		unsigned int retry_delay = 5;
 
 		const char * cbid = storage_Get_chargebox_identity_ocpp();
+		const char * authorization_key = storage_Get_ocpp_authorization_key();
 		do{
 			if(should_run == false || should_reboot)
 				goto clean;
 
 			err = start_ocpp(storage_Get_url_ocpp(),
+					(authorization_key[0] == '\0') ? NULL : authorization_key,
 					(cbid[0] == '\0') ? i2cGetLoadedDeviceInfo().serialNumber : cbid,
 					storage_Get_ocpp_heartbeat_interval(),
 					storage_Get_ocpp_transaction_message_attempts(),
