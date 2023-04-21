@@ -1959,6 +1959,60 @@ enum ocpp_mcu_error_code{
 	eOCPP_MCU_UNDER_VOLTAGE = WARNING_NO_VOLTAGE_L1 | WARNING_NO_VOLTAGE_L2_L3 | WARNING_12V_LOW_LEVEL,
 };
 
+// when false is returned, the error should be masked
+bool internal_error_to_description(uint32_t warning_mask, char * err_description, size_t err_description_length){
+	uint32_t internal_error_mask = warning_mask & eOCPP_MCU_INTERNAL_ERROR;
+	uint error_count = __builtin_parity(internal_error_mask);
+
+	char * err_pos = err_description;
+	char * err_end = err_description + err_description_length;
+
+	bool ret = false;
+
+	if(error_count > 1){
+		err_pos = strncpy(err_pos, "Multiple errors: ", fmax(err_end - err_pos, 0));
+	}
+
+	if(internal_error_mask & WARNING_TEMPERATURE_ERROR){
+		err_pos = strncpy(err_pos, "Communication error with temperature sensor;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	if(internal_error_mask & WARNING_UNEXPECTED_RELAY){
+		err_pos = strncpy(err_pos, "Relay not configured;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	if(internal_error_mask & WARNING_FPGA_WATCHDOG){
+		err_pos = strncpy(err_pos, "FPGA watchdown triggered;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	if(internal_error_mask & WARNING_MAX_SESSION_RESTART){
+		err_pos = strncpy(err_pos, "Charging reset too many times;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	if(internal_error_mask & WARNING_DISABLED){
+		err_pos = strncpy(err_pos, "Configured as inactive, check zaptec portal;", fmax(err_end - err_pos, 0));
+		if(storage_Get_availability_ocpp()){
+			ret = true;
+		}
+	}
+
+	if(internal_error_mask & WARNING_FPGA_VERSION){
+		err_pos = strncpy(err_pos, "Incorrect FPGA version;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	if(internal_error_mask & WARNING_RCD){
+		err_pos = strncpy(err_pos, "RCD warning;", fmax(err_end - err_pos, 0));
+		ret = true;
+	}
+
+	return ret;
+}
+
 // TODO: Update with errors that need to be cleared before exiting faulted state
 #define MCU_WARNING_TRANSITION_FAULTED (WARNING_RCD | WARNING_CLEAR_REPLUG | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT)
 
@@ -2023,8 +2077,12 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		if(new_warning & eOCPP_MCU_HIGH_TEMPERATURE){
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true, false);
 		}
-		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){ //TODO: Consider hiding error caused by "inoperative"
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, NULL, true, false);
+		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){
+			char err_description[128];
+			err_description[0] = '\0';
+
+			if(internal_error_to_description(new_warning,err_description, sizeof(err_description)))
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, err_description, true, false);
 		}
 		if(new_warning & eOCPP_MCU_OVER_CURRENT_FAILURE){
 			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, NULL, true, false);
