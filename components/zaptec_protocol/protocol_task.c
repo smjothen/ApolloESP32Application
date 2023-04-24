@@ -1346,6 +1346,14 @@ uint32_t GetCombinedNotifications()
 	return (uint32_t)((espNotifications << 16) + mcuNotifications);
 }
 
+/*
+ * Mask bit 0 from MCU to avoid Cloud message every time it toggles. The toggling is counted in the HandleNotifictions()-function
+ */
+uint32_t GetCombinedNotificationsMasked()
+{
+	return (uint32_t)((espNotifications << 16) + (mcuNotifications & ~0x1));
+}
+
 void SetFinalStopActiveStatus(uint8_t status)
 {
 	finalStopActive = status;

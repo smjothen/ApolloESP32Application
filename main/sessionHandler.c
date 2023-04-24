@@ -217,10 +217,12 @@ void on_ocmf_sync_time(TimerHandle_t xTimer){
 }
 
 
-static uint32_t previousNotificaiton = 0;
+static uint32_t previousNotification = 0;
 
 static bool rcdBit0 = false;
 static bool previousRcdBit0 = false;
+static uint32_t errorCountAB = 0;
+static uint32_t errorCountABCTotal = 0;
 
 static bool rcdBit1 = false;
 static bool previousRcdBit1 = false;
@@ -228,11 +230,11 @@ void NotificationHandler()
 {
 	uint32_t combinedNotification = GetCombinedNotifications();
 
-	if(combinedNotification != previousNotificaiton)
+	if(combinedNotification != previousNotification)
 	{
-		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotificaiton, combinedNotification);
+		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotification, combinedNotification);
 	}
-	previousNotificaiton = combinedNotification;
+	previousNotification = combinedNotification;
 
 	/// Handle RCD notification in state A and B
 	previousRcdBit0 = rcdBit0;
@@ -240,8 +242,27 @@ void NotificationHandler()
 
 	if((rcdBit0 == true) && (previousRcdBit0 == false))
 	{
-		publish_debug_message_event("RCD error A/B trig", cloud_event_level_warning);
-		ESP_LOGW(TAG, "RCD error in state A/B");
+		errorCountAB++;
+		errorCountABCTotal++;
+		ESP_LOGW(TAG, "RCD error in state A/B: %i", errorCountAB);
+
+		/// Send event on different level to be able to search event messages based on severity
+		if(errorCountAB == 1)
+		{
+			publish_debug_message_event("RCD error A/B trig", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 10)
+		{
+			publish_debug_message_event("RCD error A/B 10", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 100)
+		{
+			publish_debug_message_event("RCD error A/B 100", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 1000)
+		{
+			publish_debug_message_event("RCD error A/B 1000", cloud_event_level_warning);
+		}
 	}
 
 
@@ -251,6 +272,8 @@ void NotificationHandler()
 
 	if(rcdBit1 != previousRcdBit1)
 	{
+		errorCountABCTotal++;
+
 		//Check for RCD error indication
 		if(rcdBit1)
 		{
@@ -268,7 +291,7 @@ void NotificationHandler()
 			if(readErrorCount <= 4)
 				publish_debug_message_event("RCD error trig", cloud_event_level_warning);
 			else if(readErrorCount == 5)
-				publish_debug_message_event("RCD error trig 5", cloud_event_level_error);
+				publish_debug_message_event("RCD error trig warning", cloud_event_level_error);
 		}
 		else
 		{
@@ -976,6 +999,9 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
+			//Clear RCD error counter on disconnect to allow recount
+			errorCountAB = 0;
+
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
@@ -1532,6 +1558,16 @@ static void sessionHandler_task()
 
 			NotificationHandler();
 
+			/// For chargers with x804 RCD, this prints out diagnostics every 24 hours if there has been any faults.
+			if(errorCountABCTotal > 0)
+			{
+				if(onTime % 86400 == 0)
+				{
+					char buf[100];
+					snprintf(buf, 100, "RCD error ABC total: %i / %.1f  Avg per day: %.1f", errorCountABCTotal, (onTime/86400.0), (errorCountABCTotal/(onTime / 86400.0)));
+					publish_debug_telemetry_observation_Diagnostics(buf);
+				}
+			}
 
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
