@@ -71,6 +71,7 @@
         ParamLedOverrideClear = 291,
 
 		RCDButtonTestState = 402,
+		RCDErrorCount = 403,
 
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,

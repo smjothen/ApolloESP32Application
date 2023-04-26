@@ -879,7 +879,7 @@ int publish_telemetry_observation_on_change(){
 
 
 
-    uint32_t notifications = GetCombinedNotifications();
+    uint32_t notifications = GetCombinedNotificationsMasked();
     if(previousNotifications != notifications)
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(Notifications, notifications));

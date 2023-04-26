@@ -101,6 +101,7 @@ uint8_t MCU_GetIT3OptimizationState();
 
 void SetEspNotification(uint16_t notification);
 void ClearNotifications();
+uint32_t GetCombinedNotificationsMasked();
 uint32_t GetCombinedNotifications();
 void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
