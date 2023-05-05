@@ -2479,7 +2479,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			}
 			else if(strstr(commandString,"GetMCUSettings") != NULL)
 			{
-				sessionHandler_SendMCUSettings();
+				if(strstr(commandString,"GetMCUSettings600") != NULL)
+					SetMCUDiagnosticsFrequency(600);
+				else if(strstr(commandString,"GetMCUSettings60") != NULL)
+					SetMCUDiagnosticsFrequency(60);
+				else if(strstr(commandString,"GetMCUSettings2") != NULL)
+					SetMCUDiagnosticsFrequency(2);
+				else
+					SetMCUDiagnosticsFrequency(1);
+
 				responseStatus = 200;
 			}
 

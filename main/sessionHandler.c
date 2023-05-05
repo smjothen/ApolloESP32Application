@@ -485,6 +485,13 @@ void SetMemoryDiagnosticsFrequency(uint16_t freq)
 	memoryDiagnosticsFrequency = freq;
 }
 
+static uint16_t mcuDiagnosticsFrequency = 0;
+void SetMCUDiagnosticsFrequency(uint16_t freq)
+{
+	mcuDiagnosticsFrequency = freq;
+}
+
+
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 {
 	return chargeOperatingMode;
@@ -1270,6 +1277,7 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_LteParameters();
 				}
 
+				publish_debug_telemetry_observation_capabilities();
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
@@ -1593,6 +1601,18 @@ static void sessionHandler_task()
 				}
 			}
 
+			/// Send MCU diagnostics once or periodically
+			if (mcuDiagnosticsFrequency > 0)
+			{
+				if(onTime % mcuDiagnosticsFrequency == 0)
+				{
+					if(mcuDiagnosticsFrequency == 1)
+						mcuDiagnosticsFrequency = 0;
+
+					sessionHandler_SendMCUSettings();
+				}
+			}
+
 
 			NotificationHandler();
 
@@ -1759,7 +1779,7 @@ void sessionHandler_StopAndResetChargeSession()
 
 void sessionHandler_SendMCUSettings()
 {
-	char mcuPayload[100];
+	char mcuPayload[130];
 
 	ZapMessage rxMsg = MCU_ReadParameter(ParamIsEnabled);
 	uint8_t enabled = rxMsg.data[0];
@@ -1776,7 +1796,16 @@ void sessionHandler_SendMCUSettings()
 	rxMsg = MCU_ReadParameter(MCUFaultPins);
 	uint8_t faultPins = rxMsg.data[0];
 
-	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X", enabled, standAlone, auth, maxC, faultPins);
+	rxMsg = MCU_ReadParameter(RCDTestState);
+	uint8_t rcdTestState = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamChargePilotLevelAverage);
+	uint16_t averagePilotLevel = GetUInt16(rxMsg.data);
+
+	rxMsg = MCU_ReadParameter(ParamInstantPilotCurrent);
+	float instantPilotCurrent = GetFloat(rxMsg.data);
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X, RCDts: %i, CM: %i, ADC: %i, CP: %2.2f", enabled, standAlone, auth, maxC, faultPins, rcdTestState, MCU_GetChargeMode(), averagePilotLevel, instantPilotCurrent);
 	ESP_LOGI(TAG, "%s", mcuPayload);
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }

@@ -51,6 +51,7 @@ enum SessionResetMode
 
 void sessionHandler_init();
 void SetMemoryDiagnosticsFrequency(uint16_t freq);
+void SetMCUDiagnosticsFrequency(uint16_t freq);
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode();
 //void SetDataInterval(int newDataInterval);
 void sessionHandler_HoldParametersFromCloud(float newCurrent, int newPhases);
