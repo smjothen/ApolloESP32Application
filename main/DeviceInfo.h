@@ -17,6 +17,8 @@
 //#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
 
 //#define MCU_APP_ONLY
+#define PORTAL_TYPE_PROD_DEFAULT 0
+#define PORTAL_TYPE_DEV 1
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -199,6 +201,7 @@ struct Configuration
 	uint32_t maxStartDelay;
 
 	uint16_t cover_on_value;
+	uint8_t connectToPortalType;
 };
 
 
