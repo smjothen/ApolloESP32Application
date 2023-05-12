@@ -463,6 +463,11 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     }
 
     if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
+        // Let charger go into "idle" state where we don't fail if not in MID mode
+        if (!calibration_set_mode(ctx, Idle)) {
+            return false;
+        }
+
         // Upload to cloud as observation
         calibration_https_upload_to_cloud(ctx, hexbuf);
 
@@ -489,7 +494,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     ctx->Retries = 0;
 
     if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
-
         // Let charger go into "idle" state where we don't fail if not in MID mode
         if (!calibration_set_mode(ctx, Idle)) {
             return false;

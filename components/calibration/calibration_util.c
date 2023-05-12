@@ -322,8 +322,10 @@ bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock) {
 
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
     if (!MCU_GetMidStoredCalibrationId(id)) {
+        ESP_LOGE(TAG, "Couldn't get calibration ID!");
         return false;
     }
+    ESP_LOGI(TAG, "Got calibration ID %d!", *id);
     return true;
 }
 
