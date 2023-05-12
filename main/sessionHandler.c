@@ -1758,7 +1758,6 @@ void sessionHandler_StopAndResetChargeSession()
 	//Any failed or final state - cleare opModeOverride
 	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() == 0.0))
 	{
-		MCU_ClearMaximumEnergy();
 		ESP_LOGI(TAG, "sessionReset: Energy cleared");
 		sessionResetMode = eSESSION_RESET_NONE;
 	}

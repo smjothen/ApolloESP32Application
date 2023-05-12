@@ -183,7 +183,6 @@ static float currents[3] = {0.0};
 
 static float totalChargePower = 0.0;
 static float totalChargePowerSession = -1.0;
-static float max_reported_energy = -1.0;
 
 static int8_t chargeMode = eCAR_UNINITIALIZED;
 static uint8_t chargeOperationMode = 0;
@@ -546,12 +545,7 @@ void uartSendTask(void *pvParameters){
         else if(rxMsg.identifier == ParamTotalChargePower)
         	totalChargePower = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamTotalChargePowerSession)
-        {
         	totalChargePowerSession = GetFloat(rxMsg.data);
-        	if(max_reported_energy<totalChargePowerSession)
-				max_reported_energy = totalChargePowerSession;
-        }
-
 	    else if(rxMsg.identifier == ParamChargeMode)
 	    	chargeMode = rxMsg.data[0];
 	    else if(rxMsg.identifier == ParamChargeOperationMode)
@@ -1015,20 +1009,6 @@ float MCU_GetEnergy()
 	return totalChargePowerSession;
 }
 
-float MCU_GetMaximumEnergy(){
-	return max_reported_energy;
-}
-
-void MCU_AdjustMaximumEnergy(){
-	ESP_LOGI(TAG, "MCU_AjustMaximumEnergy: %f = %f", max_reported_energy, totalChargePowerSession);
-	max_reported_energy = totalChargePowerSession;
-}
-
-
-void MCU_ClearMaximumEnergy(){
-	ESP_LOGI(TAG, "MCU_ClearMaximumEnergy");
-	max_reported_energy = 0;
-}
 
 int8_t MCU_GetChargeMode()
 {
