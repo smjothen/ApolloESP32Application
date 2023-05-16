@@ -558,13 +558,13 @@ void app_main(void)
 	{
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 		mcuTimeout--;
-		ESP_LOGW(TAG, "Waiting for MCU: %d", mcuTimeout);
+		ESP_LOGW(TAG_MAIN, "Waiting for MCU: %d", mcuTimeout);
 	}
 
 	///Check for MID calibrationHandle at boot
 	bool isCalibrationHandle = MCU_IsCalibrationHandle();
 
-	ESP_LOGI(TAG, "MCU is ready. CalibrationHandle: %i", isCalibrationHandle);
+	ESP_LOGI(TAG_MAIN, "MCU is ready. CalibrationHandle: %i", isCalibrationHandle);
 
 	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished) && (isCalibrationHandle == false))
 	{
