@@ -22,6 +22,7 @@
 #include "../components/ntp/zntp.h"
 #include "../components/authentication/authentication.h"
 #include "../components/i2c/include/i2cDevices.h"
+#include "../components/calibration/include/calibration.h"
 #include "offline_log.h"
 #include "offlineSession.h"
 #include "offlineHandler.h"
@@ -1844,7 +1845,17 @@ void sessionHandler_SendMIDStatus(void) {
 	}
 }
 
+static bool hasUpdatedCapability = false;
 void sessionHandler_SendMIDStatusUpdate(void) {
+
+	///Once factory calibration is finished, send updated capability observation
+	/// so that the calibration status is correct in the portal.
+	if((calibration_get_finished_flag() == true) && (hasUpdatedCapability == false))
+	{
+		hasUpdatedCapability = true;
+		publish_debug_telemetry_observation_capabilities();
+	}
+
 	if (!calibrationId) {
 		return;
 	}

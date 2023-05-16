@@ -764,6 +764,12 @@ int calibration_send_state(CalibrationCtx *ctx) {
     return ctx->Seq++;
 }
 
+static bool isCalibratedFlag = false;
+bool calibration_get_finished_flag()
+{
+	return isCalibratedFlag;
+}
+
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
     if (!calibration_set_mode(ctx, Idle)) {
         ESP_LOGI(TAG, "Waiting for charger to go idle...");
@@ -781,6 +787,7 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             }
         } else {
             ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
+            isCalibratedFlag = true;
         }
 
         ctx->Flags |= CAL_FLAG_DONE;

@@ -551,7 +551,22 @@ void app_main(void)
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
-	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished))
+	//Ensure that the MCU parameters are available before connecting or syncing with cloud,
+	//otherwise we may send uninitialized values
+	uint8_t mcuTimeout = 30;
+	while((MCU_IsReady() == false) && (mcuTimeout > 0))
+	{
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		mcuTimeout--;
+		ESP_LOGW(TAG, "Waiting for MCU: %d", mcuTimeout);
+	}
+
+	///Check for MID calibrationHandle at boot
+	bool isCalibrationHandle = MCU_IsCalibrationHandle();
+
+	ESP_LOGI(TAG, "MCU is ready. CalibrationHandle: %i", isCalibrationHandle);
+
+	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished) && (isCalibrationHandle == false))
 	{
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
@@ -620,7 +635,7 @@ void app_main(void)
     int otaDelayCounter = 0;
     int lowMemCounter = 0;
 
-		bool calibrationMode = false;
+	bool calibrationMode = false;
 
 	while (true)
     {
@@ -759,7 +774,7 @@ void app_main(void)
 		}
 
 		// Allow starting calibration task once when the handle is plugged in
-		if (MCU_IsCalibrationHandle() && !calibrationMode) {
+		if (isCalibrationHandle && !calibrationMode) {
 			ESP_LOGI(TAG_MAIN, "Starting calibration task!");
 			calibration_task_start();
 			calibrationMode = true;
