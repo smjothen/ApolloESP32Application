@@ -335,6 +335,7 @@ bool MCU_IsReady()
 	return isMCUReady;
 }
 
+static uint32_t offsetCount = 0;
 void MCU_PrintReadings()
 {
 	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
@@ -383,7 +384,7 @@ void uartSendTask(void *pvParameters){
 
     uint32_t count = 0;
     uint32_t printCount = 0;
-    uint32_t offsetCount = 0;
+
     while (true)
     {
     	if(mcuDebugCounter < previousMcuDebugCounter)
