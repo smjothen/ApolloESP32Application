@@ -30,4 +30,35 @@
 #define OCPP_REASON_UNLOCK_COMMAND "UnlockCommand" ///< "Central System sent an Unlock Connector command."
 ///@}
 
+/**
+ * @brief Identifies the reason
+ */
+enum ocpp_reason_id{
+	eOCPP_REASON_OTHER = 0,
+	eOCPP_REASON_DE_AUTHORIZED,
+	eOCPP_REASON_EMERGENCY_STOP,
+	eOCPP_REASON_EV_DISCONNECT,
+	eOCPP_REASON_HARD_RESET,
+	eOCPP_REASON_LOCAL,
+	eOCPP_REASON_POWER_LOSS,
+	eOCPP_REASON_REBOOT,
+	eOCPP_REASON_REMOTE,
+	eOCPP_REASON_SOFT_RESET,
+	eOCPP_REASON_UNLOCK_COMMAND,
+};
+
+/**
+ * @brief converts reason to id
+ *
+ * @param  reason value to convert
+ */
+enum ocpp_reason_id ocpp_reason_to_id(const char * reason);
+
+/**
+ * @brief converts id to reason
+ *
+ * @param id reason id
+ */
+const char * ocpp_reason_from_id(enum ocpp_reason_id id);
+
 #endif /*OCPP_REASON_H*/

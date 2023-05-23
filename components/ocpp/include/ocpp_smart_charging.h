@@ -47,8 +47,9 @@ esp_err_t update_charging_profile(struct ocpp_charging_profile * profile);
  * Expects the ocpp_set_active_transaction_id to have been called previously
  *
  * @param active Should be true if transaction is active
+ * @param start_time when the transaction started
  */
-void ocpp_set_transaction_is_active(bool active);
+void ocpp_set_transaction_is_active(bool active, time_t start_time);
 
 /**
  * @brief sets a callback when minimum/maximum charge limit or number of phases to be used changes.

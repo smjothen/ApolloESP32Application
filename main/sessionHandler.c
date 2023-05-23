@@ -33,6 +33,7 @@
 #include "chargeController.h"
 
 #include "ocpp_task.h"
+#include "ocpp_transaction.h"
 #include "ocpp_smart_charging.h"
 #include "ocpp_auth.h"
 #include "ocpp.h"
@@ -337,13 +338,16 @@ enum ocpp_cp_status_id ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
  * the result from the StartTransaction.req. If CP fails to recieve the id, it will be unable to create a valid StopTransaction.req
  * as it requires an id. Transaction related MeterValues will still be sendt but can not be associated with a transaction.
  *
- * The current implementation of the ocpp component expects messages to be enqueued and only allows valid messages to be created.
- * to allow the construction of MeterValue.req and StopTransaction.req when StartTransaction.conf has not been recieved, a random id
- * will be created before sending the StartTransaction.req. This id will then be replaced by the valid id when the confirmation is
- * recieved. This will cause issues if a confirmation is never recieved. What should happen if id is not recieved is not specified
- * by ocpp 1.6.
+ * The current implementation of the ocpp component only allows valid messages to be created. Transaction related messages that do not
+ * have a valid transaction id must be stored.
+ *
+ * What should happen if id is not recieved is specifid in ocpp 1.6 errata sheet v4.0:
+ * "the Charge Point SHALL send any Transaction related messages for this transaction to the Central System with a transactionId = -1.
+ * The Central System SHALL respond as if these messages refer to a valid transactionId, so that the Charge Point is not blocked by this."
  */
 int * transaction_id = NULL;
+bool transaction_id_is_valid = false;
+
 time_t transaction_start = 0;
 int meter_start = 0;
 bool pending_change_availability = false;
@@ -372,10 +376,12 @@ bool sessionHandler_OcppTransactionIsActive(uint connector_id){
 	}
 }
 
-int * sessionHandler_OcppGetTransactionId(uint connector_id){
+int * sessionHandler_OcppGetTransactionId(uint connector_id, bool * valid_out){
 	if(sessionHandler_OcppTransactionIsActive(connector_id)){
+		*valid_out = transaction_id_is_valid;
 		return transaction_id;
 	}else{
+		*valid_out = false;
 		return NULL;
 	}
 }
@@ -483,7 +489,7 @@ void transition_to_preparing(){
 	preparing_started = time(NULL);
 }
 
-void sessionHandler_OcppStopTransaction(const char * reason){
+void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
 	sessionHandler_InitiateResetChargeSession();
@@ -492,24 +498,29 @@ void sessionHandler_OcppStopTransaction(const char * reason){
 
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Received start transaction response");
+
+	int transaction_entry = -1;
+	if(cb_data == NULL){
+		ESP_LOGE(TAG, "No file entry given. Unable to determine if transaction is current");
+	}else{
+		transaction_entry = *(int *)cb_data;
+	}
+
 	bool is_current_transaction = false;
 	if(cJSON_HasObjectItem(payload, "transactionId")){
-		/*
-		 * Cloud sets session id whilst in requesting state, ocpp sets transaction id during charge state
-		 * if cloud sets the id first, we should not update it as it would confuse the cloud.
-		 */
-		int tmp_id = *(int*)cb_data;
 		int received_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
 
-		if(transaction_id != NULL && *transaction_id == tmp_id){
+		ESP_LOGI(TAG, "transaction id is: %d, transaction entry is %d", (transaction_id == NULL) ? -1 : *transaction_id, transaction_entry);
+		if(transaction_id != NULL && *transaction_id == transaction_entry){
 			ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
 
 			*transaction_id = received_id;
+			transaction_id_is_valid = true;
 			is_current_transaction = true;
 			ocpp_set_active_transaction_id(transaction_id);
 		}
 
-		esp_err_t err = offlineSession_UpdateTransactionId_ocpp(tmp_id, received_id);
+		esp_err_t err = ocpp_transaction_set_real_id(transaction_entry, received_id);
 		if(err == ESP_OK){
 			ESP_LOGI(TAG, "Sat valid transaction_id for stored transaction");
 
@@ -518,10 +529,6 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 
 		}else{
 			ESP_LOGE(TAG, "Failed to set valid id for stored transaction");
-		}
-
-		if(ocpp_update_enqueued_transaction_id(tmp_id, received_id) != 0){
-			ESP_LOGE(TAG, "Unable to update enqueued transaction id");
 		}
 
 		// Only set the transaction id if cloud did not yet and response is related to active transaction
@@ -574,7 +581,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 			if(storage_Get_ocpp_stop_transaction_on_invalid_id()){
 				ESP_LOGW(TAG, "Attempting to stop transaction");
 				sessionHandler_InitiateResetChargeSession();
-				chargeSession_SetStoppedReason(OCPP_REASON_DE_AUTHORIZED);
+				chargeSession_SetStoppedReason(eOCPP_REASON_DE_AUTHORIZED);
 			}else{
 				ESP_LOGW(TAG, "Attempting to pause transaction");
 				MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
@@ -608,37 +615,27 @@ static void stop_transaction_response_cb(const char * unique_id, cJSON * payload
 				ocpp_on_id_tag_info_recieved((const char *)cb_data, &id_tag_info);
 		}
 	}
-
-	free(cb_data);
 }
 
 bool pending_ocpp_authorize = false;
 
-static void stop_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-	free(cb_data);
-	error_logger(unique_id, error_code, error_description, error_details, "stop");
-}
-
 static void start_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
-        int * failed_transaction_id = (int *) cb_data;
+	ESP_LOGE(TAG, "Failed start trasnsaction request");
 
-	ESP_LOGE(TAG, "Start transaction request failed for temporary id %d", *failed_transaction_id);
-
-	if(error_code != NULL){
-		if(error_description != NULL){
-			if(error_details != NULL){
-				char * details = cJSON_Print(error_details);
-				if(details != NULL){
-					ESP_LOGE(TAG, "[%s]: (%s) '%s' \nDetails:\n %s", unique_id, error_code, error_description, details);
-					free(details);
-				}
-			}else{
-				ESP_LOGE(TAG, "[%s]: (%s) '%s'", unique_id, error_code, error_description);
-			}
-		}else{
-			ESP_LOGE(TAG, "[%s]: (%s)", unique_id, error_code);
-		}
+	int transaction_entry = -1;
+	if(cb_data == NULL){
+		ESP_LOGE(TAG, "Missing cb_data for failed start transaction");
+	}else{
+		transaction_entry = *(int *)cb_data;
 	}
+
+	if(transaction_id != NULL && *transaction_id == transaction_entry){
+		ESP_LOGE(TAG, "Setting -1 as valid id for active transaction");
+		*transaction_id = -1;
+		transaction_id_is_valid = true;
+	}
+
+	error_logger(unique_id, error_code, error_description, error_details, cb_data);
 }
 
 static struct ocpp_meter_value_list * current_meter_values = NULL;
@@ -735,10 +732,10 @@ static void sample_meter_values(){
 	uint connector = 1;
 	handle_meter_value(eOCPP_CONTEXT_SAMPLE_PERIODIC,
 			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
-			transaction_id, &connector, 1, false);
+			transaction_id, transaction_id_is_valid, &connector, 1, false);
 }
 
-static void start_sample_interval(){
+static void start_sample_interval(enum ocpp_reading_context_id context){
 	ESP_LOGI(TAG, "Starting sample interval");
 
 	sample_handle = xTimerCreate("Ocpp sample",
@@ -751,7 +748,7 @@ static void start_sample_interval(){
 		if(xTimerStart(sample_handle, pdMS_TO_TICKS(200)) != pdPASS){
 			ESP_LOGE(TAG, "Unable to start sample interval");
 		}else{
-			init_interval_measurands(eOCPP_CONTEXT_TRANSACTION_BEGIN);
+			init_interval_measurands(context);
 			ESP_LOGI(TAG, "Started sample interval");
 		}
 	}
@@ -770,23 +767,41 @@ static void stop_sample_interval(){
 	uint connector = 1;
 	handle_meter_value(eOCPP_CONTEXT_TRANSACTION_END,
 			storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
-			transaction_id, &connector, 1, false);
+			transaction_id, transaction_id_is_valid, &connector, 1, false);
 }
 
-void stop_transaction(){
+void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 	stop_sample_interval();
+	ocpp_set_transaction_is_active(false, 0);
 
 	int meter_stop = floor(get_accumulated_energy() * 1000);
 
 	time_t timestamp = time(NULL);
-	char * stop_token = NULL;
 
-	if(chargeSession_Get().StoppedByRFID){
-		stop_token = strndup(chargeSession_Get().StoppedById, 20);
+	enum ocpp_reason_id reason = chargeSession_Get().StoppedReason;
+
+	if(reason == eOCPP_REASON_OTHER){ // No reason has been set, try to detect more specific reason
+		ESP_LOGW(TAG, "OCPP reason not explicitly set");
+
+		/*
+		 * We use a low counter to detect reboot, as it is possible that ocpp connected quickly and transaction
+		 * was very short.
+		 */
+		if(MCU_GetDebugCounter() < 10){
+			ESP_LOGW(TAG, "Resent reboot caused transaction to end");
+			if(MCU_GetResetSource() & 1<<2){ // brownout
+				reason = eOCPP_REASON_POWER_LOSS;
+			}else{
+				reason = eOCPP_REASON_REBOOT;
+			}
+
+		}else if(ocpp_state == eOCPP_CP_STATUS_AVAILABLE){
+			ESP_LOGI(TAG, "Looks like transaction stopped due to car disconnect");
+			reason = eOCPP_REASON_EV_DISCONNECT;
+		}
 	}
 
-	if(strcmp(chargeSession_Get().StoppedReason, OCPP_REASON_EV_DISCONNECT) == 0 &&
-		storage_Get_ocpp_stop_transaction_on_ev_side_disconnect()){
+	if(reason == eOCPP_REASON_EV_DISCONNECT && storage_Get_ocpp_stop_transaction_on_ev_side_disconnect()){
 
 		/*
 		 * Ocpp 1.6 specify that a status notification with state finishing, no error, and info about ev disconnect.
@@ -799,39 +814,12 @@ void stop_transaction(){
 		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected", true, false);
 	}
 
-	cJSON * response = ocpp_create_stop_transaction_request(stop_token, meter_stop, timestamp, transaction_id,
-								chargeSession_Get().StoppedReason, current_meter_values);
+	transaction_id_is_valid = false;
 
-	if(response == NULL){
-		ESP_LOGE(TAG, "Unable to create stop transaction request");
-		free(stop_token);
-	}else{
-		int err = enqueue_call(response, stop_transaction_response_cb, stop_transaction_error_cb, stop_token, eOCPP_CALL_TRANSACTION_RELATED);
-		if(err != 0){
-			free(stop_token);
-			cJSON_Delete(response);
-			ESP_LOGE(TAG, "Unable to enqueue stop transaction request, storing stop transaction on file");
-			esp_err_t err = offlineSession_SaveStopTransaction_ocpp(*transaction_id, transaction_start, stop_token, meter_stop,
-										timestamp, chargeSession_Get().StoppedReason);
+	if(ocpp_transaction_enqueue_stop(chargeSession_Get().StoppedById ? chargeSession_Get().StoppedById : NULL,
+						meter_stop, timestamp, reason, current_meter_values) != 0){
 
-			if(err != ESP_OK){
-				ESP_LOGE(TAG, "Failed to save stop transaction to file");
-			}
-
-			if(current_meter_values != NULL){
-				size_t meter_buffer_length;
-				unsigned char * meter_buffer = ocpp_meter_list_to_contiguous_buffer(current_meter_values, true, &meter_buffer_length);
-				if(meter_buffer == NULL){
-					ESP_LOGE(TAG, "Could not create meter value as string for storing stop transaction data");
-				}else{
-					ESP_LOGI(TAG, "Storing stop transaction data as short string");
-					if(offlineSession_SaveNewMeterValue_ocpp(*transaction_id, transaction_start, meter_buffer, meter_buffer_length) != ESP_OK){
-						ESP_LOGE(TAG, "Unable to save stop transaction data");
-					}
-					free(meter_buffer);
-				}
-			}
-		}
+		ESP_LOGE(TAG, "Failed to enqueue stop transaction");
 	}
 
 	ocpp_meter_list_delete(current_meter_values);
@@ -860,38 +848,36 @@ void start_transaction(){
 		chargeSession_SetAuthenticationCode(storage_Get_ocpp_default_id_token());
 	}
 
-	cJSON * start_transaction  = ocpp_create_start_transaction_request(1, chargeSession_Get().AuthenticationCode, meter_start,
-									(reservation_info != NULL) ? &reservation_info->reservation_id : NULL, transaction_start);
-
-	free(reservation_info);
-	reservation_info = NULL;
-
 	transaction_id = malloc(sizeof(int));
 	if(transaction_id == NULL){
 		ESP_LOGE(TAG, "Unable to create buffer for transaction id");
 		return;
 	}
 
-	*transaction_id = -fabs(esp_random()); // Use negative number to indicate local
-	if(*transaction_id > -2){ // -1 has a special meaning in errata v4.0
-		*transaction_id = -2; // The chance of two transactions having the same ID is still negligible
+	if(ocpp_transaction_enqueue_start(1, chargeSession_Get().AuthenticationCode, meter_start,
+						(reservation_info != NULL) ? &reservation_info->reservation_id : NULL,
+						time(NULL), transaction_id) != 0){
+
+		ESP_LOGE(TAG, "Unable to enqueue start transaction request");
 	}
 
-	if(start_transaction == NULL){
-		ESP_LOGE(TAG, "Unable to create start transaction request");
-	}else{
-		int err = enqueue_call(start_transaction, start_transaction_response_cb, start_transaction_error_cb,
-				transaction_id, eOCPP_CALL_TRANSACTION_RELATED);
-		if(err != 0){
-			cJSON_Delete(start_transaction);
-			ESP_LOGE(TAG, "Unable to enqueue start transaction request, storing on file");
-			offlineSession_SaveStartTransaction_ocpp(*transaction_id, transaction_start, 1,
-								chargeSession_Get().AuthenticationCode, meter_start, NULL);
-		}
-	}
+	ESP_LOGI(TAG, "Transaction id set to: %d before StartTransaction.conf", *transaction_id);
 
-	if(storage_Get_ocpp_meter_value_sample_interval() > 0)
-		start_sample_interval();
+	ocpp_set_transaction_is_active(true, transaction_start);
+
+	free(reservation_info);
+	reservation_info = NULL;
+
+	if(storage_Get_ocpp_meter_value_sample_interval() > 0){
+
+		start_sample_interval(eOCPP_CONTEXT_TRANSACTION_BEGIN);
+
+		uint connector = 1;
+		handle_meter_value(eOCPP_CONTEXT_TRANSACTION_BEGIN,
+				storage_Get_ocpp_meter_values_sampled_data(), storage_Get_ocpp_stop_txn_sampled_data(),
+				transaction_id, transaction_id_is_valid, &connector, 1, false);
+
+	}
 }
 
 const char * id_token_from_tag(const char * tag_id){
@@ -1083,6 +1069,9 @@ static int change_availability(bool new_available){
 	return 0;
 }
 
+time_t boot_timestamp = 0;
+bool ocpp_startup = true;
+
 // See transition table in section on Status notification in ocpp 1.6 specification
 static enum ocpp_cp_status_id get_ocpp_state(){
 
@@ -1102,8 +1091,9 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 	}
 
 	enum CarChargeMode charge_mode = MCU_GetChargeMode();
+	enum ChargerOperatingMode operating_mode = MCU_GetChargeOperatingMode();
 
-	switch(MCU_GetChargeOperatingMode()){
+	switch(operating_mode){
 	case CHARGE_OPERATION_STATE_UNINITIALIZED:
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 
@@ -1538,7 +1528,7 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	if(stop_charging_accepted){
 	        sessionHandler_InitiateResetChargeSession();
 		SetAuthorized(false);
-		chargeSession_SetStoppedReason(OCPP_REASON_REMOTE);
+		chargeSession_SetStoppedReason(eOCPP_REASON_REMOTE);
 	}
 	//TODO: "[...]and, if applicable, unlock the connector"
 }
@@ -1651,9 +1641,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
-			chargeSession_SetStoppedReason(OCPP_REASON_EV_DISCONNECT);
-			stop_transaction();
-			ocpp_set_transaction_is_active(false);
+			stop_transaction(new_state);
 			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FINISHING:
@@ -1688,7 +1676,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
-			ocpp_set_transaction_is_active(true);
 			//Clear authorization for next transaction
 			SetAuthorized(false);
 			break;
@@ -1741,8 +1728,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
-			stop_transaction();
-			ocpp_set_transaction_is_active(false);
+			stop_transaction(new_state);
 			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FAULTED:
@@ -1768,6 +1754,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_CHARGING:
+			stop_transaction(new_state);
+			SetAuthorized(false);
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
@@ -1988,6 +1976,7 @@ static void handle_state(enum ocpp_cp_status_id state){
 		handle_reserved();
 		break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
+		break;
 	case eOCPP_CP_STATUS_FAULTED:
 		handle_faulted();
 		break;
@@ -2279,6 +2268,8 @@ static void sessionHandler_task()
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
+    boot_timestamp = time(NULL);
+
     // Prepare for incomming ocpp messages
     attach_call_cb(eOCPP_ACTION_CHANGE_AVAILABILITY_ID, change_availability_cb, NULL);
     attach_call_cb(eOCPP_ACTION_REMOTE_START_TRANSACTION_ID, remote_start_transaction_cb, NULL);
@@ -2310,10 +2301,10 @@ static void sessionHandler_task()
     chargeController_Init();
 
     offlineSession_Init();
-    ocpp_set_offline_functions(offlineSession_PeekNextMessageTimestamp_ocpp, offlineSession_ReadNextMessage_ocpp,
-			    start_transaction_response_cb, NULL, "start",
-			    NULL, NULL, "stop",
-			    NULL, NULL, "meter");
+    ocpp_transaction_set_callbacks(
+	    start_transaction_response_cb, start_transaction_error_cb,
+	    stop_transaction_response_cb, NULL,
+	    NULL, NULL);
 
     /// Check for corrupted "files"-partition
     fileSystemOk = offlineSession_CheckAndCorrectFilesSystem();
@@ -2486,6 +2477,64 @@ static void sessionHandler_task()
 
 		// Handle ocpp state if session type is ocpp
 		if(storage_Get_session_controller() == eSESSION_OCPP){
+			if(ocpp_startup && ocpp_transaction_is_ready()){
+				// If this is the first loop where CP is registered, then we may have just rebooted and need to sync state with storage.
+				ocpp_startup = false;
+
+				ESP_LOGI(TAG, "Check if active transaction was on file before CS accepted boot");
+				if(ocpp_transaction_find_active_entry(1) != -1){
+					ESP_LOGW(TAG, "Transaction was on file");
+
+					ocpp_id_token stored_token;
+					transaction_id = malloc(sizeof(int));
+
+					if(transaction_id != NULL){
+						if(ocpp_transaction_load_into_session(&transaction_start, stored_token, transaction_id, &transaction_id_is_valid) != ESP_OK){
+							ESP_LOGE(TAG, "Expected active entry, but unable to load into session. Did it just end?");
+
+						}else{
+							chargeSession_SetAuthenticationCode(stored_token);
+
+							ocpp_set_active_transaction_id(transaction_id);
+							ocpp_set_transaction_is_active(true, transaction_start);
+
+							if(storage_Get_ocpp_meter_value_sample_interval() > 0)
+								start_sample_interval(eOCPP_CONTEXT_OTHER);
+
+							enum ChargerOperatingMode operating_mode = MCU_GetChargeOperatingMode();
+
+							if(operating_mode != CHARGE_OPERATION_STATE_CHARGING && operating_mode != CHARGE_OPERATION_STATE_PAUSED){
+
+								enum ocpp_reason_id reason = eOCPP_REASON_OTHER;
+								/*
+								 * We use a higher max counter value here than in stop_transaction
+								 * to detect reboot, as we expect reboot to be the cause, as the esp also reset.
+								 * We also account for some time from boot to sessionHandler starting.
+								 */
+								if(MCU_GetDebugCounter() < 300){
+									ESP_LOGW(TAG, "Resent reboot caused transaction to end");
+									if(MCU_GetResetSource() & 1<<2){ // brownout
+										reason = eOCPP_REASON_POWER_LOSS;
+									}else{
+										reason = eOCPP_REASON_REBOOT;
+									}
+								}else{
+									reason = eOCPP_REASON_OTHER; // May be overwritten by stop_transaction
+								}
+
+								chargeSession_SetStoppedReason(reason);
+								stop_transaction(eOCPP_CP_STATUS_FINISHING);
+							}
+						}
+					}else{
+						ESP_LOGE(TAG, "Unable to allocate memory for transaction id during loading of stored transaction");
+					}
+
+				}else{
+					ESP_LOGI(TAG, "No transaction on file");
+				}
+			}
+
 			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state(chargeOperatingMode, currentCarChargeMode);
 			handle_warnings(&ocpp_new_state, MCU_GetWarnings());
 

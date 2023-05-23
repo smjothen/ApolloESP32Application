@@ -2,6 +2,25 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_MAX_TRANSACTION_QUEUE_SIZE
+       int "Size of transaction queue"
+       help
+	Maximum number of transaction queued without being stored on file
+       default 20
+
+config OCPP_MAX_TRANSACTION_FILES
+       int "Maximum transaction files"
+       help
+	Maximum number of unique transactions that can be stored on file while offline.
+	Transaction files are deleted when a StopTransaction.conf is received or failed too many times.
+       default 100
+
+config OCPP_MAX_TRANSACTION_FILE_SIZE
+       int "Maximum transaction file size"
+       help
+	Maximum size of each unique transaction file size. Only meter values may be rejected due to space limitations.
+       default 65536
+
 config OCPP_AUTH_CACHE_MAX_LENGTH
        int "Equivalent to LocalAuthListMaxLength for auth cache"
        help

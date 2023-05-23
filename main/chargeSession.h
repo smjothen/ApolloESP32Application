@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 
+#include "../components/ocpp/include/types/ocpp_reason.h"
 
 struct ChargeSession
 {
@@ -15,7 +16,7 @@ struct ChargeSession
 	bool ReliableClock;
 	bool StoppedByRFID;
 	char StoppedById[21];
-	char StoppedReason[16];
+	enum ocpp_reason_id StoppedReason;
 	char AuthenticationCode[41];//Up to GUID string.
 	char parent_id[21];
 	uint32_t unixStartTime;
@@ -52,7 +53,7 @@ char* chargeSession_GetAuthenticationCode();
 void chargeSession_ClearAuthenticationCode();
 //void chargeSession_SetEnergy(float energy);
 void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag);
-void chargeSession_SetStoppedReason(const char * reason);
+void chargeSession_SetStoppedReason(enum ocpp_reason_id reason);
 void chargeSession_SetEnergyForTesting(float e);
 void chargeSession_SetOCMF(char * OCMDString);
 void SetUUIDFlagAsCleared();

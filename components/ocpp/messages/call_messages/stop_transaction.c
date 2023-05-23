@@ -5,7 +5,7 @@
 #include "types/ocpp_reason.h"
 #include "types/ocpp_date_time.h"
 
-cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int * transaction_id, const char * reason, struct ocpp_meter_value_list * transaction_data){
+cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int transaction_id, const char * reason, struct ocpp_meter_value_list * transaction_data){
 
 	if(id_tag != NULL && !is_ci_string_type(id_tag, 20))
 		return NULL;
@@ -24,9 +24,6 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 							OCPP_REASON_UNLOCK_COMMAND) != 0){
 		return NULL;
 	}
-
-	if(transaction_id == NULL)
-		return NULL;
 
 	cJSON * payload = cJSON_CreateObject();
 	if(payload == NULL)
@@ -60,7 +57,7 @@ cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop
 	}
 	cJSON_AddItemToObject(payload, "timestamp", timestamp_json);
 
-	cJSON * transaction_id_json = cJSON_CreateNumber(*transaction_id);
+	cJSON * transaction_id_json = cJSON_CreateNumber(transaction_id);
 	if(transaction_id_json == NULL){
 		cJSON_Delete(payload);
 		NULL;

@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include "../components/ocpp/include/types/ocpp_meter_value.h"
+#include "../components/ocpp/include/types/ocpp_reason.h"
 
 enum CarChargeMode
 {
@@ -65,10 +66,10 @@ int sessionHandler_GetStackWatermark();
 void sessionHandler_CheckAndSendOfflineSessions();
 void sessionHandler_SetOfflineSessionFlag();
 bool sessionHandler_OcppTransactionIsActive(uint connector_id);
-int * sessionHandler_OcppGetTransactionId(uint connector_id);
+int * sessionHandler_OcppGetTransactionId(uint connector_id, bool * valid_out);
 time_t sessionHandler_OcppTransactionStartTime();
 void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases);
-void sessionHandler_OcppStopTransaction(const char * reason);
+void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason);
 // Transfers the ownership of the meter values to sessionHandler
 void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length);
 void sessionHandler_OcppSaveState();

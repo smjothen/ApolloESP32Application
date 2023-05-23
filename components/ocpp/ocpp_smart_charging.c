@@ -1051,8 +1051,14 @@ error:
 }
 
 int * active_transaction_id = NULL;
+time_t transaction_start_time = 0;
 
-void ocpp_set_transaction_is_active(bool active){
+void ocpp_set_transaction_is_active(bool active, time_t start_time){
+
+	transaction_start_time = start_time;
+	if(ocpp_smart_task_handle == NULL)
+		return;
+
 	if(active){
 		xTaskNotify(ocpp_smart_task_handle, eTRANSACTION_START, eSetBits);
 	}else{
@@ -1063,14 +1069,8 @@ void ocpp_set_transaction_is_active(bool active){
 void ocpp_set_active_transaction_id(int * transaction_id){
 	active_transaction_id = transaction_id;
 
-	xTaskNotify(ocpp_smart_task_handle, eTRANSACTION_ID_CHANGED, eSetBits);
-}
-
-
-void clear_active_transaction_id(){
-	active_transaction_id = NULL;
-
-	xTaskNotify(ocpp_smart_task_handle, eTRANSACTION_ID_CHANGED, eSetBits);
+	if(ocpp_smart_task_handle != NULL)
+		xTaskNotify(ocpp_smart_task_handle, eTRANSACTION_ID_CHANGED, eSetBits);
 }
 
 /**
@@ -1843,7 +1843,6 @@ static void ocpp_smart_task(){
 	uint32_t next_renewal_delay = UINT32_MAX;
 
 	transaction_is_active = false;
-	time_t transaction_start_time = 0;
 
 	while(true){
 
@@ -1869,7 +1868,6 @@ static void ocpp_smart_task(){
 				if(active_transaction_id != NULL){
 					ESP_LOGW(TAG, "Transaction_id set, expecting active transaction");
 					transaction_is_active = true;
-					transaction_start_time = current_time;
 				}else{
 					ESP_LOGW(TAG, "Transaction_id not set, expecting no transaction");
 					transaction_is_active = false; // Could be wrong in offline or if delay between start and setting id
@@ -1877,7 +1875,6 @@ static void ocpp_smart_task(){
 				}
 			}else{
 				transaction_is_active = true;
-				transaction_start_time = current_time;
 			}
 
 		}else if(data & eTRANSACTION_STOP){

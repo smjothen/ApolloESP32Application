@@ -6,7 +6,6 @@
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "ocpp_call_with_cb.h"
-#include "ocpp_json/ocppj_message_structure.h"
 #include "messages/error_messages/ocpp_call_error.h"
 
 static const char * TAG = "OCPP_LISTENER";
@@ -208,8 +207,6 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		return;
 	}
 
-	struct ocpp_active_call call = {0};
-
 	switch(message_type_id){
 	case eOCPPJ_MESSAGE_ID_CALL:
 		ESP_LOGD(TAG, "Recieved ocpp call message");
@@ -217,37 +214,10 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 		break;
 
 	case eOCPPJ_MESSAGE_ID_RESULT:
-		ESP_LOGD(TAG, "Recieved ocpp result message: %s", unique_id);
-
-		if(take_active_call_if_match(&call, unique_id, 500) != pdTRUE){
-			ESP_LOGE(TAG, "Unable to match result to an active call");
-			break;
-		}
-
-		if(task_to_notify != NULL)
-			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING<<notify_offset, eSetBits);
-
-		if(call.call->result_cb != NULL){
-			call.call->result_cb(unique_id, payload, call.call->cb_data);
-		}else{
-			result_logger(unique_id, payload, call.call->cb_data);
-		}
-
-		free_call_with_cb(call.call);
-		break;
-
 	case eOCPPJ_MESSAGE_ID_ERROR:
-		ESP_LOGE(TAG, "Recieved ocpp error message");
-
-		if(take_active_call_if_match(&call, unique_id, 500) != pdTRUE){
-			ESP_LOGE(TAG, "Unable to match error response to an active call");
-			break;
-		}
-
-		if(task_to_notify != NULL)
+		if(handle_active_call_if_match(unique_id, eOCPPJ_MESSAGE_ID_RESULT, payload, error_code, error_description, error_details, 500) == pdTRUE && task_to_notify != NULL)
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING<<notify_offset, eSetBits);
 
-		fail_active_call(&call, error_code, error_description, error_details);
 		break;
 	}
 

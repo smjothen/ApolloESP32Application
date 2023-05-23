@@ -33,6 +33,7 @@
 #include "../../main/offlineHandler.h"
 #include "../../main/offlineSession.h"
 #include "../../main/ocpp.h"
+#include "../ocpp/include/ocpp_transaction.h"
 #include "../../main/chargeController.h"
 #include "../../main/production_test.h"
 #include "fat.h"
@@ -2499,7 +2500,38 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 				}
 			}
+			// Get ocpp transaction diagnostics
+			else if(strstr(commandString, "get ocpp transaction diagnostics") != NULL){
+				ESP_LOGI(TAG, "Got request for ocpp transaction diagnostics");
 
+				int transaction_count = ocpp_transaction_count();
+				if(transaction_count < 0 || transaction_count > 9999){
+					responseStatus = 500;
+				}else{
+					char result[5];
+					sprintf(result, "%d", transaction_count % 1000);
+
+					publish_debug_telemetry_observation_Diagnostics(result);
+					responseStatus = 200;
+				}
+			}
+			// Clear ocpp transactions files
+			else if(strstr(commandString, "clear ocpp transactions") != NULL){
+				ESP_LOGI(TAG, "Got request to clear ocpp transactions");
+
+				if(ocpp_transaction_clear_all() != 0) {
+					responseStatus = 500;
+				}else{
+					responseStatus = 200;
+				}
+			}
+			// Fail ocpp transactions messages
+			else if(strstr(commandString, "fail ocpp transactions") != NULL){
+				ESP_LOGI(TAG, "Got request to fail ocpp transactions");
+
+				ocpp_transaction_fail_all("Cloud command");
+				responseStatus = 200;
+			}
 			/*else if(strstr(commandString,"StartTimer") != NULL)
 			{
 				//chargeController_SetStartTimer();

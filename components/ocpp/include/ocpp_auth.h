@@ -90,7 +90,7 @@ void ocpp_authorize_compare(const char * id_token_1, const char * parent_token_1
 /**
  * @brief Returns the authorization status taking the potential tag expiration into account
  *
- * @paran id_tag_info The tag to get authorization status from
+ * @param id_tag_info The tag to get authorization status from
  */
 enum ocpp_authorization_status_id ocpp_get_status_from_id_tag_info(struct ocpp_id_tag_info * id_tag_info);
 

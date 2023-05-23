@@ -107,7 +107,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
  * @param reason "Optional. This contains the reason why the transaction was stopped. MAY only be omitted when the Reason is "Local"."
  * @param transaction_data "Optional. This contains transaction usage details relevant for billing purposes."
  */
-cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int * transaction_id, const char * reason, struct ocpp_meter_value_list * transaction_data);
+cJSON * ocpp_create_stop_transaction_request(const char * id_tag, int meter_stop, time_t timestamp, int transaction_id, const char * reason, struct ocpp_meter_value_list * transaction_data);
 
 /**
  * @brief create a generic .req

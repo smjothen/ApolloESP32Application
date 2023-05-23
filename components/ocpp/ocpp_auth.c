@@ -17,10 +17,9 @@
 #include "sdkconfig.h"
 
 #include "types/ocpp_update_status.h"
+#include "types/ocpp_id_token.h"
 
 static const char * TAG = "OCPP AUTH      ";
-
-typedef char id_token[21];
 
 struct auth_header{
 	int file_version;
@@ -30,12 +29,12 @@ struct auth_header{
 
 struct auth_tag_info{
 	time_t expiry_date;
-	id_token parent_tag;
+	ocpp_id_token parent_tag;
 	uint8_t status;
 };
 
 struct auth_crc_content{
-	id_token id_tag;
+	ocpp_id_token id_tag;
 	struct auth_tag_info id_tag_info;
 };
 
@@ -119,7 +118,7 @@ void ocpp_change_allow_offline_for_unknown(bool new_value){
  * authorization cache should have version INT_MAX.
  */
 
-bool filesystem_is_ready(){
+static bool filesystem_is_ready(){
 	if(file_lock == NULL){
 		ESP_LOGE(TAG, "File lock was not initialized");
 		return false;
@@ -193,14 +192,14 @@ esp_err_t read_auth_data(struct ocpp_authorization_data * authorization_data, bo
 		goto cleanup;
 	}
 
-	id_token id_tag;
+	ocpp_id_token id_tag;
 	size_t entry_nr = 0;
 	bool found = false;
 	size_t read_count = 0;
 
 	for(;read_count < header.token_count; entry_nr++){
 
-		if(fread(&id_tag, sizeof(id_token), 1, fp) != 1){
+		if(fread(&id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read id token during auth read: %s", strerror(errno));
 			goto cleanup;
 		}
@@ -421,11 +420,11 @@ enum id_tag_origin{
 
 struct comparison_data{
 	struct ocpp_authorization_data auth_data_1;
-	id_token original_parent_1;
+	ocpp_id_token original_parent_1;
 	enum id_tag_origin origin_1;
 	struct ocpp_authorization_data auth_data_2;
 	enum id_tag_origin origin_2;
-	id_token original_parent_2;
+	ocpp_id_token original_parent_2;
 	authorize_compare_cb on_similar;
 	authorize_compare_cb on_different;
 };
@@ -621,14 +620,14 @@ void ocpp_authorize_compare(const char * id_token_1, const char * parent_token_1
 	authorize_compare_parents(cmp_data);
 }
 
-int write_auth_tag_entry(id_token id_tag, struct ocpp_id_tag_info * id_tag_info, time_t written_timestamp, FILE * fp){
+int write_auth_tag_entry(ocpp_id_token id_tag, struct ocpp_id_tag_info * id_tag_info, time_t written_timestamp, FILE * fp){
 	struct auth_tag_entry tag_entry = {0};
 	if(id_tag_info != NULL){
 		struct auth_tag_info auth_tag = {0};
 
 		auth_tag.expiry_date = id_tag_info->expiry_date;
 		auth_tag.status = (uint8_t)id_tag_info->status;
-		memset(auth_tag.parent_tag, 0, sizeof(id_token));
+		memset(auth_tag.parent_tag, 0, sizeof(ocpp_id_token));
 
 		if(id_tag_info->parent_id_tag != NULL){
 			strcpy(auth_tag.parent_tag, id_tag_info->parent_id_tag);
@@ -703,7 +702,7 @@ enum ocpp_update_status_id update_auth_full(int version, struct ocpp_authorizati
 	}
 
 	for(size_t i = 0; i < list_length; i++){
-		if(fwrite(&auth_data[i].id_tag, sizeof(id_token), 1, fp) != 1){
+		if(fwrite(&auth_data[i].id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to write id_tag nr %d to file during full update", i);
 			goto error;
 		}
@@ -841,7 +840,7 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 	size_t * known_vacant_entries = malloc(sizeof(size_t) * list_length);
 	size_t known_vacant_count = 0;
 
-	id_token id_tag;
+	ocpp_id_token id_tag;
 
 	size_t local_entry_nr = 0;
 	size_t read_count = 0;
@@ -849,7 +848,7 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 	// Find all entries that have an existing entry on file and vacant entries
 	for(;read_count < header.token_count && match_count < list_length; local_entry_nr++){
 
-		if(fread(&id_tag, sizeof(id_token), 1, fp) != 1){
+		if(fread(&id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read id tag at %ul during differential update: %s", local_entry_nr, strerror(errno));
 			free(known_vacant_entries);
 			goto cleanup;
@@ -923,24 +922,24 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 		goto cleanup;
 	}
 
-	id_token delete_token = {0};
+	ocpp_id_token delete_token = {0};
 
 	for(size_t i = 0; i < list_length; i++){
 		if(output_entry[i] < 0) // Skip deletion of non existing token or replaced token
 			continue;
 
-		if(fseek(fp, OFFSET_TOKEN_LIST + (sizeof(id_token) * output_entry[i]), SEEK_SET) != 0){
+		if(fseek(fp, OFFSET_TOKEN_LIST + (sizeof(ocpp_id_token) * output_entry[i]), SEEK_SET) != 0){
 			ESP_LOGE(TAG, "Unable to seek for replacing token list entry during differential update");
 			goto cleanup;
 		}
 
 		if(auth_data[i].id_tag_info == NULL){
-			if(fwrite(delete_token, sizeof(id_token), 1, fp) != 1){
+			if(fwrite(delete_token, sizeof(ocpp_id_token), 1, fp) != 1){
 				ESP_LOGE(TAG, "Unable to delete token during differential update");
 			}
 			header.token_count--;
 		}else{
-			if(fwrite(&auth_data[i].id_tag, sizeof(id_token), 1, fp) != 1){
+			if(fwrite(&auth_data[i].id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
 				ESP_LOGE(TAG, "Unable to write id_tag nr %d to file during differential update", i);
 				goto cleanup;
 			}
@@ -1185,16 +1184,16 @@ size_t auth_cache_remove(int requested_remove_count){
 		}
 	}
 
-	id_token delete_token = {0};
+	ocpp_id_token delete_token = {0};
 	for(size_t i = 0; i < remove_count; i++){
-		if(fseek(fp, OFFSET_TOKEN_LIST + sizeof(id_token) * remove_index[i], SEEK_SET) != 0){
+		if(fseek(fp, OFFSET_TOKEN_LIST + sizeof(ocpp_id_token) * remove_index[i], SEEK_SET) != 0){
 			ESP_LOGE(TAG, "Unable to seek to token for deletion during removal of tokens from auth cache: %s", strerror(errno));
 			free(remove_index);
 			goto cleanup;
 		}
 
 
-		if(fwrite(&delete_token, sizeof(id_token), 1, fp) != 1){
+		if(fwrite(&delete_token, sizeof(ocpp_id_token), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to delete token at %d during removal of tokens from auth cache: %s", remove_index[i], strerror(errno));
 			free(remove_index);
 			goto cleanup;
@@ -1331,12 +1330,14 @@ int ocpp_get_auth_list_version(){
 	struct stat st;
 	if(stat(auth_list_path, &st) != 0){
 		ESP_LOGI(TAG, "No auth list (empty) found during get list version");
+		xSemaphoreGive(file_lock);
 		return 0;
 	}
 
 	FILE * fp = fopen(auth_list_path, "rb");
 	if(fp == NULL){
 		ESP_LOGE(TAG, "Unable to open existing auth list for getting list version");
+		xSemaphoreGive(file_lock);
 		return -1;
 	}
 
@@ -1362,6 +1363,7 @@ int ocpp_get_auth_list_version(){
 	ret = header.list_version;
 
 cleanup:
+	xSemaphoreGive(file_lock);
 	fclose(fp);
 	return ret;
 }

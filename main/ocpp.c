@@ -20,6 +20,7 @@
 
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
+#include "ocpp_transaction.h"
 #include "ocpp_smart_charging.h"
 #include "ocpp_auth.h"
 
@@ -146,7 +147,7 @@ void reset_cb(const char * unique_id, const char * action, cJSON * payload, void
 			bool ongoing_transaction = false;
 			for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 				if(sessionHandler_OcppTransactionIsActive(i)){
-					sessionHandler_OcppStopTransaction(OCPP_REASON_HARD_RESET);
+					sessionHandler_OcppStopTransaction(eOCPP_REASON_HARD_RESET);
 					ongoing_transaction = true;
 				}
 			}
@@ -224,7 +225,7 @@ void unlock_connector_cb(const char * unique_id, const char * action, cJSON * pa
 
 		}else{
 			if(sessionHandler_OcppTransactionIsActive(connector_id)){
-				sessionHandler_OcppStopTransaction(OCPP_REASON_UNLOCK_COMMAND);
+				sessionHandler_OcppStopTransaction(eOCPP_REASON_UNLOCK_COMMAND);
 			}
 
 			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCKED);
@@ -489,6 +490,8 @@ void init_interval_measurands(enum ocpp_reading_context_id context){
 	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
 	case eOCPP_CONTEXT_TRANSACTION_BEGIN:
 	case eOCPP_CONTEXT_TRANSACTION_END:
+	case eOCPP_CONTEXT_OTHER:
+
 		ESP_LOGI(TAG, "Initiating periodic interval measurands");
 
 		sampled_timestamp_begin = time(NULL);
@@ -744,16 +747,8 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 
 TimerHandle_t clock_aligned_handle = NULL;
 
-static void meter_values_response_cb(){
-	ESP_LOGI(TAG, "Meter values complete");
-}
-
-static void meter_values_error_cb(){
-	ESP_LOGE(TAG, "Meter values completed with errors");
-}
-
 void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, const char * stoptxn_csl,
-			int * transaction_id, uint * connectors, size_t connector_count, bool is_trigger){
+			int * transaction_id, bool valid_id, uint * connectors, size_t connector_count, bool is_trigger){
 
 	for(size_t i = 0; i < connector_count; i++){
 		uint connector = connectors[i];
@@ -773,66 +768,44 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				ESP_LOGW(TAG, "No meter values to send");
 
 			}else{
-				cJSON * request = ocpp_create_meter_values_request(connector, (transaction_related) ? transaction_id : NULL,
-										meter_value_list);
-				if(request == NULL){
-					ESP_LOGE(TAG, "Unable to create meter value request for %s values", ocpp_reading_context_from_id(context));
-					return;
-				}
+				if(transaction_related){
+					ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list);
 
-				ESP_LOGI(TAG, "Sending meter values");
-				int err;
+					if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0'){
+						ESP_LOGI(TAG, "Creating stoptxn meter values");
 
-				if(is_trigger){
-					err = enqueue_trigger(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
-							(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC, true);
-				}else{
-					err = enqueue_call_immediate(request, meter_values_response_cb, meter_values_error_cb, "Meter value",
-								(transaction_related) ? eOCPP_CALL_TRANSACTION_RELATED : eOCPP_CALL_GENERIC);
-				}
-
-				if(err != 0){
-
-					ESP_LOGE(TAG, "Unable to send meter values");
-					cJSON_Delete(request);
-
-					if(transaction_related){
-						ESP_LOGE(TAG, "Storing meter value on file");
-
-						size_t meter_buffer_length;
-						unsigned char * meter_buffer = ocpp_meter_list_to_contiguous_buffer(meter_value_list, false, &meter_buffer_length);
-						if(meter_buffer == NULL){
-							ESP_LOGE(TAG, "Could not create meter value as string");
+						struct ocpp_meter_value_list * stoptxn_meter_value_list = ocpp_create_meter_list();
+						if(stoptxn_meter_value_list == NULL){
+							ESP_LOGE(TAG, "Unable to create meter value list for stop transaction");
 						}else{
-							if(offlineSession_SaveNewMeterValue_ocpp(*transaction_id, sessionHandler_OcppTransactionStartTime(),
-													meter_buffer, meter_buffer_length)!= ESP_OK){
-								ESP_LOGE(TAG, "Unable to store transaction related meter value");
-							}
-							free(meter_buffer);
-						}
 
+							int length = ocpp_populate_meter_values_from_existing(connector, context, stoptxn_csl,
+													meter_value_list, stoptxn_meter_value_list);
+							if(length > 0){
+								sessionHandler_OcppTransferMeterValues(connector, stoptxn_meter_value_list, length);
+							}
+						}
+					}
+
+
+				}else{
+					cJSON * request = ocpp_create_meter_values_request(connector, NULL, meter_value_list);
+					if(request == NULL){
+						ESP_LOGE(TAG, "Unable to create meter value request for %s values", ocpp_reading_context_from_id(context));
+						return;
+					}
+
+					ESP_LOGI(TAG, "Sending meter values");
+
+					if(is_trigger){
+						enqueue_trigger(request, NULL, NULL, "Meter value", eOCPP_CALL_GENERIC, true);
+					}else{
+						enqueue_call_immediate(request, NULL, NULL, "Meter value", eOCPP_CALL_GENERIC);
 					}
 				}
 			}
-
-
 		}
 
-		if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0' && transaction_id != NULL){
-			ESP_LOGI(TAG, "Creating stoptxn meter values");
-
-			struct ocpp_meter_value_list * stoptxn_meter_value_list = ocpp_create_meter_list();
-			if(stoptxn_meter_value_list == NULL){
-				ESP_LOGE(TAG, "Unable to create meter value list for stop transaction");
-			}else{
-
-				int length = ocpp_populate_meter_values_from_existing(connector, context, stoptxn_csl,
-										meter_value_list, stoptxn_meter_value_list);
-				if(length > 0){
-					sessionHandler_OcppTransferMeterValues(connector, stoptxn_meter_value_list, length);
-				}
-			}
-		}
 		ocpp_meter_list_delete(meter_value_list);
 	}
 	save_interval_measurands(context);
@@ -847,11 +820,12 @@ static void clock_aligned_meter_values(){
 		connectors[i] = i;
 	}
 
-	int * transaction_id = sessionHandler_OcppGetTransactionId(1);
+	bool valid_id;
+	int * transaction_id = sessionHandler_OcppGetTransactionId(1, &valid_id);
 
 	handle_meter_value(eOCPP_CONTEXT_SAMPLE_CLOCK,
 			storage_Get_ocpp_meter_values_aligned_data(), storage_Get_ocpp_stop_txn_aligned_data(),
-			transaction_id, connectors, connector_count, false);
+			transaction_id, valid_id, connectors, connector_count, false);
 
 	free(connectors);
 }
@@ -2885,7 +2859,7 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 		}
 
 		handle_meter_value(eOCPP_CONTEXT_TRIGGER, storage_Get_ocpp_meter_values_sampled_data(),
-				NULL, NULL, connector_id, connector_count, true);
+				NULL, NULL, false, connector_id, connector_count, true);
 
 		if(allocated)
 			free(connector_id);
@@ -3392,12 +3366,14 @@ static void ocpp_task(){
 		time_t last_problem_timestamp = time(NULL);
 		int enqueued_calls = enqueued_call_count();;
 
+
+		bool awaiting_response = false;
 		while(should_run && should_reboot == false){
 			uint32_t data = 0;
 
-			if(connected && enqueued_calls > 0){ // Prevent blocking when calls are waiting
+			if(connected && enqueued_calls > 0 && !awaiting_response){ // Prevent blocking when calls are waiting
 				data = ulTaskNotifyTake(pdTRUE, 0);
-			} else if(connected){
+			}else if(connected){
 				data = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 			}else{
 				data = ulTaskNotifyTake(pdTRUE, OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp));
@@ -3455,18 +3431,31 @@ static void ocpp_task(){
 					last_problem_timestamp = time(NULL);
 				}
 
+				if(websocket_event & eOCPP_WEBSOCKET_RECEIVED_MATCHING)
+					awaiting_response = false;
+
 				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
 					break;
-
 			}
 
 			if(task_event & eOCPP_TASK_CALL_TIMEOUT){
 				timeout_active_call();
+				awaiting_response = false;
 			}
 
-			if(enqueued_calls > 0 || task_event & eOCPP_TASK_CALL_ENQUEUED){
+			if((enqueued_calls > 0 || task_event & eOCPP_TASK_CALL_ENQUEUED) && (awaiting_response == false)){
 				if(connected){
-					if(handle_ocpp_call(&enqueued_calls) != 0){
+					switch(handle_ocpp_call(&enqueued_calls)){
+					case ESP_OK:
+						enqueued_calls = 1;
+						awaiting_response = true;
+						break;
+
+					case ESP_ERR_NOT_FOUND:
+						enqueued_calls = 0;
+						break;
+
+					case ESP_FAIL:
 						ESP_LOGE(TAG, "Unable to handle ocpp call");
 						problem_count++; //TODO: integrate with problem count restart
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
@@ -3480,7 +3469,6 @@ static void ocpp_task(){
 				ESP_LOGE(TAG, "%d seconds since OCPP was last online, attempting reboot", OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT);
 				esp_restart(); // TODO: write reason for reboot;
 			}
-
 		}
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
@@ -3496,9 +3484,9 @@ clean:
 				if(sessionHandler_OcppTransactionIsActive(i)){
 					ESP_LOGI(TAG, "Active transaction on connector %d", i);
 					if(should_reboot){
-						sessionHandler_OcppStopTransaction(OCPP_REASON_SOFT_RESET);
+						sessionHandler_OcppStopTransaction(eOCPP_REASON_SOFT_RESET);
 					}else{
-						sessionHandler_OcppStopTransaction(OCPP_REASON_OTHER);
+						sessionHandler_OcppStopTransaction(eOCPP_REASON_OTHER);
 					}
 					ESP_LOGI(TAG, "Transaction stopped");
 				}

@@ -259,6 +259,9 @@ void chargeSession_Start()
 
 	MCU_ClearMaximumEnergy();
 
+	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
+	chargeSession_SetParentId("\0");
+
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{
 		ESP_LOGI(TAG, "chargeSession_Start() using uncompleted Session from flash");
@@ -274,8 +277,6 @@ void chargeSession_Start()
 		memset(&chargeSession, 0, sizeof(chargeSession));
 		ChargeSession_Set_GUID();
 		ChargeSession_Set_StartTime();
-		chargeSession_SetStoppedReason(OCPP_REASON_OTHER);
-		chargeSession_SetParentId("\0");
 
 		if(connectivity_GetSNTPInitialized() == true)
 		{
@@ -415,7 +416,7 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag)
 {
 	if(chargeSession.SessionId[0] != '\0'){
 		chargeSession.StoppedByRFID = stoppedByRFID;
-		chargeSession_SetStoppedReason(OCPP_REASON_LOCAL);
+		chargeSession_SetStoppedReason(eOCPP_REASON_LOCAL);
 
 		strncpy(chargeSession.StoppedById, id_tag, 20);
 		chargeSession.StoppedById[20] = '\0';
@@ -424,9 +425,9 @@ void chargeSession_SetStoppedByRFID(bool stoppedByRFID, const char * id_tag)
 	}
 }
 
-void chargeSession_SetStoppedReason(const char * reason)
+void chargeSession_SetStoppedReason(enum ocpp_reason_id reason)
 {
-	strcpy(chargeSession.StoppedReason, reason);
+	chargeSession.StoppedReason = reason;
 }
 
 /*void chargeSession_SetEnergy(float energy)
