@@ -183,7 +183,6 @@ static float currents[3] = {0.0};
 
 static float totalChargePower = 0.0;
 static float totalChargePowerSession = -1.0;
-static float max_reported_energy = -1.0;
 
 static int8_t chargeMode = eCAR_UNINITIALIZED;
 static uint8_t chargeOperationMode = 0;
@@ -336,6 +335,12 @@ bool MCU_IsReady()
 	return isMCUReady;
 }
 
+static uint32_t offsetCount = 0;
+void MCU_PrintReadings()
+{
+	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
+}
+
 uint32_t mcuComErrorCount = 0;
 
 void uartSendTask(void *pvParameters){
@@ -379,7 +384,7 @@ void uartSendTask(void *pvParameters){
 
     uint32_t count = 0;
     uint32_t printCount = 0;
-    uint32_t offsetCount = 0;
+
     while (true)
     {
     	if(mcuDebugCounter < previousMcuDebugCounter)
@@ -482,6 +487,9 @@ void uartSendTask(void *pvParameters){
 			case 23:
 				txMsg.identifier = StandAloneCurrent;
 				break;
+			case 24:
+				txMsg.identifier = Notifications;
+				break;
 
 
         	/*default:
@@ -543,12 +551,7 @@ void uartSendTask(void *pvParameters){
         else if(rxMsg.identifier == ParamTotalChargePower)
         	totalChargePower = GetFloat(rxMsg.data);
         else if(rxMsg.identifier == ParamTotalChargePowerSession)
-        {
         	totalChargePowerSession = GetFloat(rxMsg.data);
-        	if(max_reported_energy<totalChargePowerSession)
-				max_reported_energy = totalChargePowerSession;
-        }
-
 	    else if(rxMsg.identifier == ParamChargeMode)
 	    	chargeMode = rxMsg.data[0];
 	    else if(rxMsg.identifier == ParamChargeOperationMode)
@@ -595,8 +598,17 @@ void uartSendTask(void *pvParameters){
 		else if(rxMsg.identifier == StandAloneCurrent)
 		{
 			mcuStandAloneCurrent =  GetFloat(rxMsg.data);
+		}
+		else if(rxMsg.identifier == Notifications)
+		{
+			mcuNotifications = (rxMsg.data[0] << 8) | rxMsg.data[1];
+			if(isMCUReady == false)
+			{
+				MCU_PrintReadings();
+			}
 			isMCUReady = true;
 		}
+
 			//mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
 
 
@@ -623,13 +635,13 @@ void uartSendTask(void *pvParameters){
         	vTaskDelay(100 / portTICK_PERIOD_MS);
         }
 
-        if(printCount >= 24 * 5)//15)
+        if(printCount >= 25 * 5)//15)
         {
-        	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d Timeouts: %i, Off: %d, - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent);
+        	MCU_PrintReadings();
         	printCount = 0;
         }
 
-        if(count >= 24)
+        if(count >= 25)
         {
         	vTaskDelay(1000 / portTICK_PERIOD_MS);
         	count = 0;
@@ -1007,20 +1019,6 @@ float MCU_GetEnergy()
 	return totalChargePowerSession;
 }
 
-float MCU_GetMaximumEnergy(){
-	return max_reported_energy;
-}
-
-void MCU_AdjustMaximumEnergy(){
-	ESP_LOGI(TAG, "MCU_AjustMaximumEnergy: %f = %f", max_reported_energy, totalChargePowerSession);
-	max_reported_energy = totalChargePowerSession;
-}
-
-
-void MCU_ClearMaximumEnergy(){
-	ESP_LOGI(TAG, "MCU_ClearMaximumEnergy");
-	max_reported_energy = 0;
-}
 
 int8_t MCU_GetChargeMode()
 {
@@ -1442,6 +1440,14 @@ void ClearNotifications()
 uint32_t GetCombinedNotifications()
 {
 	return (uint32_t)((espNotifications << 16) + mcuNotifications);
+}
+
+/*
+ * Mask bit 0 from MCU to avoid Cloud message every time it toggles. The toggling is counted in the HandleNotifictions()-function
+ */
+uint32_t GetCombinedNotificationsMasked()
+{
+	return (uint32_t)((espNotifications << 16) + (mcuNotifications & ~0x1));
 }
 
 void SetFinalStopActiveStatus(uint8_t status)

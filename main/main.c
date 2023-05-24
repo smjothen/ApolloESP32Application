@@ -50,7 +50,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.1.0.100";
+char softwareVersion[] = "2.1.0.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -420,7 +420,7 @@ void app_main(void)
 	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_ota_get_app_description()->version);
 
 #ifdef DEVELOPEMENT_URL
-	ESP_LOGE(TAG_MAIN, "DEVELOPEMENT URLS USED");
+	ESP_LOGE(TAG_MAIN, "DEFINED DEVELOPEMENT URLS USED");
 #else
 	//PROD url used
 #endif
@@ -551,7 +551,22 @@ void app_main(void)
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
-	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished))
+	//Ensure that the MCU parameters are available before connecting or syncing with cloud,
+	//otherwise we may send uninitialized values
+	uint8_t mcuTimeout = 30;
+	while((MCU_IsReady() == false) && (mcuTimeout > 0))
+	{
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		mcuTimeout--;
+		ESP_LOGW(TAG_MAIN, "Waiting for MCU: %d", mcuTimeout);
+	}
+
+	///Check for MID calibrationHandle at boot
+	bool isCalibrationHandle = MCU_IsCalibrationHandle();
+
+	ESP_LOGI(TAG_MAIN, "MCU is ready. CalibrationHandle: %i", isCalibrationHandle);
+
+	if((storage_Get_CommunicationMode() == eCONNECTION_LTE) && (devInfo.factory_stage == FactoryStageFinnished) && (isCalibrationHandle == false))
 	{
 		//Toggling 4G to ensure a clean 4G initialization
 		//If it was ON at restart it will be power OFF now and ON again later.
@@ -620,7 +635,7 @@ void app_main(void)
     int otaDelayCounter = 0;
     int lowMemCounter = 0;
 
-		bool calibrationMode = false;
+	bool calibrationMode = false;
 
 	while (true)
     {
@@ -652,7 +667,7 @@ void app_main(void)
 
     	if(onTimeCounter % 10 == 0)
     	{
-    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d cal: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), calibration_task_watermark());
+    		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d cal: %d ota: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), calibration_task_watermark(), ota_GetStackWatermark());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -759,7 +774,7 @@ void app_main(void)
 		}
 
 		// Allow starting calibration task once when the handle is plugged in
-		if (MCU_IsCalibrationHandle() && !calibrationMode) {
+		if (isCalibrationHandle && !calibrationMode) {
 			ESP_LOGI(TAG_MAIN, "Starting calibration task!");
 			calibration_task_start();
 			calibrationMode = true;

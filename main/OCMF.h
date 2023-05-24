@@ -12,7 +12,7 @@ extern "C" {
 void OCMF_Init();
 
 /******_SignedMeterValue_*****/
-
+double OCMF_GetLastAccumulated_Energy();
 int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out);
 int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_in, double energy_in);
 //char * OCMF_CreateNewOCMFLog();

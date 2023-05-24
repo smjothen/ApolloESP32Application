@@ -35,27 +35,37 @@ void OCMF_Init()
 	xSemaphoreGive(ocmf_lock);
 }
 
+static double previousEnergyMax = 0.0;
+static double accumulated_energy = 0.0;
+
+double OCMF_GetLastAccumulated_Energy()
+{
+	return accumulated_energy;
+}
+
 double get_accumulated_energy(){
-	float dspic_session_energy = MCU_GetEnergy();
 
-	float max = MCU_GetMaximumEnergy();
+	float dspic_session_energy_max = chargeSession_GetEnergy();
 
-	//ESP_LOGE(TAG, "dspic energy %f, max: %f opMode %i",	dspic_session_energy, max, MCU_GetChargeOperatingMode());
+	ESP_LOGW(TAG, "dspic max %f (session: %f) opMode %i", dspic_session_energy_max, MCU_GetEnergy(), MCU_GetChargeOperatingMode());
 
-	if((max>0.0) && (dspic_session_energy < max)){
-		MCU_AdjustMaximumEnergy();
-		ESP_LOGW(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
-			dspic_session_energy, max
-		);
-		dspic_session_energy = max;
+	if(previousEnergyMax > dspic_session_energy_max){
+		storage_update_accumulated_energy(0.0);
+		ESP_LOGW(TAG, "previousEnergyMax (%f > %f) dspic_session_energy_max - passing 0.0 max value to STORAGE", previousEnergyMax, dspic_session_energy_max);
 	}
 
-	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
+	double accumulated_energy_tmp = storage_update_accumulated_energy(dspic_session_energy_max);
 
-	accumulated_energy = round(accumulated_energy * 1000) / 1000;/// Rounding to 3 decimal places
+	accumulated_energy_tmp = round(accumulated_energy_tmp * 1000) / 1000;/// Rounding to 3 decimal places
+
+	previousEnergyMax = dspic_session_energy_max;
+
+	/// Ensure async reading can not get intermediately calculated value;
+	accumulated_energy = accumulated_energy_tmp;
 
 	return accumulated_energy;
 }
+
 
 int _OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
 {
@@ -329,9 +339,9 @@ void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double e
 
 		if(valueB == valueE)
 		{
-			ESP_LOGW(TAG, "");
-			ESP_LOGW(TAG, "*****************  OK: %f == %f (E=B)  *****************", valueE, valueB);
-			ESP_LOGW(TAG, "");
+			ESP_LOGI(TAG, "");
+			ESP_LOGI(TAG, "*****************  OK: %f == %f (E=B)  *****************", valueE, valueB);
+			ESP_LOGI(TAG, "");
 		}
 		else
 		{

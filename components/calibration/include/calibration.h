@@ -254,6 +254,7 @@ typedef struct {
 } CalibrationCtx;
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode);
+bool calibration_get_finished_flag();
 
 void calibration_task(void *pvParameters);
 

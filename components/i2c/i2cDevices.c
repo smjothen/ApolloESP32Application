@@ -83,7 +83,7 @@ bool i2cSerialIsZGB()
  */
 bool i2cCheckSerialForDiskPartition()
 {
-	if(strstr(deviceInfo.serialNumber,"ZAP") != NULL) 	///ZGB should always return false since it always has the new partition table
+	if(strstr(deviceInfo.serialNumber,"ZAP") != NULL) 	///ZGB and ZAG should always return false since it always has the new partition table
 	{
 		int serial = atoi(&deviceInfo.serialNumber[3]);
 		if(serial < 149)
@@ -208,7 +208,7 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 		int len = strlen(deviceInfo.serialNumber);
 
 		//Check for valid serial number
-		if((len == 9) && ((strncmp(deviceInfo.serialNumber, "ZAP", 3) == 0) || (strncmp(deviceInfo.serialNumber, "ZGB", 3) == 0)))
+		if((len == 9) && ((strncmp(deviceInfo.serialNumber, "ZAP", 3) == 0) || (strncmp(deviceInfo.serialNumber, "ZGB", 3) == 0) || (strncmp(deviceInfo.serialNumber, "ZAG", 3) == 0)))
 		{
 			ESP_LOGI(TAG_EEPROM, "Serial number: %s", deviceInfo.serialNumber);
 

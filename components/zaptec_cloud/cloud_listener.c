@@ -43,11 +43,6 @@
 
 #define TAG "CLOUD LISTENER "
 
-#ifdef DEVELOPEMENT_URL
-	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT //FOR DEVELOPEMENT
-#else
-	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_MAIN_MQTT
-#endif
 
 #define MQTT_PORT 8883
 
@@ -1585,15 +1580,34 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			// Factory reset
 			else if(strstr(commandString,"Factory reset") != NULL)
 			{
-
 				MessageType ret = MCU_SendUint8Parameter(CommandFactoryReset, 0);
 				if(ret == MsgWriteAck) {
+
 					ESP_LOGI(TAG, "MCU Factory Reset OK");
-					storage_clearWifiParameters();
-					storage_Init_Configuration();
-					storage_SaveConfiguration();
-					responseStatus = 200;
-					ESP_LOGI(TAG, "Factory reset complete");
+					if(strstr(commandString,"Factory reset keep wifi") != NULL)
+					{
+						uint8_t comMode = storage_Get_CommunicationMode();
+
+						//Not clearing wifi
+						storage_clearAllRFIDTagsOnFile();
+						storage_Init_Configuration();
+
+						if(comMode == eCONNECTION_WIFI)
+							storage_Set_CommunicationMode(eCONNECTION_WIFI);
+
+						storage_SaveConfiguration();
+						responseStatus = 200;
+						ESP_LOGI(TAG, "Factory reset keep wifi complete");
+					}
+					else
+					{
+						storage_clearAllRFIDTagsOnFile();
+						storage_clearWifiParameters();
+						storage_Init_Configuration();
+						storage_SaveConfiguration();
+						responseStatus = 200;
+						ESP_LOGI(TAG, "Factory reset complete");
+					}
 				}
 				else {
 					ESP_LOGE(TAG, "MCU Factory Reset FAILED");
@@ -2479,7 +2493,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			}
 			else if(strstr(commandString,"GetMCUSettings") != NULL)
 			{
-				sessionHandler_SendMCUSettings();
+				if(strstr(commandString,"GetMCUSettings600") != NULL)
+					SetMCUDiagnosticsFrequency(600);
+				else if(strstr(commandString,"GetMCUSettings60") != NULL)
+					SetMCUDiagnosticsFrequency(60);
+				else if(strstr(commandString,"GetMCUSettings2") != NULL)
+					SetMCUDiagnosticsFrequency(2);
+				else
+					SetMCUDiagnosticsFrequency(1);
+
 				responseStatus = 200;
 			}
 
@@ -2708,7 +2730,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				else if(strstr(commandString, "FixPartitionDiskErase"))
 				{
 					fat_ClearDiagnostics();
-					fat_eraseAndRemountPartition(eFAT_ID_DISK);
+					fat_CorrectFilesystem(); //Erases Disk partition
 					publish_debug_telemetry_observation_Diagnostics(fat_GetDiagnostics());
 					responseStatus = 200;
 				}
@@ -2773,6 +2795,32 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					ESP_LOGE(TAG, "MCU RunRCDTest command FAILED");
 					responseStatus = 400;
+				}
+			}
+			else if(strstr(commandString, "GetMemoryStatus"))
+			{
+				if(strstr(commandString, "GetMemoryStatus1"))
+					SetMemoryDiagnosticsFrequency(1);
+				else if(strstr(commandString, "GetMemoryStatus3600"))
+					SetMemoryDiagnosticsFrequency(3600);
+				else
+					SetMemoryDiagnosticsFrequency(0);
+			}
+			else if(strstr(commandString, "ConnectTo"))
+			{
+				if(strstr(commandString, "ConnectToProd"))
+				{
+					storage_Set_ConnectToPortalType(PORTAL_TYPE_PROD_DEFAULT);
+					ESP_LOGW(TAG, "Connecting to PROD after boot");
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "ConnectToDev"))
+				{
+					storage_Set_ConnectToPortalType(PORTAL_TYPE_DEV);
+					ESP_LOGW(TAG, "Connecting to DEV after boot");
+					storage_SaveConfiguration();
+					responseStatus = 200;
 				}
 			}
 		}
@@ -3321,11 +3369,34 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 	ESP_LOGI(TAG, "Connecting to IotHub");
 
-    static char broker_url[128] = {0};
-    sprintf(broker_url, "mqtts://%s", MQTT_HOST);
+#ifdef DEVELOPEMENT_URL
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT //FOR DEVELOPEMENT
+#else
+	#define MQTT_HOST CONFIG_ZAPTEC_CLOUD_URL_MAIN_MQTT
+#endif
 
-    static char username[128];
-    sprintf(username, "%s/%s/?api-version=2018-06-30", MQTT_HOST, cloudDeviceInfo.serialNumber);
+	char mqttUrlToUse[128] = {0};
+#ifdef DEVELOPEMENT_URL
+	strncpy(mqttUrlToUse, CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT, 128-1);
+	ESP_LOGE(TAG, "###### USING DEFINE DEVELOPMENT URL !!! #######");
+#else
+	if(storage_Get_ConnectToPortalType() == PORTAL_TYPE_DEV)
+	{
+		strncpy(mqttUrlToUse, CONFIG_ZAPTEC_CLOUD_URL_DEVELOPMENT_MQTT, 128-1);
+		ESP_LOGE(TAG, "###### USING CMD DEVELOPMENT URL !!! #######");
+	}
+	else
+	{
+		strncpy(mqttUrlToUse, CONFIG_ZAPTEC_CLOUD_URL_MAIN_MQTT, 128-1);
+	}
+
+#endif
+
+    static char broker_url[140] = {0};
+    sprintf(broker_url, "mqtts://%s", mqttUrlToUse);
+
+    static char username[170];
+    sprintf(username, "%s/%s/?api-version=2018-06-30", mqttUrlToUse, cloudDeviceInfo.serialNumber);
 
 
     char * instId = storage_Get_InstallationId();
