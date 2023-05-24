@@ -790,8 +790,6 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             // Re-enable cloud publishing so capabilities can be sent
             cloud_observations_disable(false);
             isCalibratedFlag = true;
-         }
-            isCalibratedFlag = true;
         }
 
         ctx->Flags |= CAL_FLAG_DONE;
