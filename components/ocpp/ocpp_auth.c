@@ -53,8 +53,8 @@ static const char * auth_cache_path = DIRECTORY_PATH "/auth_cah.bin";
 #define OFFSET_HEADER 0
 #define OFFSET_TOKEN_LIST OFFSET_HEADER + sizeof(struct auth_header) + sizeof(uint32_t)
 
-#define OFFSET_TAG_LIST_AUTH_LIST OFFSET_TOKEN_LIST + (sizeof(char) * 20 * CONFIG_OCPP_LOCAL_AUTH_LIST_MAX_LENGTH)
-#define OFFSET_TAG_LIST_AUTH_CACHE OFFSET_TOKEN_LIST + (sizeof(char) * 20 * CONFIG_OCPP_AUTH_CACHE_MAX_LENGTH)
+#define OFFSET_TAG_LIST_AUTH_LIST OFFSET_TOKEN_LIST + (sizeof(ocpp_id_token) * CONFIG_OCPP_LOCAL_AUTH_LIST_MAX_LENGTH)
+#define OFFSET_TAG_LIST_AUTH_CACHE OFFSET_TOKEN_LIST + (sizeof(ocpp_id_token) * CONFIG_OCPP_AUTH_CACHE_MAX_LENGTH)
 
 static SemaphoreHandle_t file_lock = NULL;
 
