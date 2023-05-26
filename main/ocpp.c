@@ -17,7 +17,7 @@
 #include "fat.h"
 #include "apollo_ota.h"
 #include "OCMF.h"
-
+#include "zaptec_cloud_observations.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
@@ -55,7 +55,7 @@
 #define OCPP_PROBLEM_RESET_INTERVAL 30
 #define OCPP_PROBLEMS_COUNT_BEFORE_RETRY 50
 #define OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT 18000 // 5 hours
-#define OCPP_EXIT_TIMEOUT 20
+#define OCPP_EXIT_TIMEOUT 40
 
 static const char * TAG = "OCPP";
 static TaskHandle_t task_ocpp_handle = NULL;
@@ -67,6 +67,7 @@ static bool should_reboot = false;
 static bool should_reconnect = false;
 static bool graceful_exit = false;
 static bool connected = false;
+static bool reset_from_cs = false;
 
 static char * mnt_directory = "/files";
 static char * firmware_update_request_path = "/files/ocpp_upd.bin";
@@ -101,98 +102,55 @@ static void reboot_esp_mcu(){
 void reset_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGW(TAG, "Received reset request");
 
-	if(cJSON_HasObjectItem(payload, "type")){
-		char * reset_type = cJSON_GetObjectItem(payload, "type")->valuestring;
+	cJSON * reply = NULL;
+	bool accepted = false;
+	bool is_soft = true;
+
+	char err_str[128];
+
+	char * reset_type;
+	esp_err_t err = ocppj_get_string_field(payload, "type", true, &reset_type, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		accepted = false;
+	}else{
 
 		if(strcmp(reset_type, OCPP_RESET_TYPE_SOFT) == 0){
-			cJSON * conf = ocpp_create_reset_confirmation(unique_id, OCPP_RESET_STATUS_ACCEPTED);
-			if(conf == NULL){
-				ESP_LOGE(TAG, "Unable to send reset confirmation");
-			}
-			else{
-				send_call_reply(conf);
-			}
-			ocpp_end_and_reboot(true);
-			return;
-		}
-		else if(strcmp(reset_type, OCPP_RESET_TYPE_HARD) == 0){
-			cJSON * conf = ocpp_create_reset_confirmation(unique_id, OCPP_RESET_STATUS_ACCEPTED);
-			if(conf == NULL){
-				ESP_LOGE(TAG, "Unable to create reset confirmation");
-			}
-			else{
-				send_call_reply(conf);
-			}
+			accepted = true;
+			is_soft = true;
 
-			/*
-			 * According to the specification:
-			 * "The Charge Point SHALL send a StopTransaction.req for any ongoing transaction before performing
-			 * the reset. If the Charge Point fails to receive a StopTransaction.conf [from] the Central System,
-			 * it shall queue the StopTransaction.req."
-			 *
-			 * This is regardless of the type being soft or hard. But the specification also states:
-			 * "At receipt of a hard reset [...] it is not required to gracefully stop ongoing transaction."
-			 *
-			 * It is unclear what a non gracefully stoped transaction would be if not the sending and receiving
-			 * of StopTransaction request and confirmation.
-			 *
-			 * The approach taken here is to stop any ongoing transaction, enqueueing StopTransaction.req and
-			 * waiting 2 seconds, before resetting. If the StopTransaction.req is not sendt or saved within the
-			 * 2 seconds, enqueued data will be lost.
-			 * According to the specification:
-			 * "by sending a "hard" reset, (queued) information might get lost"
-			 *
-			 * The loss of information should therefore be acceptable.
-			 */
-			bool ongoing_transaction = false;
-			for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
-				if(sessionHandler_OcppTransactionIsActive(i)){
-					sessionHandler_OcppStopTransaction(eOCPP_REASON_HARD_RESET);
-					ongoing_transaction = true;
-				}
-			}
-
-			bool delay = false;
-			if(ongoing_transaction){
-				TimerHandle_t reset_timer = xTimerCreate("reset", pdMS_TO_TICKS(2000), false, NULL, reboot_esp_mcu);
-				if(reset_timer != NULL){
-					if(xTimerStart(reset_timer, 0) != pdPASS){
-						ESP_LOGE(TAG, "Unable to start reset timer, Resetting imediatly");
-						reboot_esp_mcu();
-					}else{
-						delay = true;
-					}
-				}else{
-					ESP_LOGE(TAG, "Unable to create reset timer, Resetting imediatly");
-				}
-			}
-
-			if(!delay){
-				vTaskDelay(pdMS_TO_TICKS(400)); // Allow time for websocket to send call reply
-				reboot_esp_mcu();
-			}
-		}
-		else{
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'type' field does not conform to 'ResetType'", NULL);
-			if(ocpp_error == NULL){
-				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
-				return;
-			}
-			else{
-				send_call_reply(ocpp_error);
-				return;
-			}
-		}
-	}else{
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "'type' field is required", NULL);
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Unable to create call error for formation violation");
-		}
-		else{
-			send_call_reply(ocpp_error);
-			return;
+		}else if(strcmp(reset_type, OCPP_RESET_TYPE_HARD) == 0){
+			accepted = true;
+			is_soft = false;
+		}else{
+			accepted = false;
+			err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			strcpy(err_str, "'type' field is not a valid 'ResetType'");
 		}
 	}
+
+	if(err != eOCPPJ_NO_ERROR){
+		reply = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	}else{
+		reply = ocpp_create_reset_confirmation(unique_id, accepted ? OCPP_RESET_STATUS_ACCEPTED : OCPP_RESET_STATUS_REJECTED);
+	}
+
+	if(reply == NULL){
+		ESP_LOGE(TAG, "Unable to create Reset result when err was '%s'", (err != eOCPPJ_NO_ERROR) ? ocppj_error_code_from_id(err) : "No error");
+	}else{
+		send_call_reply(reply);
+	}
+
+	if(accepted){
+		for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
+			if(sessionHandler_OcppTransactionIsActive(i)){
+				sessionHandler_OcppStopTransaction(is_soft ? eOCPP_REASON_SOFT_RESET : eOCPP_REASON_HARD_RESET);
+			}
+		}
+		reset_from_cs = true;
+		ocpp_end_and_reboot(is_soft);
+	}
+
+	return;
 }
 
 void unlock_connector_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
@@ -3225,6 +3183,105 @@ static void transition_offline(){
 
 #define eOCPP_NO_EVENT 0
 
+static esp_err_t prepare_reset(){
+
+	time_t exit_start = time(NULL);
+
+	ESP_LOGI(TAG, "Checking for ongoing transactions.");
+	for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
+		ESP_LOGI(TAG, "Checking connector %d", i);
+		if(sessionHandler_OcppTransactionIsActive(i)){
+			ESP_LOGI(TAG, "Active transaction. Will attempt to stop");
+			if(should_reboot && reset_from_cs){
+				if(graceful_exit){
+					sessionHandler_OcppStopTransaction(eOCPP_REASON_SOFT_RESET);
+				}else{
+					sessionHandler_OcppStopTransaction(eOCPP_REASON_HARD_RESET);
+				}
+			}else{
+				sessionHandler_OcppStopTransaction(eOCPP_REASON_OTHER);
+			}
+
+			bool stopped = false;
+			while(time(NULL) < exit_start + OCPP_EXIT_TIMEOUT){
+				if(!sessionHandler_OcppTransactionIsActive(i)){
+					stopped = true;
+					ESP_LOGI(TAG, "Transaction stopped");
+					break;
+				}else{
+					ESP_LOGW(TAG, "Waiting for transaction to stop...");
+					vTaskDelay(pdMS_TO_TICKS(1000));
+				}
+			}
+
+			if(stopped){
+				ESP_LOGI(TAG, "Transaction stopped");
+			}else{
+				ESP_LOGE(TAG, "Transaction did not stop within timeout");
+				return ESP_ERR_TIMEOUT;
+			}
+		}else{
+			ESP_LOGI(TAG, "No active transaction");
+		}
+	}
+
+	block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
+	block_sending_call(eOCPP_CALL_GENERIC);
+
+	uint exit_duration = 0;
+
+	int message_count = 0;
+	// We loop over enqueued_call_count instead of message_count given by handle_ocpp_call due to handle assumes that the call will not fail after.
+	while(enqueued_call_count() > 0 && exit_duration < OCPP_EXIT_TIMEOUT){
+
+		esp_err_t err = handle_ocpp_call(&message_count);
+		if(err != ESP_OK && err != ESP_ERR_NOT_FOUND){
+			ESP_LOGE(TAG, "Error sending message during exit.");
+
+			block_enqueue_call(0);
+			block_sending_call(0);
+
+			return err;
+		}
+
+		while(true){
+			time_t current = time(NULL);
+			uint wait = (current < exit_start + OCPP_EXIT_TIMEOUT) ? (exit_start + OCPP_EXIT_TIMEOUT) - current : 0;
+
+			ESP_LOGI(TAG, "Waiting for result for %d sec", wait);
+			uint32_t event_data = ulTaskNotifyTake(pdTRUE,  pdMS_TO_TICKS(wait * 1000)); // This may remove event relevant if ocpp continues without reset
+			if(event_data == eOCPP_NO_EVENT
+				|| event_data & (eOCPP_WEBSOCKET_RECEIVED_MATCHING << WEBSOCKET_EVENT_OFFSET)
+				|| event_data & (eOCPP_WEBSOCKET_FAILURE << WEBSOCKET_EVENT_OFFSET)
+				|| event_data & (eOCPP_TASK_CALL_TIMEOUT << TASK_EVENT_OFFSET)){
+
+				ESP_LOGI(TAG, "Event result accepted as complete: %d", event_data);
+				break;
+			}
+		}
+
+		exit_duration = time(NULL) - exit_start;
+	}
+
+	message_count = enqueued_call_count();
+
+	block_enqueue_call(0);
+	block_sending_call(0);
+
+	if(message_count > 0){
+
+		if(time(NULL) - exit_start > OCPP_EXIT_TIMEOUT){
+			ESP_LOGE(TAG, "Not able to send all transaction messages within timeout");
+			return ESP_ERR_TIMEOUT;
+		}else{
+			ESP_LOGE(TAG, "Unable to remove all enqueued transaction calls. %d remaining", message_count);
+			return ESP_ERR_INVALID_STATE;
+		}
+	}
+
+	return ESP_OK;
+}
+
 static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
@@ -3387,8 +3444,33 @@ static void ocpp_task(){
 				ESP_LOGI(TAG, "Handling main event");
 
 				if(data & eOCPP_QUIT){
-					ESP_LOGE(TAG, "Quitting ocpp loop");
-					break;
+					esp_err_t reset_result = prepare_reset(graceful_exit);
+					if(reset_result != ESP_OK && graceful_exit){
+						ESP_LOGE(TAG, "Failed to restart attempting to continue with ocpp.");
+						if(reset_from_cs){
+							switch(reset_result){
+							case ESP_ERR_TIMEOUT:
+								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
+											"Transaction related Timeout while prepare reset", true, false);
+								break;
+							default:
+								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
+											"Unable to prepare for reset", true, false);
+							}
+						}else{
+							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");
+						}
+
+						should_run = true;
+						should_reboot = false;
+						should_reconnect = false;
+						graceful_exit = false;
+						reset_from_cs = false;
+					}else{
+						ESP_LOGW(TAG, "Quitting ocpp loop");
+						break;
+					}
+
 				}
 				if(data & eOCPP_FIRMWARE_UPDATE){
 					ESP_LOGI(TAG, "Attempting to start firmware update from ocpp");
@@ -3476,65 +3558,30 @@ clean:
 		ocpp_auth_deinit();
 		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
-
-		if(graceful_exit){
-			ESP_LOGI(TAG, "Attemting graceful exit");
-			for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
-				ESP_LOGI(TAG, "Checking connector %d", i);
-				if(sessionHandler_OcppTransactionIsActive(i)){
-					ESP_LOGI(TAG, "Active transaction on connector %d", i);
-					if(should_reboot){
-						sessionHandler_OcppStopTransaction(eOCPP_REASON_SOFT_RESET);
-					}else{
-						sessionHandler_OcppStopTransaction(eOCPP_REASON_OTHER);
-					}
-					ESP_LOGI(TAG, "Transaction stopped");
-				}
-			}
-
-			vTaskDelay(pdMS_TO_TICKS(1000)); // Allow time for session loop to transition away from active transaction
-
-			ESP_LOGI(TAG, "Blocking non transaction related messages");
-			block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
-			block_sending_call(eOCPP_CALL_GENERIC);
-
-			time_t exit_start = time(NULL);
-			uint exit_duration = 0;
-			int message_count = enqueued_call_count();
-
-			while(message_count > 0 && exit_duration < OCPP_EXIT_TIMEOUT){
-				ESP_LOGW(TAG, "Remaining messages to send: %d. timeout: (%d/%d sec)",
-					message_count, exit_duration, OCPP_EXIT_TIMEOUT);
-
-				if(handle_ocpp_call(&message_count) != 0){
-					ESP_LOGE(TAG, "Error sending message during graceful exit. Exiting non gracefully");
-					break;
-				}
-
-				exit_duration = time(NULL) - exit_start;
-			}
-
-			message_count = enqueued_call_count();
-			exit_duration = time(NULL) - exit_start;
-
-			if(message_count != 0){
-				ESP_LOGE(TAG, "Non gracefull exit with %d abandoned messages after %d seconds",
-					message_count, exit_duration);
-			}
-		}
 		stop_ocpp();
 
 		ESP_LOGI(TAG, "Teardown complete");
 
 		if(should_reconnect){
+			block_enqueue_call(0);
+			block_sending_call(0);
+
 			should_run = true;
-			should_reconnect =false;
+			should_reboot = false;
+			should_reconnect = false;
+			reset_from_cs = false;
+			connected = false;
 		}
 	}
 
 	if(should_reboot){
-		ESP_LOGI(TAG, "Ocpp end complete rebooting device");
-		reboot_esp_mcu();
+		if(graceful_exit){
+			ESP_LOGI(TAG, "Ocpp end gracefully restarting esp");
+			esp_restart(); //TODO: Write restart reason
+		}else{
+			ESP_LOGI(TAG, "Ocpp end hard restarting device");
+			reboot_esp_mcu();
+		}
 	}
 
 	task_ocpp_handle = NULL;
@@ -3547,6 +3594,10 @@ int ocpp_get_stack_watermark(){
 	}else{
 		return -1;
 	}
+}
+
+bool ocpp_is_exiting(){
+	return (should_run == false && task_ocpp_handle != NULL);
 }
 
 bool ocpp_is_running(){
@@ -3578,10 +3629,12 @@ void ocpp_end_and_reconnect(bool graceful){
 }
 
 void ocpp_init(){
-
 	if(task_ocpp_handle == NULL){ // TODO: Make thread safe. NOTE: eTaskGetState returns eReady for deleted task
+		ESP_LOGI(TAG, "Creating ocpp task");
 		should_run = true;
 		task_ocpp_handle = xTaskCreateStatic(ocpp_task, "ocpp_task", TASK_OCPP_STACK_SIZE, NULL, 2, task_ocpp_stack, &task_ocpp_buffer);
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}else{
+		ESP_LOGW(TAG, "Requested to init ocpp task, but task already exists");
 	}
 }

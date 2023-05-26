@@ -309,7 +309,7 @@ esp_err_t find_oldest_transaction_file(int * entry_out, time_t * timestamp_out)
 	}else if(oldest_known_entries[0].entry == -1){
 		ret = ESP_ERR_NOT_FOUND;
 	}else{
-		ESP_LOGI(TAG, "Oldest transaction is at entry: %d", *entry_out);
+		ESP_LOGI(TAG, "Oldest transaction is at entry: %d", oldest_known_entries[0].entry);
 	}
 
 	*timestamp_out = oldest_known_entries[0].timestamp;
@@ -607,6 +607,7 @@ esp_err_t write_header(FILE * fp, bool * is_active, time_t * start_transaction, 
 			}else{
 				if(known_message_count >= 0)
 					known_message_count += message_count;
+
 				header.awaiting_message_count += message_count;
 			}
 		}
@@ -1622,6 +1623,8 @@ esp_err_t ocpp_transaction_confirm_last(int * entry_out){ // TODO require new co
 			ret = ESP_FAIL;
 		}else{
 			ESP_LOGI(TAG, "Successfully finished transaction file");
+			if(known_message_count >= 0)
+				known_message_count--;
 			ret = ESP_OK;
 		}
 
@@ -2093,6 +2096,7 @@ bool ocpp_transaction_is_ready(){
 }
 
 void ocpp_transaction_deinit(){
+	ESP_LOGI(TAG, "Deiniting ocpp transaction with storage");
 
 	if(file_lock != NULL){
 		vSemaphoreDelete(file_lock);

@@ -2378,6 +2378,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				ESP_LOGI(TAG, "Received request to change session type");
 				responseStatus = 200;
+				bool reboot_required = false;
 
 				char * cmd_begin = strstr(commandString, "set session type");
 
@@ -2408,6 +2409,34 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 400;
 				}
 
+				if(responseStatus == 200 && (controller & eCONTROLLER_OCPP_STANDALONE)){
+
+					if(ocpp_is_running()){
+						ocpp_end(false);
+
+						for(size_t i = 0; i < 30; i++){
+							if(ocpp_is_exiting()){
+								ESP_LOGW(TAG, "Waiting for ocpp to exit...");
+								vTaskDelay(pdMS_TO_TICKS(2000));
+							}else{
+								break;
+							}
+						}
+
+						if(ocpp_is_exiting()){
+							ESP_LOGE(TAG, "ocpp did not exit within timeout. Reboot required");
+							reboot_required = true;
+						}
+					}
+				}else{
+
+					if(!ocpp_is_running()){
+						ocpp_init();
+					}else{
+						ESP_LOGW(TAG, "Ocpp is already running");
+					}
+				}
+
 				if(responseStatus == 200){
 					MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
 					if(ret == MsgWriteAck)
@@ -2427,21 +2456,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					}
 				}
 
-
-				if(responseStatus == 200){
-
-					if(storage_Get_session_controller() & eCONTROLLER_OCPP_STANDALONE){
-						ocpp_end(true);
-
-					}else{
-
-						if(!ocpp_is_running()){
-							ocpp_init();
-						}else{
-							ESP_LOGW(TAG, "Ocpp is already running");
-						}
-					}
-				}
+				if(reboot_required)
+					esp_restart();
 			}
 			// Set cbid (ChargeBox identity) for ocpp url
 			else if(strstr(commandString, "set ocpp cbid") != NULL){

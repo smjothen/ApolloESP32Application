@@ -19,6 +19,7 @@ void ocpp_init();
 // Note that all ocpp_end* functions prepares the ocpp thread and notifies it will therefore not exit imediatly.
 void ocpp_end(bool graceful);
 bool ocpp_is_running();
+bool ocpp_is_exiting();
 bool ocpp_task_exists();
 void ocpp_end_and_reboot(bool graceful);
 void ocpp_end_and_reconnect(bool graceful);
