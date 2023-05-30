@@ -1315,7 +1315,7 @@ int test_hw_trig(){
 		if((rxMsgm.length == 1) && (rxMsgm.identifier == FactoryHWTrigResult))
 		{
 			trigResult = rxMsgm.data[0];
-			if((trigResult == 6) || (trigResult > 0xF))
+			if((trigResult == 7) || (trigResult > 0xF))
 			{
 				break;
 			}
@@ -1328,7 +1328,7 @@ int test_hw_trig(){
 	snprintf(trig_string, 100, "HW Trig: 0x%x (%i)\r\n", trigResult, timeout);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
 
-    if(trigResult == 6){
+    if(trigResult == 7){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_HW_TRIG, trig_string);
 		return 0;
 	}else{
