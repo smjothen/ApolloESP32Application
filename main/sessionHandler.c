@@ -412,13 +412,53 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 		MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, min_charging_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Minimum current updated");
-			ocpp_max_limit = max_charging_limit;
+			ocpp_min_limit = min_charging_limit;
 		}else{
 			ESP_LOGE(TAG, "Unable to update minimum current");
 		}
 	}
+
 	if(ocpp_max_limit != max_charging_limit){
- 		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
+		if(max_charging_limit >= 0.0f && max_charging_limit <= 0.05f){
+			ESP_LOGI(TAG, "OCPP charging variable set to 0. Attempting to pausing charging");
+
+			MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK during set charging variables");
+				SetFinalStopActiveStatus(1);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED during ocpp set charging variables");
+			}
+
+		}else if(ocpp_max_limit >= 0.0f && ocpp_max_limit <= 0.05f){
+			ESP_LOGI(TAG, "OCPP charging variable no longer set to 0. Attempting to resume charging");
+
+			MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during ocpp set charging variables");
+				SetFinalStopActiveStatus(0);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during ocpp set charging variables");
+			}
+
+			ret = MCU_SendCommandId(CommandStartCharging);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU CommandStartCharging OK during ocpp set charging variables");
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp set charging variables");
+			}
+		}
+
+		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
 		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Max current updated");
@@ -492,6 +532,7 @@ void transition_to_preparing(){
 void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
+	SetAuthorized(false);
 	sessionHandler_InitiateResetChargeSession();
 	chargeSession_SetStoppedReason(reason);
 }
@@ -973,6 +1014,7 @@ void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
 		tag_1, (transaction_id != NULL) ? *transaction_id : -1, tag_2);
 
 	ESP_LOGI(TAG, "Authorized to stop transaction");
+	SetAuthorized(false);
 
 	audio_play_nfc_card_accepted();
 
@@ -1110,8 +1152,12 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING:
+		ESP_LOGE(TAG, "%d | %d", charge_mode, operating_mode);
 		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
+
+		}else if(isAuthorized && sessionHandler_OcppTransactionIsActive(1)){
+			return eOCPP_CP_STATUS_SUSPENDED_EVSE;
 
 		}else if(ocpp_finishing_session // not transitioning away from FINISHED
 			|| ocpp_old_state == eOCPP_CP_STATUS_CHARGING // transition C6
@@ -1676,8 +1722,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 			start_transaction();
-			//Clear authorization for next transaction
-			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
@@ -1721,6 +1765,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	case eOCPP_CP_STATUS_FINISHING:
 		ESP_LOGI(TAG, "OCPP STATE FINISHING");
 		ocpp_finishing_session = true;
+		SetAuthorized(false);
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
@@ -1729,7 +1774,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 			stop_transaction(new_state);
-			SetAuthorized(false);
 			break;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
