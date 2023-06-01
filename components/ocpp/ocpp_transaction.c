@@ -1038,7 +1038,8 @@ void fail_transaction_message_on_file(const char * file_path){
 			goto error;
 		}
 
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. MeterValue maybe lost", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. MeterValue maybe lost",
+					NULL, NULL, true, false);
 		return;
 	}else if(header.confirmed_offset != OFFSET_STOP_TRANSACTION){
 
@@ -1110,7 +1111,8 @@ void fail_transaction_message_on_file(const char * file_path){
 			goto error;
 		}
 
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. MeterValue maybe lost", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. MeterValue maybe lost",
+					NULL, NULL, true, false);
 		return;
 	}
 
@@ -1121,9 +1123,11 @@ error:
 
 	if(remove(file_path) != 0){
 		ESP_LOGE(TAG, "Unable to delete transaction file. May be persistently ruined");
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. Unable to discard", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. Unable to discard",
+					NULL, NULL, true, false);
 	}else{
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error lead to transaction data being discarded", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error lead to transaction data being discarded",
+					NULL, NULL, true, false);
 	}
 }
 
@@ -1360,7 +1364,8 @@ void fail_loaded_transaction(){
 		fclose(fp);
 		fp = NULL;
 		remove(file_path);
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. StopTransaction lost", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Error with transaction data. StopTransaction lost",
+					NULL, NULL, true, false);
 	}
 
 	if(fp != NULL)

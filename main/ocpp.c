@@ -172,7 +172,8 @@ void unlock_connector_cb(const char * unique_id, const char * action, cJSON * pa
 
 		MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, true);
 		if(ret != MsgWriteAck){
-			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to set connector to locked to attempt unlock", true, false);
+			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to lock connector to attempt unlock",
+						NULL, NULL, true, false);
 			ESP_LOGE(TAG, "Unlock connector preparation failed");
 		}
 
@@ -2435,9 +2436,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		if(err == 0 && (sessionHandler_OcppTransactionIsActive(0) || storage_Get_ocpp_unlock_connector_on_ev_side_disconnect())){
 			MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
 			if(ret != MsgWriteAck){
-				ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR,
-							"Unable to set UnlockConnectorOnEVSideDisconnect for an active transaction or set to unlock while no transaction was active",
-							true, false);
+				ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR, "Unable to apply UnlockConnectorOnEVSideDisconnect",
+							NULL, NULL, true, false);
 				ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect as a result of ChangeConfiguration.req");
 			}
 		}
@@ -3451,11 +3451,13 @@ static void ocpp_task(){
 							switch(reset_result){
 							case ESP_ERR_TIMEOUT:
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Transaction related Timeout while prepare reset", true, false);
+											"Transaction related Timeout while prepare reset",
+											NULL, NULL, true, false);
 								break;
 							default:
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Unable to prepare for reset", true, false);
+											"Unable to prepare for reset",
+											NULL, NULL, true, false);
 							}
 						}else{
 							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");

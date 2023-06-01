@@ -366,7 +366,8 @@ static void stop_awaiting_status_notification(){
 
 enum ocpp_cp_status_id last_known_state = -1;
 
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important, bool is_trigger){
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, const char * vendor_id,
+				const char * vendor_error_code, bool important, bool is_trigger){
 	ESP_LOGI(TAG, "Preparing status notification");
 
 	if(new_state == -1){
@@ -388,7 +389,7 @@ void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char 
 		return;
 	}
 
-	cJSON * status_notification  = ocpp_create_status_notification_request(1, error_code, info, state, time(NULL), NULL, NULL);
+	cJSON * status_notification  = ocpp_create_status_notification_request(1, error_code, info, state, time(NULL), vendor_id, vendor_error_code);
 	if(status_notification == NULL){
 		ESP_LOGE(TAG, "Unable to create status notification request");
 		return;

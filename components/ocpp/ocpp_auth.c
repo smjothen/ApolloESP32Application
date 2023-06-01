@@ -1265,7 +1265,8 @@ void ocpp_on_id_tag_info_recieved(const char * id_token, struct ocpp_id_tag_info
 						|| strcmp(id_tag_info->parent_id_tag, local_id_tag->parent_id_tag) == 0))){
 
 				ESP_LOGW(TAG, "local Authorization list mismatch");
-				ocpp_send_status_notification(-1, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT, NULL, true, false);
+				ocpp_send_status_notification(-1, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT,
+							NULL, NULL, NULL, true, false);
 			}else{
 				ESP_LOGI(TAG, "local Authorization list matched");
 			}
@@ -1292,7 +1293,8 @@ void ocpp_on_id_tag_info_recieved(const char * id_token, struct ocpp_id_tag_info
 
 		if(result != eOCPP_UPDATE_STATUS_ACCEPTED){
 			ESP_LOGE(TAG, "Unable to add token to authorization cache. authorization cache will not work as expected");
-			ocpp_send_status_notification(-1, OCPPJ_ERROR_INTERNAL, "Unable to update authorization cache", true, false);
+			ocpp_send_status_notification(-1, OCPPJ_ERROR_INTERNAL, "Unable to update authorization cache",
+						NULL, NULL, true, false);
 		}
 	}
 

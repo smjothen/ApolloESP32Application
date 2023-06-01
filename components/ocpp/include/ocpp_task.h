@@ -59,13 +59,16 @@ int send_call_reply(cJSON * call);
  * @param new_state "Required. This contains the current status of the Charge Point."
  * @param error_code "Required. This contains the error code reported by the Charge Point."
  * @param info "Optional. Additional free format information related to the error."
+ * @param vendor_id "Optional. This identifies the vendor-specific implementation."
+ * @param vendor_error_code "Optional. This contains the vendor-specific error code."
  * @param important if false the notification will wait for MinimumStatusDuration seconds and
  * not be sent if new notification is created within the duration.
  * @param is_trigger should be true if initiated by a TriggerMessage.req
  *
  * @note is_trigger is ignored if important is false.
  */
-void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info, bool important, bool is_trigger);
+void ocpp_send_status_notification(enum ocpp_cp_status_id new_state, const char * error_code, const char * info,
+				const char * vendor_id, const char * vendor_error_code, bool important, bool is_trigger);
 
 /**
  * @brief Prepares a CP initiated call (.req call)

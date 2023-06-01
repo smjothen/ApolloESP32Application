@@ -852,7 +852,8 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 		 * Finishing seems to be intended for situation where user action is required before new transaction or new user, yet
 		 * we must inform CS of finishing before entering available.
 		 */
-		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected", true, false);
+		ocpp_send_status_notification(eOCPP_CP_STATUS_FINISHING, OCPP_CP_ERROR_NO_ERROR, "EV side disconnected",
+					NULL, NULL, true, false);
 	}
 
 	transaction_id_is_valid = false;
@@ -880,7 +881,8 @@ void start_transaction(){
 
 	MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
 	if(ret != MsgWriteAck){
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to prepare UnlockConnectorOnEVSideDisconnect", true, false);
+		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to apply UnlockConnectorOnEVSideDisconnect",
+					NULL, NULL, true, false);
 		ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect on MCU");
 	}
 
@@ -1053,7 +1055,7 @@ void reserved_on_tag_accept(const char * tag_1, const char * tag_2){
 	ocpp_old_state = eOCPP_CP_STATUS_PREPARING;
 	transition_to_preparing();
 
-	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, false, false);
+	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, NULL, NULL, false, false);
 
 }
 
@@ -1074,7 +1076,7 @@ bool sessionHandler_OcppStateHasChanged(){
 }
 
 void sessionHandler_OcppSendState(bool is_trigger){
-	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, true, is_trigger);
+	ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_NO_ERROR, NULL, NULL, NULL, true, is_trigger);
 }
 
 static int change_availability(bool new_available){
@@ -1088,7 +1090,7 @@ static int change_availability(bool new_available){
 	ESP_LOGI(TAG, "Set availability to %s", new_available ? "operative" : "inoperative");
 
 	if(new_available && storage_Get_IsEnabled() == 0){
-		ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_OTHER_ERROR, "Availability changed to operative, but chargepoint is not set to active in Zaptec cloud. Availability setting persisted, but will not have effect until activated in Zaptec cloud", true, false);
+		ocpp_send_status_notification(ocpp_old_state, OCPP_CP_ERROR_OTHER_ERROR, "'Available' ineffective, CP disabled in portal", NULL, NULL,  true, false);
 
 	}else{
 
@@ -1836,7 +1838,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		break;
 	}
 
-	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, false, false);
+	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, NULL, NULL, false, false);
 
 	if(new_state == eOCPP_CP_STATUS_AVAILABLE || new_state == eOCPP_CP_STATUS_FINISHING)
 		change_availability_if_pending(false);
@@ -1982,13 +1984,13 @@ enum ocpp_mcu_error_code{
 	eOCPP_MCU_EV_COMMUNICATION_ERROR = WARNING_PILOT_STATE | WARNING_PILOT_LOW_LEVEL | WARNING_PILOT_NO_PROXIMITY,
 	eOCPP_MCU_GROUND_FAILURE = WARNING_RCD,
 	eOCPP_MCU_HIGH_TEMPERATURE = WARNING_TEMPERATURE,
-	eOCPP_MCU_INTERNAL_ERROR = WARNING_TEMPERATURE_ERROR | WARNING_UNEXPECTED_RELAY | WARNING_FPGA_WATCHDOG | WARNING_MAX_SESSION_RESTART | WARNING_DISABLED | WARNING_FPGA_VERSION | WARNING_RCD,
-	eOCPP_MCU_OTHER_ERROR =/* WARNING_HUMIDITY, */ WARNING_O_PEN,
+	eOCPP_MCU_INTERNAL_ERROR = WARNING_TEMPERATURE_ERROR | WARNING_UNEXPECTED_RELAY | WARNING_FPGA_WATCHDOG | WARNING_MAX_SESSION_RESTART | WARNING_DISABLED | WARNING_FPGA_VERSION | WARNING_NO_VOLTAGE_L1 | WARNING_NO_VOLTAGE_L2_L3 | WARNING_12V_LOW_LEVEL,
+	eOCPP_MCU_OTHER_ERROR = WARNING_HUMIDITY | WARNING_O_PEN,
 	eOCPP_MCU_OVER_CURRENT_FAILURE = WARNING_OVERCURRENT_INSTALLATION | WARNING_CHARGE_OVERCURRENT,
 	/* eOCPP_MCU_OVER_VOLTAGE = , */
 	eOCPP_MCU_POWER_METER_FAILURE = WARNING_EMETER_NO_RESPONSE | WARNING_EMETER_LINK | WARNING_EMETER_ALARM,
 	eOCPP_MCU_POWER_SWITCHFAILURE = WARNING_NO_SWITCH_POW_DEF,
-	eOCPP_MCU_UNDER_VOLTAGE = WARNING_NO_VOLTAGE_L1 | WARNING_NO_VOLTAGE_L2_L3 | WARNING_12V_LOW_LEVEL,
+	/* eOCPP_MCU_UNDER_VOLTAGE = ,*/
 };
 
 // TODO: Update with errors that need to be cleared before exiting faulted state
@@ -2033,6 +2035,8 @@ time_t weak_connection_check_timestamp = 0;
 
 #define WEAK_CONNECTION_SEND_INTERVAL 300 // The minimum duration between two status notifications with weak signal warning
 #define WEAK_CONNECTION_CHECK_INTERVAL 10 // The minimum duration between each check for weak signal
+
+char vendor_error_code[16];
 static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mask){
 	if(get_registration_status() != eOCPP_REGISTRATION_ACCEPTED)
 		return;
@@ -2042,64 +2046,105 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 
 	//TODO: Add description to status notifications
 	if(new_warning){ // A warning that has not been notified earlier
+		sprintf(vendor_error_code, "%u", new_warning);
+
 		if(new_warning & MCU_WARNING_TRANSITION_FAULTED){
 			sessionHandler_OcppTransitionToFaulted();
 			*state = eOCPP_CP_STATUS_FAULTED;
 		}
 
 		if(new_warning & eOCPP_MCU_CONNECTOR_LOCK_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_CONNECTOR_LOCK_FAILURE,
+						"Unable to lock cable to charging station", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_EV_COMMUNICATION_ERROR){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR,
+						"Vehicle communication error, Inspect cable and car", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_GROUND_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_GROUND_FAILURE, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_GROUND_FAILURE,
+						"Ground fault, Try reconnecting cable", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_HIGH_TEMPERATURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE,
+						"High temperature, Let charging station cool down", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_INTERNAL_ERROR){
 			if(new_warning & WARNING_TEMPERATURE_ERROR){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "Communication error with temperature sensor", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Temperature sensor error, Try restarting CP", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_UNEXPECTED_RELAY){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "Relay not configured", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Relay not configured", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_FPGA_WATCHDOG){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "FPGA watchdown triggered", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"FPGA watchdog triggered", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_MAX_SESSION_RESTART){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "Charging reset too many times", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Charging reset too many times, Try reconnecting", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_DISABLED && storage_Get_availability_ocpp()){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "Configured as inactive, check zaptec portal", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Configured as inactive, check zaptec portal", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_FPGA_VERSION){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "Incorrect FPGA version;", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Incorrect FPGA version", NULL, vendor_error_code, true, false);
 			}
 
 			if(new_warning & WARNING_RCD){
-				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR, "RCD warning", true, false);
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"RCD warning", NULL, vendor_error_code, true, false);
 			}
 
+			if(new_warning & WARNING_NO_VOLTAGE_L1 || new_warning & WARNING_NO_VOLTAGE_L2_L3){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Charge output fuse is blown", NULL, vendor_error_code, true, false);
+			}
+
+			if(new_warning & WARNING_12V_LOW_LEVEL){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_INTERNAL_ERROR,
+							"Low voltage in charge station component", NULL, vendor_error_code, true, false);
+			}
+		}
+		if(new_warning & eOCPP_MCU_OTHER_ERROR){
+			if(new_warning & WARNING_O_PEN){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR,
+							"Abnormal sypply voltage detected", NULL, vendor_error_code, true, false);
+			}
+
+			if(new_warning & WARNING_HUMIDITY){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR,
+							"Moisture in the charging station", NULL, vendor_error_code, true, false);
+			}
 		}
 		if(new_warning & eOCPP_MCU_OVER_CURRENT_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE,
+						"The vehicle has drawn more current than allowed", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_POWER_METER_FAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE, NULL, true, false);
+
+			if(new_warning & WARNING_EMETER_NO_RESPONSE || new_warning & WARNING_EMETER_LINK){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE,
+							"Emeter communication error", NULL, vendor_error_code, true, false);
+			}
+
+			if(new_warning & WARNING_EMETER_ALARM){
+				ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_METER_FAILURE,
+							"Charging station limits have been exceeded", NULL, vendor_error_code, true, false);
+			}
 		}
 		if(new_warning & eOCPP_MCU_POWER_SWITCHFAILURE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_SWITCH_FAILURE, NULL, true, false);
-		}
-		if(new_warning & eOCPP_MCU_UNDER_VOLTAGE){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_POWER_SWITCH_FAILURE,
+						"The charging station has not been fully configured", NULL, vendor_error_code, true, false);
 		}
 	}
 
@@ -2108,20 +2153,26 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 
 	//TODO: test with emeter alarm
 	if(new_emeter_alarm){
+		sprintf(vendor_error_code, "%u", new_emeter_alarm);
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_VRMSA | EMETER_PARAM_STATUS_OV_VRMSB | EMETER_PARAM_STATUS_OV_VRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_VOLTAGE, "Reported by emeter", true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_VOLTAGE,
+						"Reported by emeter", NULL, vendor_error_code, true, false);
 		}
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_UN_VRMSA | EMETER_PARAM_STATUS_UN_VRMSB | EMETER_PARAM_STATUS_UN_VRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE, "Reported by emeter", true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_UNDER_VOLTAGE,
+						"Reported by emeter", NULL, vendor_error_code, true, false);
 		}
 		if(new_emeter_alarm & (EMETER_PARAM_STATUS_OV_IRMSA | EMETER_PARAM_STATUS_OV_IRMSB | EMETER_PARAM_STATUS_OV_IRMSC)){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE, "Reported by emeter", true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OVER_CURRENT_FAILURE,
+						"Reported by emeter", NULL, vendor_error_code, true, false);
 		}
 		if(new_emeter_alarm & EMETER_PARAM_STATUS_OV_TEMP){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE, "Reported by emeter", true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_HIGH_TEMPERATURE,
+						"Reported by emeter", NULL, vendor_error_code, true, false);
 		}
 		if(new_emeter_alarm & EMETER_PARAM_STATUS_UN_TEMP){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR, "Low temperature reported by emeter", true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_OTHER_ERROR,
+						"Low temperature reported by emeter", NULL, vendor_error_code, true, false);
 		}
 	}
 
@@ -2142,12 +2193,12 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 		if(weak_connection){
 			ESP_LOGW(TAG, "Weak wireless");
 			weak_connection_timestamp = now;
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, true, false);
+			ocpp_send_status_notification(*state, OCPP_CP_ERROR_WEAK_SIGNAL, NULL, NULL, NULL, true, false);
 		}
 	}
 
 	if(GetNewReaderFailure()){
-		ocpp_send_status_notification(*state, OCPP_CP_ERROR_READER_FAILURE, NULL, true, false);
+		ocpp_send_status_notification(*state, OCPP_CP_ERROR_READER_FAILURE, NULL, NULL, NULL, true, false);
 	}
 }
 
