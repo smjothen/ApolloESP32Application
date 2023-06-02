@@ -3,6 +3,7 @@
 
 #include "calibration.h"
 
+const char *calibration_mode_to_string(CalibrationMode mode);
 const char *calibration_state_to_string(CalibrationCtx *ctx);
 const char *calibration_step_to_string(CalibrationCtx *ctx);
 const char *charger_state_to_string(CalibrationCtx *ctx);

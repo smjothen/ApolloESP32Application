@@ -16,6 +16,14 @@
 
 static const char *TAG = "CALIBRATION    ";
 
+const char *calibration_mode_to_string(CalibrationMode mode) {
+    switch(mode) {
+        case Idle: return "Idle";
+        case Open: return "Open";
+        default: return "Closed";
+    }
+}
+
 const char *calibration_state_to_string(CalibrationCtx *ctx) {
     CalibrationState state = ctx->State;
     const char *_calibration_states[] = { FOREACH_CS(CS_STRING) };
@@ -390,8 +398,11 @@ void calibration_fail(CalibrationCtx *ctx, const char *format, ...) {
     }
 
     ctx->FailReason = _calibration_fail(format, ap);
+
     ESP_LOGE(TAG, "%s: %s", calibration_state_to_string(ctx), ctx->FailReason);
     CAL_CSTATE(ctx) = Failed;
+
+    CALLOG(ctx, "- %s", ctx->FailReason);
 
     va_end(ap);
 }
