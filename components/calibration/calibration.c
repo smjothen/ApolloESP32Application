@@ -843,6 +843,8 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             }
         } else {
             ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
+            // Re-enable cloud publishing so capabilities can be sent
+            cloud_observations_disable(false);
             isCalibratedFlag = true;
         }
 
