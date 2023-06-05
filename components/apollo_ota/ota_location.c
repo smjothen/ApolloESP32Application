@@ -10,6 +10,7 @@
 #include "string.h"
 #include "certificate.h"
 #include "../../main/DeviceInfo.h"
+#include "storage.h"
 
 
 #define TAG "OTA_LOCATION"
@@ -172,9 +173,17 @@ int get_image_location(char *location, int buffersize, char * version)
     char url [150];
 #ifdef DEVELOPEMENT_URL
     snprintf(url, 150, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
-    ESP_LOGE(TAG, "###### USING DEVELOPMENT URL !!! #######");
+    ESP_LOGE(TAG, "###### USING DEFINE OTA DEVELOPMENT URL !!! #######");
 #else
-    snprintf(url, 150, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    if(storage_Get_ConnectToPortalType() == PORTAL_TYPE_DEV)
+    {
+    	snprintf(url, 150, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    	ESP_LOGE(TAG, "###### USING CMD OTA DEVELOPMENT URL !!! #######");
+    }
+    else
+    {
+    	snprintf(url, 150, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    }
 #endif
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);

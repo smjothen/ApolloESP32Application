@@ -5,20 +5,12 @@
 
 #include "sessionHandler.h"
 
+#include "zaptec_protocol_warnings.h"
+
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
-
-#define WARNING_PILOT_NO_PROXIMITY  (1 << 23)
-#define WARNING_NO_SWITCH_POW_DEF   (1 << 9)
-#define WARNING_RCD_6MA             (1 << 12)
-#define WARNING_RCD_30MA            (1 << 13)
-#define WARNING_RCD_TEST_6MA        (1 << 16)
-#define WARNING_RCD_TEST_30MA       (1 << 17)
-#define WARNING_RCD_FAILURE         (1 << 18)
-#define WARNING_RCD                 (WARNING_RCD_6MA | WARNING_RCD_30MA | WARNING_RCD_TEST_6MA | WARNING_RCD_TEST_30MA | WARNING_RCD_FAILURE)
-#define WARNING_MID                 (1 << 30)
 
 // TODO: Check these are reasonable?
 #define CALIBRATION_IOFF_MAX_ERROR 0.002
@@ -228,6 +220,8 @@ typedef enum {
 typedef struct {
     int Run;
     int Seq;
+    int PktsSent;
+    int PktsAckd;
     int LastSeq;
     int Count;
     int Position;
@@ -254,6 +248,7 @@ typedef struct {
 } CalibrationCtx;
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode);
+bool calibration_get_finished_flag();
 
 void calibration_task(void *pvParameters);
 
@@ -280,5 +275,12 @@ int calibration_task_watermark(void);
 void calibration_set_simulation(bool sim);
 bool calibration_is_simulation(void);
  
- 
+#define CALIBRATION_LOG "/files/cal.txt"
+
+void calibration_log_line(CalibrationCtx *ctx, const char *format, ...);
+
+#define _CALLOG(ctx, fmt, ...) calibration_log_line(ctx, fmt, __VA_ARGS__)
+#define CALLOG(ctx, fmt, ...) _CALLOG(ctx, "%s - %s / %s " fmt "\n", esp_log_system_timestamp(), calibration_state_to_string(ctx), charger_state_to_string(ctx), ## __VA_ARGS__)
+#define CALLOGTIME(ctx, fmt, ...) _CALLOG(ctx, "%s " fmt "\n", esp_log_system_timestamp(), ## __VA_ARGS__)
+
 #endif

@@ -42,6 +42,7 @@ bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
 void chargeSession_CheckIfLastSessionIncomplete();
 void chargeSession_Start();
+float chargeSession_GetEnergy();
 void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();
 void chargeSession_Clear();

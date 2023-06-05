@@ -11,6 +11,8 @@
 // #include "crypto/sha256.h"
 #include "base64.h"
 #include "sha256.h"
+#include "storage.h"
+#include "DeviceInfo.h"
 
 // #include "wpa/includes.h"
 // #include "crypto/crypto.h"
@@ -63,10 +65,23 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	strcpy((char*)data, "zap-d-iothub.azure-devices.net/devices/");
 	const size_t data_len = 55+4; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
 #else
-	unsigned char *data = malloc(56);
-	strcpy((char*)data, "ZapCloud.azure-devices.net/devices/");
-	const size_t data_len = 55; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
+	unsigned char *data;
+	size_t data_len_tmp;
+	if(storage_Get_ConnectToPortalType() == PORTAL_TYPE_DEV)
+	{
+		data = malloc(56+4);
+		strcpy((char*)data, "zap-d-iothub.azure-devices.net/devices/");
+		data_len_tmp = 55+4; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
+	}
+	else
+	{
+		data = malloc(56);
+		strcpy((char*)data, "ZapCloud.azure-devices.net/devices/");
+		data_len_tmp = 55; //sizeof(data) gives 4 instead of 56, so cant use sizeof(data)-1 here.
+	}
+	const size_t data_len = data_len_tmp;
 #endif
+
 
 	strcat((char*)data, uniqueId);
 	strcat((char*)data, "\n");
@@ -106,7 +121,14 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 #ifdef DEVELOPEMENT_URL
 	strcpy(token_out, "SharedAccessSignature sr=zap-d-iothub.azure-devices.net/devices/");
 #else
-	strcpy(token_out, "SharedAccessSignature sr=ZapCloud.azure-devices.net/devices/");
+	if(storage_Get_ConnectToPortalType() == PORTAL_TYPE_DEV)
+	{
+		strcpy(token_out, "SharedAccessSignature sr=zap-d-iothub.azure-devices.net/devices/");
+	}
+	else
+	{
+		strcpy(token_out, "SharedAccessSignature sr=ZapCloud.azure-devices.net/devices/");
+	}
 #endif
 
 	strcat(token_out, uniqueId);

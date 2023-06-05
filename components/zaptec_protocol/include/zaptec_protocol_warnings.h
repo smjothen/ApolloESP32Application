@@ -54,7 +54,9 @@
 //#define WARNING_RCD_TEST_TIMEOUT    (1l << 19)
     
 #define WARNING_SERVO               (1l << 29)
-    
+
+#define WARNING_MID                 (1l << 30)
+
 // RCD Warnings: These are cleared when a car is disconnected
 #define WARNING_RCD                 (WARNING_RCD_6MA | WARNING_RCD_30MA | WARNING_RCD_TEST_6MA | WARNING_RCD_TEST_30MA | WARNING_RCD_FAILURE)
 

@@ -18,6 +18,8 @@ static const char *TAG = "STORAGE        ";
 
 #define CONFIG_FILE "CONFIG_FILE"
 #define DEFAULT_TRANSMIT_INTERVAL 3600
+
+
 nvs_handle configuration_handle;
 
 // "wifi"
@@ -127,6 +129,7 @@ void storage_Init_Configuration()
 	storage_Initialize_ScheduleParameteres();
 
 	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
+	configurationStruct.connectToPortalType = 0;
 }
 
 
@@ -516,6 +519,13 @@ void storage_Set_cover_on_value(uint16_t newValue)
 
 	configurationStruct.cover_on_value = newValue;
 }
+
+
+void storage_Set_ConnectToPortalType(uint8_t newValue)
+{
+	configurationStruct.connectToPortalType = newValue;
+}
+
 
 //****************************************************
 
@@ -926,6 +936,11 @@ uint16_t storage_Get_cover_on_value()
 	return configurationStruct.cover_on_value;
 }
 
+uint8_t storage_Get_ConnectToPortalType()
+{
+	return configurationStruct.connectToPortalType;
+}
+
 //************************************************
 
 esp_err_t storage_SaveConfiguration()
@@ -1008,6 +1023,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u32(configuration_handle, "MaxStartDelay", configurationStruct.maxStartDelay);
 
 	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
+	err += nvs_set_u8(configuration_handle, "ConPortType", configurationStruct.connectToPortalType);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -1133,6 +1149,9 @@ esp_err_t storage_ReadConfiguration()
 	if(nvs_get_u16(configuration_handle, "CoverOnValue", &configurationStruct.cover_on_value) != ESP_OK)
 		configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 
+	if(nvs_get_u8(configuration_handle, "ConPortType", &configurationStruct.connectToPortalType) != ESP_OK)
+		configurationStruct.connectToPortalType = PORTAL_TYPE_PROD_DEFAULT;
+
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
@@ -1170,6 +1189,7 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "TransmitInterval: 			\t%i", configurationStruct.transmitInterval);
 	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
 	ESP_LOGI(TAG, "DiagnosticsLog: 				%s", configurationStruct.diagnosticsLog);
+	ESP_LOGI(TAG, "Portal: 						%i", configurationStruct.connectToPortalType);
 
 
 	//ESP_LOGW(TAG, "*********************************");

@@ -83,6 +83,7 @@ void storage_Set_TimeSchedule(char * newString);
 void storage_Set_MaxStartDelay(uint32_t newValue);
 
 void storage_Set_cover_on_value(uint16_t newValue);
+void storage_Set_ConnectToPortalType(uint8_t newValue);
 
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
@@ -150,6 +151,7 @@ char * storage_Get_Timezone();
 char * storage_Get_TimeSchedule();
 
 uint16_t storage_Get_cover_on_value();
+uint8_t storage_Get_ConnectToPortalType();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();

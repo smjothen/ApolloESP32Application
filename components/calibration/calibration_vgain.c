@@ -70,6 +70,8 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
                         ESP_LOGI(TAG, "%s: VGAIN(%d) = %.6f Scaled = %f (%f / %f)", calibration_state_to_string(ctx), phase, avg[phase], gain, ctx->Ref.V[phase], averageMeasurement);
 
+                        CALLOG(ctx, "- L%d = %.5f / %.5f = %.5f", phase + 1, ctx->Ref.V[phase], averageMeasurement, gain);
+
                         if (!emeter_write_float(V1_GAIN + phase, gain, 21)) {
                             ESP_LOGE(TAG, "%s: VGAIN(%d) write failed!", calibration_state_to_string(ctx), phase);
                             return false;

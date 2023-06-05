@@ -184,7 +184,7 @@ int prodtest_getNewId(bool validate_only)
 
 
 		//The string has fixed predefined format, only allow parsing if format is correct
-		if(((strncmp(buffer, "ZAP", 3) == 0) || (strncmp(buffer, "ZGB", 3) == 0)) &&
+		if(((strncmp(buffer, "ZAP", 3) == 0) || (strncmp(buffer, "ZGB", 3) == 0) || (strncmp(buffer, "ZAG", 3) == 0)) &&
 			(buffer[9] == '|') && (buffer[54] == '|') && (buffer[59] == '|'))
 		{
 			struct DeviceInfo prodDevInfo = {0};

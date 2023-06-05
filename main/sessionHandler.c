@@ -25,6 +25,7 @@
 #include "../components/ntp/zntp.h"
 #include "../components/authentication/authentication.h"
 #include "../components/i2c/include/i2cDevices.h"
+#include "../components/calibration/include/calibration.h"
 #include "offline_log.h"
 #include "offlineSession.h"
 #include "offlineHandler.h"
@@ -249,6 +250,93 @@ void ocmf_sync_task(void * pvParameters){
 void on_ocmf_sync_time(TimerHandle_t xTimer){
 	xSemaphoreGive(ocmf_sync_semaphore);
 }
+
+
+static uint32_t previousNotification = 0;
+
+static bool rcdBit0 = false;
+static bool previousRcdBit0 = false;
+static uint32_t errorCountAB = 0;
+static uint32_t errorCountABCTotal = 0;
+
+static bool rcdBit1 = false;
+static bool previousRcdBit1 = false;
+void NotificationHandler()
+{
+	uint32_t combinedNotification = GetCombinedNotifications();
+
+	if(combinedNotification != previousNotification)
+	{
+		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotification, combinedNotification);
+	}
+	previousNotification = combinedNotification;
+
+	/// Handle RCD notification in state A and B
+	previousRcdBit0 = rcdBit0;
+	rcdBit0 = (combinedNotification & 0x1);
+
+	if((rcdBit0 == true) && (previousRcdBit0 == false))
+	{
+		errorCountAB++;
+		errorCountABCTotal++;
+		ESP_LOGW(TAG, "RCD error in state A/B: %i", errorCountAB);
+
+		/// Send event on different level to be able to search event messages based on severity
+		if(errorCountAB == 1)
+		{
+			publish_debug_message_event("RCD error A/B trig", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 10)
+		{
+			publish_debug_message_event("RCD error A/B 10", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 100)
+		{
+			publish_debug_message_event("RCD error A/B 100", cloud_event_level_warning);
+		}
+		else if(errorCountAB == 1000)
+		{
+			publish_debug_message_event("RCD error A/B 1000", cloud_event_level_warning);
+		}
+	}
+
+
+	/// Handle RCD notification in state C
+	previousRcdBit1 = rcdBit1;
+	rcdBit1 = (combinedNotification & 0x2);
+
+	if(rcdBit1 != previousRcdBit1)
+	{
+		errorCountABCTotal++;
+
+		//Check for RCD error indication
+		if(rcdBit1)
+		{
+			ZapMessage rxMsg = MCU_ReadParameter(RCDErrorCount);
+			uint8_t readErrorCount = 0;
+			if((rxMsg.length == 1) && (rxMsg.identifier == RCDErrorCount))
+				readErrorCount = rxMsg.data[0];
+
+
+			char noteBuf[25];
+			snprintf(noteBuf, 25, "RCD error count: %i", readErrorCount);
+			publish_debug_telemetry_observation_Diagnostics(noteBuf);
+			ESP_LOGW(TAG, "%s", noteBuf);
+
+			if(readErrorCount <= 4)
+				publish_debug_message_event("RCD error trig", cloud_event_level_warning);
+			else if(readErrorCount == 5)
+				publish_debug_message_event("RCD error trig warning", cloud_event_level_error);
+		}
+		else
+		{
+			///Ensure car is waked up if delay is so long it goes into sleep mode
+			sessionHandler_ClearCarInterfaceResetConditions();
+		}
+	}
+
+}
+
 
 //For diagnostics and developement
 static float currentSetFromCloud = 0.0;
@@ -2305,6 +2393,13 @@ void SetMemoryDiagnosticsFrequency(uint16_t freq)
 	memoryDiagnosticsFrequency = freq;
 }
 
+static uint16_t mcuDiagnosticsFrequency = 0;
+void SetMCUDiagnosticsFrequency(uint16_t freq)
+{
+	mcuDiagnosticsFrequency = freq;
+}
+
+
 enum ChargerOperatingMode sessionHandler_GetCurrentChargeOperatingMode()
 {
 	return chargeOperatingMode;
@@ -2913,6 +3008,9 @@ static void sessionHandler_task()
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED))
 		{
+			//Clear RCD error counter on disconnect to allow recount
+			errorCountAB = 0;
+
 			//Do not send a CompletedSession with no SessionId.
 			if(chargeSession_Get().SessionId[0] != '\0')
 			{
@@ -3169,6 +3267,7 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_LteParameters();
 				}
 
+				publish_debug_telemetry_observation_capabilities();
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
@@ -3494,6 +3593,32 @@ static void sessionHandler_task()
 				}
 			}
 
+			/// Send MCU diagnostics once or periodically
+			if (mcuDiagnosticsFrequency > 0)
+			{
+				if(onTime % mcuDiagnosticsFrequency == 0)
+				{
+					if(mcuDiagnosticsFrequency == 1)
+						mcuDiagnosticsFrequency = 0;
+
+					sessionHandler_SendMCUSettings();
+				}
+			}
+
+
+			NotificationHandler();
+
+			/// For chargers with x804 RCD, this prints out diagnostics every 24 hours if there has been any faults.
+			if(errorCountABCTotal > 0)
+			{
+				if(onTime % 86400 == 0)
+				{
+					char buf[100];
+					snprintf(buf, 100, "RCD error ABC total: %i / %.1f  Avg per day: %.1f", errorCountABCTotal, (onTime/86400.0), (errorCountABCTotal/(onTime / 86400.0)));
+					publish_debug_telemetry_observation_Diagnostics(buf);
+				}
+			}
+
 			/*if(CloudCommandCurrentUpdated() == true)
 			{
 				MessageType rxMsg = MCU_ReadFloatParameter(ParamChargeCurrentUserMax);
@@ -3625,7 +3750,6 @@ void sessionHandler_StopAndResetChargeSession()
 	//Any failed or final state - cleare opModeOverride
 	else if((sessionResetMode == eSESSION_RESET_WAIT) && (MCU_GetEnergy() == 0.0))
 	{
-		MCU_ClearMaximumEnergy();
 		ESP_LOGI(TAG, "sessionReset: Energy cleared");
 		sessionResetMode = eSESSION_RESET_NONE;
 	}
@@ -3646,7 +3770,7 @@ void sessionHandler_StopAndResetChargeSession()
 
 void sessionHandler_SendMCUSettings()
 {
-	char mcuPayload[100];
+	char mcuPayload[130];
 
 	ZapMessage rxMsg = MCU_ReadParameter(ParamIsEnabled);
 	uint8_t enabled = rxMsg.data[0];
@@ -3663,7 +3787,16 @@ void sessionHandler_SendMCUSettings()
 	rxMsg = MCU_ReadParameter(MCUFaultPins);
 	uint8_t faultPins = rxMsg.data[0];
 
-	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X", enabled, standAlone, auth, maxC, faultPins);
+	rxMsg = MCU_ReadParameter(RCDTestState);
+	uint8_t rcdTestState = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ParamChargePilotLevelAverage);
+	uint16_t averagePilotLevel = GetUInt16(rxMsg.data);
+
+	rxMsg = MCU_ReadParameter(ParamInstantPilotCurrent);
+	float instantPilotCurrent = GetFloat(rxMsg.data);
+
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X, RCDts: %i, CM: %i, ADC: %i, CP: %2.2f", enabled, standAlone, auth, maxC, faultPins, rcdTestState, MCU_GetChargeMode(), averagePilotLevel, instantPilotCurrent);
 	ESP_LOGI(TAG, "%s", mcuPayload);
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }
@@ -3703,7 +3836,17 @@ void sessionHandler_SendMIDStatus(void) {
 	}
 }
 
+static bool hasUpdatedCapability = false;
 void sessionHandler_SendMIDStatusUpdate(void) {
+
+	///Once factory calibration is finished, send updated capability observation
+	/// so that the calibration status is correct in the portal.
+	if((calibration_get_finished_flag() == true) && (hasUpdatedCapability == false))
+	{
+		hasUpdatedCapability = true;
+		publish_debug_telemetry_observation_capabilities();
+	}
+
 	if (!calibrationId) {
 		return;
 	}

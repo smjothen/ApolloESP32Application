@@ -257,8 +257,6 @@ void chargeSession_Start()
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
-	MCU_ClearMaximumEnergy();
-
 	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
 	chargeSession_SetParentId("\0");
 
@@ -310,6 +308,10 @@ void chargeSession_Start()
 }
 
 
+float chargeSession_GetEnergy()
+{
+	return chargeSession.Energy;
+}
 
 void chargeSession_UpdateEnergy()
 {
@@ -348,8 +350,7 @@ void chargeSession_Finalize()
 
 	/// After the 'E' entry is set no more 'T' entries can be added through hourly interrupt
 
-
-	double endAcc = storage_update_accumulated_energy(0.0);
+	double endAcc = OCMF_GetLastAccumulated_Energy();
 	double accDiff = endAcc - startAcc;
 	if(fabs(accDiff - chargeSession.Energy) < 0.001)
 		ESP_LOGW(TAG, "**** ACC-DIFF: %f - %f = %f vs %f **** OK", endAcc, startAcc, accDiff, chargeSession.Energy);

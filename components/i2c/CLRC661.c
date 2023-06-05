@@ -223,21 +223,30 @@ int NFCReadTag()
 
 	i2c_master_read_slave(slaveAddressNFC, message, 2);
 
+	uint8_t UIDsizeBits = (message[0] >> 6);			 ///2 highest bits
+	uint8_t BitFrameAnticollision = (message[0] & 0x1F); ///5 lowest bits
+	bool BitFrameAnticollisionOK = false;
+
+	if((BitFrameAnticollision == 0x1) || (BitFrameAnticollision == 0x2) || (BitFrameAnticollision == 0x4) || (BitFrameAnticollision == 0x8) || (BitFrameAnticollision == 0x10))
+	{
+		BitFrameAnticollisionOK = true;
+	}
+
 	//Detect 00 02 (Classic 1K) and 00 04 (Classic 4K)
-	if(((message[0] == 0x02) || (message[0] == 0x04)) && (message[1] == 0x0))
+	if((UIDsizeBits == 0) && (BitFrameAnticollisionOK == true) && (message[1] == 0x0))
 	{
 		uidLength = 4;
-		printf("Single UID: ATQA: %02X %02X\n", message[1], message[0]);
+		printf("Single UID: ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
 	}
 	//Detect 00 44 (Ultralight C)
-	else if ((message[0] == 0x44) && (message[1] == 0x0))
+	else if ((UIDsizeBits == 1) && (BitFrameAnticollisionOK == true) && (message[1] == 0x0))
 	{
 		uidLength = 7;
-		printf("Double UID: ATQA: %02X %02X\n", message[1], message[0]);
+		printf("Double UID: ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
 	}
 	else
 	{
-		printf("Unknown ATQA: %02X %02X\n", message[1], message[0]);
+		printf("Unknown ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
 
 		lastFailedATQA = message[1]<<8 | message[0];
 
@@ -313,11 +322,8 @@ int NFCReadTag()
 
 	uint8_t BBC = message[0] ^  message[1] ^  message[2] ^  message[3];
 
-	if(BBC == message[4])
-	{
-		printf("Valid BBC %X == %X\n", BBC, message[4]);
-	}
-	else
+	/// Check checksum and don't allow 00-ID
+	if((BBC != message[4]) || ((message[0] == 0) && (message[1] == 0) && (message[2] == 0) && (message[3] == 0)))
 	{
 		printf("Invalid BBC %X != %X\n", BBC, message[4]);
 
@@ -328,6 +334,10 @@ int NFCReadTag()
 
 		vTaskDelay(2000 / portTICK_PERIOD_MS);
 		return -2;
+	}
+	else
+	{
+		printf("Valid BBC %X == %X\n", BBC, message[4]);
 	}
 
 	if(uidLength == 4)

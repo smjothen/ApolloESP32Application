@@ -178,6 +178,8 @@ bool calibration_tick_verification(CalibrationCtx *ctx) {
         }
 
         int id = ctx->VerTest;
+
+        CALLOG(ctx, "- Test %d - Charger %.3fWh vs. Reference %.3fWh, Error = %.3f%%", ctx->VerTest, energy, ref_energy, error * 100.0);
        
         if (ctx->VerTest == NoLoad) {
             if (energy > 0.1) {

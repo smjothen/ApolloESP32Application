@@ -64,7 +64,7 @@ bool wifiInitialized = false;
 static uint32_t mqttUnconnectedCounter = 0;
 static uint32_t carNotChargingCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
-static const uint32_t restartTimeLimit = 3900;
+static uint32_t restartTimeLimit = 3900;
 static uint32_t nrOfConnectsFailsBeforeReinit = 2;
 static uint32_t nrOfLTEReconnects = 0;
 
@@ -78,7 +78,7 @@ static void OneSecondTimer()
 	//ESP_LOGW(TAG,"OneSec?");
 	sessionHandler_Pulse();
 
-	if(mqttInitialized == true)
+	if(storage_Get_CommunicationMode() != eCONNECTION_NONE)
 	{
 		if(isMqttConnected() == false)
 		{
@@ -101,6 +101,17 @@ static void OneSecondTimer()
 					//vTaskDelay(pdMS_TO_TICKS(3000));
 					//start_cloud_listener_task(i2cGetLoadedDeviceInfo());
 				}
+			}
+
+			if(mqttInitialized == true)
+			{
+				/// If physical connection has been present, try restarting more frequently
+				restartTimeLimit = 3900;
+			}
+			else
+			{
+				/// If no physical connection, try restarting every 24 hours. Condition may occur on 4G network detach
+				restartTimeLimit = 86400;
 			}
 
 			if(mqttUnconnectedCounter % 10 == 0)
@@ -129,6 +140,7 @@ static void OneSecondTimer()
 			{
 				carDisconnectedCounter = 0;
 			}
+
 
 			/// Ensure that the offline situation has been consistent for x seconds
 			/// and a car disconnected for x seconds before saving to log and restarting
@@ -177,17 +189,6 @@ static void connectivity_task()
 
 	bool interfaceChange = false;
 	bool zntpIsRunning = false;
-
-	//Ensure that the MCU parameters are available before connecting or syncing with cloud,
-	//otherwise we may send uninitialized values
-	uint8_t mcuTimeout = 30;
-	while((MCU_IsReady() == false) && (mcuTimeout > 0))
-	{
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
-		mcuTimeout--;
-		ESP_LOGW(TAG, "Waiting for MCU: %d", mcuTimeout);
-	}
-	ESP_LOGI(TAG, "MCU is ready");
 
 
     //Create timer for sending pulses once mqtt is initialized

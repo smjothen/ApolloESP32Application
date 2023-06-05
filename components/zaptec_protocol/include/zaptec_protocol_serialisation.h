@@ -19,8 +19,8 @@
         Unknown = 0,
 
         OfflineMode = 1,
-                
-        ParamSerialNumber = 100,
+
+		Capabilities = 100,
                 
         ParamRunTest = 101,
         ParamTestResult = 102,
@@ -71,6 +71,8 @@
         ParamLedOverrideClear = 291,
 
 		RCDButtonTestState = 402,
+		RCDErrorCount = 403,
+		RCDTestState = 404,
 
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
@@ -119,6 +121,7 @@
 
         ParamSessionEnergyCountImportActiveInterpolated = 565,
 
+		ParamInstantPilotCurrent = 700,
         ParamChargeDuration = 701,
         ParamChargeMode = 702,
         ParamChargePilotLevelInstant = 703,
