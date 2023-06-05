@@ -21,6 +21,7 @@
 #include "mbedtls/sha256.h"
 
 #include "calibration.h"
+#include "calibration_util.h"
 
 static const char *TAG = "CALIBRATION    ";
 
@@ -305,6 +306,8 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 
 			ctx->Params.CalibrationId = cJSON_GetObjectItem(body, "CalibrationId")->valueint;
 			ESP_LOGI(TAG, "Got calibration ID %d!", ctx->Params.CalibrationId);
+
+			CALLOG(ctx, "- Calibration ID = %d", ctx->Params.CalibrationId);
 
 			cJSON_Delete(body);
 		}

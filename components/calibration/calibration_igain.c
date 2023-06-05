@@ -72,6 +72,8 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
                         ESP_LOGI(TAG, "%s: IGAIN(%d) = %f = (%f / %f)", calibration_state_to_string(ctx), phase, gain, ctx->Ref.I[phase], average);
 
+                        CALLOG(ctx, "- L%d = %.5f / %.5f = %.5f", phase + 1, ctx->Ref.I[phase], average, gain);
+
                         if (!emeter_write_float(I1_GAIN + phase, gain, 21)) {
                             ESP_LOGE(TAG, "%s: IGAIN(%d) write failed!", calibration_state_to_string(ctx), phase);
                             return false;
