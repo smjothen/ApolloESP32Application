@@ -15,11 +15,21 @@
  */
 
 /**
+ * @brief callback structure for StartTransaction.conf and StopTransaction.conf
+ */
+struct ocpp_transaction_start_stop_cb_data{
+	int transaction_entry; ///< Entry on file used for this transaction
+	ocpp_id_token id_tag; ///< idToken used to start or stop transaction if present
+};
+
+/**
  * @brief Sets callbacks for transaction related messages.
  *
- * @note although the callback signature is the same as for other OCPP messages, it may not be able to use the callback data.
- * This is due to the strict requirements for transaction messages that means that the messages may be stored on file and sent
- * after reboot. Instead the callback data may contain the entry nr of the transaction file.
+ * @note although the callback signature is the same as for other OCPP messages, the callback data can not
+ * be known before a response has been recieved as the messages may have been written to file and sent after
+ * a reboot has occured. The callback data will be populated with statically allocated data and should be
+ * treated as a \ref ocpp_transaction_start_stop_cb_data struct for start and stop messages and a const char array
+ * for meter values stored on file.
  *
  * @param start_transaction_result_cb callback function on StartTransaction.conf
  * @param start_transaction_error_cb callback function on failed StartTransaction.req
@@ -117,11 +127,19 @@ int ocpp_transaction_enqueue_stop(const char * id_tag, int meter_stop, time_t ti
 esp_err_t ocpp_transaction_set_real_id(int entry, int transaction_id);
 
 /**
- * @brief Updates the transaction state to indicate that a .conf or error response has been received.
+ * @brief loades the cb data for the currently active transaction call if relevant data exits.
  *
- * @param entry_out output parameter containing the transaction file entry number.
+ * @param cb_data_out output buffer to write cb data to.
+ *
+ * @return ESP_OK on success, ESP_ERR_INVALID_PARAM if cb_data_out is NULL, ESP_ERR_INVALID STATE if
+ * no transaction was loaded from file, ESP_ERR_NOT_FOUND if No relevant data found.
  */
-esp_err_t ocpp_transaction_confirm_last(int * entry_out);
+esp_err_t ocpp_transaction_load_cb_data(struct ocpp_transaction_start_stop_cb_data * cb_data_out);
+
+/**
+ * @brief Updates the transaction state to indicate that a .conf or error response has been received.
+ */
+esp_err_t ocpp_transaction_confirm_last();
 
 /**
  * @brief Get the information needed to continue an active transaction that was ongoing during last boot

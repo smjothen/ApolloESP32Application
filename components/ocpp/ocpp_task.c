@@ -473,22 +473,19 @@ BaseType_t handle_active_call_if_match(const char * unique_id, enum ocpp_message
 		return ret;
 	}
 
+	struct ocpp_transaction_start_stop_cb_data cb_data_buffer;
 	if(call.is_transaction_related){
 		// If transaction related. make sure that storage is up to date.
 		// NOTE: Should be done while locked by active_call_lock to prevent loaded transaction from being sent after received but before confirmed or failed message set.
+
 		if(message_type == eOCPPJ_MESSAGE_ID_RESULT){
-			int entry = -1;
-			if(ocpp_transaction_confirm_last(&entry) != ESP_OK){
-				ESP_LOGE(TAG, "Failed to confirm last. entry '%d' may be invalid", entry);
+			if(call.call->cb_data == NULL && ocpp_transaction_load_cb_data(&cb_data_buffer) == ESP_OK){
+				call.call->cb_data = &cb_data_buffer;
 			}
 
-			if(entry != -1){
-				if(call.call->cb_data != NULL){
-					ESP_LOGW(TAG, "Callback data for transaction message has data. Unable to inject file entry");
-				}else{
-					call.call->cb_data = &entry;
-				}
-			}
+			if(ocpp_transaction_confirm_last() != ESP_OK)
+				ESP_LOGE(TAG, "Failed to confirm last");
+
 		}else if(message_type == eOCPPJ_MESSAGE_ID_ERROR){
 			fail_active_call(&call, error_code, error_description, error_details);
 		}
@@ -531,6 +528,8 @@ void timeout_active_call(){
 // Used if the active call was sendt or attempted to be sendt to allow retrying transaction related messages. Returns true if needs retries.
 void fail_active_call(struct ocpp_active_call * call, const char * error_code, const char * error_description, cJSON * error_details){
 	if(call != NULL && call->call != NULL){
+		struct ocpp_transaction_start_stop_cb_data cb_data_buffer;
+
 		if(call->is_transaction_related){
 			ESP_LOGE(TAG, "Failing transaction related call");
 			if(call->retries < UINT_MAX)
@@ -549,8 +548,12 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 				}
 			}else{
 				ESP_LOGE(TAG, "Transaction retry attempts exceeded");
-				int entry;
-				ocpp_transaction_confirm_last(&entry);
+
+				if(call->call->cb_data == NULL && ocpp_transaction_load_cb_data(&cb_data_buffer) == ESP_OK){
+					call->call->cb_data = &cb_data_buffer;
+				}
+
+				ocpp_transaction_confirm_last();
 			}
 		}else{
 			ESP_LOGE(TAG, "Failing call");

@@ -441,6 +441,7 @@ int meter_start = 0;
 bool pending_change_availability = false;
 bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_STATUS_FINISHING and eOCPP_CP_STATUS_PREPARING
 bool ocpp_faulted = false; // Used to differentiate between faulted state and any other state with same features
+ocpp_id_token ocpp_start_token = {0}; // Charge session may be cleared after ocpp token has been presented and before StartTransaction has been created. Charge session should be updated with this
 enum ocpp_cp_status_id ocpp_faulted_exit_state = eOCPP_CP_STATUS_UNAVAILABLE; // ocpp only allows transitioning from faulted to pre-faulted state
 bool pending_change_availability_state;
 time_t preparing_started = 0;
@@ -628,78 +629,79 @@ void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
 static void start_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Received start transaction response");
 
-	int transaction_entry = -1;
-	if(cb_data == NULL){
-		ESP_LOGE(TAG, "No file entry given. Unable to determine if transaction is current");
-	}else{
-		transaction_entry = *(int *)cb_data;
-	}
-
 	bool is_current_transaction = false;
-	if(cJSON_HasObjectItem(payload, "transactionId")){
-		int received_id = cJSON_GetObjectItem(payload, "transactionId")->valueint;
-
-		ESP_LOGI(TAG, "transaction id is: %d, transaction entry is %d", (transaction_id == NULL) ? -1 : *transaction_id, transaction_entry);
-		if(transaction_id != NULL && *transaction_id == transaction_entry){
-			ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
-
-			*transaction_id = received_id;
-			transaction_id_is_valid = true;
-			is_current_transaction = true;
-			ocpp_set_active_transaction_id(transaction_id);
-		}
-
-		esp_err_t err = ocpp_transaction_set_real_id(transaction_entry, received_id);
-		if(err == ESP_OK){
-			ESP_LOGI(TAG, "Sat valid transaction_id for stored transaction");
-
-		}else if(err == ESP_ERR_NOT_FOUND){
-			ESP_LOGI(TAG, "No stored transaction for transaction_id");
-
-		}else{
-			ESP_LOGE(TAG, "Failed to set valid id for stored transaction");
-		}
-
-		// Only set the transaction id if cloud did not yet and response is related to active transaction
-		if(strstr(chargeSession_GetSessionId(), "-") == NULL && is_current_transaction){
-			//If session id is persisted from a previous session, then this might still be valid as ocpp will use the transaction id instead, but this should be changed.
-			char transaction_id_str[37]; // when not using ocpp directly, session id is UUID
-
-			snprintf(transaction_id_str, sizeof(transaction_id_str), "%d", *transaction_id);
-
-			chargeSession_SetSessionIdFromCloud(transaction_id_str);
-		}
-	}else{
-		ESP_LOGE(TAG, "Recieved start transaction response lacking 'transactionId'");
-	}
-
 	bool valid = false;
-	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+	struct ocpp_transaction_start_stop_cb_data * data = cb_data;
 
-		char error_str[64];
-		struct ocpp_id_tag_info id_tag_info = {0};
-		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, error_str, sizeof(error_str))
-			!= eOCPPJ_NO_ERROR){
-			ESP_LOGW(TAG, "Received idTagInfo in startTransaction.conf is invalid: %s", error_str);
+	char err_str[64];
 
-			valid = false;
+	if(data != NULL){
+		if(transaction_id != NULL){
+			ESP_LOGI(TAG, "transaction id is: %d, transaction entry is %d", *transaction_id, data->transaction_entry);
+
+			int received_id;
+			enum ocppj_err_t err = ocppj_get_int_field(payload, "transactionId", true, &received_id, err_str, sizeof(err_str));
+			if(err == eOCPPJ_NO_ERROR){
+				if(*transaction_id == data->transaction_entry){
+					ESP_LOGI(TAG, "Sat valid transaction_id for current transaction");
+
+					*transaction_id = received_id;
+					transaction_id_is_valid = true;
+					is_current_transaction = true;
+					ocpp_set_active_transaction_id(transaction_id);
+				}
+
+				if(ocpp_transaction_set_real_id(data->transaction_entry, received_id) == ESP_OK){
+					ESP_LOGI(TAG, "Sat valid transaction_id for stored transaction");
+				}else{
+					ESP_LOGE(TAG, "Failed to set valid id for stored transaction");
+				}
+
+				// Only set the session id if cloud did not yet and response is related to active transaction
+				if(strstr(chargeSession_GetSessionId(), "-") == NULL && is_current_transaction){
+					char transaction_id_str[37]; // when not using ocpp directly, session id is UUID
+
+					snprintf(transaction_id_str, sizeof(transaction_id_str), "%d", *transaction_id);
+					chargeSession_SetSessionIdFromCloud(transaction_id_str);
+				}
+			}else{
+				ESP_LOGE(TAG, "Set id for transaction: [%s] '%s'", ocppj_error_code_from_id(err), err_str);
+			}
+		}
+
+		if(cJSON_HasObjectItem(payload, "idTagInfo")){
+
+			struct ocpp_id_tag_info id_tag_info = {0};
+			if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, err_str, sizeof(err_str))
+				!= eOCPPJ_NO_ERROR){
+				ESP_LOGW(TAG, "Received idTagInfo in startTransaction.conf is invalid: %s", err_str);
+			}else{
+				if(data->id_tag[0] != '\0'){
+					ocpp_on_id_tag_info_recieved(data->id_tag, &id_tag_info);
+				}else{
+					ESP_LOGE(TAG, "StartTransaction callback data contains no idToken, but StartTransaction.conf contains idTagInfo");
+				}
+
+				enum ocpp_authorization_status_id status_id = ocpp_get_status_from_id_tag_info(&id_tag_info);
+				ESP_LOGI(TAG, "Central system returned status %s", ocpp_authorization_status_from_id(status_id));
+				valid = (status_id == eOCPP_AUTHORIZATION_STATUS_ACCEPTED);
+			}
+
+			if(id_tag_info.parent_id_tag != NULL){
+				ESP_LOGI(TAG, "Adding parent id to current charge session");
+				chargeSession_SetParentId(id_tag_info.parent_id_tag);
+			}
 		}else{
-			if(chargeSession_GetAuthenticationCode()[0] != '\0')
-				ocpp_on_id_tag_info_recieved(chargeSession_GetAuthenticationCode(), &id_tag_info);
-
-			enum ocpp_authorization_status_id status_id = ocpp_get_status_from_id_tag_info(&id_tag_info);
-			ESP_LOGI(TAG, "Central system returned status %s", ocpp_authorization_status_from_id(status_id));
-			valid = (status_id == eOCPP_AUTHORIZATION_STATUS_ACCEPTED);
+			ESP_LOGE(TAG, "Recieved start transaction response lacking 'idTagInfo'");
+			valid = false;
 		}
 
-		if(id_tag_info.parent_id_tag != NULL){
-			ESP_LOGI(TAG, "Adding parent id to current charge session");
-			chargeSession_SetParentId(id_tag_info.parent_id_tag);
-		}
-	}else{
-		ESP_LOGE(TAG, "Recieved start transaction response lacking 'idTagInfo'");
-		valid = false;
+		chargeSession_SetAuthenticationCode(data->id_tag);
+
+	}else if(data == NULL){
+		ESP_LOGE(TAG, "Callback data is missing for start transaction response");
 	}
+
 
 	if(!valid){
 
@@ -733,15 +735,16 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 static void stop_transaction_response_cb(const char * unique_id, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Stop transaction response success");
 
-	if(cJSON_HasObjectItem(payload, "idTagInfo")){
+	struct ocpp_transaction_start_stop_cb_data * data = cb_data;
+
+	if(data != NULL && data->id_tag[0] != '\0' && cJSON_HasObjectItem(payload, "idTagInfo")){
 		char err_str[64];
 		struct ocpp_id_tag_info id_tag_info;
 
 		if(id_tag_info_from_json(cJSON_GetObjectItem(payload, "idTagInfo"), &id_tag_info, err_str, sizeof(err_str)) != eOCPPJ_NO_ERROR){
 			ESP_LOGE(TAG, "Received idTagInfo in stop transaction is invalid: %s", err_str);
 		}else{
-			if(cb_data != NULL)
-				ocpp_on_id_tag_info_recieved((const char *)cb_data, &id_tag_info);
+			ocpp_on_id_tag_info_recieved(data->id_tag, &id_tag_info);
 		}
 	}
 }
@@ -751,20 +754,20 @@ bool pending_ocpp_authorize = false;
 static void start_transaction_error_cb(const char * unique_id, const char * error_code, const char * error_description, cJSON * error_details, void * cb_data){
 	ESP_LOGE(TAG, "Failed start trasnsaction request");
 
-	int transaction_entry = -1;
-	if(cb_data == NULL){
-		ESP_LOGE(TAG, "Missing cb_data for failed start transaction");
+	struct ocpp_transaction_start_stop_cb_data * data = cb_data;
+
+	if(data != NULL){
+		if(transaction_id != NULL && *transaction_id == data->transaction_entry){
+			ESP_LOGE(TAG, "Setting -1 as valid id for active transaction");
+			*transaction_id = -1;
+			transaction_id_is_valid = true;
+		}
 	}else{
-		transaction_entry = *(int *)cb_data;
+		ESP_LOGE(TAG, "Missing cb_data for failed start transaction");
 	}
 
-	if(transaction_id != NULL && *transaction_id == transaction_entry){
-		ESP_LOGE(TAG, "Setting -1 as valid id for active transaction");
-		*transaction_id = -1;
-		transaction_id_is_valid = true;
-	}
 
-	error_logger(unique_id, error_code, error_description, error_details, cb_data);
+	error_logger(unique_id, error_code, error_description, error_details, NULL);
 }
 
 static struct ocpp_meter_value_list * current_meter_values = NULL;
@@ -946,7 +949,7 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 
 	transaction_id_is_valid = false;
 
-	if(ocpp_transaction_enqueue_stop(chargeSession_Get().StoppedById ? chargeSession_Get().StoppedById : NULL,
+	if(ocpp_transaction_enqueue_stop(chargeSession_Get().StoppedByRFID ? chargeSession_Get().StoppedById : NULL,
 						meter_stop, timestamp, reason, current_meter_values) != 0){
 
 		ESP_LOGE(TAG, "Failed to enqueue stop transaction");
@@ -975,8 +978,12 @@ void start_transaction(){
 	}
 
 	if(chargeSession_Get().AuthenticationCode[0] == '\0'){
-		ESP_LOGW(TAG, "No id tag for charge session. Using default value");
-		chargeSession_SetAuthenticationCode(storage_Get_ocpp_default_id_token());
+		if(ocpp_start_token[0] != '\0'){
+			chargeSession_SetAuthenticationCode(ocpp_start_token);
+		}else{
+			ESP_LOGW(TAG, "No id tag for charge session. Using default value");
+			chargeSession_SetAuthenticationCode(storage_Get_ocpp_default_id_token());
+		}
 	}
 
 	transaction_id = malloc(sizeof(int));
@@ -1051,6 +1058,8 @@ void start_charging_on_tag_accept(const char * tag){
 		}else{
 			SetPendingRFIDTag(storage_Get_ocpp_default_id_token());
 		}
+
+		strncpy(ocpp_start_token, pendingAuthID, sizeof(ocpp_id_token));
 		SetAuthorized(true);
 	}
 }
@@ -1235,14 +1244,20 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 			return eOCPP_CP_STATUS_RESERVED;
 
 		}else if(isAuthorized || pending_ocpp_authorize){
-			return eOCPP_CP_STATUS_PREPARING;
+			if(ocpp_old_state == eOCPP_CP_STATUS_CHARGING
+				|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EV
+				|| ocpp_old_state == eOCPP_CP_STATUS_SUSPENDED_EVSE){
+
+				return eOCPP_CP_STATUS_FINISHING;
+			}else{
+				return eOCPP_CP_STATUS_PREPARING;
+			}
 
 		}else{
 			return eOCPP_CP_STATUS_AVAILABLE;
 		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING:
-		ESP_LOGE(TAG, "%d | %d", charge_mode, operating_mode);
 		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
 
@@ -3692,6 +3707,19 @@ void sessionHandler_StopAndResetChargeSession()
 	///First send STOP command
 	if(sessionResetMode == eSESSION_RESET_INITIATED)
 	{
+		if(GetFinalStopActiveStatus() == 1){
+			MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
+			if(ret == MsgCommandAck)
+			{
+				ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during stop and reset");
+				SetFinalStopActiveStatus(0);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during stop and reset");
+			}
+		}
+
 		SetTransitionOperatingModeState(CHARGE_OPERATION_STATE_PAUSED);
 		MessageType ret = MCU_SendCommandId(CommandStopCharging);
 		if(ret == MsgCommandAck)

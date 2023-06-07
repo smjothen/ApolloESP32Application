@@ -1404,6 +1404,39 @@ time_t ocpp_transaction_get_oldest_timestamp(){
 	return loaded_transaction_timestamp;
 }
 
+esp_err_t ocpp_transaction_load_cb_data(struct ocpp_transaction_start_stop_cb_data * cb_data_out){
+
+	if(cb_data_out == NULL){
+		ESP_LOGE(TAG, "No callback data to populate");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	if(loaded_transaction_data == NULL || loaded_transaction_entry == -1){
+		ESP_LOGW(TAG, "Callback data requested, but no loaded transaction exists, possibly meter value sent with queue.");
+		return ESP_ERR_INVALID_STATE;
+	}
+
+	cb_data_out->transaction_entry = loaded_transaction_entry;
+
+	if(loaded_transaction_type == eTRANSACTION_TYPE_METER){
+		return ESP_ERR_NOT_FOUND; // No callback data needed/exist for meter value
+
+	}else if(loaded_transaction_type == eTRANSACTION_TYPE_START){
+		struct start_transaction_data * start_data = (struct start_transaction_data *)loaded_transaction_data;
+		strcpy(cb_data_out->id_tag, start_data->id_tag);
+
+		return ESP_OK;
+
+	}else if(loaded_transaction_type == eTRANSACTION_TYPE_STOP){
+		struct stop_transaction_data * stop_data = (struct stop_transaction_data *)loaded_transaction_data;
+		strcpy(cb_data_out->id_tag, stop_data->id_tag);
+
+		return ESP_OK;
+	}
+
+	return ESP_FAIL;
+}
+
 cJSON * read_next_message(){
 
 	ESP_LOGI(TAG, "Attempting to read next transaction message");
@@ -1512,7 +1545,7 @@ cJSON * read_next_message(){
 }
 
 
-BaseType_t ocpp_transaction_get_next_message(struct ocpp_active_call * call){ // TODO: Update last_from_file
+BaseType_t ocpp_transaction_get_next_message(struct ocpp_active_call * call){
 	ESP_LOGI(TAG, "Getting next transaction message");
 
 	struct ocpp_call_with_cb * call_with_cb = NULL;
@@ -1586,7 +1619,7 @@ BaseType_t ocpp_transaction_get_next_message(struct ocpp_active_call * call){ //
 	return pdFALSE;
 }
 
-esp_err_t ocpp_transaction_confirm_last(int * entry_out){ // TODO require new count read
+esp_err_t ocpp_transaction_confirm_last(){
 	if(!last_from_file){
 		return ESP_OK;
 	}
@@ -1594,8 +1627,6 @@ esp_err_t ocpp_transaction_confirm_last(int * entry_out){ // TODO require new co
 	if(loaded_transaction_entry == -1){
 		ESP_LOGE(TAG, "No entry for loaded transaction that was confirmed");
 		return ESP_ERR_INVALID_STATE;
-	}else{
-		*entry_out = loaded_transaction_entry;
 	}
 
 	if(!filesystem_is_ready()){

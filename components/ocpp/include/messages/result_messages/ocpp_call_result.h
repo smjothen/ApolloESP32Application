@@ -88,13 +88,6 @@ cJSON * ocpp_create_reset_confirmation(const char * unique_id, const char * stat
  */
 cJSON * ocpp_create_unlock_connector_confirmation(const char * unique_id, const char * status);
 
-/**
- * @brief create a UpdateFirmware.conf
- *
- * @param unique_id id given in the matching .req
- */
-cJSON * ocpp_create_update_firmware_confirmation(const char * unique_id);
-
 //Firmware Management Profile
 /**
  * @brief create a GetDiagnostics.conf
