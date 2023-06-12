@@ -4,12 +4,16 @@
 
 cJSON * ocpp_create_get_configuration_confirmation(const char * unique_id, cJSON * configuration_key, size_t unknown_key_count, char ** unknown_key){
 
-	if(unknown_key_count > 0 && unknown_key == NULL)
+	if(unknown_key_count > 0 && unknown_key == NULL){
+		cJSON_Delete(configuration_key);
 		return NULL;
+	}
 
 	cJSON * payload = cJSON_CreateObject();
-	if(payload == NULL)
+	if(payload == NULL){
+		cJSON_Delete(configuration_key);
 		return NULL;
+	}
 
 	if(configuration_key != NULL)
 		cJSON_AddItemToObject(payload, "configurationKey", configuration_key);

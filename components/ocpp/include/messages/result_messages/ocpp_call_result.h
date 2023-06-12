@@ -49,6 +49,8 @@ cJSON * ocpp_create_data_transfer_confirmation(const char * unique_id, const cha
 /**
  * @brief create a GetConfiguration.conf
  *
+ * @note configuration_key will be freed / deleted on error.
+ *
  * @param unique_id id given in the matching .req
  * @param configuration_key "Optional. List of requested or known keys"
  * @param unknown_key_count length of unknown_key array

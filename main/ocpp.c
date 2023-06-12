@@ -847,56 +847,38 @@ static void restart_clock_aligned_meter_values(){
 	}
 }
 
-static int allocate_and_write_configuration_u8(uint8_t value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 4);
-	if(*value_out == NULL){
+static int write_configuration_u8(uint8_t value, char * value_out){
+	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 4, "%u", value);
+		snprintf(value_out, 4, "%u", value);
 		return 0;
 	}
 }
 
-static int allocate_and_write_configuration_u16(uint16_t value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 6);
-	if(*value_out == NULL){
+static int write_configuration_u16(uint16_t value, char * value_out){
+	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 8, "%u", value);
+		snprintf(value_out, 8, "%u", value);
 		return 0;
 	}
 }
 
-static int allocate_and_write_configuration_u32(uint32_t value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 11);
-	if(*value_out == NULL){
+static int write_configuration_u32(uint32_t value, char * value_out){
+	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(*value_out, 16, "%u", value);
+		snprintf(value_out, 16, "%u", value);
 		return 0;
 	}
 }
 
-int allocate_and_write_configuration_bool(bool value, char ** value_out){
-	*value_out = malloc(sizeof(char) * 6);
-	if(*value_out == NULL){
+static int write_configuration_bool(bool value, char * value_out){
+	if(value_out == NULL){
 		return -1;
 	}else{
-		strcpy(*value_out, value ? "true" : "false");
-		return 0;
-	}
-}
-
-static int allocate_and_write_configuration_str(const char * value, char ** value_out){
-	size_t length = strlen(value);
-	if(length > 500)
-		return -1;
-
-	*value_out = malloc((length + 1) * sizeof(char));
-	if(*value_out == NULL){
-		return -1;
-	}else{
-		strcpy(*value_out, value);
+		strcpy(value_out, value ? "true" : "false");
 		return 0;
 	}
 }
@@ -994,14 +976,16 @@ cJSON * create_key_value(const char * key, bool read_only, const char * value){
 	return key_value_json;
 }
 
+static char value_buffer[500];
 
 esp_err_t add_configuration_ocpp_allow_offline_tx_for_unknown_id(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_allow_offline_tx_for_unknown_id(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_allow_offline_tx_for_unknown_id(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1009,12 +993,13 @@ esp_err_t add_configuration_ocpp_allow_offline_tx_for_unknown_id(cJSON * key_lis
 }
 
 esp_err_t add_configuration_ocpp_authorization_cache_enabled(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_authorization_cache_enabled(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_authorization_cache_enabled(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1022,12 +1007,13 @@ esp_err_t add_configuration_ocpp_authorization_cache_enabled(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_authorize_remote_tx_requests(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_authorize_remote_tx_requests(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_authorize_remote_tx_requests(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1039,12 +1025,13 @@ esp_err_t add_configuration_ocpp_blink_repeat(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_clock_aligned_data_interval(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u32(storage_Get_ocpp_clock_aligned_data_interval(), &value) != 0)
+	if(write_configuration_u32(storage_Get_ocpp_clock_aligned_data_interval(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CLOCK_ALIGNED_DATA_INTERVAL);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1052,12 +1039,13 @@ esp_err_t add_configuration_ocpp_clock_aligned_data_interval(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_connection_timeout(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u32(storage_Get_ocpp_connection_timeout(), &value) != 0)
+	if(write_configuration_u32(storage_Get_ocpp_connection_timeout(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTION_TIMEOUT, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTION_TIMEOUT, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CONNECTION_TIMEOUT);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1065,7 +1053,6 @@ esp_err_t add_configuration_ocpp_connection_timeout(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
-	char * value;
 	char phase_rotation_str[CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH * 13 +1];
 
 	size_t offset = 0;
@@ -1077,11 +1064,10 @@ esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
 		sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
 	}
 
-	if(allocate_and_write_configuration_str(phase_rotation_str, &value) != 0)
-		return ESP_FAIL;
-
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION, false, phase_rotation_str);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1089,12 +1075,13 @@ esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_connector_phase_rotation_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1102,12 +1089,13 @@ esp_err_t add_configuration_ocpp_connector_phase_rotation_max_length(cJSON * key
 }
 
 esp_err_t add_configuration_ocpp_get_configuration_max_keys(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_GET_CONFIGURATION_MAX_KEYS, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_GET_CONFIGURATION_MAX_KEYS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1115,12 +1103,13 @@ esp_err_t add_configuration_ocpp_get_configuration_max_keys(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_heartbeat_interval(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u32(storage_Get_ocpp_heartbeat_interval(), &value) != 0)
+	if(write_configuration_u32(storage_Get_ocpp_heartbeat_interval(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1128,14 +1117,15 @@ esp_err_t add_configuration_ocpp_heartbeat_interval(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_light_intensity(cJSON * key_list){
-	char * value;
 	uint8_t intensity_percentage = (uint8_t)floor(storage_Get_HmiBrightness() * 100);
 
-	if(allocate_and_write_configuration_u8(intensity_percentage, &value) != 0)
+	if(write_configuration_u8(intensity_percentage, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LIGHT_INTENSITY, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LIGHT_INTENSITY, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_LIGHT_INTENSITY);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1143,12 +1133,13 @@ esp_err_t add_configuration_ocpp_light_intensity(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_local_authorize_offline(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_authorize_offline(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_local_authorize_offline(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_LOCAL_AUTHORIZE_OFFLINE);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1156,12 +1147,13 @@ esp_err_t add_configuration_ocpp_local_authorize_offline(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_local_pre_authorize(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_pre_authorize(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_local_pre_authorize(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_LOCAL_PRE_AUTHORIZE);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1173,12 +1165,13 @@ esp_err_t add_configuration_ocpp_max_energy_on_invalid_id(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_message_timeout(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u16(storage_Get_ocpp_message_timeout(), &value) != 0)
+	if(write_configuration_u16(storage_Get_ocpp_message_timeout(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MESSAGE_TIMEOUT, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MESSAGE_TIMEOUT, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_MESSAGE_TIMEOUT);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1186,12 +1179,13 @@ esp_err_t add_configuration_ocpp_message_timeout(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_meter_values_aligned_data(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(storage_Get_ocpp_meter_values_aligned_data(), &value) != 0)
+	if(strlen(storage_Get_ocpp_meter_values_aligned_data()) > 500)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA, false, storage_Get_ocpp_meter_values_aligned_data());
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1199,12 +1193,13 @@ esp_err_t add_configuration_ocpp_meter_values_aligned_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_meter_values_aligned_data_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_METER_VALUES_ALIGNED_DATA_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1212,12 +1207,13 @@ esp_err_t add_configuration_ocpp_meter_values_aligned_data_max_length(cJSON * ke
 }
 
 esp_err_t add_configuration_ocpp_meter_values_sampled_data(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(storage_Get_ocpp_meter_values_sampled_data(), &value) != 0)
+	if(strlen(storage_Get_ocpp_meter_values_sampled_data()) > 500)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA, false, storage_Get_ocpp_meter_values_sampled_data());
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1225,12 +1221,13 @@ esp_err_t add_configuration_ocpp_meter_values_sampled_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_meter_values_sampled_data_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1238,12 +1235,13 @@ esp_err_t add_configuration_ocpp_meter_values_sampled_data_max_length(cJSON * ke
 }
 
 esp_err_t add_configuration_ocpp_meter_value_sample_interval(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u32(storage_Get_ocpp_meter_value_sample_interval(), &value) != 0)
+	if(write_configuration_u32(storage_Get_ocpp_meter_value_sample_interval(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1251,12 +1249,13 @@ esp_err_t add_configuration_ocpp_meter_value_sample_interval(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_minimum_status_duration(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u32(storage_Get_ocpp_minimum_status_duration(), &value) != 0)
+	if(write_configuration_u32(storage_Get_ocpp_minimum_status_duration(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1264,12 +1263,13 @@ esp_err_t add_configuration_ocpp_minimum_status_duration(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_number_of_connectors(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_NUMBER_OF_CONNECTORS, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_NUMBER_OF_CONNECTORS, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_NUMBER_OF_CONNECTORS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1277,12 +1277,13 @@ esp_err_t add_configuration_ocpp_number_of_connectors(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_reset_retries(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(storage_Get_ocpp_reset_retries(), &value) != 0)
+	if(write_configuration_u8(storage_Get_ocpp_reset_retries(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESET_RETRIES, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESET_RETRIES, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_RESET_RETRIES);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1290,12 +1291,13 @@ esp_err_t add_configuration_ocpp_reset_retries(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_transaction_max_meter_values(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u16(CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES, &value) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_MAX_METER_VALUES, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_MAX_METER_VALUES, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TRANSACTION_MAX_METER_VALUES);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1303,12 +1305,13 @@ esp_err_t add_configuration_ocpp_stop_transaction_max_meter_values(cJSON * key_l
 }
 
 esp_err_t add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_stop_transaction_on_ev_side_disconnect(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1316,12 +1319,13 @@ esp_err_t add_configuration_ocpp_stop_transaction_on_ev_side_disconnect(cJSON * 
 }
 
 esp_err_t add_configuration_ocpp_stop_transaction_on_invalid_id(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_transaction_on_invalid_id(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_stop_transaction_on_invalid_id(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_INVALID_ID);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1329,12 +1333,13 @@ esp_err_t add_configuration_ocpp_stop_transaction_on_invalid_id(cJSON * key_list
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_aligned_data(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(storage_Get_ocpp_stop_txn_aligned_data(), &value) != 0)
+	if(strlen(storage_Get_ocpp_stop_txn_aligned_data()) > 500)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA, false, storage_Get_ocpp_stop_txn_aligned_data());
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1342,12 +1347,13 @@ esp_err_t add_configuration_ocpp_stop_txn_aligned_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, &value) != 0)
+	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1355,12 +1361,13 @@ esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_li
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_stop_txn_sampled_data(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_stop_txn_sampled_data(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1368,12 +1375,13 @@ esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_sampled_data_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, &value) != 0)
+	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1381,12 +1389,11 @@ esp_err_t add_configuration_ocpp_stop_txn_sampled_data_max_length(cJSON * key_li
 }
 
 esp_err_t add_configuration_ocpp_supported_feature_profiles(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES, &value) != 0)
-		return ESP_FAIL;
-
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES, true,
+							CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1394,12 +1401,13 @@ esp_err_t add_configuration_ocpp_supported_feature_profiles(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_supported_feature_profiles_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SUPPORTED_FEATURE_PROFILES_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1407,12 +1415,13 @@ esp_err_t add_configuration_ocpp_supported_feature_profiles_max_length(cJSON * k
 }
 
 esp_err_t add_configuration_ocpp_transaction_message_attempts(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(storage_Get_ocpp_transaction_message_attempts(), &value) != 0)
+	if(write_configuration_u8(storage_Get_ocpp_transaction_message_attempts(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1420,12 +1429,13 @@ esp_err_t add_configuration_ocpp_transaction_message_attempts(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_transaction_message_retry_interval(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u16(storage_Get_ocpp_transaction_message_retry_interval(), &value) != 0)
+	if(write_configuration_u16(storage_Get_ocpp_transaction_message_retry_interval(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1433,12 +1443,13 @@ esp_err_t add_configuration_ocpp_transaction_message_retry_interval(cJSON * key_
 }
 
 esp_err_t add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_unlock_connector_on_ev_side_disconnect(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_UNLOCK_CONNECTOR_ON_EV_SIDE_DISCONNECT);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1450,12 +1461,11 @@ esp_err_t add_configuration_ocpp_websocket_ping_interval(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_supported_file_transfer_protocols(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(CONFIG_OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS, &value) != 0)
-		return ESP_FAIL;
-
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FILE_TRANSFER_PROTOCOLS, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SUPPORTED_FILE_TRANSFER_PROTOCOLS, true,
+							CONFIG_OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SUPPORTED_FILE_TRANSFER_PROTOCOLS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1463,12 +1473,13 @@ esp_err_t add_configuration_ocpp_supported_file_transfer_protocols(cJSON * key_l
 }
 
 esp_err_t add_configuration_ocpp_local_auth_list_enabled(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_bool(storage_Get_ocpp_local_auth_list_enabled(), &value) != 0)
+	if(write_configuration_bool(storage_Get_ocpp_local_auth_list_enabled(), value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED, false, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1476,12 +1487,13 @@ esp_err_t add_configuration_ocpp_local_auth_list_enabled(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_local_auth_list_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u16(CONFIG_OCPP_LOCAL_AUTH_LIST_MAX_LENGTH, &value) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_LOCAL_AUTH_LIST_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1489,12 +1501,13 @@ esp_err_t add_configuration_ocpp_local_auth_list_max_length(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_send_local_list_max_length(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_SEND_LOCAL_LIST_MAX_LENGTH, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_SEND_LOCAL_LIST_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SEND_LOCAL_LIST_MAX_LENGTH);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1503,12 +1516,13 @@ esp_err_t add_configuration_ocpp_send_local_list_max_length(cJSON * key_list){
 
 esp_err_t add_configuration_ocpp_reserve_connector_zero_supported(cJSON * key_list){
 #ifdef CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED
-	char * value;
-	if(allocate_and_write_configuration_bool(CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED, &value) != 0)
+	if(write_configuration_bool(CONFIG_OCPP_RESERVE_CONNECTOR_ZERO_SUPPORTED, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESERVE_CONNECTOR_ZERO_SUPPORTED, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_RESERVE_CONNECTOR_ZERO_SUPPORTED, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_RESERVE_CONNECTOR_ZERO_SUPPORTED);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1519,12 +1533,13 @@ esp_err_t add_configuration_ocpp_reserve_connector_zero_supported(cJSON * key_li
 }
 
 esp_err_t add_configuration_ocpp_charge_profile_max_stack_level(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_CHARGE_PROFILE_MAX_STACK_LEVEL, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGE_PROFILE_MAX_STACK_LEVEL, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGE_PROFILE_MAX_STACK_LEVEL, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CHARGE_PROFILE_MAX_STACK_LEVEL);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1532,12 +1547,11 @@ esp_err_t add_configuration_ocpp_charge_profile_max_stack_level(cJSON * key_list
 }
 
 esp_err_t add_configuration_ocpp_charging_schedule_allowed_charging_rate_unit(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, &value) != 0)
-		return ESP_FAIL;
-
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT, true,
+							CONFIG_OCPP_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CHARGING_SCHEDULE_ALLOWED_CHARGING_RATE_UNIT);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1545,12 +1559,13 @@ esp_err_t add_configuration_ocpp_charging_schedule_allowed_charging_rate_unit(cJ
 }
 
 esp_err_t add_configuration_ocpp_charging_schedule_max_periods(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_CHARGING_SCHEDULE_MAX_PERIODS, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1559,12 +1574,13 @@ esp_err_t add_configuration_ocpp_charging_schedule_max_periods(cJSON * key_list)
 
 esp_err_t add_configuration_ocpp_connector_switch_3_to_1_phase_supported(cJSON * key_list){
 #ifdef CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
-	char * value;
-	if(allocate_and_write_configuration_bool(CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, &value) != 0)
+	if(write_configuration_bool(CONFIG_OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1575,12 +1591,13 @@ esp_err_t add_configuration_ocpp_connector_switch_3_to_1_phase_supported(cJSON *
 }
 
 esp_err_t add_configuration_ocpp_max_charging_profiles_installed(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_u8(CONFIG_OCPP_MAX_CHARGING_PROFILES_INSTALLED, &value) != 0)
+	if(write_configuration_u8(CONFIG_OCPP_MAX_CHARGING_PROFILES_INSTALLED, value_buffer) != 0)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED, true, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED, true, value_buffer);
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1591,12 +1608,13 @@ esp_err_t add_configuration_ocpp_max_charging_profiles_installed(cJSON * key_lis
 // Non-standard configuration keys
 
 esp_err_t add_configuration_ocpp_default_id_token(cJSON * key_list){
-	char * value;
-	if(allocate_and_write_configuration_str(storage_Get_ocpp_default_id_token(), &value) != 0)
+	if(strlen(storage_Get_ocpp_default_id_token()) > 500)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN, false, value);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN, false, storage_Get_ocpp_default_id_token());
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN);
+		cJSON_Delete(key_value_json);
 		return ESP_FAIL;
 	}else{
 		return ESP_OK;
@@ -1807,7 +1825,6 @@ void get_all_ocpp_configurations(cJSON * configuration_out){
 
 static void get_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Got request for get configuration");
-
 	char err_str[128];
 	enum ocppj_err_t err = eOCPPJ_NO_ERROR;
 
@@ -1879,7 +1896,6 @@ static void get_configuration_cb(const char * unique_id, const char * action, cJ
 	}
 
 	cJSON * response = ocpp_create_get_configuration_confirmation(unique_id, configuration_key, unknown_key_index, unknown_key);
-
 	for(size_t i = 0; i < unknown_key_index; i++){
 		free(unknown_key[i]);
 	}
