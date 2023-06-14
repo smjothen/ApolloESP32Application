@@ -544,6 +544,7 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 
 			memcpy(&entry->value, &periods[i], sizeof(struct ocpp_charging_schedule_period));
 		}
+		free(periods);
 	}
 
 	fclose(fp);
@@ -1327,21 +1328,31 @@ int compute_range(time_t start, int offset, time_t end, int * transaction_id,
 		time_t active_from = get_when_schedule_is_active(start, offset, current_profile, transaction_id);
 
 		if(active_from != start + offset){ // If current profile is inactive
+			bool should_remove;
 			if(active_from < end // If it will be active later in the range
 				&& (index == 0 || active_from < range_stack[(index -1) * 2])){ // And is not superseeded by another profile active at the same time.
 
 				// save the profile with active_from and end, where end is when a higher priority profile will be active or range is complete.
 				profile_stack[index] = current_profile;
+				should_remove = false;
+
 				range_stack[index * 2] = active_from;
 				range_stack[(index * 2) +1] = end;
 
 				end = active_from;
 
 				index++;
+			}else{
+				should_remove = true;
 			}
+
+			struct ocpp_charging_profile * tmp_profile = current_profile;
 
 			// Set current profile lower priority profile.
 			current_profile = next_profile(current_profile);
+
+			if(should_remove)
+				ocpp_free_charging_profile(tmp_profile);
 
 		}else{ // If current profile is active
 
