@@ -104,6 +104,11 @@ static time_t get_txn_enqueue_timestamp(){
 BaseType_t ocpp_transaction_queue_send(struct ocpp_call_with_cb ** message, TickType_t wait){
 	ESP_LOGW(TAG, "Enqueued transaction message. Expecting meter values and will not be stored on file");
 
+	if (!filesystem_is_ready()) {
+		ESP_LOGE(TAG, "Filesystem not ready to enqueue message to queue");
+		return -1;
+	}
+
 	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
 	{
 		ESP_LOGE(TAG, "Unable to take lock to add to transaction queue");
@@ -1917,7 +1922,6 @@ int ocpp_transaction_enqueue_meter_value(unsigned int connector_id, const int * 
 
 	// We create request to validate that the data is valid
 	cJSON * request = ocpp_create_meter_values_request(connector_id, transaction_id, meter_values);
-
 	if(request == NULL){
 		ESP_LOGE(TAG, "Unable to create transaction related meter value request");
 		return -1;
@@ -2084,16 +2088,16 @@ int ocpp_transaction_init(){
 		return -1;
 	}
 
+	file_lock = xSemaphoreCreateMutex();
+	if(file_lock == NULL){
+		ESP_LOGE(TAG, "Unable to create file lock");
+		goto error;
+	}
+
 	ocpp_transaction_call_queue = xQueueCreate(CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE, sizeof(struct ocpp_call_with_cb *));
 	if(ocpp_transaction_call_queue == NULL){
 		ESP_LOGE(TAG, "Unable to create transaction call queue");
 		return -1;
-	}
-
-       	file_lock = xSemaphoreCreateMutex();
-	if(file_lock == NULL){
-		ESP_LOGE(TAG, "Unable to create file lock");
-		goto error;
 	}
 
 	if(stat(DIRECTORY_PATH, &st) != 0){
