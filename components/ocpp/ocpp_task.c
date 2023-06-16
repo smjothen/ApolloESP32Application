@@ -7,6 +7,10 @@
 #include "esp_event.h"
 #include "esp_log.h"
 
+#ifdef CONFIG_OCPP_TRACE_MEMORY
+#include "esp_heap_trace.h"
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -147,11 +151,26 @@ uint8_t get_blocked_enqueue_mask(){
 	return enqueue_blocking_mask;
 }
 
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+static char * request_trace = NULL;
+bool request_trace_match = false;
+#endif
+
 int enqueue_call_generic(cJSON * call, ocpp_result_callback result_cb, ocpp_error_callback error_cb, void * cb_data, enum call_type type, TickType_t wait, bool is_trigger){
 	if(call == NULL){
 		ESP_LOGE(TAG, "Invalid call: NULL");
 		return -1;
 	}
+
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+	if(request_trace == NULL){
+		request_trace = ocppj_get_unique_id_from_call(call);
+		if(request_trace != NULL){
+			ESP_LOGE(TAG, "Tracing: %s", request_trace);
+			heap_trace_start(HEAP_TRACE_LEAKS);
+		}
+	}
+#endif /* CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND */
 
 	if(enqueue_blocking_mask & type){
 		ESP_LOGW(TAG, "Enqueue is blocked by mask");
@@ -450,6 +469,10 @@ int check_send_legality(const char * action, bool is_trigger_message){
 BaseType_t handle_active_call_if_match(const char * unique_id, enum ocpp_message_type_id message_type, cJSON * payload, char * error_code, char * error_description, cJSON * error_details, uint timeout_ms){
 
 	struct ocpp_active_call call = {0};
+
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+	request_trace_match = false;
+#endif
 	xSemaphoreTake(ocpp_active_call_lock_1, portMAX_DELAY);
 
 	BaseType_t ret = xQueuePeek(ocpp_active_call_queue, &call, timeout_ms);
@@ -462,6 +485,13 @@ BaseType_t handle_active_call_if_match(const char * unique_id, enum ocpp_message
 			}else{
 				//Call matches, remove it from the queue
 				xQueueReset(ocpp_active_call_queue); // Use reset as it cannot fail and recieve would not give more info
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+				 // Checking pointer and not strcmp as cJSON should return same pointer and if it times out the pointer could be invalid
+				if(request_trace != NULL && active_id == request_trace){
+					request_trace_match = true;
+					request_trace = NULL;
+				}
+#endif /* CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND */
 			}
 		}else{
 			ret = pdFALSE;
@@ -505,7 +535,6 @@ BaseType_t handle_active_call_if_match(const char * unique_id, enum ocpp_message
 	}else if(message_type == eOCPPJ_MESSAGE_ID_ERROR && call.is_transaction_related == false){
 		fail_active_call(&call, error_code, error_description, error_details);
 	}
-
 	return ret;
 }
 

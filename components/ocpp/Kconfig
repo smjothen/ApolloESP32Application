@@ -173,4 +173,29 @@ config OCPP_MAX_CHARGING_PROFILES_INSTALLED # 9.4.5
 
 endmenu
 
+menu "Debug"
+
+config OCPP_TRACE_MEMORY
+       bool "Enable memory tracing for component"
+       depends on HEAP_TRACING
+       default n
+
+choice OCPP_TRACE_MEMORY_FOR
+       bool "Trace type"
+       depends on OCPP_TRACE_MEMORY
+       default OCPP_TRACE_MEMORY_FOR_REQ_CB
+
+       config OCPP_TRACE_MEMORY_FOR_REQ_CB
+       	      bool "Enable memory leak info for .req callbacks"
+       	      help
+	       Calls heap_trace_start before the callback is called for each .req message sent and calls
+	       heap_trace_stop and heap_trace_dump after the callback returns.
+
+       config OCPP_TRACE_MEMORY_FOR_REQ_SEND
+       	      bool "Enable memory leak info for .req sending"
+       	      help
+	       Calls heap_trace_start when message is enqueued and calls heap_trace_stop and heap_trace_dump
+	       after related .conf has been handled.
+endchoice
+endmenu
 endmenu

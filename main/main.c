@@ -11,6 +11,10 @@
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
 
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+#include "esp_heap_trace.h"
+#endif
+
 #include "main.h"
 #include "esp_websocket_client.h"
 #include "protocol_task.h"
@@ -416,6 +420,10 @@ void log_efuse_info()
 	ESP_LOGI(TAG_MAIN, "");
 }
 
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+#define TRACE_RECORD_COUNT 80
+static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
+#endif
 
 void app_main(void)
 {
@@ -438,6 +446,14 @@ void app_main(void)
 	//Logging enabled
 #endif
 
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+	ESP_LOGE(TAG_MAIN, "MEMORY LEAK DETECTION ENABLED");
+	ESP_LOGE(TAG_MAIN, "Max records: %d, Max depth: %d, record size: %u", TRACE_RECORD_COUNT, CONFIG_HEAP_TRACING_STACK_DEPTH, sizeof(trace_records));
+
+	if(heap_trace_init_standalone(trace_records, TRACE_RECORD_COUNT) != ESP_OK){
+		ESP_LOGE(TAG_MAIN, "Unable to start heap trace for memory leak detection");
+	}
+#endif
 	//First check hardware revision in order to configure io accordingly
 	adc_init();
 

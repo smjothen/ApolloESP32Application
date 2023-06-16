@@ -3,6 +3,10 @@
 
 #include "esp_log.h"
 
+#ifdef CONFIG_OCPP_TRACE_MEMORY
+#include "esp_heap_trace.h"
+#endif
+
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "ocpp_call_with_cb.h"
@@ -168,7 +172,19 @@ int call_handler(esp_websocket_client_handle_t client, const char * unique_id, c
 	}
 
 	if(action_id != -1 && callbacks[action_id].cb != NULL){
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_CB
+		heap_trace_start(HEAP_TRACE_LEAKS);
+#endif
+
 		callbacks[action_id].cb(unique_id, action, payload, callbacks[action_id].cb_data);
+
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_CB
+		heap_trace_stop();
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+		heap_trace_dump();
+#endif /* CONFIG_HEAP_TRACING_STANDALONE */
+#endif /* CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_CB */
+
 		return 0;
 	}
 	else{
@@ -182,6 +198,10 @@ int call_handler(esp_websocket_client_handle_t client, const char * unique_id, c
 		return -1;
 	}
 }
+
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+extern bool request_trace_match;
+#endif
 
 void text_frame_handler(esp_websocket_client_handle_t client, const char * data){
 	cJSON * ocpp_request = cJSON_Parse(data);
@@ -222,6 +242,16 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 	}
 
 	cJSON_Delete(ocpp_request);
+
+#ifdef CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND
+	if(request_trace_match){
+		ESP_LOGE(TAG, "Ending trace");
+		heap_trace_stop();
+		heap_trace_dump();
+
+		request_trace_match = false;
+	}
+#endif /* CONFIG_OCPP_TRACE_MEMORY_FOR_REQ_SEND */
 }
 
 cJSON * ocpp_listener_get_diagnostics(){
