@@ -236,11 +236,13 @@ struct DeviceInfo i2cReadDeviceInfoFromEEPROM()
 	// from the production test. If upgraded ota without this they will go into production test mode!
 	if(deviceInfo.EEPROMFormatVersion == GetEEPROMFormatVersion())
 	{
+		/*
 		int serial = atoi(deviceInfo.serialNumber + 3);
 		if (serial < 50)
 		{
 			deviceInfo.factory_stage = FactoryStageFinnished;
 		}
+		*/
 	}
 	deviceInfoLoaded = true;
 
