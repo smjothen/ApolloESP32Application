@@ -8,7 +8,7 @@ static const char * TAG = "OCPP CALLBACK  ";
 
 void free_call_with_cb(struct ocpp_call_with_cb * call){
 	if(call != NULL){
-		free(call->call_message);
+		cJSON_Delete(call->call_message);
 		free(call);
 	}
 }

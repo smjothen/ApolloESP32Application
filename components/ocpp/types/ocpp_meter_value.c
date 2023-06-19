@@ -177,7 +177,7 @@ void ocpp_meter_list_delete(struct ocpp_meter_value_list * list){
 
 		free(list->value);
 		list->value = NULL;
-
+		free(list);
 		list = next;
 	}
 }
