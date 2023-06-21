@@ -2876,7 +2876,7 @@ TimerHandle_t firmware_update_handle = NULL;
 int defer_update(time_t when){
 	time_t now = time(NULL);
 	if(when > now){
-		int update_delay = when - now;
+		ulong update_delay = when - now;
 		firmware_update_handle = xTimerCreate("Ocpp firmware update",
 						pdMS_TO_TICKS(update_delay * 1000),
 						pdFALSE, NULL, ocpp_prepare_firmware_update);
@@ -2885,13 +2885,14 @@ int defer_update(time_t when){
 			ESP_LOGE(TAG, "Unable to activate new firmware update timer");
 			return -1;
 		}else{
-			int days = update_delay / 24*60*60;
-			update_delay %= 24*60*60;
-			int hours = update_delay / 60*60;
-			update_delay %= 60*60;
-			int minutes = update_delay / 60;
-			update_delay %= 60;
-			ESP_LOGI(TAG, "Update will start in %d days %d hours %d minutes and %d seconds",  days, hours, minutes, update_delay);
+			ulong rest = update_delay;
+			uint days = rest / (24*60*60);
+			rest %= 24*60*60;
+			uint hours = rest / (60*60);
+			rest %= 60*60;
+			uint minutes = rest / 60;
+			rest %= 60;
+			ESP_LOGI(TAG, "Update will start in %u days %u hours %u minutes and %lu seconds (sec total %ld)",  days, hours, minutes, rest, update_delay);
 		}
 	}else{
 		ocpp_prepare_firmware_update();
@@ -2901,7 +2902,7 @@ int defer_update(time_t when){
 }
 
 struct update_request{
-	char location[1024];
+	char location[2048];
 	int retries;
 	time_t retrieve_date;
 	int retry_interval;
@@ -2997,6 +2998,30 @@ static void update_firmware_cb(const char * unique_id, const char * action, cJSO
 		goto error;
 	}
 
+	char supported_protocols[32];
+	strncpy(supported_protocols, CONFIG_OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS, sizeof(supported_protocols));
+
+	char * scheme = strtok(supported_protocols, ",");
+	bool scheme_supported = false;
+	while(scheme != NULL){
+		uint scheme_length = strlen(scheme);
+		if(strncasecmp(location, scheme, scheme_length) == 0){
+			if(location[scheme_length] == ':'){
+				scheme_supported = true;
+				break;
+			}
+		}
+		scheme = strtok(NULL, ",");
+	}
+
+	if(!scheme_supported){
+		ESP_LOGW(TAG, "Unsupported scheme in location: %s", location);
+		snprintf(err_str, sizeof(err_str), "'location' to contain supported scheme: %s", CONFIG_OCPP_SUPPORTED_FILE_TRANSFER_PROTOCOLS);
+		err = eOCPPJ_ERROR_NOT_SUPPORTED;
+
+		goto error;
+	}
+
 	//TODO: add aditional verification of location
 	strcpy(update_info.location, location);
 
@@ -3068,7 +3093,7 @@ static void update_firmware_cb(const char * unique_id, const char * action, cJSO
 	return;
 
 error:
-	if(err == eOCPPJ_NO_ERROR || eOCPPJ_NO_VALUE){
+	if(err == eOCPPJ_NO_ERROR || err == eOCPPJ_NO_VALUE){
 		ESP_LOGE(TAG, "Update firmware callback exit error without id");
 
 		err = eOCPPJ_ERROR_INTERNAL;
