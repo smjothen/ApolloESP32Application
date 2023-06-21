@@ -1427,58 +1427,61 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 #endif
 	enum ocpp_cp_status_id state = get_ocpp_state();
 
+	if(storage_Get_AuthenticationRequired()){
+		switch(state){
+		case eOCPP_CP_STATUS_AVAILABLE:
+			ESP_LOGI(TAG, "Available, accepting reservation request");
 
-	switch(state){
-	case eOCPP_CP_STATUS_AVAILABLE:
-		ESP_LOGI(TAG, "Available, accepting reservation request");
+			if(reservation_info == NULL)
+				reservation_info = malloc(sizeof(struct ocpp_reservation_info));
 
-		if(reservation_info == NULL)
-			reservation_info = malloc(sizeof(struct ocpp_reservation_info));
+			if(reservation_info == NULL){
+				ESP_LOGE(TAG, "Unable to allocate space for reservation id");
+				reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to allocate memory for reservation", NULL);
 
-		if(reservation_info == NULL){
-			ESP_LOGE(TAG, "Unable to allocate space for reservation id");
-			reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to allocate memory for reservation", NULL);
-
-		}else{
-			reservation_info->connector_id = connector_id;
-			reservation_info->expiry_date = expiry_date;
-			strcpy(reservation_info->id_tag, id_tag);
-			if(id_parent != NULL){
-				strcpy(reservation_info->parent_id_tag, id_parent);
 			}else{
-				reservation_info->parent_id_tag[0] = '\0';
+				reservation_info->connector_id = connector_id;
+				reservation_info->expiry_date = expiry_date;
+				strcpy(reservation_info->id_tag, id_tag);
+				if(id_parent != NULL){
+					strcpy(reservation_info->parent_id_tag, id_parent);
+				}else{
+					reservation_info->parent_id_tag[0] = '\0';
+				}
+				reservation_info->reservation_id = reservation_id;
+				reservation_info->is_reservation_state = true;
+
+				ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %ld seconds", connector_id, id_tag, expiry_date - time(NULL));
+				reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
 			}
-			reservation_info->reservation_id = reservation_id;
-			reservation_info->is_reservation_state = true;
+			break;
 
-			ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %ld seconds", connector_id, id_tag, expiry_date - time(NULL));
-			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
+		case eOCPP_CP_STATUS_PREPARING:
+		case eOCPP_CP_STATUS_CHARGING:
+		case eOCPP_CP_STATUS_SUSPENDED_EV:
+		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		case eOCPP_CP_STATUS_FINISHING:
+		case eOCPP_CP_STATUS_RESERVED:
+			ESP_LOGI(TAG, "Occupied, denied reservation request");
+			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_OCCUPIED);
+			break;
+
+		case eOCPP_CP_STATUS_UNAVAILABLE:
+			ESP_LOGI(TAG, "Unavailable, denied reservation request");
+			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_UNAVAILABLE);
+			break;
+
+		case eOCPP_CP_STATUS_FAULTED:
+			ESP_LOGI(TAG, "Faulted, denied reservation request");
+			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_FAULTED);
+			break;
+
+		default:
+			ESP_LOGE(TAG, "Unhandled state during reservation");
+			return;
 		}
-		break;
-
-	case eOCPP_CP_STATUS_PREPARING:
-	case eOCPP_CP_STATUS_CHARGING:
-	case eOCPP_CP_STATUS_SUSPENDED_EV:
-	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
-	case eOCPP_CP_STATUS_FINISHING:
-	case eOCPP_CP_STATUS_RESERVED:
-		ESP_LOGI(TAG, "Occupied, denied reservation request");
-		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_OCCUPIED);
-		break;
-
-	case eOCPP_CP_STATUS_UNAVAILABLE:
-		ESP_LOGI(TAG, "Unavailable, denied reservation request");
-		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_UNAVAILABLE);
-		break;
-
-	case eOCPP_CP_STATUS_FAULTED:
-		ESP_LOGI(TAG, "Faulted, denied reservation request");
-		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_FAULTED);
-		break;
-
-	default:
-		ESP_LOGE(TAG, "Unhandled state during reservation");
-		return;
+	}else{
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
 	}
 
 	send_call_reply(reply);
@@ -2071,6 +2074,11 @@ static void handle_reserved(){
 
 	}else if(time(NULL) > reservation_info->expiry_date){
 		ESP_LOGW(TAG, "Canceling reservation due to expiration");
+		free(reservation_info);
+		reservation_info = NULL;
+
+	}else if(!storage_Get_AuthenticationRequired()){
+		ESP_LOGW(TAG, "Canceling reservation due to authorization no longer required");
 		free(reservation_info);
 		reservation_info = NULL;
 	}
