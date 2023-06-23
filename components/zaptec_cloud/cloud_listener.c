@@ -1623,6 +1623,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				//start_segmented_ota();
 				start_ota();
+				responseStatus = 200;
 			}else if(strstr(commandString, "multiblockota") != NULL){
 
 				MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
@@ -1632,6 +1633,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 
 				start_segmented_ota();
+				responseStatus = 200;
 			}
 
 
@@ -1779,7 +1781,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			// GetInstallationConfigOnFile
 			else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
 			{
-
 				reportInstallationConfigOnFile = true;
 				ESP_LOGI(TAG, "Getting installationConfigOnFile");
 				responseStatus = 200;
@@ -1869,7 +1870,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				storage_SaveConfiguration();
 
 				ESP_LOGI(TAG, "SwapCommunicationMode");
-				responseStatus = 200;
 
 				restartCmdReceived = true;
 				responseStatus = 200;
@@ -2070,6 +2070,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"RTC") != NULL)
 			{
 				SetSendRTC();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"PulseInterval ") != NULL)
 			{
@@ -2102,6 +2103,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"PowerToggle4G") != NULL)
 			{
 				cellularPinsOff();
+				responseStatus = 200;
 			}
 
 			//For testing AT on BG while on Wifi
@@ -2109,6 +2111,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				cellularPinsOn();
 				ATOnly();
+				responseStatus = 200;
 			}
 
 			//AT command tunneling - do not change command mode
@@ -2126,11 +2129,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"OnlineWD") != NULL)
 			{
 				SetOnlineWatchdog();
+				responseStatus = 200;
 			}
 			//AT command tunneling - do change command mode
 			else if(strstr(commandString,"ClearNotifications") != NULL)
 			{
 				ClearNotifications();
+				responseStatus = 200;
 			}
 
 			else if(strstr(commandString,"PrintStat") != NULL)
@@ -2138,6 +2143,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				char stat[100] = {0};
 				storage_GetStats(stat);
 				publish_debug_telemetry_observation_Diagnostics(stat);
+				responseStatus = 200;
 			}
 
 			else if(strstr(commandString,"DeleteOfflineLog") != NULL)
@@ -2147,20 +2153,25 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					publish_debug_telemetry_observation_Diagnostics("Delete OK");
 				else
 					publish_debug_telemetry_observation_Diagnostics("Delete failed");
+
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"StartStack") != NULL)
 			{
 				//Also send instantly when activated
 				SendStacks();
 				StackDiagnostics(true);
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"StopStack") != NULL)
 			{
 				StackDiagnostics(false);
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"OCMFHigh") != NULL)
 			{
 				SessionHandler_SetOCMFHighInterval();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"LogCurrent") != NULL)
 			{
@@ -2173,6 +2184,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SessionHandler_SetLogCurrents(interval);
 				}
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
 			{
@@ -2187,10 +2199,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 400;
 					ESP_LOGI(TAG, "MCU Restart car FAILED");
 				}
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"ServoCheck") != NULL)
 			{
 				MCU_PerformServoCheck();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
 			{
@@ -2535,6 +2549,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						storage_Set_cover_on_value((uint16_t)newProxValue);
 						storage_SaveConfiguration();
 					}
+					responseStatus = 200;
 				}
 				else if(strstr(commandString, "GetCoverProximity"))
 				{
