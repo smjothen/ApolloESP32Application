@@ -782,6 +782,21 @@ static void sessionHandler_task()
 			}
 		}
 
+
+		// Check if car connecting -> start a new session
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
+		{
+			offlineSession_ClearLog();
+			chargeSession_Start();
+
+			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
+			if(isOnline && (OCMF_GetEnergyFault() == true))
+			{
+				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
+			}
+		}
+
+
 		/// MQTT connected and pingReply not in offline state
 		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
 		{
@@ -873,19 +888,6 @@ static void sessionHandler_task()
 			}
 		}
 
-
-		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
-		{
-			offlineSession_ClearLog();
-			chargeSession_Start();
-
-			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
-			if(isOnline && (OCMF_GetEnergyFault() == true))
-			{
-				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
-			}
-		}
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
@@ -1493,6 +1495,14 @@ static void sessionHandler_task()
 				MCU_ServoCheckClear();
 			}
 
+
+			if(chargeSession_GetFileError() == true)
+			{
+				ESP_LOGW(TAG, "Sending file error SequenceLog: \r\n%s", offlineSession_GetLog());
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+
+				publish_debug_message_event("Could not create sessionfile", cloud_event_level_warning);
+			}
 
 			if(HasNewData() == true)
 			{

@@ -252,6 +252,23 @@ void chargeSession_CheckIfLastSessionIncomplete()
 	}
 }
 
+/// For remote functional testing of the file correction feature
+static bool testFileCorrection = false;
+void chargeSession_SetTestFileCorrection()
+{
+	testFileCorrection = true;
+}
+
+///Flag if the file system error has occured
+static bool sessionFileError = false;
+bool chargeSession_GetFileError()
+{
+	//Clear on read
+	bool tmp = sessionFileError;
+	sessionFileError = false;
+	return tmp;
+}
+
 static double startAcc = 0.0;
 void chargeSession_Start()
 {
@@ -290,7 +307,22 @@ void chargeSession_Start()
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
 
+		sessionFileError = false;
+
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
+
+		//Check to see if the file could not be created
+		if((saveErr == -2) || (testFileCorrection == true))
+		{
+			testFileCorrection = false;
+			sessionFileError = true;
+
+			ESP_LOGW(TAG, "FILE ERROR");
+			offlineSession_ClearDiagnostics();
+			offlineSession_eraseAndRemountPartition();
+			saveErr = offlineSession_SaveSession(sessionData);
+		}
+
 		free(sessionData);
 
 		if (saveErr != ESP_OK)

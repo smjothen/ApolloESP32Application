@@ -1300,6 +1300,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     			ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
     			SetPendingRFIDTag(bleId);
     			publish_debug_telemetry_observation_NFC_tag_id(bleId);
+    			publish_debug_telemetry_observation_ChargingStateParameters();
     		}
     		else
     		{
