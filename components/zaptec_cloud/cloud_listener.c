@@ -1897,13 +1897,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				responseStatus = 200;
 			}
 
-			if(strstr(commandString,"Activate TCP") != NULL)
+			else if(strstr(commandString,"Activate TCP") != NULL)
 			{
 				storage_Set_DiagnosticsMode(eACTIVATE_TCP_PORT);
 				storage_SaveConfiguration();
 				responseStatus = 200;
 			}
-			if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
+			else if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
 			{
 				storage_Set_DiagnosticsMode(eALWAYS_SEND_SESSION_DIAGNOSTICS);
 				storage_SaveConfiguration();
