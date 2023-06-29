@@ -3417,8 +3417,8 @@ static void ocpp_task(){
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			err = complete_boot_notification_process(NULL, "Go", i2cGetLoadedDeviceInfo().serialNumber,
-								"zaptec", GetSoftwareVersion(),
+			err = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
+								"Zaptec", GetSoftwareVersion(),
 								LTEGetIccid(), LTEGetImsi(), NULL, NULL);
 			if(err != 0){
 				if(retry_attempts < 7){
