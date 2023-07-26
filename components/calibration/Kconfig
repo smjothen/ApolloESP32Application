@@ -1,26 +1,5 @@
 menu "MID Calibration"
 
-	config CAL_SIMULATION
-		bool "Simulate correct eMeter registers/verification steps"
-		default N
-	
-	config CAL_SIMULATION_FAIL
-		bool "Force simulation to fail in verification stage"
-		default N
-		depends on CAL_SIMULATION
-
-	config CAL_SIMULATION_PROD_SERV
-		bool "Simulate transfer of calibration data to production server"
-		default N
-
-	config CAL_SSID
-		string "Network SSID for simulation"
-		depends on CAL_SIMULATION
-
-	config CAL_PSK
-		string "Network PSK for simulation"
-		depends on CAL_SIMULATION
-
 	config CAL_KEY
 		string "Secret calibration key for communication with app"
 		default "6ea2ac08d055bcf09ae52d570315f43e"

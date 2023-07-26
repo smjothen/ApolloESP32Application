@@ -79,7 +79,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
                 uint32_t rawOffset;
 
                 if (!emeter_read(V1_OFFS + phase, &rawOffset)) {
-                    ESP_LOGE(TAG, "VOFFS(%d) write failed!", phase);
+                    ESP_LOGE(TAG, "VOFFS(%d) read failed!", phase);
                     return false;
                 }
 
@@ -87,6 +87,7 @@ bool calibration_step_calibrate_voltage_offset(CalibrationCtx *ctx) {
 
                 calibration_write_parameter(ctx, type, phase, offset);
 
+                CALLOG(ctx, "- L%d = %f", phase + 1, offset);
                 ESP_LOGI(TAG, "%s: VOFFS(%d) = %f", calibration_state_to_string(ctx), phase, offset);
             }
 

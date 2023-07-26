@@ -10,6 +10,7 @@
 #include "string.h"
 #include "certificate.h"
 #include "../../main/DeviceInfo.h"
+#include "storage.h"
 
 
 #define TAG "OTA_LOCATION"
@@ -157,7 +158,7 @@ static void log_task_info(void)
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
     char formated_memory_use[256];
     snprintf(formated_memory_use, 256,
-             "[MEMORY USE] (GetFreeHeapSize now: %" PRId32 ", GetMinimumEverFreeHeapSize: %" PRId32 ", heap_caps_get_free_size: %d)",
+             "[MEMORY USE] (GetFreeHeapSize now: %zu, GetMinimumEverFreeHeapSize: %zu, heap_caps_get_free_size: %d)",
              xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size);
     ESP_LOGD(TAG, "freertos api result:\n\r%s", formated_memory_use);
 
@@ -175,9 +176,17 @@ int get_image_location(char *location, int buffersize, char * version)
     char url [150];
 #ifdef DEVELOPEMENT_URL
     snprintf(url, 150, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
-    ESP_LOGE(TAG, "###### USING DEVELOPMENT URL !!! #######");
+    ESP_LOGE(TAG, "###### USING DEFINE OTA DEVELOPMENT URL !!! #######");
 #else
-    snprintf(url, 150, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    if(storage_Get_ConnectToPortalType() == PORTAL_TYPE_DEV)
+    {
+    	snprintf(url, 150, "https://dev-api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    	ESP_LOGE(TAG, "###### USING CMD OTA DEVELOPMENT URL !!! #######");
+    }
+    else
+    {
+    	snprintf(url, 150, "https://api.zaptec.com/api/firmware/%.10s/current", i2cGetLoadedDeviceInfo().serialNumber);
+    }
 #endif
 
     ESP_LOGI(TAG, "getting ota image location from %s", url);

@@ -17,6 +17,8 @@
 //#define RUN_FACTORY_TESTS //default commented out /* Replaced by CONFIG_ZAPTEC_RUN_FACTORY_TESTS, se Kconfig / Menuconfig */
 
 //#define MCU_APP_ONLY
+#define PORTAL_TYPE_PROD_DEFAULT 0
+#define PORTAL_TYPE_DEV 1
 
 enum FactoryStage {FactoryStageUnknown=0xff, FactoryStageUnknown2 = 0, FactoryStagComponentsTested=1, FactoryStageFinnished = 16};
 
@@ -104,6 +106,7 @@ typedef enum {
 #define DIAGNOSTICS_STRING_SIZE 100
 
 // Network IDs
+#define NETWORK_NONE 0
 #define NETWORK_1P3W 1
 #define NETWORK_3P3W 2
 #define NETWORK_1P4W 3
@@ -117,7 +120,7 @@ typedef enum {
 
 #define DEFAULT_MAX_CHARGE_DELAY 600
 
-#define DEFAULT_COVER_ON_VALUE 0xd0
+#define DEFAULT_COVER_ON_VALUE 0xB2//0xd0
 
 //Numbers should match Pro
 enum CommunicationMode
@@ -148,6 +151,7 @@ enum DiagnosticsModes
 	eACTIVATE_TCP_PORT				= 5,
 	eDISABLE_CERTIFICATE_ONCE		= 6,
 	eDISABLE_CERTIFICATE_ALWAYS		= 7,
+	eALWAYS_SEND_SESSION_DIAGNOSTICS= 8,
 };
 
 struct Configuration
@@ -197,6 +201,7 @@ struct Configuration
 	uint32_t maxStartDelay;
 
 	uint16_t cover_on_value;
+	uint8_t connectToPortalType;
 };
 
 

@@ -385,7 +385,7 @@ void EnsureBandAndLTEMOnBoot()
 	 //Check if correct Band setting
 	char response[100] = {0};
 	at_command_get_LTE_band(response, 100);
-	if(response != NULL)
+	if(response[0])
 	{
 		ESP_LOGI(TAG, "LTE Band: %s", response);
 

@@ -11,9 +11,12 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 
-static const char *tmp_path = "/tmp";
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static const char *tmp_path = "/files";
+
+static SemaphoreHandle_t log_lock = NULL;
+
 static const int max_log_items = 1000;
+static bool disabledForCalibration = false;
 
 #define OFFLINE_LOG_FLAG_64BIT (1 << 0)
 
@@ -43,7 +46,7 @@ struct LogLine64 {
 };
 
 static const struct LogFile log32 = {
-    .path = "/tmp/log554.bin",
+    .path = "/files/log554.bin",
     .flags = 0,
     .entry_size = sizeof (struct LogLine),
 };
@@ -51,39 +54,13 @@ static const struct LogFile log32 = {
 // If sizeof (time_t) == 64 this will be used for logging, while the file above will be
 // only sent to the cloud and cleared.
 static const struct LogFile log64 = {
-    .path = "/tmp/log64.bin",
+    .path = "/files/log64.bin",
     .flags = OFFLINE_LOG_FLAG_64BIT,
     .entry_size = sizeof (struct LogLine64),
 };
 
-bool mount_tmp()
-{
-    static bool mounted = false;
-
-	if(mounted)
-	{
-		ESP_LOGI(TAG, "/tmp already mounted");
-		return mounted;
-	}
-
-    ESP_LOGI(TAG, "Mounting /tmp");
-    const esp_vfs_fat_mount_config_t mount_config = {
-            .max_files = 4,
-            .format_if_mount_failed = true,
-            .allocation_unit_size = CONFIG_WL_SECTOR_SIZE
-    };
-
-	esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(tmp_path, "files", &mount_config, &s_wl_handle);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-		return mounted;
-	}
-
-	mounted = true;
-
-	ESP_LOGI(TAG, "Mounted");
-
-	return mounted;
+void offline_log_disable(void) {
+    disabledForCalibration = true;
 }
 
 int update_header(FILE *fp, int start, int end){
@@ -113,7 +90,9 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     ESP_LOGI(TAG, "header on disk %d %d %" PRIu32 " (s:%d, res:%d)    <<<   ", 
     head_in_file.start, head_in_file.end, head_in_file.crc, sizeof(head_in_file), read_result);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-    perror("read perror: ");
+    if (read_result < sizeof (head_in_file)) {
+        ESP_LOGE(TAG, "fread errno %d: %s", errno, strerror(errno));
+    }
     uint32_t crc_in_file = head_in_file.crc;
     head_in_file.crc = 0;
 
@@ -139,17 +118,41 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
 
 }
 
-FILE * init_log(const struct LogFile *file, int *start, int *end){
-    bool mounted = mount_tmp();
+FILE * init_and_lock_log(const struct LogFile *file, int *start, int *end){
 
-    if(!mounted){
-        ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
-        return NULL;
-    }
+  if (disabledForCalibration) {
+    ESP_LOGI(TAG, "Blocking offline log during calibration!");
+    return NULL;
+  }
 
-    FILE *fp = fopen(file->path, "wb+");
+	struct stat st;
+	if(stat(tmp_path, &st) != 0){
+		ESP_LOGE(TAG, "'%s' not mounted, offline log will not work", tmp_path);
+		return NULL;
+	}
+
+  if (log_lock == NULL) {
+      ESP_LOGE(TAG, "No allocated mutex for offline log!");
+      return NULL;
+  }
+
+	if (xSemaphoreTake(log_lock, pdMS_TO_TICKS(5000)) != pdTRUE) {
+		ESP_LOGE(TAG, "Failed to aquire mutex lock for offline log");
+		return NULL;
+	}
+
+  FILE *fp = NULL;
+  if (stat(file->path, &st) != 0){
+      // Doesn't exist, w+ will create
+      fp = fopen(file->path, "w+b");
+  }else{
+      // Does exist, r+ will allow updating
+      fp = fopen(file->path, "r+b");
+  }
+
     if(fp==NULL){
-        ESP_LOGE(TAG, "failed to open file %s", file->path);
+        ESP_LOGE(TAG, "failed to open file ");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
 
@@ -162,22 +165,33 @@ FILE * init_log(const struct LogFile *file, int *start, int *end){
     );
 
     if(seek_res < 0){
-        ESP_LOGE(TAG, "seek failed");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
     ESP_LOGI(TAG, "expanded log to %d(%d)", log_size, seek_res);
-
-
-    putc('\0', fp);
 
     fseek(fp, 0, SEEK_SET);
 
     if(ensure_valid_header(fp, start, end)<0){
         ESP_LOGE(TAG, "failed to create log header");
+        xSemaphoreGive(log_lock);
         return NULL;
     }
 
     return fp;
+}
+
+int release_log(FILE * fp){
+	int result = 0;
+	if(fp != NULL && fclose(fp) != 0){
+		result = EOF;
+		ESP_LOGE(TAG, "Unable to close offline log: %s", strerror(errno));
+	}
+
+	if(xSemaphoreGive(log_lock) != pdTRUE) // "indicating that the semaphore was not first obtained correctly"
+		ESP_LOGE(TAG, "Unable to give log mutex");
+
+	return result;
 }
 
 #ifdef OFFLINE_LOG_LEGACY_LOGGING
@@ -188,10 +202,11 @@ void offline_log_append_energy_legacy(time_t timestamp, double energy){
     int log_start;
     int log_end;
 
-    FILE *fp = init_log(&log32, &log_start, &log_end);
+    FILE *fp = init_and_lock_log(&log32, &log_start, &log_end);
 
-    if(fp==NULL)
+    if(fp==NULL) {
         return;
+    }
 
     int new_log_end = (log_end+1) % max_log_items;
     if(new_log_end == log_start){
@@ -229,7 +244,7 @@ void offline_log_append_energy(time_t timestamp, double energy){
     int log_end;
 
     // Always append to 64bit path for future energy
-    FILE *fp = init_log(&log64, &log_start, &log_end);
+    FILE *fp = init_and_lock_log(&log64, &log_start, &log_end);
 
     if(fp==NULL)
         return;
@@ -257,9 +272,7 @@ void offline_log_append_energy(time_t timestamp, double energy){
         bytes_written, start_of_line, log_start, new_log_end
     );
 
- 
-    int close_result = fclose(fp);
-    ESP_LOGI(TAG, "closed log file %d", close_result);
+    release_log(fp);
 }
 
 int _offline_log_read_line(FILE *fp, int index, int *line_start, double *line_energy,
@@ -304,10 +317,9 @@ int _offline_log_attempt_send(const struct LogFile *file) {
     ESP_LOGI(TAG, "log data (%s):", file->path);
 
     int result = -1;
-    
     int log_start;
     int log_end;
-    FILE *fp = init_log(file, &log_start, &log_end);
+    FILE *fp = init_and_lock_log(file, &log_start, &log_end);
 
     //If file or partition is now available, indicate empty file
     if(fp == NULL)
@@ -360,9 +372,8 @@ int _offline_log_attempt_send(const struct LogFile *file) {
         if(log_start!=0)
             update_header(fp, 0, 0);
     }
-    
-    int close_result = fclose(fp);
-    ESP_LOGI(TAG, "closed log file %d", close_result);
+
+    release_log(fp);
     return result;
 }
 
@@ -394,14 +405,24 @@ int offline_log_attempt_send(void) {
 
 int offline_log_delete(void)
 {
-	int ret = 0;
+	struct stat st;
+	if(stat(tmp_path, &st) != 0){
+		ESP_LOGE(TAG, "'%s' not mounted. Unable to delete offline log", tmp_path);
+		return ENOTDIR;
+	}
 
-	if(!mount_tmp()){
-		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
-		return ret;
+	if(log_lock == NULL){
+		return ENOLCK;
+	}
+
+	if(xSemaphoreTake(log_lock, pdMS_TO_TICKS(5000)) != pdTRUE){
+		ESP_LOGE(TAG, "Failed to aquire mutex lock to delete offline log");
+		return ETIMEDOUT;
 	}
 
   const struct LogFile files[] = { log32, log64 };
+
+  int ret = 0;
 
   for (size_t i = 0; i < sizeof (files) / sizeof (files[0]); i++) {
       const struct LogFile *file = &files[i];
@@ -432,4 +453,12 @@ int offline_log_delete(void)
   }
 
 	return ret;
+}
+
+void setup_offline_log(){
+	log_lock = xSemaphoreCreateMutex();
+	if(log_lock == NULL){
+		ESP_LOGE(TAG, "Failed to create mutex for offline log");
+		return;
+	}
 }

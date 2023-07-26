@@ -2,9 +2,9 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "chargeSession.h"
 #include <sys/time.h>
-#include "sntp.h"
 #include <string.h>
 #include "connectivity.h"
 #include "cJSON.h"
@@ -201,6 +201,11 @@ int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
 		return 1;
 	}
 
+	else
+	{
+		offlineSession_AppendLogString(sessionIdFromCloud);
+	}
+
 	if(strlen(chargeSession.SessionId) > 0)
 	{
 		ESP_LOGW(TAG, "SessionId was already set: %s. Overwriting.", chargeSession.SessionId);
@@ -247,6 +252,23 @@ void chargeSession_CheckIfLastSessionIncomplete()
 	}
 }
 
+/// For remote functional testing of the file correction feature
+static bool testFileCorrection = false;
+void chargeSession_SetTestFileCorrection()
+{
+	testFileCorrection = true;
+}
+
+///Flag if the file system error has occured
+static bool sessionFileError = false;
+bool chargeSession_GetFileError()
+{
+	//Clear on read
+	bool tmp = sessionFileError;
+	sessionFileError = false;
+	return tmp;
+}
+
 static double startAcc = 0.0;
 void chargeSession_Start()
 {
@@ -285,7 +307,22 @@ void chargeSession_Start()
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
 
+		sessionFileError = false;
+
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
+
+		//Check to see if the file could not be created
+		if((saveErr == -2) || (testFileCorrection == true))
+		{
+			testFileCorrection = false;
+			sessionFileError = true;
+
+			ESP_LOGW(TAG, "FILE ERROR");
+			offlineSession_ClearDiagnostics();
+			offlineSession_eraseAndRemountPartition();
+			saveErr = offlineSession_SaveSession(sessionData);
+		}
+
 		free(sessionData);
 
 		if (saveErr != ESP_OK)
@@ -301,6 +338,10 @@ void chargeSession_Start()
 }
 
 
+float chargeSession_GetEnergy()
+{
+	return chargeSession.Energy;
+}
 
 void chargeSession_UpdateEnergy()
 {
@@ -339,8 +380,7 @@ void chargeSession_Finalize()
 
 	/// After the 'E' entry is set no more 'T' entries can be added through hourly interrupt
 
-
-	double endAcc = storage_update_accumulated_energy(0.0);
+	double endAcc = OCMF_GetLastAccumulated_Energy();
 	double accDiff = endAcc - startAcc;
 	if(fabs(accDiff - chargeSession.Energy) < 0.001)
 		ESP_LOGW(TAG, "**** ACC-DIFF: %f - %f = %f vs %f **** OK", endAcc, startAcc, accDiff, chargeSession.Energy);

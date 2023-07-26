@@ -18,6 +18,8 @@ static const char *TAG = "STORAGE        ";
 
 #define CONFIG_FILE "CONFIG_FILE"
 #define DEFAULT_TRANSMIT_INTERVAL 3600
+
+
 nvs_handle configuration_handle;
 
 // "wifi"
@@ -99,6 +101,7 @@ void storage_Init_Configuration()
 	storage_Initialize_ScheduleParameteres();
 
 	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
+	configurationStruct.connectToPortalType = 0;
 }
 
 
@@ -342,6 +345,13 @@ void storage_Set_cover_on_value(uint16_t newValue)
 
 	configurationStruct.cover_on_value = newValue;
 }
+
+
+void storage_Set_ConnectToPortalType(uint8_t newValue)
+{
+	configurationStruct.connectToPortalType = newValue;
+}
+
 
 //****************************************************
 
@@ -608,8 +618,16 @@ uint32_t storage_Get_MaxStartDelay()
 
 uint16_t storage_Get_cover_on_value()
 {
+	//Change default value on existing chargers (from 160-130)
+	if(configurationStruct.cover_on_value == 0xd0)
+		return DEFAULT_COVER_ON_VALUE;
 
 	return configurationStruct.cover_on_value;
+}
+
+uint8_t storage_Get_ConnectToPortalType()
+{
+	return configurationStruct.connectToPortalType;
 }
 
 //************************************************
@@ -659,6 +677,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u32(configuration_handle, "MaxStartDelay", configurationStruct.maxStartDelay);
 
 	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
+	err += nvs_set_u8(configuration_handle, "ConPortType", configurationStruct.connectToPortalType);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -732,6 +751,9 @@ esp_err_t storage_ReadConfiguration()
 	if(nvs_get_u16(configuration_handle, "CoverOnValue", &configurationStruct.cover_on_value) != ESP_OK)
 		configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 
+	if(nvs_get_u8(configuration_handle, "ConPortType", &configurationStruct.connectToPortalType) != ESP_OK)
+		configurationStruct.connectToPortalType = PORTAL_TYPE_PROD_DEFAULT;
+
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
 	nvs_close(configuration_handle);
@@ -769,6 +791,7 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "TransmitInterval: 			\t%" PRIi32 "", configurationStruct.transmitInterval);
 	ESP_LOGI(TAG, "PulseInterval: 				%" PRIi32 "", configurationStruct.pulseInterval);
 	ESP_LOGI(TAG, "DiagnosticsLog: 				%s", configurationStruct.diagnosticsLog);
+	ESP_LOGI(TAG, "Portal: 						%i", configurationStruct.connectToPortalType);
 
 
 	//ESP_LOGW(TAG, "*********************************");
@@ -1262,13 +1285,6 @@ esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()){
-#ifdef CONFIG_CAL_SIMULATION
-		ESP_LOGI(TAG, "Using calibration SSID and PSK!");
-		strcpy(SSID, CONFIG_CAL_SSID);
-		strcpy(PSK, CONFIG_CAL_PSK);
-		return 0;
-#endif
-
 		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
 		// strcpy(SSID, "arntnett");
 		// strcpy(PSK, "4703c87e817842c4ce6b167d43701b7685693846db");

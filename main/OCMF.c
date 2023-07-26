@@ -13,6 +13,7 @@
 #include "protocol_task.h"
 #include "offlineSession.h"
 #include <math.h>
+#include "zaptec_cloud_observations.h"
 
 static const char *TAG = "OCMF           ";
 
@@ -24,6 +25,8 @@ static SemaphoreHandle_t ocmf_lock;
 static TickType_t lock_timeout = pdMS_TO_TICKS(1000*5);
 cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx,  time_t time_in, double energy_in);
 
+static double valueB = 0.0;
+static double valueE = 0.0;
 
 void OCMF_Init()
 {
@@ -32,25 +35,37 @@ void OCMF_Init()
 	xSemaphoreGive(ocmf_lock);
 }
 
+static double previousEnergyMax = 0.0;
+static double accumulated_energy = 0.0;
+
+double OCMF_GetLastAccumulated_Energy()
+{
+	return accumulated_energy;
+}
+
 double get_accumulated_energy(){
-	float dspic_session_energy = MCU_GetEnergy();
 
-	float max = MCU_GetMaximumEnergy();
+	float dspic_session_energy_max = chargeSession_GetEnergy();
 
-	if((max>0.0) && (dspic_session_energy < max)){
-		MCU_ClearMaximumEnergy();
-		ESP_LOGW(TAG, "detected dspic energy reset (%f, %f), passing max value to STORAGE",
-			dspic_session_energy, max
-		);
-		dspic_session_energy = max;
+	ESP_LOGW(TAG, "dspic max %f (session: %f) opMode %i", dspic_session_energy_max, MCU_GetEnergy(), MCU_GetChargeOperatingMode());
+
+	if(previousEnergyMax > dspic_session_energy_max){
+		storage_update_accumulated_energy(0.0);
+		ESP_LOGW(TAG, "previousEnergyMax (%f > %f) dspic_session_energy_max - passing 0.0 max value to STORAGE", previousEnergyMax, dspic_session_energy_max);
 	}
 
-	double accumulated_energy = storage_update_accumulated_energy(dspic_session_energy);
+	double accumulated_energy_tmp = storage_update_accumulated_energy(dspic_session_energy_max);
 
-	accumulated_energy = round(accumulated_energy * 1000) / 1000;/// Rounding to 3 decimal places
+	accumulated_energy_tmp = round(accumulated_energy_tmp * 1000) / 1000;/// Rounding to 3 decimal places
+
+	previousEnergyMax = dspic_session_energy_max;
+
+	/// Ensure async reading can not get intermediately calculated value;
+	accumulated_energy = accumulated_energy_tmp;
 
 	return accumulated_energy;
 }
+
 
 int _OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, char * time_buffer, double energy)
 {
@@ -134,9 +149,11 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 	if(CompletedSessionObject == NULL)
 	{
 		xSemaphoreGive(ocmf_lock);
+		offlineSession_AppendLogString("3 CS_Object == NULL");
 		return ESP_ERR_NOT_FOUND;
 	}
 
+	offlineSession_AppendLogString("3 CS_Object OK");
 
 	/// 2. ..then get OCMF log entires
 	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
@@ -190,7 +207,12 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		{
 			cJSON_ReplaceItemInObject(CompletedSessionObject, "ReliableClock", cJSON_CreateBool(false));
 			ESP_LOGW(TAG, "Cleared ReliableClock");
-			//ESP_LOGW(TAG, "IsBool E: %i", cJSON_IsBool(cJSON_GetObjectItem(CompletedSessionObject,"ReliableClock")));
+
+			/// Must set an EndDateTime(for Cloud to parse) even tough the time is incorrect. Set time of reporting.
+			char lastEdt[33];
+			GetUTCTimeString(lastEdt, NULL, NULL);
+			cJSON_ReplaceItemInObject(CompletedSessionObject, "EndDateTime", cJSON_CreateString(lastEdt));
+			ESP_LOGE(TAG, "Set final EDT %s", lastEdt);
 		}
 		//ESP_LOGW(TAG, "EndDateTime length: %i", edtLength);
 
@@ -291,10 +313,45 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx, time_t time_in, double energy
 }
 
 
+static bool energyFault = false;
+bool OCMF_GetEnergyFault()
+{
+	bool tmp = energyFault;
+	energyFault = false;
+	return tmp;
+}
+
 void OCMF_CompletedSession_AddElementToOCMFLog(char tx, time_t time_in, double energy_in)
 {
 	//Add to file log
 	offlineSession_append_energy(tx, time_in, energy_in);
+
+	/// This is diagnostics output to show if there is an energy mismatch between
+	/// End of one session and Beginning of the next
+	if(tx == 'E')
+	{
+		valueB = 0.0;
+		valueE = energy_in;
+	}
+	else if((tx == 'B') && (valueE != 0.0))
+	{
+		valueB = energy_in;
+
+		if(valueB == valueE)
+		{
+			ESP_LOGI(TAG, "");
+			ESP_LOGI(TAG, "*****************  OK: %f == %f (E=B)  *****************", valueE, valueB);
+			ESP_LOGI(TAG, "");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "");
+			ESP_LOGE(TAG, "*****************  FAIL: %f != %f (E!=B) ****************", valueE, valueB);
+			ESP_LOGE(TAG, "");
+			energyFault = true;
+		}
+	}
+
 }
 
 /*int OCMF_CompletedSession_FinalizeOCMFLog()

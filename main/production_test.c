@@ -33,6 +33,8 @@
 #include "protocol_task.h"
 #include "adc_control.h"
 #include "efuse.h"
+#include "fat.h"
+#include "offlineSession.h"
 
 //#include "adc_control.h"
 
@@ -189,7 +191,7 @@ int prodtest_getNewId(bool validate_only)
 
 
 		//The string has fixed predefined format, only allow parsing if format is correct
-		if(((strncmp(buffer, "ZAP", 3) == 0) || (strncmp(buffer, "ZGB", 3) == 0)) &&
+		if(((strncmp(buffer, "ZAP", 3) == 0) || (strncmp(buffer, "ZGB", 3) == 0) || (strncmp(buffer, "ZAG", 3) == 0)) &&
 			(buffer[9] == '|') && (buffer[54] == '|') && (buffer[59] == '|'))
 		{
 			struct DeviceInfo prodDevInfo = {0};
@@ -271,6 +273,8 @@ enum test_item{
 	TEST_ITEM_COMPONENT_HW_TRIG,
 	TEST_ITEM_COMPONENT_GRID,
 	TEST_ITEM_COMPONENT_OPEN,
+	TEST_ITEM_COMPONENT_DISK_PARTITION,
+	TEST_ITEM_COMPONENT_FILES_PARTITION,
 	TEST_ITEM_CHARGE_CYCLE_START,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_TEMPS,
 	TEST_ITEM_CHARGE_CYCLE_EMETER_VOLTAGES,
@@ -314,7 +318,7 @@ int prodtest_send(enum test_state state, enum test_item item, char *message){
 	sprintf(payload, "%d|%d|%s\r\n", item, state, message);
 
 	/// Debug for testing subset of factory tests without socket connection
-	ESP_LOGW(TAG, "%s", payload);
+	//ESP_LOGW(TAG, "%s", payload);
 	//return 0;
 
 	if(prodtest_sock_send(payload)<0){
@@ -1099,6 +1103,111 @@ int test_switch(){
 }
 
 
+
+
+int test_disk_partition(){
+	char payload[160] = {0};
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition");
+
+	/// Test create file on disk-partition
+	bool diskPartitionOk = false;
+	bool deleted = false;
+	bool created = fat_Factorytest_CreateFile();
+
+	if(created)
+		deleted = fat_Factorytest_DeleteFile();
+
+	if((created == false) || (deleted == false))
+	{
+		/// File system not behaving as expected
+		fat_CorrectFilesystem();
+
+		created = fat_Factorytest_CreateFile();
+
+		if(created)
+			deleted = fat_Factorytest_DeleteFile();
+
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition failed");
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk formatted. Restart required");
+
+		diskPartitionOk = false;
+	}
+	else
+	{
+		diskPartitionOk = true;
+	}
+
+	ESP_LOGW(TAG, "Disk partition: %s", fat_GetDiagnostics());
+
+    if(diskPartitionOk == true){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition");
+		return 0;
+	}else{
+		snprintf(payload, sizeof(payload), "Disk: %s", fat_GetDiagnostics());
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_DISK_PARTITION, payload);
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_DISK_PARTITION, "Disk partition");
+	}
+
+	return -1;
+}
+
+
+
+int test_files_partition(){
+	char payload[160] = {0};
+	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
+	prodtest_send(TEST_STATE_RUNNING, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition");
+
+	/// Test create file on files-partition
+	bool filesPartitionOk = false;
+	bool deleted = false;
+	bool created = offlineSession_test_CreateFile();
+
+	if(created)
+		deleted = offlineSession_test_DeleteFile();
+
+	if((created == false) || (deleted == false))
+	{
+		/// File system not behaving as expected
+		offlineSession_eraseAndRemountPartition();
+
+		created = offlineSession_test_CreateFile();
+
+		if(created)
+			deleted = offlineSession_test_DeleteFile();
+
+		if((created == false) || (deleted == false))
+		{
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition failed");
+		}
+		else
+		{
+			snprintf(payload, sizeof(payload), "%s", offlineSession_GetDiagnostics());
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, payload);
+			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition retry OK");
+			filesPartitionOk = true;
+		}
+	}
+	else
+	{
+		filesPartitionOk = true;
+	}
+
+	ESP_LOGW(TAG, "Files partition: %s", offlineSession_GetDiagnostics());
+
+    if(filesPartitionOk == true){
+		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition");
+		return 0;
+	}else{
+		snprintf(payload, sizeof(payload), "%s", offlineSession_GetDiagnostics());
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_FILES_PARTITION, payload);
+		prodtest_send(TEST_STATE_FAILURE, TEST_ITEM_COMPONENT_FILES_PARTITION, "Files partition");
+	}
+
+	return -1;
+}
+
 int test_servo(){
 	char payload[128];
 	set_prodtest_led_state(TEST_STAGE_RUNNING_TEST);
@@ -1167,7 +1276,7 @@ int test_speed_hwid(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 
-    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
@@ -1326,6 +1435,14 @@ int run_component_tests(){
 	}
 
 	if(test_switch()<0){
+		goto err;
+	}
+
+	if(test_disk_partition()<0){
+		goto err;
+	}
+
+	if(test_files_partition()<0){
 		goto err;
 	}
 
@@ -1605,7 +1722,7 @@ int charge_cycle_test(){
 				return -1;
 			}
 
-			snprintf(payload, 100, "Cycle currents[%d]: %f, %.2f", i, MCU_GetCurrents(0), GetPowerMeas());
+			snprintf(payload, 100, "Cycle currents[%d]: %f A, %.2f W", i, MCU_GetCurrents(0), MCU_GetPower());
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
 
 			if(i==5){
@@ -1671,8 +1788,8 @@ int charge_cycle_test(){
 				return -1;
 			}
 
-			snprintf(payload, 100, "Cycle currents[%d]: %f, %f, %f, %.2f",
-				 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), GetPowerMeas()
+			snprintf(payload, 100, "Cycle currents[%d]: %f, %f, %f A, %.2f W",
+				 i, MCU_GetCurrents(0), MCU_GetCurrents(1), MCU_GetCurrents(2), MCU_GetPower()
 			);
 			prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_CHARGE_CYCLE_EMETER_CURRENTS2, payload);
 

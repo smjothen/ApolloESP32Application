@@ -269,6 +269,57 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
     return publish_json(observations);
 }*/
 
+
+/* Pro capabilities
+	{
+	  "DeviceType": "Pro",
+	  "MeterCalibrated": true,
+	  "MeterCalibrationId": 137101,
+	  "MIDCertified": true,
+	  "HardwareVariant": "Costcut",
+	  "ConnectorType": "ITT_Socket"
+	}
+ */
+
+int publish_debug_telemetry_observation_capabilities(){
+    cJSON *observations = create_observation_collection();
+
+    cJSON *CapabilitiesObject = cJSON_CreateObject();
+	if(CapabilitiesObject == NULL){return -10;}
+
+	cJSON_AddStringToObject(CapabilitiesObject, "DeviceType", "Go");
+	cJSON_AddStringToObject(CapabilitiesObject, "SerialNumber", i2cGetLoadedDeviceInfo().serialNumber);
+
+	uint32_t calibrationId = 0;
+	bool calibrationRead = MCU_GetMidStoredCalibrationId(&calibrationId);
+	if((calibrationRead == true) && (calibrationId != 0))
+	{
+		cJSON_AddBoolToObject(CapabilitiesObject, "MeterCalibrated", true);
+		cJSON_AddNumberToObject(CapabilitiesObject, "MeterCalibrationId", calibrationId);
+	}
+	else
+	{
+		cJSON_AddBoolToObject(CapabilitiesObject, "MeterCalibrated", false);
+	}
+
+	///Todo:
+	///cJSON_AddStringToObject(CapabilitiesObject, "HardwareVariant", "");
+
+	char *capabilityString = cJSON_PrintUnformatted(CapabilitiesObject);
+
+	ESP_LOGW(TAG, "capabilityString: %s", capabilityString);
+
+	cJSON_Delete(CapabilitiesObject);
+
+    add_observation_to_collection(observations, create_observation(Capabilities, capabilityString));
+
+    int ret = publish_json(observations);
+
+    free(capabilityString);
+
+    return ret;
+}
+
 int publish_debug_telemetry_observation_power(){
     ESP_LOGD(TAG, "sending charging telemetry");
 
@@ -753,6 +804,26 @@ static int8_t sendUpdateInSeconds = 0;
 static bool sendPower = false;
 static float powerLimit = 0.0;
 
+/*
+ * Calling this resets the previous values,
+ * causing the current value to be retransmitted.
+ */
+void ReInitParametersForCloud()
+{
+	previousMaxInstallationCurrentConfig = -1.0;
+	previousMaxInstallationCurrentOnFile = -1.0;
+
+	previousSwitchState = 0xff;
+	previousPermanentLock = 0xff;
+
+	previousFinalStopActiveStatus = 0xff;
+	previousCableType = 0xff;
+
+	previousTransmitInterval = 0;
+	previousOverrideGridType = 0xff;
+	previousIT3OptimizationEnabled = 0xff;
+}
+
 int publish_telemetry_observation_on_change(){
     ESP_LOGD(TAG, "sending on change telemetry");
 
@@ -860,7 +931,7 @@ int publish_telemetry_observation_on_change(){
 
 
 
-    uint32_t notifications = GetCombinedNotifications();
+    uint32_t notifications = GetCombinedNotificationsMasked();
     if(previousNotifications != notifications)
     {
     	add_observation_to_collection(observations, create_uint32_t_observation(Notifications, notifications));

@@ -17,6 +17,8 @@
 #include "zaptec_cloud_listener.h"
 #include "offline_log.h"
 
+#include "calibration.h"
+
 static const char *TAG = "CONSOLE";
 static const char *REPLY_TAG = ">>>>>>";
 
@@ -160,76 +162,6 @@ int register_prodtest_write_cmd(void){
     };
 
     ESP_ERROR_CHECK( esp_console_cmd_register(&join_cmd) );
-    return 0;
-}
-
-static int offline_log_cmd(int argc, char **argv){
-    if (argc > 1) {
-        char *cmd = argv[1];
-
-        time_t ts = time(NULL);
-        double energy = 0.1;
-
-        if (strcmp(cmd, "append") == 0) {
-            if (argc > 2) {
-                ts = strtoll(argv[2], NULL, 10);
-            }
-            if (argc > 3) {
-                energy = atof(argv[3]);
-            }
-            offline_log_append_energy(ts, energy);
-            ESP_LOGI(TAG, "offline_log_append_energy(%llu, %f)", ts, energy);
-        } else if (strcmp(cmd, "lappend") == 0) {
-            if (argc > 2) {
-                ts = strtoll(argv[2], NULL, 10);
-            }
-            if (argc > 3) {
-                energy = atof(argv[3]);
-            }
-            offline_log_append_energy_legacy(ts, energy);
-            ESP_LOGI(TAG, "offline_log_append_energy_legacy(%llu, %f)", ts, energy);
-        } else if (strcmp(cmd, "send") == 0) {
-            int ret = offline_log_attempt_send();
-            ESP_LOGI(TAG, "offline_log_attempt_send() = %d", ret);
-        }
-    }
-    return 0;
-}
-
-static int register_offline_log_cmd(void){
-    const esp_console_cmd_t cmd = {
-        .command = "offline_log",
-        .help = "test offline log",
-        .hint = NULL,
-        .func = &offline_log_cmd,
-        .argtable = NULL
-    };
-
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
-    return 0;
-}
-
-static int sim_offline_cmd(int argc, char **argv) {
-    static bool enabled = true;
-
-    ESP_LOGI(TAG, "Setting simulated offline %s", enabled ? "ON" : "OFF");
-
-    MqttSetSimulatedOffline(enabled);
-    enabled = !enabled;
-
-    return 0;
-}
-
-static int register_sim_offline_cmd(void) {
-    const esp_console_cmd_t cmd = {
-        .command = "sim_offline",
-        .help = "simulate offline",
-        .hint = NULL,
-        .func = sim_offline_cmd,
-        .argtable = NULL
-    };
-
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
     return 0;
 }
 
@@ -395,13 +327,6 @@ void apollo_console_init(void){
     register_reboot_cmd();
     register_new_id_cmd();
     register_clear_energy_cmd();
-    register_offline_log_cmd();
-
-#ifdef CONFIG_HEAP_TRACING_STANDALONE
-    register_heap_toggle_cmd();
-#endif
-
-    register_sim_offline_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }

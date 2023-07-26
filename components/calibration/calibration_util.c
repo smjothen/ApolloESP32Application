@@ -16,6 +16,14 @@
 
 static const char *TAG = "CALIBRATION    ";
 
+const char *calibration_mode_to_string(CalibrationMode mode) {
+    switch(mode) {
+        case Idle: return "Idle";
+        case Open: return "Open";
+        default: return "Closed";
+    }
+}
+
 const char *calibration_state_to_string(CalibrationCtx *ctx) {
     CalibrationState state = ctx->State;
     const char *_calibration_states[] = { FOREACH_CS(CS_STRING) };
@@ -106,31 +114,11 @@ bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv) {
 bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float *iv, float *vv) {
     MessageType ret;
 
-#ifdef CONFIG_CAL_SIMULATION
-
-    iv[0] = iv[1] = iv[2] = 5.0;
-    vv[0] = vv[1] = vv[2] = 230.0;
-
-    /*
-    switch(CAL_STATE(ctx)) {
-        case WarmingUp:
-            if (ctx->VerTest & HighLevelCurrent) {
-                calibration_set_sim_vals(iv, vv, 32.0, 230.0);
-            } else if (ctx->VerTest & MediumLevelCurrent) {
-                calibration_set_sim_vals(iv, vv, 16.0, 230.0);
-            } else {
-                calibration_set_sim_vals(iv, vv, 0.5, 230.0);
-            }
-            break;
-        default:
-            calibration_set_sim_vals(iv, vv, 5.0, 230.0);
-            break;
+    if (calibration_is_simulation()) {
+        iv[0] = iv[1] = iv[2] = 5.0;
+        vv[0] = vv[1] = vv[2] = 230.0;
+        return true;
     }
-    */
-
-    return true;
-
-#endif
 
     if ((ret = MCU_SendCommandId(CommandCurrentSnapshot)) != MsgCommandAck) {
         ESP_LOGE(TAG, "Couldn't send current snapshot command!");
@@ -166,37 +154,36 @@ uint16_t calibration_read_samples(void) {
 bool calibration_read_average(CalibrationType type, int phase, float *average) {
     (void)type;
 
-#ifdef CONFIG_CAL_SIMULATION
+    if (calibration_is_simulation()) {
 
-    float currentOffset = 0.001234;
-    float voltageOffset = 0.001234;
-    float current;
-    float voltage;
+        float currentOffset = 0.0;
+        float voltageOffset = 0.0;
+        float current;
+        float voltage;
 
-    enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
+        enum ChargerOperatingMode mode = MCU_GetChargeOperatingMode();
 
-    switch(mode) {
-        case CHARGE_OPERATION_STATE_CHARGING:
-            voltage = 230.0012;
-            current = 0.501234;
-            break;
-        default:
-            voltage = 0.0012;
-            current = 0.001234;
-            break;
+        switch(mode) {
+            case CHARGE_OPERATION_STATE_CHARGING:
+                voltage = 230.0;
+                current = 0.5;
+                break;
+            default:
+                voltage = 0.0;
+                current = 0.0;
+                break;
+        }
+
+        switch(type) {
+            case CALIBRATION_TYPE_CURRENT_GAIN  : *average = current / emeter_get_fsi(); break;
+            case CALIBRATION_TYPE_VOLTAGE_GAIN  : *average = voltage / emeter_get_fsv(); break;
+            case CALIBRATION_TYPE_CURRENT_OFFSET: *average = currentOffset / emeter_get_fsi(); break;
+            case CALIBRATION_TYPE_VOLTAGE_OFFSET: *average = voltageOffset / emeter_get_fsv(); break;
+            default                             : *average = 0.0; break;
+        }
+
+        return true;
     }
-
-    switch(type) {
-        case CALIBRATION_TYPE_CURRENT_GAIN  : *average = current / emeter_get_fsi(); break;
-        case CALIBRATION_TYPE_VOLTAGE_GAIN  : *average = voltage / emeter_get_fsv(); break;
-        case CALIBRATION_TYPE_CURRENT_OFFSET: *average = currentOffset / emeter_get_fsi(); break;
-        case CALIBRATION_TYPE_VOLTAGE_OFFSET: *average = voltageOffset / emeter_get_fsv(); break;
-        default                             : *average = 0.0; break;
-    }
-
-    return true;
-
-#endif
 
     ZapMessage msg = MCU_ReadParameter(ParamCalibrationAveragePhase1 + phase);
     if (msg.type == MsgReadAck && msg.identifier == (ParamCalibrationAveragePhase1 + phase) && msg.length == 4) {
@@ -298,11 +285,11 @@ bool calibration_read_mid_status(uint32_t *status) {
 
 bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
-#ifdef CONFIG_CAL_SIMULATION
-    ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx));
-    *val = 25.0f;
-    return true;
-#endif
+    if (calibration_is_simulation()) {
+        ESP_LOGI(TAG, "%s: Simulating idle power!", calibration_state_to_string(ctx));
+        *val = 25.0f;
+        return true;
+    }
 
     ZapMessage msg = MCU_ReadParameter(ParamTotalChargePower);
     if (msg.length == 4 && msg.identifier == ParamTotalChargePower) {
@@ -343,8 +330,10 @@ bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock) {
 
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
     if (!MCU_GetMidStoredCalibrationId(id)) {
+        ESP_LOGE(TAG, "Couldn't get calibration ID!");
         return false;
     }
+    ESP_LOGI(TAG, "Got calibration ID %" PRIu32 "!", *id);
     return true;
 }
 
@@ -409,8 +398,11 @@ void calibration_fail(CalibrationCtx *ctx, const char *format, ...) {
     }
 
     ctx->FailReason = _calibration_fail(format, ap);
+
     ESP_LOGE(TAG, "%s: %s", calibration_state_to_string(ctx), ctx->FailReason);
     CAL_CSTATE(ctx) = Failed;
+
+    CALLOG(ctx, "- %s", ctx->FailReason);
 
     va_end(ap);
 }

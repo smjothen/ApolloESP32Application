@@ -19,8 +19,8 @@
         Unknown = 0,
 
         OfflineMode = 1,
-                
-        ParamSerialNumber = 100,
+
+		Capabilities = 100,
                 
         ParamRunTest = 101,
         ParamTestResult = 102,
@@ -70,6 +70,10 @@
         ParamLedOverride = 290,
         ParamLedOverrideClear = 291,
 
+		RCDButtonTestState = 402,
+		RCDErrorCount = 403,
+		RCDTestState = 404,
+
         ParamVoltagePhase1 = 501,
         ParamVoltagePhase2 = 502,
         ParamVoltagePhase3 = 503,
@@ -117,6 +121,7 @@
 
         ParamSessionEnergyCountImportActiveInterpolated = 565,
 
+		ParamInstantPilotCurrent = 700,
         ParamChargeDuration = 701,
         ParamChargeMode = 702,
         ParamChargePilotLevelInstant = 703,
@@ -184,6 +189,8 @@
 		ESPResetSource = 815,
 		MCUFaultPins	= 816,
 		RelayStates		= 817,
+    ParamAutoClearState = 818,
+
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
 		DataUsage = 822,
@@ -306,6 +313,7 @@
 		CommandRunGridTest = 804,
 		CommandITDiagnosticsStart = 806,
 		CommandITDiagnosticsStop = 807,
+		CommandRunRCDTest = 808,
 		CommandActivateWatchdog = 810,
 		CommandStartServoCheck = 811,
 		CommandGetOPENSamples = 812,

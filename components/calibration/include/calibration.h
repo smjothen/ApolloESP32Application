@@ -228,6 +228,8 @@ typedef enum {
 typedef struct {
     int Run;
     int Seq;
+    int PktsSent;
+    int PktsAckd;
     int LastSeq;
     int Count;
     int Position;
@@ -254,6 +256,7 @@ typedef struct {
 } CalibrationCtx;
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode);
+bool calibration_get_finished_flag();
 
 void calibration_task(void *pvParameters);
 
@@ -276,5 +279,16 @@ bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw);
 void calibration_task_start(void);
 void calibration_task_stop(void);
 int calibration_task_watermark(void);
+
+void calibration_set_simulation(bool sim);
+bool calibration_is_simulation(void);
  
+#define CALIBRATION_LOG "/files/cal.txt"
+
+void calibration_log_line(CalibrationCtx *ctx, const char *format, ...);
+
+#define _CALLOG(ctx, fmt, ...) calibration_log_line(ctx, fmt, __VA_ARGS__)
+#define CALLOG(ctx, fmt, ...) _CALLOG(ctx, "%s - %s / %s " fmt "\n", esp_log_system_timestamp(), calibration_state_to_string(ctx), charger_state_to_string(ctx), ## __VA_ARGS__)
+#define CALLOGTIME(ctx, fmt, ...) _CALLOG(ctx, "%s " fmt "\n", esp_log_system_timestamp(), ## __VA_ARGS__)
+
 #endif

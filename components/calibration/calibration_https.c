@@ -21,6 +21,7 @@
 #include "mbedtls/sha256.h"
 
 #include "calibration.h"
+#include "calibration_util.h"
 
 static const char *TAG = "CALIBRATION    ";
 
@@ -89,12 +90,6 @@ bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw) {
 bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, bool verification) {
 
 		memset(buf, 0, sizeof (buf));
-
-#ifdef CONFIG_CAL_SIMULATION_PROD_SERV
-		ESP_LOGI(TAG, "Simulating production server data transfer, using calibration ID 1337!");
-		ctx->Params.CalibrationId = 1337;
-		return true;
-#endif
 
     char *url = "https://devices.zaptec.com/production/mid/calibration";
 		if (verification) {
@@ -177,11 +172,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 		cJSON *test = cJSON_CreateObject();
 		cJSON_AddNumberToObject(test, "Station", ctx->Position);
 		cJSON_AddNumberToObject(test, "Run", ctx->Run);
-#ifdef CONFIG_CAL_SIMULATION
-		cJSON_AddBoolToObject(test, "IsSimulated", true);
-#else
-		cJSON_AddBoolToObject(test, "IsSimulated", false);
-#endif
+		cJSON_AddBoolToObject(test, "IsSimulated", calibration_is_simulation());
 
 		if (verification) {
 			cJSON_AddNumberToObject(test, "CalibrationId", ctx->Params.CalibrationId);
@@ -315,6 +306,8 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 
 			ctx->Params.CalibrationId = cJSON_GetObjectItem(body, "CalibrationId")->valueint;
 			ESP_LOGI(TAG, "Got calibration ID %" PRIu32 "!", ctx->Params.CalibrationId);
+
+			CALLOG(ctx, "- Calibration ID = %d", ctx->Params.CalibrationId);
 
 			cJSON_Delete(body);
 		}

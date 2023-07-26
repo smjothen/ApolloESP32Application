@@ -8,6 +8,7 @@
 void offline_log_append_energy(time_t timestamp, double energy);
 int offline_log_attempt_send(void);
 int offline_log_delete(void);
+void offline_log_disable(void);
 
 uint32_t crc32_normal(uint32_t crc, const void *buf, size_t size);
 
@@ -19,4 +20,6 @@ void offline_log_append_energy_legacy(time_t timestamp, double energy);
 
 #endif
  
+void setup_offline_log();
+
 #endif /* __OFFLINE_LOG_H__ */

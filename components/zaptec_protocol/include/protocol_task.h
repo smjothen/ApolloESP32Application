@@ -51,7 +51,8 @@ float MCU_GetCurrents(uint8_t phase);
 
 float MCU_GetPower();
 float MCU_GetEnergy();
-float MCU_GetMaximumEnergy();
+
+void MCU_AdjustMaximumEnergy();
 void MCU_ClearMaximumEnergy();
 
 int8_t MCU_GetChargeMode();
@@ -87,6 +88,7 @@ float MCU_GetHWCurrentMaxLimit();
 
 void MCU_GetOPENSamples(char * samples);
 uint8_t MCU_GetRelayStates();
+uint8_t MCU_GetRCDButtonTestStates();
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen);
 
 float MCU_GetMaxInstallationCurrentSwitch();
@@ -99,6 +101,7 @@ uint8_t MCU_GetIT3OptimizationState();
 
 void SetEspNotification(uint16_t notification);
 void ClearNotifications();
+uint32_t GetCombinedNotificationsMasked();
 uint32_t GetCombinedNotifications();
 void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
@@ -110,5 +113,6 @@ bool MCU_GetInterpolatedEnergyCounter(float *energy);
 bool MCU_IsCalibrationHandle(void);
 
 bool MCU_GetMidStatus(uint32_t *id);
+bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalCount);
 
 #endif /* PROTOCOL_TASK_H */

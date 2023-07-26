@@ -24,6 +24,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "zaptec_cloud_observations.h"
 #include "offlineSession.h"
+#include "offline_log.h"
 
 #include "calibration_crc.h"
 #include "calibration_util.h"
@@ -39,21 +40,67 @@
 
 static const char *TAG = "CALIBRATION    ";
 
-TaskHandle_t handle = NULL;
+static TaskHandle_t handle = NULL;
 
 // Moved out of functions to save stack space
-char raddr_name[32] = { 0 };
-char buf[256] = { 0 };
-char recvbuf[128] = { 0 };
-char hexbuf[256] = { 0 };
+static char raddr_name[32] = { 0 };
+static char buf[256] = { 0 };
+static char recvbuf[128] = { 0 };
+static char hexbuf[256] = { 0 };
 
-CalibrationCtx cctx = { 0 };
-CalibrationServer serv = { 0 };
-CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
+static CalibrationCtx ctx = { 0 };
+static CalibrationServer serv = { 0 };
+static CalibrationUdpMessage msg = CalibrationUdpMessage_init_zero;
 
-fd_set fds = { 0 };
+static fd_set fds = { 0 };
 
 struct DeviceInfo devInfo;
+
+static bool calibration_is_simulated = false;
+
+void calibration_set_simulation(bool sim) {
+    calibration_is_simulated = sim;
+}
+
+bool calibration_is_simulation(void) {
+    return calibration_is_simulated;
+}
+
+void calibration_log_line(CalibrationCtx *ctx, const char *format, ...) {
+    FILE *fp;
+    if (!(fp = fopen(CALIBRATION_LOG, "a"))) {
+        ESP_LOGE(TAG, "Can't open file for logging");
+        return;
+    }
+
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(fp, format, ap);
+    va_end(ap);
+
+    fclose(fp);
+}
+
+void calibration_log_dump(void) {
+    FILE *fp;
+    if (!(fp = fopen(CALIBRATION_LOG, "r"))) {
+        ESP_LOGE(TAG, "Can't open file for logging");
+        return;
+    }
+
+    while (fgets(hexbuf, sizeof (hexbuf), fp) != NULL) {
+        char *end = strchr(hexbuf, '\n');
+        if (end) {
+            *end = 0;
+        }
+
+        ESP_LOGI(TAG, "Log: %s", hexbuf);
+
+        publish_debug_telemetry_observation_Calibration(hexbuf);
+    }
+
+    remove(CALIBRATION_LOG);
+}
 
 bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     CalibrationHeader header = { 0 };
@@ -97,7 +144,14 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
 
 bool calibration_set_mode(CalibrationCtx *ctx, CalibrationMode mode) {
     if (mode == ctx->Mode) {
+        ctx->ReqMode = mode;
         return true;
+    }
+
+    ESP_LOGI(TAG, "%s: Requesting mode %s", calibration_state_to_string(ctx), calibration_mode_to_string(mode));
+
+    if (ctx->ReqMode != mode) {
+        CALLOG(ctx, "- Requesting %s", calibration_mode_to_string(mode));
     }
 
     ctx->ReqMode = mode;
@@ -137,8 +191,14 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     // Disable cloud communication (exception for uploading calibration data)
     cloud_observations_disable(true);
+
     // Disable offline sessions as well, chargers should be online during calibration but just in case...
     offlineSession_disable();
+    offline_log_disable();
+
+    if (!calibration_turn_led_off(ctx)) {
+        return -5;
+    }
 
     if (!calibration_get_calibration_id(ctx, &ctx->Params.CalibrationId)) {
         return -4;
@@ -156,10 +216,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
             ESP_LOGI(TAG, "Calibration already verified (ID = %" PRIu32 ")!", ctx->Params.CalibrationId);
             ctx->Flags |= CAL_FLAG_UPLOAD_VER;
         }
-    }
-
-    if (!calibration_set_blinking(ctx, 1)) {
-        return -5;
     }
 
     /* Should be standalone already?
@@ -186,17 +242,19 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
         case InProgress: {
             if (!(ctx->Flags & CAL_FLAG_INIT)) {
 
-                if (calibration_tick_starting_init(ctx) < 0) {
+                int ret = calibration_tick_starting_init(ctx);
+                // Turn off LED, etc
+                if (ret < 0) {
+                    CALLOG(ctx, "- Starting couldn't complete - %d", ret);
                     return false;
                 }
 
                 ctx->Flags |= CAL_FLAG_INIT;
-            } else {
+            }
 
-                if (calibration_set_mode(ctx, Closed)) {
-                    CAL_CSTATE(ctx) = Complete;
-                }
-
+            // Enter MID mode
+            if (calibration_set_mode(ctx, Closed)) {
+                CAL_CSTATE(ctx) = Complete;
             }
 
             break;
@@ -244,9 +302,10 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-#ifdef CONFIG_CAL_SIMULATION
-    return 3;
-#endif
+    if (calibration_is_simulation()) { 
+        return 3;
+    }
+
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 
@@ -447,6 +506,11 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     }
 
     if (!(ctx->Flags & CAL_FLAG_UPLOAD_PAR)) {
+        // Let charger go into "idle" state where we don't fail if not in MID mode
+        if (!calibration_set_mode(ctx, Idle)) {
+            return false;
+        }
+
         // Upload to cloud as observation
         calibration_https_upload_to_cloud(ctx, hexbuf);
 
@@ -473,7 +537,6 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     ctx->Retries = 0;
 
     if (!(ctx->Flags & CAL_FLAG_WROTE_PARAMS)) {
-
         // Let charger go into "idle" state where we don't fail if not in MID mode
         if (!calibration_set_mode(ctx, Idle)) {
             return false;
@@ -492,15 +555,21 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
         }
 
         ctx->Flags |= CAL_FLAG_WROTE_PARAMS;
+        ctx->Flags &= ~CAL_FLAG_INIT;
         ctx->Ticks[WRITE_TICK] = 0;
 
         return false;
 
     } else {
+        // Rebooted, turn LED off, standalone current, etc. again!
+        if (!(ctx->Flags & CAL_FLAG_INIT)) {
+            int ret = calibration_tick_starting_init(ctx);
+            if (ret < 0) {
+                CALLOG(ctx, "- Starting couldn't complete - %d", ret);
+                return false;
+            }
 
-        // Turn off LED upon boot
-        if (!calibration_turn_led_off(ctx)) {
-            return false;
+            ctx->Flags |= CAL_FLAG_INIT;
         }
 
         // Give MCU ~10 seconds to reboot and current to stabilize, otherwise current transformers
@@ -515,12 +584,10 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             return false;
         }
 
+        // Enter MID mode
         if (!calibration_set_mode(ctx, Closed)) {
             return false;
         }
-
-        // Rebooted, set standalone current, etc again
-        calibration_tick_starting_init(ctx);
 
         CAL_CSTATE(ctx) = Complete;
 
@@ -569,6 +636,8 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
                 calibration_fail(ctx, "Failed to mark calibration as verified!");
                 return false;
             }
+
+            CALLOG(ctx, "- Verified ID %d, CRC 0x%04X", calId, crc);
 
             CAL_CSTATE(ctx) = Complete;
             break;
@@ -741,35 +810,60 @@ int calibration_send_state(CalibrationCtx *ctx) {
     if (err < 0) {
         ESP_LOGE(TAG, "Sending charger state failed: %d", errno);
         return 0;
+    } else {
+        ctx->PktsSent++;
     }
 
     return ctx->Seq++;
 }
 
+static bool isCalibratedFlag = false;
+bool calibration_get_finished_flag()
+{
+	return isCalibratedFlag;
+}
+
 void calibration_finish(CalibrationCtx *ctx, bool failed) {
-    if (!(ctx->Flags & CAL_FLAG_DONE)) {
-
-        if (calibration_set_mode(ctx, Idle)) {
-            if (failed) {
-                ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
-            } else {
-                ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
-            }
-
-            ctx->Flags |= CAL_FLAG_DONE;
-        }
+    if (!calibration_set_mode(ctx, Idle)) {
+        ESP_LOGI(TAG, "Waiting for charger to go idle...");
+        return;
     }
 
-    calibration_set_blinking(ctx, 0);
+    if (!(ctx->Flags & CAL_FLAG_DONE)) {
+        // Allow sending observations again so capabilities and log can be uploaded...
+        cloud_observations_disable(false);
+
+        if (failed) {
+            ESP_LOGE(TAG, "%s: Calibration failed!", calibration_state_to_string(ctx));
+
+            // If failed, then maybe got a bad calibration, allow rewriting?
+            if (MCU_SendCommandId(CommandMidClearCalibration) != MsgCommandAck) {
+                ESP_LOGE(TAG, "%s: Couldn't clear calibration!", calibration_state_to_string(ctx));
+                return;
+            }
+        } else {
+            ESP_LOGI(TAG, "%s: Calibration complete!", calibration_state_to_string(ctx));
+            // Re-enable cloud publishing so capabilities can be sent
+            cloud_observations_disable(false);
+            isCalibratedFlag = true;
+        }
+
+        calibration_log_dump();
+
+        ctx->Flags |= CAL_FLAG_DONE;
+    }
+
     calibration_turn_led_off(ctx);
 
     static int blinkDelay = 0;
 
-    if (blinkDelay % 5 == 0) {
+    if (blinkDelay % 2 == 0) {
         // Indicate PASS/FAIL with by blinking green/red every tick
         if (failed) {
+            ESP_LOGE(TAG, "Blink!");
             calibration_blink_led_red(ctx);
         } else {
+            ESP_LOGI(TAG, "Blink!");
             calibration_blink_led_green(ctx);
         }
     }
@@ -782,7 +876,13 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
 void calibration_handle_tick(CalibrationCtx *ctx) {
     TickType_t curTick = xTaskGetTickCount();
 
+    CalibrationMode mode_before = ctx->Mode;
     calibration_update_charger_state(ctx);
+    CalibrationMode mode_after = ctx->Mode;
+
+    if (mode_before != mode_after) {
+        CALLOG(ctx, "- %s -> %s", calibration_mode_to_string(mode_before), calibration_mode_to_string(mode_after));
+    }
 
     // No tick within states if done or failed, but allow above to execute so we send
     // state back to the app
@@ -799,6 +899,23 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // Need to have received message from server in last 20 seconds, otherwise fail
     if (pdTICKS_TO_MS(curTick - ctx->Ticks[ALIVE_TICK]) > 20000) {
         calibration_fail(ctx, "No message from server in last 20 seconds");
+        return;
+    }
+
+    bool verPass = false;
+
+    uint32_t speedVer = MCU_GetHwIdMCUSpeed();
+    switch (speedVer) {
+        case 5:
+        case 7:
+            verPass = true;
+            break;
+        default:
+            break;
+    }
+
+    if (!verPass) {
+        calibration_fail(ctx, "Can only calibrate MID/EU Speed boards, detected Speed v%d", speedVer);
         return;
     }
 
@@ -840,6 +957,11 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     }
 
     bool updated = false;
+
+    static bool first_call = true;
+
+    CalibrationState state = CAL_STATE(ctx);
+    CalibrationChargerState cstate = CAL_CSTATE(ctx);
 
     //
     // Order of steps from App:
@@ -893,15 +1015,25 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
             break;
     }
 
+    CalibrationState state_after = CAL_STATE(ctx);
+    CalibrationChargerState cstate_after = CAL_CSTATE(ctx);
+
+    if (state != state_after || cstate != cstate_after || first_call) {
+        CALLOG(ctx, "");
+    }
+
     if (updated) {
         ESP_LOGI(TAG, "%s: %s ...", calibration_state_to_string(ctx), charger_state_to_string(ctx));
     }
 
     ctx->Ticks[TICK] = xTaskGetTickCount();
+
+    first_call = false;
 }
 
 void calibration_handle_ack(CalibrationCtx *ctx, CalibrationUdpMessage_ChargerAck *msg) {
     /* ESP_LOGI(TAG, "ChargerAck { %d }", msg->Sequence); */
+    ctx->PktsAckd++;
 }
 
 void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMessage *msg) {
@@ -975,6 +1107,25 @@ void calibration_reset(CalibrationCtx *ctx) {
 void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMessage *msg) {
     bool isRun = msg->State == Starting && msg->has_Run;
 
+    /*
+    static TickType_t stateTick = 0;
+
+    if (msg->State != CAL_STATE(ctx) || stateTick == 0) {
+        if (stateTick != 0) {
+            ESP_LOGI(TAG, "State %d -> %d took %ds", CAL_STATE(ctx), msg->State, pdTICKS_TO_MS(xTaskGetTickCount() - stateTick) / 1000);
+        }
+
+        stateTick = xTaskGetTickCount();
+    } else {
+
+        // Same state - allow 60s in current state before transitioning
+        if (xTaskGetTickCount() - stateTick > pdMS_TO_TICKS(60 * 1000)) {
+            calibration_fail(ctx, "State timeout");
+        }
+
+    }
+    */
+
     // If failed, allow starting a new run
     if (!isRun && CAL_CSTATE(ctx) == Failed) {
         return;
@@ -1010,6 +1161,14 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
             ctx->Run = msg->Run.Run;
             ctx->Position = testPos;
             ESP_LOGI(TAG, "Starting run %d in position %d", ctx->Run, ctx->Position);
+        }
+
+        if (strcmp(msg->Run.SetupName, "dev") == 0) {
+            ESP_LOGI(TAG, "Run is a simulation, uploading disabled!");
+            ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
+            calibration_set_simulation(true);
+        } else {
+            calibration_set_simulation(false);
         }
     }
 
@@ -1134,6 +1293,8 @@ err:
 }
 
 void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
+    ESP_LOGI(TAG, "Message: ");
+
     if (msg->has_Ack) {
         printf("Ack { Sequence: %" PRId32 " }\n", msg->Ack.Sequence);
     }
@@ -1205,8 +1366,8 @@ void calibration_task(void *pvParameters) {
         serv.ServAddr.sin_family = PF_INET;
         serv.Initialized = false;
 
-        cctx.Server = serv;
-        cctx.Ticks[STATE_TICK] = xTaskGetTickCount();
+        ctx.Server = serv;
+        ctx.Ticks[STATE_TICK] = xTaskGetTickCount();
 
         struct sockaddr_in sdestv4 = {
             .sin_family = PF_INET,
@@ -1215,11 +1376,13 @@ void calibration_task(void *pvParameters) {
 
         inet_aton(CONFIG_CAL_SERVER_IP, &sdestv4.sin_addr.s_addr);
 
+        TickType_t lastTick = 0;
+
         int err = 1;
         while (err > 0) {
             struct timeval tv = {
                 .tv_sec = 0,
-                .tv_usec = 500 * 1000, // 0.5 second tick
+                .tv_usec = 10 * 1000, // 10ms timeout
             };
 
             FD_ZERO(&fds);
@@ -1261,39 +1424,55 @@ void calibration_task(void *pvParameters) {
                         continue;
                     }
 
-                    cctx.Server.ServAddr.sin_addr.s_addr = ((struct sockaddr_in *)&raddr)->sin_addr.s_addr;
-                    cctx.Server.Initialized = true;
+                    ctx.Server.ServAddr.sin_addr.s_addr = ((struct sockaddr_in *)&raddr)->sin_addr.s_addr;
+                    ctx.Server.Initialized = true;
 
                     //calibration_debug_udp_message(&msg);
 
                     if (msg.has_Ack) {
-                        calibration_handle_ack(&cctx, &msg.Ack);
+                        calibration_handle_ack(&ctx, &msg.Ack);
                     } 
 
                     if (msg.has_Data) {
-                        calibration_handle_data(&cctx, &msg.Data);
-                        // Emulate tick since this message comes too often to get a timeout
-                        calibration_handle_tick(&cctx);
+                        calibration_handle_data(&ctx, &msg.Data);
                     } 
 
                     if (msg.has_State) {
-                        calibration_handle_state(&cctx, &msg.State);
-                        cctx.LastSeq = msg.State.Sequence;
+                        calibration_handle_state(&ctx, &msg.State);
+                        ctx.LastSeq = msg.State.Sequence;
                     }
 
-                    cctx.Ticks[ALIVE_TICK] = xTaskGetTickCount();
+                    static TickType_t periodicLog = 0;
+
+                    if (xTaskGetTickCount() - periodicLog > pdMS_TO_TICKS(30000)) {
+                        int8_t rssi = 0;
+                        wifi_ap_record_t wifidata;
+			                  if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
+                            rssi = wifidata.rssi;
+                        }
+
+                        // Every 30 seconds update log with some state
+                        CALLOGTIME(&ctx, "- RSSI %d - (%d TX / %d RX)", rssi, ctx.PktsSent, ctx.PktsAckd);
+
+                        periodicLog = xTaskGetTickCount();
+                    }
+
+                    ctx.Ticks[ALIVE_TICK] = xTaskGetTickCount();
 
                     // Enabled use of malloc in nanopb, so free any dynamically allocated fields...
                     pb_release(CalibrationUdpMessage_fields, &msg);
                 }
             } else {
-                if (!cctx.Server.Initialized) {
+                if (!ctx.Server.Initialized) {
                     /* ESP_LOGI(TAG, "Waiting for server broadcast ..."); */
                     continue;
                 }
 
-                // Timeout, do a tick
-                calibration_handle_tick(&cctx);
+                TickType_t tick = xTaskGetTickCount();
+                if (pdTICKS_TO_MS(tick - lastTick) > 1000) {
+                    calibration_handle_tick(&ctx);
+                    lastTick = tick;
+                }
             }
         }
 

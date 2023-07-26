@@ -33,6 +33,8 @@ struct HoldSessionStartTime *cloud_observation_GetTimeStruct();
 void cloud_observation_SetTimeStruct(char * _timeString, time_t _holdEpochSec, uint32_t _holdEpochUsec, bool _usedInRequest);
 void cloud_observation_ClearTimeStruct();
 
+int publish_debug_telemetry_observation_capabilities();
+
 int publish_debug_telemetry_observation_power();
 
 int publish_debug_telemetry_observation_cloud_settings();
@@ -78,6 +80,7 @@ int publish_debug_telemetry_observation_PulseInterval(uint32_t pulseInterval);
 int publish_debug_telemetry_observation_Calibration(char *calibrationJSON);
 
 void SetClearSessionFlag();
+void ReInitParametersForCloud();
 
 int publish_telemetry_observation_on_change();
 
