@@ -173,7 +173,7 @@ void log_task_info(void){
 	// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
 	char formated_memory_use[256];
 	snprintf(formated_memory_use, 256,
-		"[MEMORY USE] (GetFreeHeapSize now: %zu, GetMinimumEverFreeHeapSize: %zu, heap_caps_get_free_size: %d)",
+		"[MEMORY USE] (GetFreeHeapSize now: %" PRIu32 ", GetMinimumEverFreeHeapSize: %" PRIu32 ", heap_caps_get_free_size: %d)",
 		xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size
 	);
 	ESP_LOGD(TAG, "%s", formated_memory_use);
