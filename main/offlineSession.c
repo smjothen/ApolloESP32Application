@@ -662,21 +662,23 @@ void offlineSession_DeleteLastUsedFile()
 	}
 }
 
-void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
+int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 {
+	ESP_LOGE(TAG, " *** UpdateSessionOnFile: %i ***", createNewFile);
+
 	if (!offlineSession_is_mounted()) {
 		ESP_LOGE(TAG, "files is not mounted!");
-		return;
+		return ESP_FAIL;
 	}
 
 	if(activeFileNumber < 0)
-		return;
+		return ESP_FAIL;
 
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
-		return;
+		return ESP_FAIL;
 	}
 
 	if(createNewFile)
@@ -699,7 +701,7 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 		}
 
 		xSemaphoreGive(offs_lock);
-		return;
+		return -2;
 	}
 
 	//ESP_LOGW(TAG, "strlen: %d, path: %s", strlen(sessionData), activePathString);
@@ -745,6 +747,8 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	}
 
 	xSemaphoreGive(offs_lock);
+
+	return ESP_OK;
 }
 
 
@@ -1190,7 +1194,7 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 	sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 
 	//Save the session structure to the file including the start 'B' message
-	offlineSession_UpdateSessionOnFile(sessionData, true);
+	ret = offlineSession_UpdateSessionOnFile(sessionData, true);
 
 	return ret;
 }

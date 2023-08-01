@@ -37,7 +37,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 void offlineSession_SetSessionFileInactive();
 void offlineSession_DeleteLastUsedFile();
-void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile);
+int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile);
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo);
 
 cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo);
