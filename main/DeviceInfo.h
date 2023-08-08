@@ -84,6 +84,8 @@ typedef enum {
     HW_SPEED_1       = 1,
     HW_SPEED_3_UK    = 3,	//MCU flashes FPGA
 	HW_SPEED_5_EU    = 5,   //MCU flashes FPGA
+	HW_SPEED_6_UK    = 6,   //MCU flashes FPGA
+	HW_SPEED_7_EU    = 7,   //MCU flashes FPGA
 } hw_speed_revision;
 
 

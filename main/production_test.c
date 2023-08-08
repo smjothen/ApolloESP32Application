@@ -910,7 +910,7 @@ int test_proximity(){
 
 	esp_err_t err = SFH7776_detect();
 
-	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3 || MCU_GetHwIdMCUSpeed() == 6);
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
 		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "present" : "missing");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
