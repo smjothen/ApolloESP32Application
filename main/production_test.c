@@ -854,40 +854,6 @@ int test_bg(){
 	snprintf(signal_string, 256, "[AT+QCSQ] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d\r\n", sysmode, rssi, rsrp, sinr, rsrq);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, signal_string);
 
-#if 0
-  // For testing at Sanmina, wait for pdpdeact from 4G module, plus
-  // a bit of extra time leeway... this can probably be optimized.
-  char at_buffer[256];
-
-  int i = 0;
-  bool got_deact = false;
-
-  while (true) {
-      ESP_LOGI(TAG, "Waiting for pdpdeact %d ...", i);
-      if (await_line(at_buffer, pdMS_TO_TICKS(10))) {
-          ESP_LOGI(TAG, "Got: %s", at_buffer);
-          if (strcmp(at_buffer, "+QIURC: \"pdpdeact\",1") == 0) {
-            got_deact = true;
-            ESP_LOGI(TAG, "Done!");
-            break;
-          }
-      }
-
-      vTaskDelay(pdMS_TO_TICKS(1000));
-
-      if (++i > 60) {
-          break;
-      }
-  }
-
-  // Not sure this extra delay is necessary after we receive the 
-  // line...
-  if (got_deact) {
-    ESP_LOGI(TAG, "Additional delay for pdpdeact ...");
-    vTaskDelay(pdMS_TO_TICKS(10000));
-  }
-#endif
-
 	int http_result = at_command_http_test();
 	if(http_result<0){
 		sprintf(payload, "bad http get: %d\r\n", http_result);
