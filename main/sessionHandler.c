@@ -1796,6 +1796,12 @@ void sessionHandler_SendMCUSettings()
 	rxMsg = MCU_ReadParameter(MCUFaultPins);
 	uint8_t faultPins = rxMsg.data[0];
 
+	rxMsg = MCU_ReadParameter(ServoState);
+	uint8_t servoState = rxMsg.data[0];
+
+	rxMsg = MCU_ReadParameter(ServoMovement);
+	uint16_t servoMovement = GetUInt16(rxMsg.data);
+
 	rxMsg = MCU_ReadParameter(RCDTestState);
 	uint8_t rcdTestState = rxMsg.data[0];
 
@@ -1805,7 +1811,7 @@ void sessionHandler_SendMCUSettings()
 	rxMsg = MCU_ReadParameter(ParamInstantPilotCurrent);
 	float instantPilotCurrent = GetFloat(rxMsg.data);
 
-	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X, RCDts: %i, CM: %i, ADC: %i, CP: %2.2f", enabled, standAlone, auth, maxC, faultPins, rcdTestState, MCU_GetChargeMode(), averagePilotLevel, instantPilotCurrent);
+	snprintf(mcuPayload, sizeof(mcuPayload), "MCUSettings: En:%i StA:%i, Auth:%i, MaxC: %2.2f faultPins: 0x%X, SS: %i, SM: %i, RCDts: %i, CM: %i, ADC: %i, CP: %2.2f", enabled, standAlone, auth, maxC, faultPins, servoState, servoMovement, rcdTestState, MCU_GetChargeMode(), averagePilotLevel, instantPilotCurrent);
 	ESP_LOGI(TAG, "%s", mcuPayload);
 	publish_debug_telemetry_observation_Diagnostics(mcuPayload);
 }

@@ -189,7 +189,7 @@
 		ESPResetSource = 815,
 		MCUFaultPins	= 816,
 		RelayStates		= 817,
-    ParamAutoClearState = 818,
+		ParamAutoClearState = 818,
 
 		UptimeVariscite = 820,
 		UptimeMCU = 821,
@@ -209,6 +209,8 @@
         ServoCheckStartCurrent  = 871,
         ServoCheckStopPosition 	= 872,
         ServoCheckStopCurrent 	= 873,
+		ServoState              = 874,
+		ServoMovement   		= 875,
 
         HWCurrentActiveLimit	= 880,
         HWCurrentMaxLimit    	= 881,
