@@ -105,7 +105,6 @@ typedef enum {
 #define SCHEDULE_SIZE 196	//(14*14) -> ((14*13) + (13 + \0)) = 196
 #define DIAGNOSTICS_STRING_SIZE 100
 
-#define URL_OCPP_MAX_LENGTH 128
 #define CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH 32
 #define DEFAULT_CSL_LENGTH 6//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
@@ -185,12 +184,14 @@ struct Configuration
 	uint8_t defaultOfflinePhase;
 	float defaultOfflineCurrent;
 	uint8_t isEnabled;
+	enum session_controller session_controller;
 
 	// ocpp core profile settings ((commented out settings are optional AND currently not in use) OR superseded by other settings)
 	// See Open charge point protocol 1.6 section 9.1 for more information
 
+	bool permitted_ocpp;
 	bool ocpp_authorization_cache_enabled;
-	char url_ocpp[URL_OCPP_MAX_LENGTH];
+	char url_ocpp[CONFIG_OCPP_URL_MAX_LENGTH];
 	char chargebox_identity_ocpp[CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH];
 	bool availability_ocpp;
 	bool ocpp_allow_offline_tx_for_unknown_id;
@@ -236,7 +237,6 @@ struct Configuration
 
 	// Local settings
 
-	enum session_controller session_controller;
 	uint8_t communicationMode;
 	float hmiBrightness;
 	uint8_t permanentLock;

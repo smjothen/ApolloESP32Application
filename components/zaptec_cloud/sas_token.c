@@ -13,6 +13,7 @@
 #include "sha256.h"
 #include "storage.h"
 #include "DeviceInfo.h"
+#include "rfc3986.h"
 
 // #include "wpa/includes.h"
 // #include "crypto/crypto.h"
@@ -20,17 +21,6 @@
 #include "sas_token.h"
 
 #define TAG "SAS TOKEN GEN  "
-
-char rfc3986[256] = {0};
-char html5[256] = {0};
-void encode(const char *s, char *enc, char *tb)
-{
-	for (; *s; s++) {
-		if (tb[(int)*s]) sprintf(enc, "%c", tb[(int)*s]);
-		else        sprintf(enc, "%%%02X", *s);
-		while (*++enc);
-	}
-}
 
 int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 
@@ -108,13 +98,7 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	size_t bufsize = (strlen(tokenbuf) *3) +1;
 	char enc[bufsize];
 	memset(enc, 0, bufsize);
-	for (int i = 0; i < 256; i++) {
-		rfc3986[i] = isalnum(i)||i == '~'||i == '-'||i == '.'||i == '_'
-			? i : 0;
-		html5[i] = isalnum(i)||i == '*'||i == '-'||i == '.'||i == '_'
-			? i : (i == ' ') ? '+' : 0;
-	}
-	encode(tokenbuf, enc, rfc3986);
+	rfc3986_percent_encode(tokenbuf, enc);
     //base64_url_encode()
 
 	//Build up signature string

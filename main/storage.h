@@ -33,6 +33,7 @@ void storage_Set_TransmitInterval(uint32_t newValue);
 void storage_Set_TransmitChangeLevel(float newValue);
 
 //Set OCPP settings
+void storage_Set_permitted_ocpp(bool newValue);
 void storage_Set_url_ocpp(const char * newValue);
 void storage_Set_chargebox_identity_ocpp(const char * newValue);
 void storage_Set_availability_ocpp(bool newValue);
@@ -102,6 +103,7 @@ float storage_Get_TransmitChangeLevel();
 uint32_t storage_Get_MaxStartDelay();
 
 //Get OCPP settings
+bool storage_Get_permitted_ocpp();
 const char * storage_Get_url_ocpp();
 const char * storage_Get_chargebox_identity_ocpp();
 bool storage_Get_availability_ocpp();

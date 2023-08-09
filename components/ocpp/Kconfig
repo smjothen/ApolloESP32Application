@@ -2,6 +2,13 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_URL_MAX_LENGTH
+       int "Maximum length of the of OCPP connection URL"
+       help
+	Length of the OCPP URL where the OCPP 1.6j websocket endpoint is located. This length is without CBID.
+       default 2048
+       range 8 4000 # Max range is currently 4000 due to nvs string limitations.
+
 config OCPP_MAX_TRANSACTION_QUEUE_SIZE
        int "Size of transaction queue"
        help

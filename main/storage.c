@@ -81,8 +81,9 @@ void storage_Init_Configuration()
 	configurationStruct.diagnosticsMode				= 0;
 
 	// ocpp settings
+	configurationStruct.permitted_ocpp = false;
 	strcpy(configurationStruct.url_ocpp, "");
-	configurationStruct.session_controller = eSESSION_ZAPTEC_CLOUD;
+	configurationStruct.session_controller = eSESSION_STANDALONE;
 	configurationStruct.availability_ocpp = configurationStruct.isEnabled;
 	// ocpp core profile settings
 	configurationStruct.ocpp_authorize_remote_tx_requests = true;
@@ -232,6 +233,12 @@ void storage_Set_TransmitChangeLevel(float newValue)
 }
 
 // Ocpp settings
+
+void storage_Set_permitted_ocpp(bool newValue)
+{
+	configurationStruct.permitted_ocpp = newValue;
+}
+
 void storage_Set_url_ocpp(const char * newValue)
 {
 	strcpy(configurationStruct.url_ocpp, newValue);
@@ -617,6 +624,10 @@ float storage_Get_TransmitChangeLevel()
 }
 
 //Ocpp settings
+bool storage_Get_permitted_ocpp(){
+	return configurationStruct.permitted_ocpp;
+}
+
 const char * storage_Get_url_ocpp()
 {
 	return configurationStruct.url_ocpp;
@@ -968,6 +979,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_zfloat(configuration_handle, "TxChangeLevel", configurationStruct.transmitChangeLevel);
 
 	//OCPP settings
+	err += nvs_set_u8(configuration_handle, "permittedOcpp", configurationStruct.permitted_ocpp);
 	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
 	err += nvs_set_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp);
 	err += nvs_set_u8(configuration_handle, "availOcpp", configurationStruct.availability_ocpp);
@@ -1061,7 +1073,9 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_zfloat(configuration_handle, "TxChangeLevel", &configurationStruct.transmitChangeLevel);
 
 	//OCPP settings
-	readSize = URL_OCPP_MAX_LENGTH;
+	if(nvs_get_u8(configuration_handle, "permittedOcpp", (uint8_t *)&configurationStruct.permitted_ocpp) != 0)
+		configurationStruct.permitted_ocpp = false;
+	readSize = CONFIG_OCPP_URL_MAX_LENGTH;
 	err += nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize);
 	readSize = CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH;
 	if(nvs_get_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp, &readSize) != 0)
