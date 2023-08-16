@@ -23,7 +23,14 @@ void zntp_init()
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_set_sync_interval(86400000);//Once per day(in ms)
+
+    // Note: Sanmina seems to block pool.ntp.org, but no.pool.ntp.org should
+    // work everywhere? Otherwise we need to set this differently in production test vs. 
+    // in the field.
     sntp_setservername(0, "pool.ntp.org");
+    sntp_setservername(1, "no.pool.ntp.org");
+    sntp_setservername(2, "europe.pool.ntp.org");
+
     //sntp_setserver(1,"216.239.35.12");//0xD8EF230C);// 216.239.35.12)
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
