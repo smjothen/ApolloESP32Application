@@ -581,7 +581,7 @@ void app_main(void)
 		//Invalid EEPROM content
 		int id_result = prodtest_getNewId(false);
 		if(id_result<0){
-			ESP_LOGE(TAG_MAIN, "ID assign failed");
+			ESP_LOGE(TAG_MAIN, "ID assign failed %d", id_result);
 			vTaskDelay(pdMS_TO_TICKS(500));
 			esp_restart();
 		}

@@ -474,7 +474,26 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA375FEC")==0)
 		return "10.0.1.19";
 
-
+  // Sanmina line 1 RFIDs
+	if(strcmp(latest_tag.idAsString, "nfc-AA4FB11C")==0)
+		return "10.250.141.16";
+	if(strcmp(latest_tag.idAsString, "nfc-AAFF7FFC")==0)
+		return "10.250.141.17";
+	if(strcmp(latest_tag.idAsString, "nfc-BB9C29BE")==0)
+		return "10.250.141.18";
+	if(strcmp(latest_tag.idAsString, "nfc-BB6C76BE")==0)
+		return "10.250.141.19";
+	
+  // Sanmina line 1 alternate RFIDs
+	if(strcmp(latest_tag.idAsString, "nfc-BBCA17BE")==0)
+		return "10.250.141.16";
+	if(strcmp(latest_tag.idAsString, "nfc-BB8260BF")==0)
+		return "10.250.141.17";
+	if(strcmp(latest_tag.idAsString, "nfc-BB56FDBE")==0)
+		return "10.250.141.18";
+	if(strcmp(latest_tag.idAsString, "nfc-BBF062BE")==0)
+		return "10.250.141.19";
+	
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
 }
@@ -1753,7 +1772,8 @@ int charge_cycle_test(){
 	else
 	{
 		current_max = 8.0;
-		current_min = 6.5;
+    // Adjusted down for oven at Sanmina
+		current_min = 6.25;
 
 		/// Voltages2 3-phase
 		sprintf(payload, "Emeter voltages while charging: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);
