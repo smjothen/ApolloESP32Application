@@ -2789,10 +2789,15 @@ static void trigger_message_cb(const char * unique_id, const char * action, cJSO
 	if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_BOOT_NOTIFICATION) == 0){
 		enqueue_boot_notification(true);
 
-	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION) == 0){
+	}
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
+
+	else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_DIAGNOSTICS_STATUS_NOTIFICATION) == 0){
 		send_diagnostics_status_notification(true);
 
-	}else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
+	}
+#endif /* CONFIG_ZAPTEC_DIAGNOSTICS_LOG */
+	else if(strcmp(requested_message, OCPP_MESSAGE_TRIGGER_FIRMWARE_STATUS_NOTIFICATION) == 0){
 		cJSON * call = NULL;
 		if(otaIsRunning()){
 			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_DOWNLOADING);
@@ -3349,8 +3354,12 @@ static void ocpp_task(){
 		attach_call_cb(eOCPP_ACTION_GET_LOCAL_LIST_VERSION_ID, get_local_list_version_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_DATA_TRANSFER_ID, data_transfer_cb, NULL);
 		attach_call_cb(eOCPP_ACTION_TRIGGER_MESSAGE_ID, trigger_message_cb, NULL);
-
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
 		attach_call_cb(eOCPP_ACTION_GET_DIAGNOSTICS_ID, get_diagnostics_cb, NULL);
+#else
+		attach_call_cb(eOCPP_ACTION_GET_DIAGNOSTICS_ID, not_supported_cb, "Diagnostics log is not enabled in this build");
+#endif /*CONFIG_ZAPTEC_DIAGNOSTICS_LOG*/
+
 		attach_call_cb(eOCPP_ACTION_UPDATE_FIRMWARE_ID, update_firmware_cb, NULL);
 
 		ESP_LOGI(TAG, "Starting connection with Central System");

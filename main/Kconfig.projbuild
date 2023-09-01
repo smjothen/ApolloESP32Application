@@ -12,7 +12,7 @@ menu "Zaptec"
 	     	    bool "Development"
 
 	     config ZAPTEC_BUILD_TYPE_PRODUCTION
-	     	    bool "Production"		    
+	     	    bool "Production"
 	     	    depends on SECURE_BOOT && SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT && NVS_ENCRYPTION && SECURE_BOOT_INSECURE\
 			    && !SECURE_BOOT_ALLOW_ROM_BASIC\
 			    && !SECURE_BOOT_ALLOW_JTAG\
@@ -37,6 +37,7 @@ menu "Zaptec"
 
      config ZAPTEC_ENABLE_LOGGING
      	    bool "Enable logging"
+	    depends on LOG_DEFAULT_LEVEL > 0
 
      config ZAPTEC_RUN_FACTORY_TESTS
      	    bool "Runs production test even if already passed"
@@ -71,4 +72,78 @@ menu "Zaptec"
      config ZAPTEC_RUN_FACTORY_ASSIGN_ID
      	    bool "Requests the serial number even if already assigned"
 	    depends on ZAPTEC_RUN_FACTORY_TESTS
+
+     config ZAPTEC_DIAGNOSTICS_LOG
+     	    bool "Allow ESP_LOG to write to file"
+	    depends on LOG_DEFAULT_LEVEL > 0
+	    default n
+
+     config ZAPTEC_DIAGNOSTICS_LOG_MOUNT_POINT
+     	    string "Diagostics log file mount point"
+	    depends on ZAPTEC_DIAGNOSTICS_LOG
+	    default "/files"
+
+     config ZAPTEC_DIAGNOSTICS_LOG_SIZE
+     	    int "Diagnostics log size"
+	    depends on ZAPTEC_DIAGNOSTICS_LOG
+	    default 16384
+
+     config ZAPTEC_DIAGNOSTICS_LOG_OCPP_UPLOAD_MALLOC_SIZE
+     	    int "Diagnostics log upload size"
+	    help
+	     Current implementation of diagnostics upload with ocpp uses esp_http_client_open
+	     which requires the size of the upload prior to data being posted. To prevent having to
+	     read the diagnostics log twice to determin the size of the uploaded file, the upload is
+	     instead constucted whilst reading the log. This approach requires a buffer that is
+	     guaranteed to be sufficient for any valid upload. If the created upload would exceed
+	     this configuration, then the upload may be missing later entries.
+	    depends on ZAPTEC_DIAGNOSTICS_LOG
+	    default 16384
+
+     config ZAPTEC_DIAGNOSTICS_LOG_ENTRY_SIZE
+     	    int "Diagnostics log entry size"
+	     help The content written with ESP_LOG has a variable length. This config is used to set
+	     a maximum length of entries written to file. Any content longer than this will be
+	     truncated. Ensure that the entry size is sufficienty less than the diagnostics file
+	     size to allow space for diagnostics file header and necessary entry meta data. The
+	     value should also be sufficiently less than MQTT buffer size for transport.
+	    depends on ZAPTEC_DIAGNOSTICS_LOG
+	    range 0 ZAPTEC_DIAGNOSTICS_LOG_SIZE if ZAPTEC_DIAGNOSTICS_LOG_SIZE < MQTT_BUFFER_SIZE
+	    range 0 MQTT_BUFFER_SIZE if ZAPTEC_DIAGNOSTICS_LOG_SIZE > MQTT_BUFFER_SIZE
+	    default 2048
+
+     choice ZAPTEC_DIAGNOSTICS_LOG_LEVEL
+     	    bool "Diagnostics log verbosity"
+	    default ZAPTEC_DIAGNOSTICS_LOG_LEVEL_WARN
+	    depends on ZAPTEC_DIAGNOSTICS_LOG
+	    help
+	     Specify minimum severity for ESP_LOG to also be written to file.
+
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_NONE
+	    	   bool "No output"
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_ERROR
+	    	   bool "Error"
+		   depends on LOG_DEFAULT_LEVEL > 0
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_WARN
+	    	   bool "Warning"
+		   depends on LOG_DEFAULT_LEVEL > 1
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_INFO
+	    	   bool "Info"
+		   depends on LOG_DEFAULT_LEVEL > 2
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_DEBUG
+	    	   bool "Debug"
+		   depends on LOG_DEFAULT_LEVEL > 3
+	    config ZAPTEC_DIAGNOSTICS_LOG_LEVEL_VERBOSE
+	    	   bool "Verbose"
+		   depends on LOG_DEFAULT_LEVEL > 4
+     endchoice
+
+     config ZAPTEC_DIAGNOSTICS_LOG_LEVEL
+     	    int
+	    default 0 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_NONE
+	    default 1 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_ERROR
+	    default 2 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_WARN
+	    default 3 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_INFO
+	    default 4 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_DEBUG
+	    default 5 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_VERBOSE
 endmenu

@@ -29,6 +29,7 @@ void storage_Set_InstallationId(char * newValue);
 void storage_Set_RoutingId(char * newValue);
 void storage_Set_ChargerName(char * newValue);
 void storage_Set_DiagnosticsMode(uint32_t newValue);
+void storage_Set_DiagnosticsLogEnabled(bool newValue);
 void storage_Set_TransmitInterval(uint32_t newValue);
 void storage_Set_TransmitChangeLevel(float newValue);
 
@@ -98,6 +99,7 @@ char * storage_Get_InstallationId();
 char * storage_Get_RoutingId();
 char * storage_Get_ChargerName();
 uint32_t storage_Get_DiagnosticsMode();
+bool storage_Get_DiagnosticsLogEnabled();
 uint32_t storage_Get_TransmitInterval();
 float storage_Get_TransmitChangeLevel();
 uint32_t storage_Get_MaxStartDelay();

@@ -222,7 +222,11 @@ static void initialize_console(void)
     esp_console_config_t console_config = {
             .max_cmdline_args = 8,
             .max_cmdline_length = 256,
+#ifdef CONFIG_LOG_COLORS
             .hint_color = atoi(LOG_COLOR_CYAN)
+#else
+	    .hint_color = 36
+#endif /* CONFIG_LOG_COLORS */
     };
     ESP_ERROR_CHECK( esp_console_init(&console_config) );
 

@@ -37,6 +37,9 @@
 #include "../ocpp/include/ocpp_transaction.h"
 #include "../../main/chargeController.h"
 #include "../../main/production_test.h"
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
+#include "../../main/diagnostics_log.h"
+#endif
 #include "fat.h"
 
 #include "esp_tls.h"
@@ -2161,6 +2164,81 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				responseStatus = 200;
 
 			}
+			else if(strstr(commandString, "set log level for") != NULL){
+#define MAX_ALLOWED_TAG_LENGTH 32
+				/*
+				 * Example with arguments:
+				 * set log level for '*' N
+				 * set log level for 'MAIN           ' W
+				 */
+				bool valid_tag = false;
+				bool valid_level = true;
+
+				char tag[MAX_ALLOWED_TAG_LENGTH +1];
+
+				char * tag_start = strchr(commandString+16, '\''); // search for the tag string from position close to end of already parsed sting
+				char * tag_end = NULL;
+
+				if(tag_start != NULL){
+					tag_end = strchr(++tag_start, '\'');
+				}
+
+				if(tag_end != NULL){
+					int tag_length = tag_end - tag_start;
+					if(tag_length < MAX_ALLOWED_TAG_LENGTH){
+						valid_tag = true;
+
+						for(size_t i = 0; i < tag_length; i++){
+							if(!isalnum(tag_start[i]) && !isblank(tag_start[i]) && tag_start[i] != '*'){
+								valid_tag = false;
+								break;
+							}
+						}
+						if(valid_tag){
+							strncpy(tag, tag_start, tag_length);
+							tag[tag_length] = '\0';
+						}
+					}
+				}
+
+
+				if(valid_tag){
+					char level = '\0';
+					size_t remaining_length = strlen(tag_end);
+					for(size_t i = 0; i < remaining_length; i++){
+						if(isalpha(tag_end[i])){
+							level = tag_end[i];
+						}
+					}
+
+					switch(level){
+					case 'N':
+						esp_log_level_set(tag, ESP_LOG_NONE);
+						break;
+					case 'E':
+						esp_log_level_set(tag, ESP_LOG_ERROR);
+						break;
+					case 'W':
+						esp_log_level_set(tag, ESP_LOG_WARN);
+						break;
+					case 'I':
+						esp_log_level_set(tag, ESP_LOG_INFO);
+						break;
+					case 'V':
+						esp_log_level_set(tag, ESP_LOG_DEBUG);
+						break;
+					default:
+						valid_level = false;
+					}
+				}
+
+				if(valid_tag && valid_level){
+					responseStatus = 200;
+				}else{
+					responseStatus = 400;
+				}
+			}
+
 			else if(strstr(commandString,"Simulate offline ") != NULL)
 			{
 				char *endptr;
@@ -3127,6 +3205,106 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetDiagnostics());
 				responseStatus = 200;
 			}
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
+			else if(strstr(commandString, "EnableLogDiagnostics"))
+			{
+				storage_Set_DiagnosticsLogEnabled(true);
+				if(diagnostics_log_init() == ESP_OK){
+					responseStatus = 200;
+				}else{
+					responseStatus = 500;
+				}
+			}
+			else if(strstr(commandString, "DisabletLogDiagnostics"))
+			{
+				storage_Set_DiagnosticsLogEnabled(false);
+				if(diagnostics_log_deinit() == ESP_OK){
+					responseStatus = 200;
+				}else{
+					responseStatus = 500;
+				}
+			}
+			else if(strstr(commandString, "EmptyLogDiagnostics"))
+			{
+				ESP_LOGW(TAG, "Emptying Diagnostics_log");
+				if(diagnostics_log_empty() == ESP_OK){
+					responseStatus = 200;
+				}else{
+					ESP_LOGE(TAG, "Unable to empty diagnostics log: %s", strerror(errno));
+					responseStatus = 500;
+				}
+			}
+			else if(strstr(commandString, "FillLogDiagnostics")){
+				// Example with arguments: FillLogDiagnostics:E,W,50,2100,16
+				esp_log_level_t log_level_from = ESP_LOG_INFO;
+				esp_log_level_t log_level_to = ESP_LOG_INFO;
+
+				size_t size_params[3][3] = {
+					{16, 2, 4096}, // minimum entry size
+					{36, 2, 4096}, // maximum entry size
+					{16, 1, 256} // entry count
+				}; // Each row has a default value, a minimum value and a maximum value.
+
+				char * argument_list = strchr(commandString, ':');
+				if(argument_list != NULL){
+					argument_list++;
+
+					char * arg = strtok(argument_list, ",");
+					if(arg != NULL){
+						log_level_from = esp_log_level_from_char(arg[0]);
+					}else{
+						log_level_from = ESP_LOG_INFO;
+					}
+
+					arg = strtok(NULL, ",");
+					if(arg != NULL){
+						log_level_to = esp_log_level_from_char(arg[0]);
+					}else{
+						log_level_to = ESP_LOG_INFO;
+					}
+
+					for(size_t i = 0; i < 3; i++){
+						arg = strtok(NULL, ",");
+						if(arg != NULL){
+							long value = strtol(arg, NULL, 10);
+							if(value > size_params[i][1] || value < size_params[i][2]){
+								size_params[i][0] = value;
+							}
+						}
+					}
+				}
+
+				ESP_LOGI(TAG, "Filling log with %d entries with level %d - %d and length %u - %u", size_params[2][0], log_level_from, log_level_to, size_params[0][0], size_params[1][0]);
+
+				uint log_range = log_level_to - log_level_from;
+				uint entry_size_range = size_params[1][0] - size_params[0][0];
+
+				for(size_t i = 0; i < size_params[2][0]; i++){
+					uint32_t value = esp_random();
+					uint log_level;
+					uint entry_size;
+
+					log_level = log_level_from + (value % (log_range +1));
+					entry_size = size_params[0][0] + (value % (entry_size_range +1));
+
+					ESP_LOG_LEVEL(log_level, TAG, "%u - %0*u", i, entry_size - 7,0);
+				}
+
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "GetLogDiagnostics"))
+			{
+				ESP_LOGW(TAG, "Diagnostics_log requested. Good luck");
+				esp_err_t result = diagnostics_log_publish_as_event();
+				if(result == ESP_OK){
+					responseStatus = 200;
+					ESP_LOGI(TAG, "Print success");
+				}else{
+					ESP_LOGE(TAG, "Unable to print: %s", esp_err_to_name(result));
+					responseStatus = 500;
+				}
+			}
+#endif /* CONFIG_ZAPTEC_DIAGNOSTICS_LOG */
 			else if(strstr(commandString, "RunRCDTest"))
 			{
 				MessageType ret = MCU_SendCommandId(CommandRunRCDTest);

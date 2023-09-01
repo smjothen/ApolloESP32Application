@@ -79,6 +79,7 @@ void storage_Init_Configuration()
 	configurationStruct.transmitInterval 			= DEFAULT_TRANSMIT_INTERVAL;
 	configurationStruct.transmitChangeLevel 		= 1.0;
 	configurationStruct.diagnosticsMode				= 0;
+	configurationStruct.diagnosticsLogEnabled = false;
 
 	// ocpp settings
 	configurationStruct.permitted_ocpp = false;
@@ -220,6 +221,11 @@ void storage_Set_ChargerName(char * newValue)
 void storage_Set_DiagnosticsMode(uint32_t newValue)
 {
 	configurationStruct.diagnosticsMode = newValue;
+}
+
+void storage_Set_DiagnosticsLogEnabled(bool newValue)
+{
+	configurationStruct.diagnosticsLogEnabled = newValue;
 }
 
 void storage_Set_TransmitInterval(uint32_t newValue)
@@ -600,6 +606,11 @@ uint32_t storage_Get_DiagnosticsMode()
 	return configurationStruct.diagnosticsMode;
 }
 
+bool storage_Get_DiagnosticsLogEnabled()
+{
+	return configurationStruct.diagnosticsLogEnabled;
+}
+
 uint32_t storage_Get_TransmitInterval()
 {
 	//Sanity check. On old chargers the default is 120. Don't use this frequent defaults when updated with nvs read parameter.
@@ -975,6 +986,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "RoutId", configurationStruct.routingId);
 	err += nvs_set_str(configuration_handle, "ChargerName", configurationStruct.chargerName);
 	err += nvs_set_u32(configuration_handle, "DiagMode", configurationStruct.diagnosticsMode);
+	err += nvs_set_u8(configuration_handle, "diagLogEnabled", configurationStruct.diagnosticsLogEnabled);
 	err += nvs_set_u32(configuration_handle, "TxInterval", configurationStruct.transmitInterval);
 	err += nvs_set_zfloat(configuration_handle, "TxChangeLevel", configurationStruct.transmitChangeLevel);
 
@@ -1069,6 +1081,8 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_str(configuration_handle, "ChargerName", NULL, &readSize);
 	err += nvs_get_str(configuration_handle, "ChargerName", configurationStruct.chargerName, &readSize);
 	err += nvs_get_u32(configuration_handle, "DiagMode", &configurationStruct.diagnosticsMode);
+	if(nvs_get_u8(configuration_handle, "diagLogEnabled", (uint8_t *)&configurationStruct.diagnosticsLogEnabled) != 0)
+		configurationStruct.diagnosticsLogEnabled = false;
 	err += nvs_get_u32(configuration_handle, "TxInterval", &configurationStruct.transmitInterval);
 	err += nvs_get_zfloat(configuration_handle, "TxChangeLevel", &configurationStruct.transmitChangeLevel);
 

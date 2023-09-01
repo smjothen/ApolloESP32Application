@@ -42,7 +42,9 @@
 #include "offlineSession.h"
 #include "offline_log.h"
 #include "zaptec_cloud_observations.h"
-#include "offline_log.h"
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
+#include "diagnostics_log.h"
+#endif
 #include "calibration.h"
 #ifdef CONFIG_ZAPTEC_USE_ADVANCED_CONSOLE
 	#include "apollo_console.h"
@@ -563,6 +565,11 @@ void app_main(void)
 
 	fat_static_mount();
 	setup_offline_log();
+
+#ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
+	if(storage_Get_DiagnosticsLogEnabled())
+		diagnostics_log_init();
+#endif
 
 	i2cReadDeviceInfoFromEEPROM();
 	I2CDevicesStartTask();

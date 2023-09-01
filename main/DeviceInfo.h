@@ -230,6 +230,7 @@ struct Configuration
     char routingId[DEFAULT_STR_SIZE];
     char chargerName[DEFAULT_STR_SIZE];
     uint32_t diagnosticsMode;
+	bool diagnosticsLogEnabled;
 	uint32_t transmitInterval;
 	float transmitChangeLevel;
 	uint32_t pulseInterval;

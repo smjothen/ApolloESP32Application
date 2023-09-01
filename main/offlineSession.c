@@ -192,6 +192,7 @@ bool offlineSession_test_CreateFile()
 		return false;
 	}
 
+	errno = 0; // Clear errno
 	testFile = fopen("/files/testfile.bin", "wb+");
 
 	if((testFile == NULL) || (errno != 0))
