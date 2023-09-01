@@ -115,7 +115,9 @@ BaseType_t ocpp_transaction_queue_send(struct ocpp_call_with_cb ** message, Tick
 		return -1;
 	}
 
-	BaseType_t result = xQueueSendToBack(ocpp_transaction_call_queue, message, wait);
+	BaseType_t result = pdFALSE;
+	if(ocpp_transaction_call_queue != NULL)
+		result = xQueueSendToBack(ocpp_transaction_call_queue, message, wait);
 
 	if(result == pdTRUE){
 		set_txn_enqueue_timestamp(time(NULL));
@@ -1606,7 +1608,7 @@ BaseType_t ocpp_transaction_get_next_message(struct ocpp_active_call * call){
 			return pdTRUE;
 		}
 
-	}else if(uxQueueMessagesWaiting(ocpp_transaction_call_queue) > 0){
+	}else if(ocpp_transaction_call_queue != NULL && uxQueueMessagesWaiting(ocpp_transaction_call_queue) > 0){
 		ESP_LOGI(TAG, "Getting message from queue");
 
 		if(xQueueReceive(ocpp_transaction_call_queue, &call->call, pdMS_TO_TICKS(1000)) == pdTRUE){
