@@ -371,6 +371,11 @@ void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue)
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = newValue;
 }
 
+void storage_Set_ocpp_websocket_ping_interval(uint32_t newValue)
+{
+	configurationStruct.ocpp_websocket_ping_interval = newValue;
+}
+
 void storage_Set_ocpp_local_auth_list_enabled(bool newValue)
 {
 	configurationStruct.ocpp_local_auth_list_enabled = newValue;
@@ -762,6 +767,11 @@ bool storage_Get_ocpp_unlock_connector_on_ev_side_disconnect()
 	return configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect;
 }
 
+uint32_t storage_Get_ocpp_websocket_ping_interval()
+{
+	return configurationStruct.ocpp_websocket_ping_interval;
+}
+
 bool storage_Get_ocpp_local_auth_list_enabled()
 {
 	return configurationStruct.ocpp_local_auth_list_enabled;
@@ -1021,7 +1031,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "oTxnAttempts", configurationStruct.ocpp_transaction_message_attempts);
 	err += nvs_set_u16(configuration_handle, "oTxnRetryInter", configurationStruct.ocpp_transaction_message_retry_interval);
 	err += nvs_set_u8(configuration_handle, "oUlockConEvDisc", configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
-	//err += nvs_set_(configuration_handle, "oWebSockPingInt", configurationStruct.web_socket_ping_interval);
+	err += nvs_set_u32(configuration_handle, "oWebSockPingInt", configurationStruct.ocpp_websocket_ping_interval);
 	err += nvs_set_u8(configuration_handle, "oAuthLEnabled", configurationStruct.ocpp_local_auth_list_enabled);
 	err += nvs_set_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key);
 	err += nvs_set_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token);
@@ -1130,7 +1140,8 @@ esp_err_t storage_ReadConfiguration()
 	err += nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts);
 	err += nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval);
 	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
-	//err += nvs_get_(configuration_handle, "oWebSockPingInt", &configurationStruct.web_socket_ping_interval);
+	if(nvs_get_u32(configuration_handle, "oWebSockPingInt", &configurationStruct.ocpp_websocket_ping_interval))
+		configurationStruct.ocpp_websocket_ping_interval = 10;
 	err += nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled);
 	readSize = sizeof(configurationStruct.ocpp_authorization_key);
 	if(nvs_get_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key, &readSize) != ESP_OK)

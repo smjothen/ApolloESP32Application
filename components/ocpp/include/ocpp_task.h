@@ -25,6 +25,13 @@
 void ocpp_change_message_timeout(uint16_t timeout);
 
 /**
+ * @brief changes the ping interval for the ocpp websocket
+ *
+ * @param ping_interval the new interval in seconds used by the websocket. 0 is not treated as "no ping"
+ */
+void ocpp_change_websocket_ping_interval(uint32_t ping_interval);
+
+/**
  * @brief changes the minimum delay for certain StatusNotification.req calls
  *
  * @details This function is meant for implementation of MinimumStatusDuration described in OCPP spec section 9.1.20.
@@ -127,8 +134,9 @@ size_t enqueued_call_count();
  * @param ocpp_heartbeat_interval the default heatbeat interval used unless bootNotification.req specifies a different interval.
  * @param ocpp_transaction_message_attempts maximum number of retries for failed transaction related messages.
  * @param ocpp_transaction_message_retry_interval wait in seconds between each failed transaction related message retries.
+ * @param ocpp_websocket_ping_interval time between ping sent as part of the websocket protocol. 0 is not treated as "no ping"
  */
-int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval);
+int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval, uint32_t ocpp_websocket_ping_interval);
 
 /**
  * @brief stops ocpp connection with CS and cleans up resources.

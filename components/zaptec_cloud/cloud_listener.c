@@ -2189,7 +2189,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						valid_tag = true;
 
 						for(size_t i = 0; i < tag_length; i++){
-							if(!isalnum((unsigned char)tag_start[i]) && !isblank((unsigned char)tag_start[i]) && tag_start[i] != '*'){
+							if(!isalnum((unsigned char)tag_start[i]) && !isblank((unsigned char)tag_start[i]) && tag_start[i] != '*' && tag_start[i] != '_' && tag_start[i] != '-'){
 								valid_tag = false;
 								break;
 							}
@@ -2224,8 +2224,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					case 'I':
 						esp_log_level_set(tag, ESP_LOG_INFO);
 						break;
-					case 'V':
+					case 'D':
 						esp_log_level_set(tag, ESP_LOG_DEBUG);
+						break;
+					case 'V':
+						esp_log_level_set(tag, ESP_LOG_VERBOSE);
 						break;
 					default:
 						valid_level = false;

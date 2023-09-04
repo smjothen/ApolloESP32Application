@@ -89,6 +89,15 @@ void ocpp_change_message_timeout(uint16_t timeout){
 	}
 }
 
+void ocpp_change_websocket_ping_interval(uint32_t ocpp_websocket_ping_interval){
+	if(client != NULL){
+		esp_err_t err = esp_websocket_client_set_ping_interval_sec(client, ocpp_websocket_ping_interval);
+		if(err != ESP_OK){
+			ESP_LOGE(TAG, "Unable to set websocket ping interval: %s", esp_err_to_name(err));
+		}
+	}
+}
+
 void ocpp_change_minimum_status_duration(uint32_t duration){
 	ocpp_minimum_status_duration = duration;
 }
@@ -917,7 +926,7 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
+int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval, uint32_t ocpp_websocket_ping_interval){
 	ESP_LOGI(TAG, "Starting ocpp");
 
 	default_heartbeat_interval = ocpp_heartbeat_interval;
@@ -939,6 +948,9 @@ int start_ocpp(const char * url, const char * authorization_key, const char * ch
 		.password = authorization_key,
 		.task_stack = 4096,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
+		.reconnect_timeout_ms = 10000,
+		.network_timeout_ms = 10000,
+		.ping_interval_sec = ocpp_websocket_ping_interval
 	};
 
 	client = esp_websocket_client_init(&websocket_cfg);

@@ -1457,7 +1457,17 @@ esp_err_t add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(cJSON * 
 }
 
 esp_err_t add_configuration_ocpp_websocket_ping_interval(cJSON * key_list){
-	return ESP_ERR_NOT_SUPPORTED;
+	if(write_configuration_u32(storage_Get_ocpp_websocket_ping_interval(), value_buffer) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL, false, value_buffer);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL);
+		cJSON_Delete(key_value_json);
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
 }
 
 esp_err_t add_configuration_ocpp_supported_file_transfer_protocols(cJSON * key_list){
@@ -2458,6 +2468,15 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			}
 		}
 
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL) == 0){
+		err = set_config_u32(storage_Set_ocpp_websocket_ping_interval, value, NULL);
+		if(err == 0){
+			if(storage_Get_ocpp_websocket_ping_interval() == 0) // ocpp treats 0 as "no ping" esp_websocket treats 0 as "default value"
+				storage_Set_ocpp_websocket_ping_interval(SIZE_MAX); //esp_websocket does not support "no ping" instead we set it to max
+
+			ESP_LOGI(TAG, "Setting new ping interval to: %" PRIu32, storage_Get_ocpp_websocket_ping_interval());
+			ocpp_change_websocket_ping_interval(storage_Get_ocpp_websocket_ping_interval());
+		}
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_LOCAL_AUTH_LIST_ENABLED) == 0){
 		err = set_config_bool(storage_Set_ocpp_local_auth_list_enabled, value, NULL);
 		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
@@ -3379,7 +3398,8 @@ static void ocpp_task(){
 					(cbid[0] == '\0') ? i2cGetLoadedDeviceInfo().serialNumber : cbid,
 					storage_Get_ocpp_heartbeat_interval(),
 					storage_Get_ocpp_transaction_message_attempts(),
-					storage_Get_ocpp_transaction_message_retry_interval());
+					storage_Get_ocpp_transaction_message_retry_interval(),
+					storage_Get_ocpp_websocket_ping_interval());
 
 			if(err != 0){
 				if(retry_attempts < 7){
