@@ -66,7 +66,7 @@ static void update_dspic_task(void *pvParameters){
         goto err_header_read;
     }
 
-    ESP_LOGI(TAG, "header crc: %x, header app len: %x (target: %x)", crc, app_length, target_crc);
+    ESP_LOGI(TAG, "header crc: %" PRIx32 ", header app len: %" PRIx32 " (target: %" PRIx32 ")", crc, app_length, target_crc);
 
     if(crc==target_crc){
         ESP_LOGI(TAG, "Correct application found in dspic");
@@ -138,7 +138,7 @@ static void update_dspic_task(void *pvParameters){
     }
 
     if(get_application_header(&crc, &app_length)>=0){
-        ESP_LOGI(TAG, "new header crc: %x, new header app len: %x", crc, app_length);
+        ESP_LOGI(TAG, "new header crc: %" PRIx32 ", new header app len: %" PRIx32 "", crc, app_length);
         if(crc==target_crc){
             ESP_LOGI(TAG, "confirmed header match, ready to start app");
         }else{
@@ -267,11 +267,11 @@ int transfer_dspic_fw(void){
     int32_t fw_byte_size = dspic_bin_end - dspic_bin_start;
 
     if(fw_byte_size%DSPIC_LINE_SIZE!=0){
-        ESP_LOGE(TAG, "firmware for dsPIC not aligned to row size, fw_byte_size %d", fw_byte_size);
+        ESP_LOGE(TAG, "firmware for dsPIC not aligned to row size, fw_byte_size %" PRId32 "", fw_byte_size);
     }
 
     int32_t fw_line_count = fw_byte_size / DSPIC_LINE_SIZE;
-    ESP_LOGI(TAG, "will flash %u lines, %u bytes; each line is %d bytes", fw_line_count, fw_byte_size, DSPIC_LINE_SIZE);
+    ESP_LOGI(TAG, "will flash %" PRIu32 " lines, %" PRIu32 " bytes; each line is %" PRId32 " bytes", fw_line_count, fw_byte_size, DSPIC_LINE_SIZE);
     //fw_line_count = 1;
 
     int address_size = 4;
@@ -294,7 +294,7 @@ int transfer_dspic_fw(void){
             &txMsg, (char *) message_data, sizeof(message_data), txBuf, encodedTxBuf
         );
 
-        ESP_LOGI(TAG, "sending fw line %d for addr %d message, %d bytes, %d lines to go",line, address, encoded_length, fw_line_count-line);
+        ESP_LOGI(TAG, "sending fw line %d for addr %" PRId32 " message, %d bytes, %" PRId32 " lines to go",line, address, encoded_length, fw_line_count-line);
 
         // printf(">>data to uart: \n\r\t");
         // int i;
@@ -384,7 +384,7 @@ int set_dspic_header(void){
     memcpy(message_data+2, &app_size, sizeof(uint32_t));
     memcpy(message_data+2+4, &app_crc, sizeof(uint32_t));
 
-    ESP_LOGI(TAG, "Sending crc %u for %u bytes", app_crc, app_size);
+    ESP_LOGI(TAG, "Sending crc %" PRIu32 " for %" PRIu32 " bytes", app_crc, app_size);
 
     uint encoded_length = ZEncodeMessageHeaderAndByteArray(
         &txMsg, (char *) message_data, sizeof(message_data), txBuf, encodedTxBuf

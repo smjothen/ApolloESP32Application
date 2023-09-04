@@ -8,7 +8,7 @@
 
 void eeprom_wp_pint_init(){
     gpio_config_t output_conf;
-	output_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+	output_conf.intr_type = GPIO_INTR_DISABLE;
 	output_conf.mode = GPIO_MODE_OUTPUT;
 	output_conf.pin_bit_mask = GPIO_OUTPUT_EEPROM_WP_SEL;
 	output_conf.pull_down_en = 0;

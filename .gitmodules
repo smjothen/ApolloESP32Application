@@ -1,3 +1,6 @@
 [submodule "components/utz"]
 	path = components/utz
 	url = https://github.com/ZaptecCharger/utz
+[submodule "components/mqtt/esp-mqtt"]
+	path = components/mqtt/esp-mqtt
+	url = https://github.com/ZaptecCharger/esp-mqtt

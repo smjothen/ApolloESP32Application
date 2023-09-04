@@ -165,7 +165,7 @@ void rfidPairing_GetStateAsChar(char * stateAsChar)
 	}
 
 
-	ESP_LOGI(TAG, "Reading Pair NFC State: %s: timeout: %d", stateAsChar, nfcPairTimeout);
+	ESP_LOGI(TAG, "Reading Pair NFC State: %s: timeout: %" PRId32 "", stateAsChar, nfcPairTimeout);
 }
 
 

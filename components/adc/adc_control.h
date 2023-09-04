@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-uint8_t HANEnergyLevel;
-float hwIdVoltageLevel;
 float GetHardwareId();
 float GetPowerMeas();
 void adc_init();

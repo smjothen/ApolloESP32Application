@@ -2,9 +2,9 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "chargeSession.h"
 #include <sys/time.h>
-#include "sntp.h"
 #include <string.h>
 #include "connectivity.h"
 #include "cJSON.h"
@@ -40,7 +40,7 @@ static void ChargeSession_Set_GUID()
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[1]);
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
 	
-	sprintf(chargeSession.SessionId, "%08x-%04x-%04x-%04x-%04x%08x", GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
+	sprintf(chargeSession.SessionId, "%08" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "%08" PRIx32, GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
 	//hasNewSessionIdFromCloud = true;
 	strcpy(sidOrigin, "local");
 	ESP_LOGI(TAG, "GUID: %s (%s)", chargeSession.SessionId, sidOrigin);
@@ -176,7 +176,7 @@ static void ChargeSession_Set_StartTime()
 		ESP_LOGW(TAG, "Made startTime in SESSION for use in REQUESTING: %s", chargeSession.StartDateTime);
 
 	}
-	ESP_LOGI(TAG, "Start time is: %s (%d.%d)", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
+	ESP_LOGI(TAG, "Start time is: %s (%" PRId32 ".%" PRId32 ")", chargeSession.StartDateTime, (uint32_t)chargeSession.EpochStartTimeSec, chargeSession.EpochStartTimeUsec);
 }
 
 int8_t chargeSession_SetSessionIdFromCloud(char * sessionIdFromCloud)
@@ -252,6 +252,23 @@ void chargeSession_CheckIfLastSessionIncomplete()
 	}
 }
 
+/// For remote functional testing of the file correction feature
+static bool testFileCorrection = false;
+void chargeSession_SetTestFileCorrection()
+{
+	testFileCorrection = true;
+}
+
+///Flag if the file system error has occured
+static bool sessionFileError = false;
+bool chargeSession_GetFileError()
+{
+	//Clear on read
+	bool tmp = sessionFileError;
+	sessionFileError = false;
+	return tmp;
+}
+
 static double startAcc = 0.0;
 void chargeSession_Start()
 {
@@ -292,7 +309,22 @@ void chargeSession_Start()
 		char * sessionData = calloc(1000,1);
 		chargeSession_GetSessionAsString(sessionData);
 
+		sessionFileError = false;
+
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
+
+		//Check to see if the file could not be created
+		if((saveErr == -2) || (testFileCorrection == true))
+		{
+			testFileCorrection = false;
+			sessionFileError = true;
+
+			ESP_LOGW(TAG, "FILE ERROR");
+			offlineSession_ClearDiagnostics();
+			offlineSession_eraseAndRemountPartition();
+			saveErr = offlineSession_SaveSession(sessionData);
+		}
+
 		free(sessionData);
 
 		if (saveErr != ESP_OK)
@@ -342,7 +374,7 @@ void chargeSession_Finalize()
 	chargeSession_UpdateEnergy();
 	GetUTCTimeString(chargeSession.EndDateTime, &chargeSession.EpochEndTimeSec, &chargeSession.EpochEndTimeUsec);
 
-	ESP_LOGI(TAG, "End time is: %s (%d.%d)", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
+	ESP_LOGI(TAG, "End time is: %s (%" PRId32 ".%" PRId32 ")", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
 
 
 	/// Create the 'E' message

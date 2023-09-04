@@ -245,7 +245,7 @@ esp_err_t read_auth_data(struct ocpp_authorization_data * authorization_data, bo
 
 	uint32_t crc_calc = esp_crc32_le(0, (uint8_t *)&crc_buffer, sizeof(struct auth_crc_content));
 	if(crc_calc != auth_tag_info.crc_tag){
-		ESP_LOGE(TAG, "CRC mismatch during auth read. expected %u got %u", auth_tag_info.crc_tag, crc_calc);
+		ESP_LOGE(TAG, "CRC mismatch during auth read. expected %" PRIu32 " got %" PRIu32, auth_tag_info.crc_tag, crc_calc);
 		err = ESP_ERR_INVALID_CRC;
 		goto cleanup;
 	}

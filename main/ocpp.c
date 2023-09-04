@@ -851,7 +851,7 @@ static int write_configuration_u8(uint8_t value, char * value_out){
 	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(value_out, 4, "%u", value);
+		snprintf(value_out, 4, "%" PRIu8, value);
 		return 0;
 	}
 }
@@ -860,7 +860,7 @@ static int write_configuration_u16(uint16_t value, char * value_out){
 	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(value_out, 8, "%u", value);
+		snprintf(value_out, 8, "%" PRIu16, value);
 		return 0;
 	}
 }
@@ -869,7 +869,7 @@ static int write_configuration_u32(uint32_t value, char * value_out){
 	if(value_out == NULL){
 		return -1;
 	}else{
-		snprintf(value_out, 16, "%u", value);
+		snprintf(value_out, 16, "%" PRIu32, value);
 		return 0;
 	}
 }
@@ -1959,7 +1959,7 @@ static long validate_u(const char * value, uint32_t upper_bounds){
 	}
 
 	if(value_long < 0 || value_long > upper_bounds){
-		ESP_LOGE(TAG, "%ld Exceeds %d", value_long, upper_bounds);
+		ESP_LOGE(TAG, "%ld Exceeds %" PRIu32, value_long, upper_bounds);
 		return -1;
 	}
 
@@ -2045,8 +2045,8 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 
 	size_t prepared_index = 0;
 	for(size_t i = 0; i < len+1; i++){
-		if(!isspace(value[i])){
-			if(iscntrl(value[i])){
+		if(!isspace((unsigned char)value[i])){
+			if(iscntrl((unsigned char)value[i])){
 				if(value[i]== '\0'){
 					value_prepared[prepared_index++] = value[i];
 					break;
@@ -2233,9 +2233,9 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 		size_t data_length = strlen(value);
 		for(size_t i = 0; i < data_length; i++){
-			if(isspace(value[i])){
+			if(isspace((unsigned char)value[i])){
 				// skip space;
-			}else if(isdigit(value[i])){ // connector id
+			}else if(isdigit((unsigned char)value[i])){ // connector id
 				if(current_item_phase_count == 0){ // if not expecting phase value
 					current_connector_id = value[i] - '0';
 					if(current_connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
@@ -2246,7 +2246,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 					is_valid = false;
 					break;
 				}
-			}else if(isupper(value[i])){ // phase value
+			}else if(isupper((unsigned char)value[i])){ // phase value
 				if(value[i] == 'R' || value[i] == 'S' || value[i] == 'T'){
 					switch(++current_item_phase_count){
 					case 1:
@@ -2280,7 +2280,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 					is_valid = false;
 					break;
 				}
-			}else if(ispunct(value[i])){
+			}else if(ispunct((unsigned char)value[i])){
 				switch(value[i]){
 				case '.':
 					if(current_item_phase_count != 0)
@@ -3301,7 +3301,7 @@ static esp_err_t prepare_reset(){
 				|| event_data & (eOCPP_WEBSOCKET_FAILURE << WEBSOCKET_EVENT_OFFSET)
 				|| event_data & (eOCPP_TASK_CALL_TIMEOUT << TASK_EVENT_OFFSET)){
 
-				ESP_LOGI(TAG, "Event result accepted as complete: %d", event_data);
+				ESP_LOGI(TAG, "Event result accepted as complete: %" PRIu32, event_data);
 				break;
 			}
 		}

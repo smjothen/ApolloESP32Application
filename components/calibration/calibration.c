@@ -198,7 +198,7 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
     fat_unmount(eFAT_ID_FILES);
 
     offlineSession_disable();
-    offlineLog_disable();
+    offline_log_disable();
 
     if (!calibration_turn_led_off(ctx)) {
         return -5;
@@ -210,14 +210,14 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     if (ctx->Params.CalibrationId != 0) {
         if (CAL_STATE(ctx) == Starting) {
-            ESP_LOGI(TAG, "Calibration already done (ID = %d)!", ctx->Params.CalibrationId);
+            ESP_LOGI(TAG, "Calibration already done (ID = %" PRIu32 ")!", ctx->Params.CalibrationId);
         }
 
         ctx->Flags |= CAL_FLAG_SKIP_CAL;
         ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
 
         if (MCU_GetMidStatus(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
-            ESP_LOGI(TAG, "Calibration already verified (ID = %d)!", ctx->Params.CalibrationId);
+            ESP_LOGI(TAG, "Calibration already verified (ID = %" PRIu32 ")!", ctx->Params.CalibrationId);
             ctx->Flags |= CAL_FLAG_UPLOAD_VER;
         }
     }
@@ -373,7 +373,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                         CAL_CSTATE(ctx) = Complete;
                         break;
                     } else {
-                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %ds) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
+                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %" PRIu32 "s) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
                     }
                 }
 
@@ -634,7 +634,7 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             uint8_t crcBytes[2];
             ZEncodeUint16(crc, crcBytes);
 
-            ESP_LOGI(TAG, "Marking calibration as verified ID %d CRC 0x%04X", calId, crc);
+            ESP_LOGI(TAG, "Marking calibration as verified ID %" PRIu32 " CRC 0x%04X", calId, crc);
 
             if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes)) != MsgCommandAck) {
                 calibration_fail(ctx, "Failed to mark calibration as verified!");
@@ -687,11 +687,11 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
     uint32_t msSinceStart = pdTICKS_TO_MS(refreshTime - midModeStart);
     
     if (msSinceRefresh > 3000) {
-        ESP_LOGI(TAG, "%s: MID mode refresh near threshold (%dms, %dms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
+        ESP_LOGI(TAG, "%s: MID mode refresh near threshold (%" PRIu32 "ms, %" PRIu32 "ms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
     }
 
     if (!midModeActive) {
-        calibration_fail(ctx, "Unexpectedly exited MID mode (%dms since last refresh, %dms since start)!", msSinceRefresh, msSinceStart);
+        calibration_fail(ctx, "Unexpectedly exited MID mode (%" PRIu32 "ms since last refresh, %" PRIu32 "ms since start)!", msSinceRefresh, msSinceStart);
     }
 
     lastRefresh = refreshTime;
@@ -1177,7 +1177,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
     }
 
     if (msg->Sequence < ctx->LastSeq) {
-        ESP_LOGE(TAG, "Received packet out of sequence! %d <= %d, Ignoring...", msg->Sequence, ctx->LastSeq);
+        ESP_LOGE(TAG, "Received packet out of sequence! %" PRId32 " <= %d, Ignoring...", msg->Sequence, ctx->LastSeq);
         return;
     }
 
@@ -1188,7 +1188,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
     }
 
     if (msg->has_Verification) {
-        ESP_LOGI(TAG, "%s: Test ID %d", calibration_state_to_string(ctx), msg->Verification.TestId);
+        ESP_LOGI(TAG, "%s: Test ID %" PRIu32, calibration_state_to_string(ctx), msg->Verification.TestId);
         ctx->VerTest = msg->Verification.TestId;
     }
 
@@ -1300,7 +1300,7 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
     ESP_LOGI(TAG, "Message: ");
 
     if (msg->has_Ack) {
-        printf("Ack { Sequence: %d }\n", msg->Ack.Sequence);
+        printf("Ack { Sequence: %" PRId32 " }\n", msg->Ack.Sequence);
     }
     if (msg->has_Data) {
         if (msg->Data.which_message_type == CalibrationUdpMessage_DataMessage_ReferenceMeterVoltage_tag) {
@@ -1315,10 +1315,10 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
         }
     }
     if (msg->has_State) {
-        printf("State { %d, Sequence: %d", msg->State.State, msg->State.Sequence);
+        printf("State { %" PRId32 ", Sequence: %" PRId32, msg->State.State, msg->State.Sequence);
 
         if (msg->State.has_Run) {
-            printf(" Run { Run: %d Key: %s Protocol: %d Serials: [", msg->State.Run.Run, msg->State.Run.Key, msg->State.Run.ServerProtocol);
+            printf(" Run { Run: %" PRId32 " Key: %s Protocol: %" PRIu32 " Serials: [", msg->State.Run.Run, msg->State.Run.Key, msg->State.Run.ServerProtocol);
 
             for (int i = 0; i < msg->State.Run.SelectedSerials_count; i++) {
                 if (i != 0) printf(", ");
@@ -1329,7 +1329,7 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
         }
 
         if (msg->State.has_Verification) {
-            printf(" Verification { TestId: %d }", msg->State.Verification.TestId);
+            printf(" Verification { TestId: %" PRIu32 " }", msg->State.Verification.TestId);
         }
 
         printf(" }\n");

@@ -16,6 +16,7 @@
 #include "chargeSession.h"
 #include "../components/ntp/zntp.h"
 #include "../components/i2c/include/i2cDevices.h"
+#include "offline_log.h"
 
 static char tmp_path[] = "/files";
 
@@ -35,12 +36,27 @@ struct LogHeader {
     // dont keep version, use other file name for versioning
 };
 
-
 struct LogOCMFData {
 	char label;
-    int timestamp;
-    double energy;
-    uint32_t crc;
+
+	// Don't use directly, read and write through provided functions:
+	//
+	// offlineSession_ReadTimestamp
+	// offlineSession_SetTimestamp
+	//
+	uint32_t _timestamp;
+	double energy;
+	uint32_t crc;
+
+	// There was 4 bytes of padding at end of LogOCMFData, we can use this as the
+	// high dword of the timestamp while keeping the size of the struct the same.
+	//
+	// On downgrade, this will be ignored, treated as padding.
+	//
+	// On upgrade, we can still potentially handle files with version 1 (though they
+	// should be sent to the cloud already).
+	//
+	uint32_t _timestampHigh;
 };
 
 static SemaphoreHandle_t offs_lock;
@@ -96,7 +112,7 @@ void offlineSession_Init()
 void offlineSession_AppendLogString(char * stringToAdd)
 {
 	int seqDiagLen = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		seqDiagLen = strlen(sequenceDiagnostics);
 
 	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s\r\n", stringToAdd);
@@ -105,7 +121,7 @@ void offlineSession_AppendLogString(char * stringToAdd)
 void offlineSession_AppendLogStringWithInt(char * stringToAdd, int value)
 {
 	int seqDiagLen = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		seqDiagLen = strlen(sequenceDiagnostics);
 
 	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s %i\r\n", stringToAdd, value);
@@ -114,7 +130,7 @@ void offlineSession_AppendLogStringWithInt(char * stringToAdd, int value)
 void offlineSession_AppendLogStringWithIntInt(char * stringToAdd, int value1, int value2)
 {
 	int seqDiagLen = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		seqDiagLen = strlen(sequenceDiagnostics);
 
 	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%s %i %i\r\n", stringToAdd, value1, value2);
@@ -123,7 +139,7 @@ void offlineSession_AppendLogStringWithIntInt(char * stringToAdd, int value1, in
 void offlineSession_AppendLogStringErr()
 {
 	int seqDiagLen = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		seqDiagLen = strlen(sequenceDiagnostics);
 
 	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "%i:%s\r\n", errno, strerror(errno));
@@ -133,11 +149,11 @@ void offlineSession_AppendLogStringErr()
 void offlineSession_AppendLogLength()
 {
 	int len = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		len = strlen(sequenceDiagnostics);
 
 	int seqDiagLen = 0;
-	if(sequenceDiagnostics != NULL)
+	if(sequenceDiagnostics[0])
 		seqDiagLen = strlen(sequenceDiagnostics);
 
 	snprintf(sequenceDiagnostics + seqDiagLen, MAX_SEQ_DIAG_LEN - seqDiagLen, "(%i)", len);
@@ -162,7 +178,7 @@ bool offlineSession_CheckFilesSystem()
 		deletedOK = offlineSession_test_DeleteFile();
 
 	int fileDiagLen = 0;
-	if(fileDiagnostics != NULL)
+	if(fileDiagnostics[0])
 		fileDiagLen = strlen(fileDiagnostics);
 
 	snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
@@ -184,6 +200,27 @@ bool offlineSession_is_mounted(void) {
 	return stat(tmp_path, &st) == 0;
 }
 
+static inline uint64_t offlineSession_ReadTimestamp(struct LogOCMFData *log, int version) {
+	uint64_t timestamp;
+	if (version == 2) {
+		timestamp = ((uint64_t)log->_timestampHigh << 32) | log->_timestamp;
+	} else {
+		// High dword (padding) is probably zero anyway but to be sure, just use low dword.
+		timestamp = log->_timestamp;
+	}
+	return timestamp;
+}
+
+static inline void offlineSession_SetTimestamp(struct LogOCMFData *log, int version, uint64_t timestamp) {
+	if (version == 2) {
+		log->_timestamp = timestamp & 0xffffffff;
+		log->_timestampHigh = (timestamp >> 32) & 0xffffffff;
+	} else {
+		log->_timestamp = timestamp & 0xffffffff;
+		log->_timestampHigh = 0;
+	}
+}
+
 static FILE *testFile = NULL;
 bool offlineSession_test_CreateFile()
 {
@@ -202,7 +239,7 @@ bool offlineSession_test_CreateFile()
 
 	if(testFile == NULL)
 	{
-		if(fileDiagnostics != NULL)
+		if(fileDiagnostics[0])
 			fileDiagLen = strlen(fileDiagnostics);
 
 		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "New file = NULL, %i:%s,", errno, strerror(errno));
@@ -210,7 +247,7 @@ bool offlineSession_test_CreateFile()
 	}
 	else
 	{
-		if(fileDiagnostics != NULL)
+		if(fileDiagnostics[0])
 			fileDiagLen = strlen(fileDiagnostics);
 
 		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "New file = 0x%08x", (unsigned int)testFile);
@@ -230,7 +267,7 @@ bool offlineSession_test_CreateFile()
 			ESP_LOGE(TAG, "fread verification failed: 0x%x, w:%i r:%i", value, wret, rret);
 			ESP_LOGE(TAG, "#### RW file errno: fp: 0x%p %i: %s", testFile, errno, strerror(errno));
 
-			if(fileDiagnostics != NULL)
+			if(fileDiagnostics[0])
 				fileDiagLen = strlen(fileDiagnostics);
 
 			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "Read failed: %i", (int)rret);
@@ -302,7 +339,7 @@ bool offlineSession_test_DeleteFile()
 	else
 	{
 		int fileDiagLen = 0;
-		if(fileDiagnostics != NULL)
+		if(fileDiagnostics[0])
 			fileDiagLen = strlen(fileDiagnostics);
 
 		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " remove = %i, %i:%s ", status, errno, strerror(errno));
@@ -345,7 +382,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 	int fileDiagLen = 0;
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
-		if(fileDiagnostics != NULL)
+		if(fileDiagnostics[0])
 			fileDiagLen = strlen(fileDiagnostics);
 
 		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, "Semaphore fault");
@@ -363,7 +400,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 
 		if(isFileSystemOK)
 		{
-			if(fileDiagnostics != NULL)
+			if(fileDiagnostics[0])
 				fileDiagLen = strlen(fileDiagnostics);
 
 			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " M: %i,", offlineSession_is_mounted());
@@ -373,7 +410,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 			{
 				fileSystemCorrected = offlineSession_test_DeleteFile();
 
-				if(fileDiagnostics != NULL)
+				if(fileDiagnostics[0])
 					fileDiagLen = strlen(fileDiagnostics);
 
 				snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " fileSystemCorrected: %i", fileSystemCorrected);
@@ -381,7 +418,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 		}
 		else
 		{
-			if(fileDiagnostics != NULL)
+			if(fileDiagnostics[0])
 				fileDiagLen = strlen(fileDiagnostics);
 
 			snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " EraseAndRemount failed");
@@ -392,7 +429,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 	{
 		bool deletedOK = offlineSession_test_DeleteFile();
 
-		if(fileDiagnostics != NULL)
+		if(fileDiagnostics[0])
 			fileDiagLen = strlen(fileDiagnostics);
 
 		snprintf(fileDiagnostics + fileDiagLen, FILE_DIAG_BUF_SIZE - fileDiagLen, " Removed: %i", deletedOK);
@@ -409,7 +446,7 @@ bool offlineSession_CheckAndCorrectFilesSystem()
 bool offlineSession_eraseAndRemountPartition()
 {
 	int fileDiagLen = 0;
-	if(fileDiagnostics != NULL)
+	if(fileDiagnostics[0])
 		fileDiagLen = strlen(fileDiagnostics);
 
 	return fat_eraseAndRemountPartition(eFAT_ID_FILES, fileDiagnostics, FILE_DIAG_BUF_SIZE, fileDiagLen) == ESP_OK;
@@ -660,21 +697,23 @@ void offlineSession_DeleteLastUsedFile()
 	}
 }
 
-void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
+int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 {
+	ESP_LOGE(TAG, " *** UpdateSessionOnFile: %i ***", createNewFile);
+
 	if (!offlineSession_is_mounted()) {
 		ESP_LOGE(TAG, "files is not mounted!");
-		return;
+		return ESP_FAIL;
 	}
 
 	if(activeFileNumber < 0)
-		return;
+		return ESP_FAIL;
 
 
 	if( xSemaphoreTake( offs_lock, lock_timeout ) != pdTRUE )
 	{
 		ESP_LOGE(TAG, "failed to obtain offs lock during finalize");
-		return;
+		return ESP_FAIL;
 	}
 
 	if(createNewFile)
@@ -697,12 +736,13 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 		}
 
 		xSemaphoreGive(offs_lock);
-		return;
+		return -2;
 	}
 
 	//ESP_LOGW(TAG, "strlen: %d, path: %s", strlen(sessionData), activePathString);
 
-	uint8_t fileVersion = 1;
+	// Write version 2 for new sessions, which support 64-bit timestamp
+	uint8_t fileVersion = 2;
 	fseek(sessionFile, FILE_VERSION_ADDR_0, SEEK_SET);
 	fwrite(&fileVersion, 1, 1, sessionFile);
 
@@ -743,8 +783,9 @@ void offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	}
 
 	xSemaphoreGive(offs_lock);
-}
 
+	return ESP_OK;
+}
 
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 {
@@ -791,7 +832,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	if(readLen <= 996)
 		crcCalc = crc32_normal(0, base64SessionData, readLen);
 
-	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
 	if(crcRead != crcCalc)
 	{
@@ -864,7 +905,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 
 	uint32_t nrOfOCMFElements = 0;
 	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	ESP_LOGI(TAG, "NrOfElements read: %" PRIi32 "", nrOfOCMFElements);
 
 	/// Build OCMF strings for each element
 	if(nrOfOCMFElements > 0)
@@ -879,13 +920,15 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 			struct LogOCMFData OCMFElement;
 			fread(&OCMFElement, sizeof(struct LogOCMFData), 1, sessionFile);
 
+			uint64_t timestamp = offlineSession_ReadTimestamp(&OCMFElement, fileVersion);
+
 			/// Hold'n clear crc to get correct calculation for packet
 			uint32_t packetCrc = OCMFElement.crc;
 			OCMFElement.crc = 0;
 
 			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
 
-			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 		}
 	}
 
@@ -945,7 +988,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
 
-	ESP_LOGW(TAG,"Session CRC read control: 0x%X vs 0x%X: %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
 	if(crcRead != crcCalc)
 	{
@@ -1064,7 +1107,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 	uint32_t nrOfOCMFElements = 0;
 	fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-	ESP_LOGI(TAG, "NrOfElements read: %i", nrOfOCMFElements);
+	ESP_LOGI(TAG, "NrOfElements read: %" PRIi32 "", nrOfOCMFElements);
 
 	/// Build OCMF strings for each element, Should never be more than maxElements
 	if((nrOfOCMFElements > 0) && (nrOfOCMFElements <= max_offline_signed_values))
@@ -1079,13 +1122,15 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 			struct LogOCMFData OCMFElement;
 			fread(&OCMFElement, sizeof(struct LogOCMFData), 1, sessionFile);
 
+			uint64_t timestamp = offlineSession_ReadTimestamp(&OCMFElement, fileVersion);
+
 			/// Hold'n clear crc got get correct calculation for packet
 			uint32_t packetCrc = OCMFElement.crc;
 			OCMFElement.crc = 0;
 
 			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
 
-			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %i %f 0x%X %s", i, newElementPosition, OCMFElement.label, OCMFElement.timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 
 			if((crcCalc == packetCrc))
 			{
@@ -1097,7 +1142,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 				cJSON * logArrayElement = cJSON_CreateObject();
 				char timeBuffer[50] = {0};
-				zntp_format_time(timeBuffer, OCMFElement.timestamp);
+				zntp_format_time(timeBuffer, timestamp);
 
 				///Convert char to string for Json use. must have \0 ending.
 				char tx[2] = {OCMFElement.label, 0};
@@ -1126,47 +1171,6 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 	return entryArray;
 }
 
-
-
-//static cJSON * fileRoot = NULL;
-/*static cJSON * fileReaderArray = NULL;
-cJSON * OCMF_AddFileElementToSession_no_lock(const char * const tx, const char * const st, time_t time_in, double energy_in)
-{
-
-	if(fileReaderArray != NULL)
-	{
-		int arrayLength = cJSON_GetArraySize(fileReaderArray);
-
-		//Allow max 100 entries including end message to limit message size.
-		if((arrayLength < 99) || ((arrayLength == 99) && (tx[0] == 'E')))
-		{
-			cJSON * logArrayElement = cJSON_CreateObject();
-			char timeBuffer[50] = {0};
-			zntp_format_time(timeBuffer, time_in);
-			//zntp_GetSystemTime(timeBuffer, NULL);
-
-			cJSON_AddStringToObject(logArrayElement, "TM", timeBuffer);	//TimeAndSyncState
-			cJSON_AddStringToObject(logArrayElement, "TX", tx);	//Message status (B, T, E)
-			cJSON_AddNumberToObject(logArrayElement, "RV", energy_in);//get_accumulated_energy());	//ReadingValue
-			cJSON_AddStringToObject(logArrayElement, "RI", "1-0:1.8.0");	//ReadingIdentification(OBIS-code)
-			cJSON_AddStringToObject(logArrayElement, "RU", "kWh");			//ReadingUnit
-			cJSON_AddStringToObject(logArrayElement, "RT", "AC");			//ReadingCurrentType
-			cJSON_AddStringToObject(logArrayElement, "ST", st);			//MeterState
-
-			cJSON_AddItemToArray(fileReaderArray, logArrayElement);
-
-			ESP_LOGW(TAG, "OCMF Array size: %i: ", cJSON_GetArraySize(fileReaderArray));
-		}
-		else
-		{
-			ESP_LOGW(TAG, "MAX OCMF Array size reached");
-		}
-	}
-	return fileReaderArray;
-}*/
-
-
-
 esp_err_t offlineSession_SaveSession(char * sessionData)
 {
 	int ret = 0;
@@ -1189,13 +1193,13 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 	sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 
 	//Save the session structure to the file including the start 'B' message
-	offlineSession_UpdateSessionOnFile(sessionData, true);
+	ret = offlineSession_UpdateSessionOnFile(sessionData, true);
 
 	return ret;
 }
 
 
-void offlineSession_append_energy(char label, int timestamp, double energy)
+void offlineSession_append_energy(char label, time_t timestamp, double energy)
 {
 	if (!offlineSession_is_mounted()) {
 		ESP_LOGE(TAG, "failed to mount /tmp, offline log will not work");
@@ -1215,6 +1219,10 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 	uint32_t nrOfOCMFElements = 0;
 	if(sessionFile != NULL)
 	{
+		uint8_t fileVersion = 0;
+		fread(&fileVersion, 1, 1, sessionFile);
+		ESP_LOGW(TAG, "File version: %d", fileVersion);
+
 		/// Find end of file to get size
 		fseek(sessionFile, 0L, SEEK_END);
 		size_t readSize = ftell(sessionFile);
@@ -1258,7 +1266,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 				else
 					offlineSession_AppendLogString("nrOfOCMFElements == 0");
 
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
@@ -1267,7 +1275,7 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			///100 elements, leave room for last element with 'E'
 			if((label == 'T') && (nrOfOCMFElements >= (max_offline_signed_values-1)))
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
@@ -1276,27 +1284,31 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 			///Max 100 elements check if room for 'e'
 			if((label == 'E') && (nrOfOCMFElements >= max_offline_signed_values))
 			{
-				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %d (%c)", activeFileNumber, nrOfOCMFElements, label);
+				ESP_LOGE(TAG, "FileNo %d: Invalid nr of OCMF elements: %" PRId32 " (%c)", activeFileNumber, nrOfOCMFElements, label);
 				fclose(sessionFile);
 				xSemaphoreGive(offs_lock);
 				return;
 			}
 		}
 
-		ESP_LOGW(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %d", activeFileNumber, label, nrOfOCMFElements);
+		ESP_LOGW(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %" PRId32 "", activeFileNumber, label, nrOfOCMFElements);
 
 		/// And add 1.
 
 		/// Prepare struct with crc
-		struct LogOCMFData line = {.label = label, .energy = energy, .timestamp = timestamp, .crc = 0};
+		struct LogOCMFData line = {.label = label, .energy = energy, .crc = 0};
+		offlineSession_SetTimestamp(&line, fileVersion, timestamp);
+
+		uint64_t timestamp = offlineSession_ReadTimestamp(&line, fileVersion);
+
 		uint32_t crc = crc32_normal(0, &line, sizeof(struct LogOCMFData));
 		line.crc = crc;
 
 		//ESP_LOGW(TAG, "FileNo %d: writing to OFFS-file with crc=%u", activeFileNumber, line.crc);
 
 		int newElementPosition = (FILE_OCMF_START_ADDR_1004) + (nrOfOCMFElements * sizeof(struct LogOCMFData));
-		ESP_LOGW(TAG, "FileNo %d: New element position: #%d: %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
-		ESP_LOGW(TAG, "OCMF Write %i addr: %i : %c %i %f 0x%X", nrOfOCMFElements, newElementPosition, line.label, line.timestamp, line.energy, line.crc);
+		ESP_LOGW(TAG, "FileNo %d: New element position: #%" PRId32 ": %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
+		ESP_LOGW(TAG, "OCMF Write %" PRIi32 " addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 "", nrOfOCMFElements, newElementPosition, line.label, timestamp, line.energy, line.crc);
 
 		/// Write new element
 		fseek(sessionFile, newElementPosition, SEEK_SET);
@@ -1315,102 +1327,12 @@ void offlineSession_append_energy(char label, int timestamp, double energy)
 
 		nrOfOCMFElements = 99;
 		fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%d", activeFileNumber, nrOfOCMFElements);
+		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%" PRId32 "", activeFileNumber, nrOfOCMFElements);
 		fclose(sessionFile);
 	}
 
 	xSemaphoreGive(offs_lock);
 }
-
-/*int offlineSession_ReadOldestSession(char * SessionString)
-{
-	if(mounted == false)
-		return -1;
-
-	sessionFile = fopen(activePathString, "rb+");
-
-	if(sessionFile != NULL)
-	{
-		/// Find end of file to get size
-		fseek(sessionFile, 0L, SEEK_END);
-		size_t readSize = ftell(sessionFile);
-		ESP_LOGW(TAG, "FileNo %d: filesize: %d", activeFileNumber, readSize);
-
-		fseek(sessionFile, 1000, SEEK_SET);
-	}
-
-	return 0;
-}*/
-
-//int offlineSession_attempt_send(void){
-//    ESP_LOGI(TAG, "log data:");
-//
-//    int result = -1;
-//
-//    int log_start;
-//    int log_end;
-//    FILE *fp = init_log(&log_start, &log_end);
-//
-//    //If file or partition is now available, indicate empty file
-//    if(fp == NULL)
-//    	return 0;
-//
-//    char ocmf_text[200] = {0};
-//
-//    while(log_start!=log_end){
-//        struct LogLine line;
-//        int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_start);
-//        fseek(fp, start_of_line, SEEK_SET);
-//        int read_result = fread(&line, 1,sizeof(line),  fp);
-//
-//        uint32_t crc_on_file = line.crc;
-//        line.crc = 0;
-//        uint32_t calculated_crc = crc32_normal(0, &line, sizeof(line));
-//
-//
-//        ESP_LOGI(TAG, "LogLine@%d>%d: E=%f, t=%d, crc=%d, valid=%d, read=%d",
-//            log_start, start_of_line,
-//            line.energy, line.timestamp,
-//            crc_on_file, crc_on_file==calculated_crc, read_result
-//        );
-//
-//        if(crc_on_file==calculated_crc){
-//            OCMF_CreateMessageFromLog(ocmf_text, line.timestamp, line.energy);
-//            int publish_result = publish_string_observation_blocked(
-//			    SignedMeterValue, ocmf_text, 2000
-//		    );
-//
-//            if(publish_result<0){
-//                ESP_LOGI(TAG, "publishing line failed, aborting log dump");
-//                break;
-//            }
-//
-//            int new_log_start = (log_start + 1) % max_offline_session_files;
-//            update_header(fp, new_log_start, log_end);
-//            fflush(fp);
-//
-//
-//            ESP_LOGI(TAG, "line published");
-//
-//
-//        }else{
-//            ESP_LOGI(TAG, "skipped corrupt line");
-//        }
-//
-//        log_start = (log_start+1) % max_offline_session_files;
-//    }
-//
-//    if(log_start==log_end){
-//        result = 0;
-//        if(log_start!=0)
-//            update_header(fp, 0, 0);
-//    }
-//
-//	int close_result = fclose(fp);
-//    ESP_LOGI(TAG, "closed log file %d", close_result);
-//    return result;
-//}
-
 
 void offlineSession_DeleteAllFiles()
 {

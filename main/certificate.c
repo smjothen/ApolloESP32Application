@@ -126,6 +126,9 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 ESP_LOGW(TAG, "Last mbedtls failure: 0x%x", mbedtls_err);
             }
             break;
+        case HTTP_EVENT_REDIRECT:
+            ESP_LOGI(TAG, "HTTP_EVENT_REDIRECT");
+            break;
     }
     return ESP_OK;
 }
@@ -301,7 +304,7 @@ void certificate_task(void* tlsErrorCause)
 		int postlen = strlen(post_data);
 		volatile esp_err_t err;
 		if ((err = esp_http_client_open(client, postlen)) != ESP_OK) {
-			ESP_LOGE(TAG, "Failed to open HTTP connection: %s, backing off: %d sec", esp_err_to_name(err), backoffDelay);
+			ESP_LOGE(TAG, "Failed to open HTTP connection: %s, backing off: %" PRId32 " sec", esp_err_to_name(err), backoffDelay);
 
 
 			//Make sure it is trying more and more seldom, but max
@@ -327,7 +330,7 @@ void certificate_task(void* tlsErrorCause)
 
 		if(read_len == 0)
 		{
-			ESP_LOGE(TAG, "Did not get any data -  backing off: %d sec", backoffDelay);
+			ESP_LOGE(TAG, "Did not get any data -  backing off: %" PRId32 " sec", backoffDelay);
 
 			vTaskDelay(pdMS_TO_TICKS(1000 * backoffDelay));
 			if(backoffDelay < (3600 * 6)) //Backoff maximum 6 hours
@@ -357,7 +360,7 @@ void certificate_task(void* tlsErrorCause)
 		}
 		else if(certStatus == 1) //Not a valid header - back off and try again
 		{
-			ESP_LOGE(TAG, "Did not get a valid certificate - backing off: %d sec", backoffDelay);
+			ESP_LOGE(TAG, "Did not get a valid certificate - backing off: %" PRId32 " sec", backoffDelay);
 
 			vTaskDelay(pdMS_TO_TICKS(1000 * backoffDelay));
 			if(backoffDelay < (3600 * 6)) //Backoff maximum 6 hours
@@ -392,11 +395,11 @@ bool certificateValidate()
 
 	mbedtls_sha256_init(&sha256_ctx);
 
-	mbedtls_sha256_starts_ret(&sha256_ctx, false);
+	mbedtls_sha256_starts(&sha256_ctx, false);
 
-	mbedtls_sha256_update_ret(&sha256_ctx, (unsigned char*)certificate, certificateLength);
+	mbedtls_sha256_update(&sha256_ctx, (unsigned char*)certificate, certificateLength);
 
-	mbedtls_sha256_finish_ret(&sha256_ctx, sha256);
+	mbedtls_sha256_finish(&sha256_ctx, sha256);
 
 	mbedtls_sha256_free(&sha256_ctx);
 
@@ -418,7 +421,7 @@ bool certificateValidate()
     }
 
     // Assuming read key is EC public key
-    mbedtls_ecdsa_context *ctx = (mbedtls_ecdsa_context*)key_ctx.pk_ctx;
+    mbedtls_ecdsa_context *ctx = (mbedtls_ecdsa_context*)key_ctx.private_pk_ctx;
 
     char *pos = sign;
     unsigned char signBytes[100] = {0};

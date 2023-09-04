@@ -1214,8 +1214,8 @@ void storage_PrintConfiguration()
 	ESP_LOGI(TAG, "RoutingId: 					%s", configurationStruct.routingId);
 	ESP_LOGI(TAG, "InstallationId: 				%s", configurationStruct.installationId);
 
-	ESP_LOGI(TAG, "TransmitInterval: 			\t%i", configurationStruct.transmitInterval);
-	ESP_LOGI(TAG, "PulseInterval: 				%i", configurationStruct.pulseInterval);
+	ESP_LOGI(TAG, "TransmitInterval: 			\t%" PRIi32 "", configurationStruct.transmitInterval);
+	ESP_LOGI(TAG, "PulseInterval: 				%" PRIi32 "", configurationStruct.pulseInterval);
 	ESP_LOGI(TAG, "DiagnosticsLog: 				%s", configurationStruct.diagnosticsLog);
 	ESP_LOGI(TAG, "Portal: 						%i", configurationStruct.connectToPortalType);
 
@@ -1352,7 +1352,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 	//Read existing nr of tags
 	//If fewer than MAX_NR_OF_RFID_TAGS, then add.
 
-	ESP_LOGI(TAG, "Cnt: %d, Token: %s, Action: %d", nrOfTokens, rfidTokens[0].Tag, rfidTokens[0].Action);
+	ESP_LOGI(TAG, "Cnt: %" PRId32 ", Token: %s, Action: %d", nrOfTokens, rfidTokens[0].Tag, rfidTokens[0].Action);
 
 	err = nvs_open("RFIDTags", NVS_READWRITE, &rfid_tag_handle);
 
@@ -1365,7 +1365,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 
 	if(nrOfTagsOnFile > 20)
 	{
-		ESP_LOGE(TAG, "NrOfTagsOnfile %d", nrOfTagsOnFile);
+		ESP_LOGE(TAG, "NrOfTagsOnfile %" PRId32 "", nrOfTagsOnFile);
 		return -1;
 	}
 
@@ -1393,7 +1393,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 					}
 
 					size_t readSize;
-					char keyErasePosName[15] = {0};
+					char keyErasePosName[17] = {0};
 					sprintf(keyErasePosName, "TagNr%d", tagNrOnFile);
 
 					//err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
@@ -1413,14 +1413,14 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 						removed++;
 						if(nrOfTagsOnFile >= 1)
 							nrOfTagsOnFile--;
-						ESP_LOGI(TAG, "Removed %s: %s, TagsOnFile: %d", keyErasePosName, rfidTokens[tagNr].Tag, nrOfTagsOnFile);
+						ESP_LOGI(TAG, "Removed %s: %s, TagsOnFile: %" PRId32 "", keyErasePosName, rfidTokens[tagNr].Tag, nrOfTagsOnFile);
 
 						//If there are more tags on file, move last item up to removed item.
 						if(tagNrOnFile < nrOfTagsOnFile)
 						{
 							//Read the key to move
 							char keyToMoveName[15] = {0};
-							sprintf(keyToMoveName, "TagNr%d", nrOfTagsOnFile);
+							sprintf(keyToMoveName, "TagNr%" PRId32 "", nrOfTagsOnFile);
 							err += nvs_get_str(rfid_tag_handle, keyToMoveName, NULL, &readSize);
 							err += nvs_get_str(rfid_tag_handle, keyToMoveName, tagId, &readSize);
 
@@ -1455,7 +1455,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 			for (int tagOnFile = 0; tagOnFile < nrOfTagsOnFileInit; tagOnFile++)
 			{
 				size_t readSize;
-				char keyName[15] = {0};
+				char keyName[17] = {0};
 				sprintf(keyName, "TagNr%d", tagOnFile);
 
 				err += nvs_get_str(rfid_tag_handle, keyName, NULL, &readSize);
@@ -1483,7 +1483,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 			if(nrOfTagsOnFile < MAX_NR_OF_RFID_TAGS)
 			{
 				char keyName[15] = {0};
-				sprintf(keyName, "TagNr%d", nrOfTagsOnFile);//Key name continuing from flash numbering
+				sprintf(keyName, "TagNr%" PRId32 "", nrOfTagsOnFile);//Key name continuing from flash numbering
 				err += nvs_set_str(rfid_tag_handle, keyName, rfidTokens[tagNr].Tag);
 				actuallySaved++;
 				nrOfTagsOnFile++;
@@ -1491,7 +1491,7 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 			else
 			{
 				//Error more than MAX_NR_OF_RFID_TAGS //TODO: Communicate to Cloud and app
-				ESP_LOGE(TAG, "More tokens than allowed: %d", nrOfTagsOnFile);
+				ESP_LOGE(TAG, "More tokens than allowed: %" PRId32 "", nrOfTagsOnFile);
 			}
 
 
@@ -1507,9 +1507,9 @@ esp_err_t storage_updateRFIDTagsToFile(volatile struct RFIDTokens rfidTokens[], 
 	nvs_close(rfid_tag_handle);
 
 	if(err == ESP_OK)
-		ESP_LOGI(TAG, "Removed: %d/%d, Saved: %d/%d, Moved: %d. On file: %d.", removed, nrOfTokens, actuallySaved, nrOfTokens, moved, nrOfTagsOnFile);
+		ESP_LOGI(TAG, "Removed: %d/%" PRId32 ", Saved: %d/%" PRId32 ", Moved: %d. On file: %" PRId32 ".", removed, nrOfTokens, actuallySaved, nrOfTokens, moved, nrOfTagsOnFile);
 	else
-		ESP_LOGI(TAG, "ERROR %d when saving %d new rfidTags",err, nrOfTokens);
+		ESP_LOGI(TAG, "ERROR %d when saving %" PRId32 " new rfidTags",err, nrOfTokens);
 
 	return err;
 }
@@ -1553,7 +1553,7 @@ esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match)
 			if(strcmp(tagId, "*") == 0)
 			{
 				*match = 1;
-				ESP_LOGW(TAG, "Found match %s == *, TagsOnFile: %d", keyName, nrOfTagsOnFile);
+				ESP_LOGW(TAG, "Found match %s == *, TagsOnFile: %" PRId32 "", keyName, nrOfTagsOnFile);
 				break;
 			}
 
@@ -1561,20 +1561,20 @@ esp_err_t storage_lookupRFIDTagInList(char * tag, uint8_t *match)
 			if(strcmp(tagId, tag) == 0)
 			{
 				*match = 1;
-				ESP_LOGW(TAG, "Found match %s == %s, TagsOnFile: %d", keyName, tag, nrOfTagsOnFile);
+				ESP_LOGW(TAG, "Found match %s == %s, TagsOnFile: %" PRId32 "", keyName, tag, nrOfTagsOnFile);
 				break;
 			}
 
 		}
 		if(*match == 0)
 		{
-			ESP_LOGW(TAG, "No match with %d TagsOnFile",  nrOfTagsOnFile);
+			ESP_LOGW(TAG, "No match with %" PRId32 " TagsOnFile",  nrOfTagsOnFile);
 		}
 
 	}
 	else
 	{
-		ESP_LOGI(TAG, "Nothing to search, %d TagsOnFile",  nrOfTagsOnFile);
+		ESP_LOGI(TAG, "Nothing to search, %" PRId32 " TagsOnFile",  nrOfTagsOnFile);
 	}
 
 	nvs_close(rfid_tag_handle);
@@ -1657,13 +1657,13 @@ esp_err_t storage_printRFIDTagsOnFile(bool writeToBuffer)
 			err += nvs_get_str(rfid_tag_handle, keyName, tagId, &readSize);
 
 			if(writeToBuffer && (RFIDbuffer != NULL))
-				sprintf(RFIDbuffer+strlen(RFIDbuffer), "%d/%d: %s -> %s\r\n", tagNr+1, nrOfTagsOnFile, keyName, tagId);
-			ESP_LOGI(TAG, "%d/%d: %s -> %s", tagNr+1, nrOfTagsOnFile, keyName, tagId);
+				sprintf(RFIDbuffer+strlen(RFIDbuffer), "%d/%" PRId32 ": %s -> %s\r\n", tagNr+1, nrOfTagsOnFile, keyName, tagId);
+			ESP_LOGI(TAG, "%d/%" PRId32 ": %s -> %s", tagNr+1, nrOfTagsOnFile, keyName, tagId);
 		}
 	}
 	else
 	{
-		ESP_LOGI(TAG, "No tags on file: tagsOnFile: %d ", nrOfTagsOnFile);
+		ESP_LOGI(TAG, "No tags on file: tagsOnFile: %" PRId32 " ", nrOfTagsOnFile);
 	}
 
 	nvs_close(rfid_tag_handle);

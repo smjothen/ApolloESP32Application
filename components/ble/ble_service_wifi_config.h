@@ -161,7 +161,7 @@
 		WIFI_NB,
 	};
 
-    uint16_t wifi_handle_table[WIFI_NB];
+    extern uint16_t wifi_handle_table[WIFI_NB];
 
     extern const uint16_t WIFI_SERV_uuid;
     extern const uint8_t Wifi_SERVICE_uuid[ESP_UUID_LEN_128];

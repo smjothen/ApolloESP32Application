@@ -1,4 +1,5 @@
 build
+build.clang
 sdkconfig.old
 
 .vscode
@@ -14,6 +15,7 @@ flash_encryption_key.bin
 *.pem
 .cache
 
+compile_commands.json
 managed_components
 .vim
 build.clang

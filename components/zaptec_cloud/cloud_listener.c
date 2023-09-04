@@ -100,7 +100,7 @@ char token[256];  // token was seen to be at least 136 char long
 int refresh_token(esp_mqtt_client_config_t *mqtt_config){
     //create_sas_token(30, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
 	create_sas_token(604800, cloudDeviceInfo.serialNumber, cloudDeviceInfo.PSK, (char *)&token);
-    mqtt_config->password = token;
+	mqtt_config->credentials.authentication.password = token;
     return 0;
 }
 
@@ -845,10 +845,10 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				}else{
 					bool url_is_valid = true;
 
-					const char * uri_end = NULL;
+					const unsigned char * uri_end = NULL;
 					if((strncmp(url, "ws://", 5) == 0 || strncmp(url, "wss://", 6) == 0)
 						&& strlen(url) <= CONFIG_OCPP_URL_MAX_LENGTH
-						&& rfc3986_is_valid_uri(url, &uri_end)
+						&& rfc3986_is_valid_uri((unsigned char *)url, &uri_end)
 						&& *uri_end == '\0'){
 
 						url_is_valid = true;
@@ -897,12 +897,12 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				if(strlen(cbid) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
 					ESP_LOGE(TAG, "CBID is too long");
 
-				}else if(!rfc3986_is_percent_encode_compliant(cbid)){
+				}else if(!rfc3986_is_percent_encode_compliant((unsigned char *)cbid)){
 					char * cbid_encoded = malloc(strlen(cbid) * 3);
 					if(cbid_encoded == NULL){
 						ESP_LOGE(TAG, "Unable to allocate buffer for encoded CBID");
 					}else{
-						rfc3986_percent_encode(cbid, cbid_encoded);
+						rfc3986_percent_encode((unsigned char *)cbid, cbid_encoded);
 						if(strlen(cbid_encoded) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
 							ESP_LOGE(TAG, "Percent encoding increased CBID length beyound allowed limit");
 							free(cbid_encoded);
@@ -1901,6 +1901,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 				//start_segmented_ota();
 				start_ota();
+				responseStatus = 200;
 			}else if(strstr(commandString, "multiblockota") != NULL){
 
 				MessageType ret = MCU_SendCommandId(CommandHostFwUpdateStart);
@@ -1910,6 +1911,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart FAILED");
 
 				start_segmented_ota();
+				responseStatus = 200;
 			}
 
 
@@ -1923,7 +1925,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					//SetDataInterval(interval);
 					storage_Set_TransmitInterval(interval);
 					storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Setting LogInterval %d", interval);
+					ESP_LOGI(TAG, "Setting LogInterval %" PRIu32, interval);
 					responseStatus = 200;
 				}
 				else
@@ -2057,7 +2059,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			// GetInstallationConfigOnFile
 			else if(strstr(commandString,"GetInstallationConfigOnFile") != NULL)
 			{
-
 				reportInstallationConfigOnFile = true;
 				ESP_LOGI(TAG, "Getting installationConfigOnFile");
 				responseStatus = 200;
@@ -2147,7 +2148,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				storage_SaveConfiguration();
 
 				ESP_LOGI(TAG, "SwapCommunicationMode");
-				responseStatus = 200;
 
 				restartCmdReceived = true;
 				responseStatus = 200;
@@ -2189,7 +2189,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						valid_tag = true;
 
 						for(size_t i = 0; i < tag_length; i++){
-							if(!isalnum(tag_start[i]) && !isblank(tag_start[i]) && tag_start[i] != '*'){
+							if(!isalnum((unsigned char)tag_start[i]) && !isblank((unsigned char)tag_start[i]) && tag_start[i] != '*'){
 								valid_tag = false;
 								break;
 							}
@@ -2206,7 +2206,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					char level = '\0';
 					size_t remaining_length = strlen(tag_end);
 					for(size_t i = 0; i < remaining_length; i++){
-						if(isalpha(tag_end[i])){
+						if(isalpha((unsigned char)tag_end[i])){
 							level = tag_end[i];
 						}
 					}
@@ -2250,13 +2250,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				responseStatus = 200;
 			}
 
-			if(strstr(commandString,"Activate TCP") != NULL)
+			else if(strstr(commandString,"Activate TCP") != NULL)
 			{
 				storage_Set_DiagnosticsMode(eACTIVATE_TCP_PORT);
 				storage_SaveConfiguration();
 				responseStatus = 200;
 			}
-			if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
+			else if(strstr(commandString,"AlwaysSendSessionDiagnostics") != NULL)
 			{
 				storage_Set_DiagnosticsMode(eALWAYS_SEND_SESSION_DIAGNOSTICS);
 				storage_SaveConfiguration();
@@ -2322,7 +2322,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					uint8_t ret = MCU_UpdateIT3OptimizationState();
 					if(ret == 0)
 					{
-						ESP_LOGI(TAG, "Set IT3 optimization enabled OK");
 						responseStatus = 200;
 					}
 					else
@@ -2423,6 +2422,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"RTC") != NULL)
 			{
 				SetSendRTC();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"PulseInterval ") != NULL)
 			{
@@ -2432,7 +2432,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					storage_Set_PulseInterval(interval);
 					storage_SaveConfiguration();
-					ESP_LOGI(TAG, "Setting Pulse interval %d", interval);
+					ESP_LOGI(TAG, "Setting Pulse interval %" PRIu32, interval);
 					responseStatus = 200;
 				}
 				else
@@ -2455,6 +2455,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"PowerToggle4G") != NULL)
 			{
 				cellularPinsOff();
+				responseStatus = 200;
 			}
 
 			//For testing AT on BG while on Wifi
@@ -2462,6 +2463,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				cellularPinsOn();
 				ATOnly();
+				responseStatus = 200;
 			}
 
 			//AT command tunneling - do not change command mode
@@ -2479,11 +2481,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString,"OnlineWD") != NULL)
 			{
 				SetOnlineWatchdog();
+				responseStatus = 200;
 			}
 			//AT command tunneling - do change command mode
 			else if(strstr(commandString,"ClearNotifications") != NULL)
 			{
 				ClearNotifications();
+				responseStatus = 200;
 			}
 
 			else if(strstr(commandString,"PrintStat") != NULL)
@@ -2491,29 +2495,35 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				char stat[100] = {0};
 				storage_GetStats(stat);
 				publish_debug_telemetry_observation_Diagnostics(stat);
+				responseStatus = 200;
 			}
 
 			else if(strstr(commandString,"DeleteOfflineLog") != NULL)
 			{
-				int ret = deleteOfflineLog();
+				int ret = offline_log_delete();
 				if(ret == 1)
 					publish_debug_telemetry_observation_Diagnostics("Delete OK");
 				else
 					publish_debug_telemetry_observation_Diagnostics("Delete failed");
+
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"StartStack") != NULL)
 			{
 				//Also send instantly when activated
 				SendStacks();
 				StackDiagnostics(true);
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"StopStack") != NULL)
 			{
 				StackDiagnostics(false);
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"OCMFHigh") != NULL)
 			{
 				SessionHandler_SetOCMFHighInterval();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"LogCurrent") != NULL)
 			{
@@ -2526,6 +2536,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				{
 					SessionHandler_SetLogCurrents(interval);
 				}
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"RestartCar") != NULL)//MCU Command 507: Reset Car Interface sequence
 			{
@@ -2540,10 +2551,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 400;
 					ESP_LOGI(TAG, "MCU Restart car FAILED");
 				}
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"ServoCheck") != NULL)
 			{
 				MCU_PerformServoCheck();
+				responseStatus = 200;
 			}
 			else if(strstr(commandString,"GetHWCurrentLimits") != NULL)
 			{
@@ -2669,7 +2682,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						uint32_t nrOfSignedValues = (uint32_t)strtol(sec+1, &endptr, 10);
 						if(nrOfSignedValues <= 110)
 						{
-							ESP_LOGW(TAG, "NrSess: %i NrSV: %i", nrOfSessions, nrOfSignedValues);
+							ESP_LOGW(TAG, "NrSess: %" PRIu32 " NrSV: %" PRIu32, nrOfSessions, nrOfSignedValues);
 							sessionHandler_TestOfflineSessions(nrOfSessions, nrOfSignedValues);
 						}
 					}
@@ -2938,6 +2951,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						storage_Set_cover_on_value((uint16_t)newProxValue);
 						storage_SaveConfiguration();
 					}
+					responseStatus = 200;
 				}
 				else if(strstr(commandString, "GetCoverProximity"))
 				{
@@ -3142,7 +3156,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					if(directory_path != NULL && strlen(directory_path) > 0){
 
 						for(size_t i = strlen(directory_path)-1; i > 0; i--){
-							if(isspace(directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+							if(isspace((unsigned char)directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
 								|| directory_path[i] == '"'){
 								directory_path[i] = '\0';
 							}
@@ -3332,6 +3346,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					SetMemoryDiagnosticsFrequency(3600);
 				else
 					SetMemoryDiagnosticsFrequency(0);
+
+				responseStatus = 200;
 			}
 			else if(strstr(commandString, "ConnectTo"))
 			{
@@ -3349,6 +3365,50 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_SaveConfiguration();
 					responseStatus = 200;
 				}
+			}
+			else if(strstr(commandString, "listdirectory")){
+				char * directory_path = index(commandString, '/');
+				if(directory_path != NULL && strlen(directory_path) > 0){
+
+					for(size_t i = strlen(directory_path)-1; i > 0; i--){
+						if(isspace((unsigned char)directory_path[i]) != 0 || directory_path[i] == '\\' || directory_path[i] == ']'
+							|| directory_path[i] == '"'){
+							directory_path[i] = '\0';
+						}
+					}
+
+					ESP_LOGI(TAG, "Listing directory: '%s'", directory_path);
+
+					cJSON * result = cJSON_CreateObject();
+					if(result == NULL){
+						responseStatus = 500;
+					}else{
+						fat_list_directory(directory_path, result);
+						char * result_str = cJSON_PrintUnformatted(result);
+						cJSON_Delete(result);
+
+						if(result_str != NULL){
+							responseStatus = 200;
+							publish_debug_telemetry_observation_Diagnostics(result_str);
+							free(result_str);
+						}else{
+							responseStatus = 500;
+						}
+					}
+				}else{
+					ESP_LOGW(TAG, "listdirectory requested with missing path");
+					responseStatus = 400;
+				}
+			}
+			else if(strstr(commandString, "TestFileCorrection"))
+			{
+				ESP_LOGI(TAG, "Testing FileCorrection");
+				chargeSession_SetTestFileCorrection();
+				responseStatus = 200;
+			}
+			else
+			{
+				responseStatus = 400;
 			}
 		}
 	}
@@ -3425,8 +3485,9 @@ static int ridNr = 4199; // TODO: Check if int is correct. Azure sdk seems to us
 static bool isFirstConnection = true;
 static int incrementalRefreshTimeout = 0;
 static esp_err_t reconnectErr = ESP_OK;
-static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
+	esp_mqtt_event_handle_t event = event_data;
 
 	//ESP_LOGE(TAG, "<<<<receiving>>>> %d:%d: %.*s", event->data_len, event->topic_len, event->data_len, event->data);
 	MqttSetRxDiagnostics(event->data_len, event->topic_len);
@@ -3496,7 +3557,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
         mqttConnected = true;
         //When connected, reset connection timeout to default
-        mqtt_config.reconnect_timeout_ms = 10000;
+				mqtt_config.network.reconnect_timeout_ms = 10000;
         esp_mqtt_set_config(mqtt_client, &mqtt_config);
         incrementalRefreshTimeout = 0;
 
@@ -3746,14 +3807,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 					randomSeconds = (10.0 + backOffSeconds) * randomSeconds / 2.0;
 
 
-				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %d)", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
+				ESP_LOGW(TAG, "*** Backoff 10 + %f + %f = %f (Rand %" PRId32 ")", backOffSeconds, randomSeconds, 10 + backOffSeconds + randomSeconds, rand);
 
 
 				incrementalRefreshTimeout = 10 + backOffSeconds + randomSeconds;
     			//incrementalRefreshTimeout += 10000; // Increment refreshTimeout with 10 sec for every disconnected error as a backoff routine.
-    			mqtt_config.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
+    			mqtt_config.network.reconnect_timeout_ms = (int)(incrementalRefreshTimeout * 1000);
     			esp_mqtt_set_config(mqtt_client, &mqtt_config);
-    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.reconnect_timeout_ms);
+    			ESP_LOGW(TAG, "*** Attempts: %d Refreshing timeout increased to %i (%i)***", reconnectionAttempt, incrementalRefreshTimeout, mqtt_config.network.reconnect_timeout_ms);
     		}
     		else
     		{
@@ -3816,8 +3877,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     memset(event->data, 0, event->data_len);
     event->data_len = 0;
     event->total_data_len = 0;
-
-    return ESP_OK;
 }
 
 int cloud_listener_GetResetCounter()
@@ -3991,39 +4050,39 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
        // strlen(cert)//, cert
     );
 
-    mqtt_config.uri = broker_url;
-    mqtt_config.event_handle = mqtt_event_handler;
-    mqtt_config.port = MQTT_PORT;
-    mqtt_config.username = username;
-    mqtt_config.client_id = cloudDeviceInfo.serialNumber;
+    mqtt_config.broker.address.uri = broker_url;
+    mqtt_config.broker.address.port = MQTT_PORT;
+    mqtt_config.credentials.username = username;
+    mqtt_config.credentials.client_id = cloudDeviceInfo.serialNumber;
     //mqtt_config.cert_pem = cert;
 
     if(certificate_GetUsage())
     {
-    	mqtt_config.use_global_ca_store = true;
+    	mqtt_config.broker.verification.use_global_ca_store = true;
     }
     else
     {
-    	mqtt_config.use_global_ca_store = false;
+    	mqtt_config.broker.verification.use_global_ca_store = false;
     	ESP_LOGE(TAG, "*** CERTIFICATES NOT USED ***");
     }
 
-    mqtt_config.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
+    //mqtt_config.broker.address.transport = MQTT_TRANSPORT_OVER_SSL; //Should already be set in menuconfig, but set here to ensure.
 
-    mqtt_config.lwt_qos = 1;
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.qos = 1;
+    mqtt_config.session.last_will.topic = event_topic;
     static char *lwt = "{\"EventType\":30,\"Message\":\"mqtt connection broke[lwt]\",\"Type\":5}";
-    mqtt_config.lwt_msg = lwt;
+    mqtt_config.session.last_will.msg = lwt;
 
-    mqtt_config.disable_auto_reconnect = false;
-    mqtt_config.reconnect_timeout_ms = 10000;
+    mqtt_config.network.disable_auto_reconnect = false;
+    mqtt_config.network.reconnect_timeout_ms = 10000;
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    if(storage_Get_Standalone() == 0)
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
-    else
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
+    if(storage_Get_Standalone() == 0) {
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+		} else {
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
+		}
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;
@@ -4035,6 +4094,9 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     mqtt_client = esp_mqtt_client_init(&mqtt_config);
     ESP_LOGI(TAG, "starting mqtt");
+
+		esp_mqtt_client_register_event(mqtt_client, MQTT_EVENT_ANY, mqtt_event_handler, NULL);
+
     esp_mqtt_client_start(mqtt_client);
 }
 
@@ -4066,7 +4128,7 @@ void update_installationId()
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.topic = event_topic;
 
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }
@@ -4096,7 +4158,7 @@ void update_mqtt_event_pattern(bool usePingReply)
 
     ESP_LOGW(TAG,"New event_topic: %s ", event_topic);
 
-    mqtt_config.lwt_topic = event_topic;
+    mqtt_config.session.last_will.topic = event_topic;
 
 	esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }
@@ -4138,13 +4200,13 @@ void periodic_refresh_token(uint8_t source)
  */
 void cloud_listener_SetMQTTKeepAliveTime(uint8_t isStandalone)
 {
-	int previous = mqtt_config.keepalive;
+	int previous = mqtt_config.session.keepalive;
     if(isStandalone == 0)
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
     else
-    	mqtt_config.keepalive = MQTT_KEEPALIVE_STANDALONE;
+    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
 
-    ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.keepalive);
+    ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.session.keepalive);
 
     esp_mqtt_set_config(mqtt_client, &mqtt_config);
 }

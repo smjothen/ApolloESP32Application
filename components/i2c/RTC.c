@@ -221,7 +221,7 @@ void RTCVerifyControlRegisters()
 		valueCheckCounter0++;
 		lastIncorrectValue0 = readByte;
 
-		ESP_LOGE(TAG_RTC, "RTC ctrl 0 == 0x%X, cnt0: %i", lastIncorrectValue0, valueCheckCounter0);
+		ESP_LOGE(TAG_RTC, "RTC ctrl 0 == 0x%X, cnt0: %" PRIi32 "", lastIncorrectValue0, valueCheckCounter0);
 
 		uint8_t writeBytes[2] = {0};
 
@@ -245,7 +245,7 @@ void RTCVerifyControlRegisters()
 		valueCheckCounter1++;
 		lastIncorrectValue1 = readByte;
 
-		ESP_LOGE(TAG_RTC, "RTC ctrl 1 == 0x%X, cnt1: %i", lastIncorrectValue1, valueCheckCounter1);
+		ESP_LOGE(TAG_RTC, "RTC ctrl 1 == 0x%X, cnt1: %" PRIi32 "", lastIncorrectValue1, valueCheckCounter1);
 
 		uint8_t writeBytes[2] = {0};
 
@@ -301,7 +301,7 @@ bool RTCReadAndUseTime()
 
 		time_t epochSec = mktime(&readTime);
 
-		ESP_LOGW(TAG_RTC, "**********epocSec: %ld", epochSec);
+		ESP_LOGW(TAG_RTC, "**********epocSec: %" PRId64 "", epochSec);
 
 		struct timeval tv = {0};
 		tv.tv_sec = epochSec;
@@ -313,7 +313,7 @@ bool RTCReadAndUseTime()
 		struct timeval tvRead = {0};
 		gettimeofday(&tvRead, NULL);
 
-		ESP_LOGW(TAG_RTC, "r: %ld, w: %ld, diff: %ld", tvRead.tv_sec, tv.tv_sec, tvRead.tv_sec-tv.tv_sec);
+		ESP_LOGW(TAG_RTC, "r: %" PRId64 ", w: %" PRId64 ", diff: %" PRId64 "", tvRead.tv_sec, tv.tv_sec, tvRead.tv_sec-tv.tv_sec);
 	}
 
 	return RTCvalid;

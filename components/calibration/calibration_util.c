@@ -333,7 +333,7 @@ bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
         ESP_LOGE(TAG, "Couldn't get calibration ID!");
         return false;
     }
-    ESP_LOGI(TAG, "Got calibration ID %d!", *id);
+    ESP_LOGI(TAG, "Got calibration ID %" PRIu32 "!", *id);
     return true;
 }
 

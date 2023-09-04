@@ -1,4 +1,3 @@
-
 idf_component_register(SRCS
   "ocpp_auth.c"
   "ocpp_call_with_cb.c"
@@ -54,7 +53,7 @@ idf_component_register(SRCS
   "ocpp_json/ocppj_message_structure.c"
   "ocpp_json/ocppj_validation.c"
   INCLUDE_DIRS "./include"
-  REQUIRES esp_websocket_client json fatfs zaptec_cloud utz
+  REQUIRES driver esp_wifi esp_event esp_websocket_client json fatfs zaptec_cloud utz
   )
 
 find_package(Doxygen

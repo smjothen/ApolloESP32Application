@@ -1404,7 +1404,7 @@ int compute_range(time_t start, int offset, time_t end, int * transaction_id,
 		}
 	}
 
-	ESP_LOGI(TAG,  "Range computed: %ld -> %ld offset: %d", start, end, offset);
+	ESP_LOGI(TAG,  "Range computed: %" PRId64 " -> %" PRId64 " offset: %d", start, end, offset);
 
 cleanup:
 	while(index > 0)
@@ -1865,7 +1865,7 @@ static void ocpp_smart_task(){
 
 		bool last_is_active = transaction_is_active;
 
-		ESP_LOGI(TAG, "Handling event mask %x, Renewal delay was: %d", data, next_renewal_delay);
+		ESP_LOGI(TAG, "Handling event mask %" PRIx32 ", Renewal delay was: %"PRIu32, data, next_renewal_delay);
 
 		if(data & eNOT_NEEDED){
 			ESP_LOGI(TAG, "Smart charging stopped");
@@ -1908,7 +1908,7 @@ static void ocpp_smart_task(){
 		}
 
 		if(transaction_is_active){
-			ESP_LOGI(TAG, "Handling active transaction. start: %ld, offset %ld", transaction_start_time, current_time - transaction_start_time);
+			ESP_LOGI(TAG, "Handling active transaction. start: %" PRId64 ", offset %" PRId64, transaction_start_time, current_time - transaction_start_time);
 			if(profile_tx == NULL || renewal_time_tx < current_time){
 				ESP_LOGI(TAG, "Current tx profile timed out");
 				data |= eACTIVE_PROFILE_TX_CHANGE;
@@ -2048,7 +2048,7 @@ static void ocpp_smart_task(){
 			}
 
 			if(next_renewal_timestamp - current_time < 1){
-				ESP_LOGW(TAG, "Unexpectedly low charging variable renewal delay: %ld", next_renewal_timestamp - current_time);
+				ESP_LOGW(TAG, "Unexpectedly low charging variable renewal delay: %" PRId64, next_renewal_timestamp - current_time);
 				next_renewal_delay = 1;
 			}else{
 				next_renewal_delay = next_renewal_timestamp - current_time;

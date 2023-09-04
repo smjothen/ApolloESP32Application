@@ -79,7 +79,7 @@ struct ocpp_active_call * awaiting_failed = NULL; // Transaction message that wa
 
 long int central_system_time_offset = 0;
 
-TaskHandle_t task_to_notify;
+static TaskHandle_t task_to_notify;
 static uint task_notify_offset = 0;
 
 void ocpp_change_message_timeout(uint16_t timeout){
@@ -101,9 +101,9 @@ enum ocpp_registration_status get_registration_status(){
 void update_central_system_time_offset(time_t charge_point_time, time_t central_system_time){
 	time_t offset = central_system_time - (charge_point_time + central_system_time_offset);
 
-	if(abs(offset) > OCPP_TIME_SYNC_MARGIN){
-		if(abs(offset) > OCPP_MAX_EXPECTED_OFFSET){
-			ESP_LOGW(TAG, "Time difference between charge point and central system is unexpectedly large %ld", offset);
+	if(llabs(offset) > OCPP_TIME_SYNC_MARGIN){
+		if(llabs(offset) > OCPP_MAX_EXPECTED_OFFSET){
+			ESP_LOGW(TAG, "Time difference between charge point and central system is unexpectedly large %" PRId64, offset);
 		}
 		central_system_time_offset += offset;
 		ESP_LOGI(TAG, "Updating central system time syncronization to %ld relative to charge point time", central_system_time_offset);

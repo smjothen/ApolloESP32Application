@@ -16,6 +16,8 @@
 #include "zones.h"
 #include "chargeSession.h"
 
+#include <esp_random.h>
+
 static const char *TAG = "CHARGECONTROL  ";
 
 
@@ -501,9 +503,9 @@ void RunStartChargeTimer()
 					int localTimeOffsetMins = (abs(localTimeOffset) % 3600) / 60;
 
 					if((timeSchedules[scheduleNr].SpanToNextDay == false) || (isNextDayPauseDay == false))
-						snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
+						snprintf(scheduleString, sizeof(scheduleString), "Within pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%" PRIi32 " (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin,    (int)((timeSchedules[scheduleNr].StopTotalMinutes - minutesNow)/60), (timeSchedules[scheduleNr].StopTotalMinutes - minutesNow) % 60, timeSchedules[scheduleNr].StopHour, timeSchedules[scheduleNr].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
 					else if(timeSchedules[scheduleNr].SpanToNextDay == true)
-						snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%i (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
+						snprintf(scheduleString, sizeof(scheduleString), "Within ext pause interval [%02i:%02i] -> %i|%02i:%02i -> [%02i:%02i]. Resuming in %02i hours %02i min at %02i:%02i +%" PRIi32 " (UTC%+d:%02d) (1)", timeSchedules[scheduleNr].StartHour, timeSchedules[scheduleNr].StartMin, weekDay, localHour, localMin, timeSchedules[scheduleNr + 1].StopHour, timeSchedules[scheduleNr + 1].StopMin,    (int)(((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow)/60), ((timeSchedules[scheduleNr].StopTotalMinutes + timeSchedules[scheduleNr+1].StopTotalMinutes) - minutesNow) % 60, timeSchedules[scheduleNr+1].StopHour, timeSchedules[scheduleNr+1].StopMin, randomStartDelay, localTimeOffsetHours, localTimeOffsetMins);
 					else
 						snprintf(scheduleString, sizeof(scheduleString), "Undefined");
 				}
@@ -556,7 +558,7 @@ void RunStartChargeTimer()
 			if(((previousIsPausedByAnySchedule > 0) && (startDelayCounter == 0)) || (overrideTimer == 1))
 				chargeController_ClearNextStartTime();
 
-			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " ACTIVE (Pb: 0x%04X) RDC:%" PRIi32 "/%" PRIi32 " Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
 			if(overrideTimer == 1)
 			{
@@ -597,7 +599,7 @@ void RunStartChargeTimer()
 
 			startDelayCounter = randomStartDelay;
 
-			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) RDC:%i/%i Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
+			snprintf(scheduleString+strlen(scheduleString), sizeof(scheduleString), " PAUSED (Pb: 0x%04X) RDC:%" PRIi32 "/%" PRIi32 " Ov:%i", isPausedByAnySchedule, startDelayCounter, randomStartDelay, overrideTimer);
 
 			/// When schedule is paused, but MCU is active (e.g. ESP restart), then pause the MCU
 			if((opMode == CHARGE_OPERATION_STATE_CHARGING) || ((opMode == CHARGE_OPERATION_STATE_PAUSED) && (GetFinalStopActiveStatus() == false)))
@@ -717,7 +719,7 @@ void chargeController_SetRandomStartDelay()
 		chargeController_ClearRandomStartDelay();
 	}
 
-	ESP_LOGW(TAG, "randomStartDelay set to %i", randomStartDelay);
+	ESP_LOGW(TAG, "randomStartDelay set to %" PRIi32 "", randomStartDelay);
 }
 
 
@@ -810,7 +812,7 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 	}
 	else
 	{
-		ESP_LOGE(TAG, "######## Failed to start: STATE: opmode: %i, std: %i, isPaused: %i, cnt %i ########", chOpMode, storage_Get_Standalone(), isPausedByAnySchedule, startDelayCounter);
+		ESP_LOGE(TAG, "######## Failed to start: STATE: opmode: %i, std: %i, isPaused: %i, cnt %" PRIi32 " ########", chOpMode, storage_Get_Standalone(), isPausedByAnySchedule, startDelayCounter);
 	}
 
 	return retval;

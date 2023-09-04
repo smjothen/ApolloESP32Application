@@ -41,6 +41,8 @@ char* chargeSession_GetSessionId();
 bool chargeSession_HasNewSessionId();
 void chargeSession_ClearHasNewSession();
 void chargeSession_CheckIfLastSessionIncomplete();
+bool chargeSession_GetFileError();
+void chargeSession_SetTestFileCorrection();
 void chargeSession_Start();
 float chargeSession_GetEnergy();
 void chargeSession_UpdateEnergy();

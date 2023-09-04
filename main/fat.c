@@ -111,7 +111,7 @@ esp_err_t fat_mount(enum fat_id id){
 		.allocation_unit_size = CONFIG_WL_SECTOR_SIZE
 	};
 
-	return esp_vfs_fat_spiflash_mount(base_paths[id], base_paths[id]+1, &mount_config, &s_wl_handle);
+	return esp_vfs_fat_spiflash_mount_rw_wl(base_paths[id], base_paths[id]+1, &mount_config, &s_wl_handle);
 }
 
 void fat_static_mount(void)
@@ -151,7 +151,7 @@ void fat_static_unmount(void)
 
 	for(size_t i = 0; i < PARTITION_COUNT; i++){
 		ESP_LOGI(TAG, "%s partition:", base_paths[i]+1);
-		if(esp_vfs_fat_spiflash_unmount(base_paths[i], s_wl_handle) != ESP_OK){
+		if(esp_vfs_fat_spiflash_unmount_rw_wl(base_paths[i], s_wl_handle) != ESP_OK){
 			ESP_LOGE(TAG, "\tUnmount failed");
 		}else{
 			ESP_LOGI(TAG, "\tUnmount success");
@@ -167,7 +167,7 @@ esp_err_t fat_unmount(enum fat_id id){
 
 	ESP_LOGI(TAG, "Unmounting %s", base_paths[id]);
 
-	return esp_vfs_fat_spiflash_unmount(base_paths[id], s_wl_handle);
+	return esp_vfs_fat_spiflash_unmount_rw_wl(base_paths[id], s_wl_handle);
 }
 
 bool fatIsMounted(void)
@@ -427,7 +427,7 @@ bool fat_CheckFilesSystem(void)
 		deletedOK = fat_Factorytest_DeleteFile();
 
 	int fatDiagLen = 0;
-	if(fatDiagnostics != NULL)
+	if(fatDiagnostics[0])
 		fatDiagLen = strlen(fatDiagnostics);
 
 	snprintf(fatDiagnostics + fatDiagLen, FAT_DIAG_BUF_SIZE - fatDiagLen, " Disk file: created = %i, deleted = %i,", createdOK, deletedOK);
@@ -438,7 +438,7 @@ bool fat_CheckFilesSystem(void)
 bool fat_CorrectFilesystem(void)
 {
 	int fileDiagLen = 0;
-	if(fatDiagnostics != NULL)
+	if(fatDiagnostics[0])
 		fileDiagLen = strlen(fatDiagnostics);
 
 	return fat_eraseAndRemountPartition(eFAT_ID_DISK, fatDiagnostics, FAT_DIAG_BUF_SIZE, fileDiagLen);
@@ -458,7 +458,7 @@ bool fat_Factorytest_CreateFile(void)
 	ESP_LOGW(TAG, "Create file errno: %i: %s", errno, strerror(errno));
 
 	int fatDiagLen = 0;
-	if(fatDiagnostics != NULL)
+	if(fatDiagnostics[0])
 		fatDiagLen = strlen(fatDiagnostics);
 
 	if(testDiskFile == NULL)

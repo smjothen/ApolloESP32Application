@@ -53,7 +53,7 @@ void offlineHandler_CheckPingReply()
 			if(incrementingToOnlineLimit <= 3600)
 				incrementingToOnlineLimit += PING_REPLY_TIMER_INCREASE;
 
-			ESP_LOGW(TAG, "Pinging InCharge! - New incrementingToOnlineLimit: %d", incrementingToOnlineLimit);
+			ESP_LOGW(TAG, "Pinging InCharge! - New incrementingToOnlineLimit: %" PRId32 "", incrementingToOnlineLimit);
 
 			pingReplyTimerToOnline = 0;
 
@@ -254,7 +254,7 @@ void offlineHandler_CheckForOffline()
 	}
 	else if(offlineCurrentSent == true)
 	{
-		ESP_LOGW(TAG, "Offline current mode. (SimulateOfflineTimeout: %d)", simulateOfflineTimeout);
+		ESP_LOGW(TAG, "Offline current mode. (SimulateOfflineTimeout: %" PRId32 ")", simulateOfflineTimeout);
 	}
 }
 

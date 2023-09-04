@@ -70,7 +70,7 @@ int ota_log_flash_success(){
     time(&now);
 
     char formated_message [128];
-    snprintf(formated_message, 128, "FW validated rebooting, download time: %ld seconds", now-last_start_time);
+    snprintf(formated_message, 128, "FW validated rebooting, download time: %" PRId64 " seconds", now-last_start_time);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADED);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLING);
 
@@ -82,9 +82,8 @@ int ota_log_lib_error(){
     time(&now);
 
     char formated_message [128];
-    snprintf(formated_message, 128, "failure after calling OTA library, failed after %ld seconds", now-last_start_time);
+    snprintf(formated_message, 128, "failure after calling OTA library, failed after %" PRId64 " seconds", now-last_start_time);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
-
     return log_message(formated_message);
 }
 
@@ -93,7 +92,7 @@ int ota_log_timeout(){
     time(&now);
 
     char formated_message [128];
-    snprintf(formated_message, 128, "we timed out OTA after %ld seconds, rebooting", now-last_start_time);
+    snprintf(formated_message, 128, "we timed out OTA after %" PRId64 " seconds, rebooting", now-last_start_time);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED);
 
     return log_message(formated_message);
@@ -110,7 +109,7 @@ int ota_log_download_progress_debounced(uint32_t bytes_received){
         bytes_at_last_log = total_bytes;
 
         char formated_message [128];
-        snprintf(formated_message, 128, "Flashed OTA data, running total=%d", total_bytes);
+        snprintf(formated_message, 128, "Flashed OTA data, running total=%" PRId32 "", total_bytes);
         return log_message(formated_message); 
     }
 
@@ -129,25 +128,25 @@ int ota_log_chunked_update_start(char *location){
 
 int ota_log_chunk_flashed(uint32_t start, uint32_t end, uint32_t total){
     char formated_message [128];
-    snprintf(formated_message, 128, "Flashed OTA chunk from %d to %d of %d bytes", start, end, total);
+    snprintf(formated_message, 128, "Flashed OTA chunk from %" PRId32 " to %" PRId32 " of %" PRId32 " bytes", start, end, total);
     return log_message(formated_message); 
 }
 
 int ota_log_chunk_flash_error(uint32_t error_code){
     char formated_message [128];
-    snprintf(formated_message, 128, "failed to flash OTA chunk (%d), will retry chunk", error_code);
+    snprintf(formated_message, 128, "failed to flash OTA chunk (%" PRId32 "), will retry chunk", error_code);
     return log_message(formated_message);
 }
 
 int ota_log_chunk_http_error(uint32_t error_code){
     char formated_message [128];
-    snprintf(formated_message, 128, "http error in chunk OTA (%d), will retry chunk", error_code);
+    snprintf(formated_message, 128, "http error in chunk OTA (%" PRId32 "), will retry chunk", error_code);
     return log_message(formated_message);
 }
 
 int ota_log_chunk_validation_error(uint32_t error_code){
     char formated_message [128];
-    snprintf(formated_message, 128, "failed to validate OTA chunk (%d), will reboot", error_code);
+    snprintf(formated_message, 128, "failed to validate OTA chunk (%" PRId32 "), will reboot", error_code);
     return log_message(formated_message);
 }
 
@@ -156,7 +155,7 @@ int ota_log_all_chunks_success(){
     time(&now);
 
     char formated_message [128];
-    snprintf(formated_message, 128, "CHUNKED FW validated. Rebooting soon. Total time: %ld seconds", now-last_start_time);
+    snprintf(formated_message, 128, "CHUNKED FW validated. Rebooting soon. Total time: %" PRId64 " seconds", now-last_start_time);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADED);
     log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLING);
 

@@ -33,7 +33,7 @@ ocpp_error_callback stop_error_cb;
 ocpp_result_callback meter_result_cb;
 ocpp_error_callback meter_error_cb;
 
-TaskHandle_t task_to_notify = NULL;
+static TaskHandle_t task_to_notify = NULL;
 static uint task_notify_offset = 0;
 
 int known_message_count = -1;

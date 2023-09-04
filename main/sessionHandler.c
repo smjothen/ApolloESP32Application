@@ -81,7 +81,7 @@ void on_send_signed_meter_value()
 	//If we have just synced with NTP and Timer event has caused redundant trip, return. Max 30 sec adjustment.
 	if(secSinceLastOCMFMessage <= 30)
 	{
-		ESP_LOGW(TAG, "****** DOUBLE OCMF %d -> RETURNING ******", secSinceLastOCMFMessage);
+		ESP_LOGW(TAG, "****** DOUBLE OCMF %" PRId32 " -> RETURNING ******", secSinceLastOCMFMessage);
 		return;
 	}
 
@@ -114,7 +114,7 @@ void on_send_signed_meter_value()
 
 	if(!isMqttConnected()){
 		// Do not attempt sending data when we know that the system is offline
-	}else if(attempt_log_send()==0){
+	}else if(offline_log_attempt_send()==0){
 		ESP_LOGI(TAG, "energy log empty");
 		state_log_empty = true;
 	}
@@ -125,12 +125,12 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
-			append_offline_energy(timeSec, energy);
+			offline_log_append_energy(timeSec, energy);
 		}
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
-		append_offline_energy(timeSec, energy);
+		offline_log_append_energy(timeSec, energy);
 	}
 
 
@@ -206,7 +206,7 @@ void log_task_info(void){
 	// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/heap_debug.html
 	char formated_memory_use[256];
 	snprintf(formated_memory_use, 256,
-		"[MEMORY USE] (GetFreeHeapSize now: %d, GetMinimumEverFreeHeapSize: %d, heap_caps_get_free_size: %d)",
+		"[MEMORY USE] (GetFreeHeapSize now: %" PRIu32 ", GetMinimumEverFreeHeapSize: %" PRIu32 ", heap_caps_get_free_size: %d)",
 		xPortGetFreeHeapSize(), xPortGetMinimumEverFreeHeapSize(), free_heap_size
 	);
 	ESP_LOGD(TAG, "%s", formated_memory_use);
@@ -267,7 +267,7 @@ void NotificationHandler()
 
 	if(combinedNotification != previousNotification)
 	{
-		ESP_LOGW(TAG, "Notification change:  %i -> %i", previousNotification, combinedNotification);
+		ESP_LOGW(TAG, "Notification change:  %" PRIu32 " -> %" PRIu32, previousNotification, combinedNotification);
 	}
 	previousNotification = combinedNotification;
 
@@ -279,7 +279,7 @@ void NotificationHandler()
 	{
 		errorCountAB++;
 		errorCountABCTotal++;
-		ESP_LOGW(TAG, "RCD error in state A/B: %i", errorCountAB);
+		ESP_LOGW(TAG, "RCD error in state A/B: %" PRIu32, errorCountAB);
 
 		/// Send event on different level to be able to search event messages based on severity
 		if(errorCountAB == 1)
@@ -1451,7 +1451,7 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 				reservation_info->reservation_id = reservation_id;
 				reservation_info->is_reservation_state = true;
 
-				ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %ld seconds", connector_id, id_tag, expiry_date - time(NULL));
+				ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %" PRId64 " seconds", connector_id, id_tag, expiry_date - time(NULL));
 				reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
 			}
 			break;
@@ -2035,7 +2035,7 @@ static void handle_preparing(){
 			}
 		}
 		else{
-			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %ld/%d", time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
+			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %" PRIu64 "/%" PRIu32, time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
 		}
 	}
 }
@@ -2157,7 +2157,7 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 
 	//TODO: Add description to status notifications
 	if(new_warning){ // A warning that has not been notified earlier
-		sprintf(vendor_error_code, "%u", new_warning);
+		sprintf(vendor_error_code, "%" PRIu32, new_warning);
 
 		if(new_warning & MCU_WARNING_TRANSITION_FAULTED){
 			sessionHandler_OcppTransitionToFaulted();
@@ -2635,7 +2635,7 @@ static void sessionHandler_task()
 
 			if(mcuDebugErrorCount == 60)
 			{
-				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %i", mcuDebugCounter);
+				ESP_LOGE(TAG, "ESP resetting due to mcuDebugCounter: %" PRIi32 "", mcuDebugCounter);
 				publish_debug_message_event("mcuDebugCounter reset", cloud_event_level_warning);
 
 				storage_Set_And_Save_DiagnosticsLog("#4 MCU debug counter stopped incrementing");
@@ -2794,6 +2794,21 @@ static void sessionHandler_task()
 			}
 		}
 
+
+		// Check if car connecting -> start a new session
+		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
+		{
+			offlineSession_ClearLog();
+			chargeSession_Start();
+
+			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
+			if(isOnline && (OCMF_GetEnergyFault() == true))
+			{
+				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
+			}
+		}
+
+
 		/// MQTT connected and pingReply not in offline state
 		if(isOnline && (pingReplyState != PING_REPLY_OFFLINE))
 		{
@@ -2811,7 +2826,7 @@ static void sessionHandler_task()
 				if(chargecontroller_IsPauseBySchedule() == false)
 					resendRequestTimer++;
 
-				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %d/%d", resendRequestTimer, resendRequestTimerLimit);
+				ESP_LOGI(TAG, "CHARGE STATE resendTimer: %" PRId32 "/%" PRId32 "", resendRequestTimer, resendRequestTimerLimit);
 				if(resendRequestTimer >= resendRequestTimerLimit)
 				{
 					/// On second request transmission, do the ping-reply to ensure inCharge is responding.
@@ -2875,7 +2890,7 @@ static void sessionHandler_task()
 				}
 				else
 				{
-					ESP_LOGI(TAG, "System mode: Waiting to declare offline: %d/%d", offlineTime, recordedPulseInterval * 2);
+					ESP_LOGI(TAG, "System mode: Waiting to declare offline: %" PRId32 "/%" PRId32 "", offlineTime, recordedPulseInterval * 2);
 				}
 			}
 			else
@@ -2885,19 +2900,6 @@ static void sessionHandler_task()
 			}
 		}
 
-
-		// Check if car connecting -> start a new session
-		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
-		{
-			offlineSession_ClearLog();
-			chargeSession_Start();
-
-			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
-			if(isOnline && (OCMF_GetEnergyFault() == true))
-			{
-				publish_debug_message_event("OCMF energy fault", cloud_event_level_warning);
-			}
-		}
 
 		bool stoppedByRfid = chargeSession_Get().StoppedByRFID;
 
@@ -3238,7 +3240,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %d  Pulse: %d/%d", GetCellularQuality(), dataInterval, pulseCounter, pulseInterval);
+				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 "", GetCellularQuality(), dataInterval, pulseCounter, pulseInterval);
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -3247,7 +3249,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %d  Pulse: %d/%d", rssi, dataInterval, pulseCounter, pulseInterval);
+				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 "", rssi, dataInterval, pulseCounter, pulseInterval);
 			}
 
 			//This is to make cloud settings visible during developement
@@ -3506,6 +3508,14 @@ static void sessionHandler_task()
 			}
 
 
+			if(chargeSession_GetFileError() == true)
+			{
+				ESP_LOGW(TAG, "Sending file error SequenceLog: \r\n%s", offlineSession_GetLog());
+				publish_debug_telemetry_observation_Diagnostics(offlineSession_GetLog());
+
+				publish_debug_message_event("Could not create sessionfile", cloud_event_level_warning);
+			}
+
 			if(HasNewData() == true)
 			{
 				int published = publish_diagnostics_observation(GetATBuffer());
@@ -3569,11 +3579,11 @@ static void sessionHandler_task()
 					(acTotalCount != autoClearLastCount || acTimeout < autoClearLastTimeout)) {
 
 				char buf[64];
-				snprintf(buf, sizeof (buf), "AutoClear: %d / %d / %d", acTimeout, acCount, acTotalCount);
+				snprintf(buf, sizeof (buf), "AutoClear: %" PRIu32 " / %d / %d", acTimeout, acCount, acTotalCount);
 
 				publish_debug_message_event(buf, cloud_event_level_warning);
 
-				ESP_LOGI(TAG, "AutoClear Timeout: %d CurrenTime: %d TotalClears: %d", acTimeout, acCount, acTotalCount);
+				ESP_LOGI(TAG, "AutoClear Timeout: %" PRIu32 " CurrenTime: %d TotalClears: %d", acTimeout, acCount, acTotalCount);
 
 				autoClearLastTimeout = acTimeout;
 				autoClearLastCount = acTotalCount;
@@ -3583,7 +3593,7 @@ static void sessionHandler_task()
 			{
 				struct MqttDataDiagnostics mqttDiag = MqttGetDiagnostics();
 				char buf[150]={0};
-				snprintf(buf, sizeof(buf), "%d MQTT data: Rx: %d %d #%d - Tx: %d %d #%d - Tot: %d (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
+				snprintf(buf, sizeof(buf), "%" PRId32 " MQTT data: Rx: %" PRId32 " %" PRId32 " #%" PRId32 " - Tx: %" PRId32 " %" PRId32 " #%" PRId32 " - Tot: %" PRId32 " (%d)", onTime, mqttDiag.mqttRxBytes, mqttDiag.mqttRxBytesIncMeta, mqttDiag.nrOfRxMessages, mqttDiag.mqttTxBytes, mqttDiag.mqttTxBytesIncMeta, mqttDiag.nrOfTxMessages, (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta), (int)((1.1455 * (mqttDiag.mqttRxBytesIncMeta + mqttDiag.mqttTxBytesIncMeta)) + 4052.1));//=1.1455*C11+4052.1
 				//ESP_LOGI(TAG, "**** %s ****", buf);
 
 				if(onTime % 7200 == 0)
@@ -3637,7 +3647,7 @@ static void sessionHandler_task()
 				if(onTime % 86400 == 0)
 				{
 					char buf[100];
-					snprintf(buf, 100, "RCD error ABC total: %i / %.1f  Avg per day: %.1f", errorCountABCTotal, (onTime/86400.0), (errorCountABCTotal/(onTime / 86400.0)));
+					snprintf(buf, 100, "RCD error ABC total: %" PRIu32 " / %.1f  Avg per day: %.1f", errorCountABCTotal, (onTime/86400.0), (errorCountABCTotal/(onTime / 86400.0)));
 					publish_debug_telemetry_observation_Diagnostics(buf);
 				}
 			}
@@ -3866,7 +3876,7 @@ void sessionHandler_SendMIDStatus(void) {
 		MCU_GetMidStatus(&midStatus);
 
 		char buf[64];
-		snprintf(buf, sizeof (buf), "MID Calibration ID: %d Status: 0x%08X", calibrationId, midStatus);
+		snprintf(buf, sizeof (buf), "MID Calibration ID: %" PRIu32 " Status: 0x%08" PRIX32, calibrationId, midStatus);
 
 		publish_debug_telemetry_observation_Diagnostics(buf);
 	}
@@ -3892,7 +3902,7 @@ void sessionHandler_SendMIDStatusUpdate(void) {
 
 	if (MCU_GetMidStatus(&midStatus) && midStatus != lastMidStatus) {
 		char buf[48];
-		snprintf(buf, sizeof (buf), "MID Status: 0x%08X -> 0x%08X", lastMidStatus, midStatus);
+		snprintf(buf, sizeof (buf), "MID Status: 0x%08" PRIX32 " -> 0x%08" PRIX32, lastMidStatus, midStatus);
 
 		publish_debug_telemetry_observation_Diagnostics(buf);
 
@@ -3986,7 +3996,7 @@ void sessionHandler_Pulse()
 		/// If charger and cloud does not have the same interval, to much current can be drawn with multiple chargers
 		if(((pulseInterval != recordedPulseInterval) && pulseOnline) || ((pulseOnline == true) && previousPulseOnline == false))
 		{
-			ESP_LOGI(TAG,"Sending pulse interval %d", pulseInterval);
+			ESP_LOGI(TAG,"Sending pulse interval %" PRId32 "", pulseInterval);
 			int ret = publish_debug_telemetry_observation_PulseInterval(pulseInterval);
 
 			if(ret == ESP_OK)
@@ -4020,7 +4030,7 @@ void sessionHandler_Pulse()
 		///Send pulse at interval or when there has been a change in interval
 		if(((pulseCounter >= pulseInterval) && (pulseOnline == true)) || ((sendPulseOnChange == true) && (pulseOnline == true)))
 		{
-			ESP_LOGI(TAG, "PULSE %i/%i Change: %i", pulseCounter, pulseInterval, sendPulseOnChange);
+			ESP_LOGI(TAG, "PULSE %" PRIi32 "/%" PRIi32 " Change: %i", pulseCounter, pulseInterval, sendPulseOnChange);
 			publish_cloud_pulse();
 
 			pulseCounter = 0;

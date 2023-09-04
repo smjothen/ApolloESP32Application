@@ -14,6 +14,8 @@
 #include "i2cDevices.h"
 #include "eeprom_wp.h"
 #include "EEPROM.h"
+#include "zaptec_cloud_listener.h"
+#include "offline_log.h"
 
 #include "calibration.h"
 
@@ -102,25 +104,6 @@ static int register_new_id_cmd(void){
     return 0;
 }
 
-static int cal_sim_cmd(int argc, char **argv){
-    ESP_LOGI(TAG, "Setting calibration into simulation mode!");
-    calibration_set_simulation(true);
-    return 0;
-}
-
-static int register_cal_sim_cmd(void){
-    const esp_console_cmd_t cmd = {
-        .command = "cal_sim",
-        .help = "Set calibration into simulation mode",
-        .hint = NULL,
-        .func = &cal_sim_cmd,
-        .argtable = NULL
-    };
-
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
-    return 0;
-}
-
 static int clear_energy_cmd(int argc, char **argv){
     storage_clear_accumulated_energy();
     return 0;
@@ -182,6 +165,57 @@ int register_prodtest_write_cmd(void){
     return 0;
 }
 
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+
+#include "esp_heap_trace.h"
+
+#define NUM_RECORDS 256
+
+static heap_trace_record_t trace_record[NUM_RECORDS]; 
+
+static int heap_toggle_cmd(int argc, char **argv) {
+    static bool heap_inited = false;
+    static bool heap_start = true; 
+
+    if (!heap_inited) {
+        ESP_LOGI(TAG, "Initializing heap records...");
+
+        ESP_ERROR_CHECK(heap_trace_init_standalone(trace_record, NUM_RECORDS));
+        heap_inited = true;
+    }
+
+
+    if (heap_start) {
+        ESP_LOGI(TAG, "Starting heap trace...");
+        ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
+
+        heap_start = false;
+    } else {
+        ESP_LOGI(TAG, "Stopping heap trace...");
+        ESP_ERROR_CHECK(heap_trace_stop());
+        heap_trace_dump();
+
+        heap_start = true;
+    }
+
+    return 0;
+}
+
+static int register_heap_toggle_cmd(void){
+    const esp_console_cmd_t cmd = {
+        .command = "heap",
+        .help = "toggle heap leak debugging",
+        .hint = NULL,
+        .func = heap_toggle_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
+#endif
+
 //based on https://github.com/espressif/esp-idf/blob/6e776946d01ec0d081d09000c36d23ec1d318c06/examples/system/console/main/console_example_main.c
 static void initialize_console(void)
 {
@@ -193,12 +227,10 @@ static void initialize_console(void)
     setvbuf(stdin, NULL, _IONBF, 0);
 
     /* Minicom, screen, idf_monitor send CR when ENTER key is pressed */
-    //esp_vfs_dev_uart_port_set_rx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CR);
-    esp_vfs_dev_uart_set_rx_line_endings(ESP_LINE_ENDINGS_CR);
-    /* Move the caret to the beginning of the next line on '\n' */
-//    esp_vfs_dev_uart_port_set_tx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CRLF);
-    esp_vfs_dev_uart_set_tx_line_endings(ESP_LINE_ENDINGS_CRLF);
+    esp_vfs_dev_uart_port_set_rx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CR);
 
+    /* Move the caret to the beginning of the next line on '\n' */
+    esp_vfs_dev_uart_port_set_tx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CRLF);
 
     /* Configure UART. Note that REF_TICK is used so that the baud rate remains
      * correct while APB frequency is changing in light sleep mode.
@@ -299,7 +331,6 @@ void apollo_console_init(void){
     register_reboot_cmd();
     register_new_id_cmd();
     register_clear_energy_cmd();
-    register_cal_sim_cmd();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }

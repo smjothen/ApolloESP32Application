@@ -245,7 +245,7 @@ static void tcp_server_task(void *pvParameters)
         ESP_LOGI(TAG, "Socket listening");
 
         struct sockaddr_in6 sourceAddr; // Large enough for both IPv4 or IPv6
-        uint addrLen = sizeof(sourceAddr);
+        socklen_t addrLen = sizeof(sourceAddr);
         sock = accept(listen_sock, (struct sockaddr *)&sourceAddr, &addrLen);
 
         if (sock < 0) {

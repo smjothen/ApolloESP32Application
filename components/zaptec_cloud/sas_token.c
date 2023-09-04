@@ -36,7 +36,7 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
     time_t UnixTimeStamp = 1592397520;
     time(&UnixTimeStamp);
 
-	//ESP_LOGI(TAG, "psk is: %s(l) and the time is %ld", key, UnixTimeStamp);
+	//ESP_LOGI(TAG, "psk is: %s(l) and the time is %" PRId32 "", key, UnixTimeStamp);
 	size_t key_len = sizeof(key)-1; //Key length -1 end of line char
 	size_t base64_key_len;
 	unsigned char *base64_key = base64_decode((char *)key, key_len, &base64_key_len);
@@ -44,8 +44,8 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	//Data for creating signature
 	char unixTime[12];
 	int tokenValidTime = ttl_s;
-	sprintf(unixTime, "%ld", UnixTimeStamp+tokenValidTime);
-	//ESP_LOGI(TAG, "Unixtime is: %ld", UnixTimeStamp);
+	sprintf(unixTime, "%" PRId64 "", UnixTimeStamp+tokenValidTime);
+	//ESP_LOGI(TAG, "Unixtime is: %" PRId32 "", UnixTimeStamp);
 	//ESP_LOGI(TAG, "Unixtime is: %i", tokenValidTime);
 	//ESP_LOGI(TAG, "Unixtime is: %s", unixTime);
 
@@ -98,7 +98,7 @@ int create_sas_token(int ttl_s, char * uniqueId, char * psk, char * token_out){
 	size_t bufsize = (strlen(tokenbuf) *3) +1;
 	char enc[bufsize];
 	memset(enc, 0, bufsize);
-	rfc3986_percent_encode(tokenbuf, enc);
+	rfc3986_percent_encode((unsigned char *)tokenbuf, enc);
     //base64_url_encode()
 
 	//Build up signature string

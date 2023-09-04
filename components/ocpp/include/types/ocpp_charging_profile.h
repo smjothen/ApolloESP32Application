@@ -2,6 +2,7 @@
 #define OCPP_CHARGING_PROFILE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <time.h>
 
 #include "cJSON.h"

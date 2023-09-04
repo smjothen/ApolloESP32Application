@@ -1,14 +1,16 @@
-#ifndef OFFLINE_LOG
-#define OFFLINE_LOG
+#ifndef __OFFLINE_LOG_H__
+#define __OFFLINE_LOG_H__
+
 #include <stdbool.h>
 #include <stddef.h>
+#include <time.h>
 #include <stdint.h>
 #include <cJSON.h>
 
-void setup_offline_log();
-
-void append_offline_energy(int timestamp, double energy);
-int attempt_log_send(void);
+void offline_log_append_energy(time_t timestamp, double energy);
+int offline_log_attempt_send(void);
+int offline_log_delete(void);
+void offline_log_disable(void);
 
 uint32_t crc32_normal(uint32_t crc, const void *buf, size_t size);
 int deleteOfflineLog();
@@ -18,4 +20,14 @@ void get_diagnostics_cb(const char * unique_id, const char * action, cJSON * pay
 
 void offlineLog_disable(void);
 
-#endif /* OFFLINE_LOG */
+#define OFFLINE_LOG_LEGACY_LOGGING
+
+#ifdef OFFLINE_LOG_LEGACY_LOGGING
+
+void offline_log_append_energy_legacy(time_t timestamp, double energy);
+
+#endif
+
+void setup_offline_log();
+
+#endif /* __OFFLINE_LOG_H__ */
