@@ -1348,10 +1348,10 @@ void stop_ocpp(void){
 	block_enqueue_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
 	block_sending_call(eOCPP_CALL_GENERIC | eOCPP_CALL_TRANSACTION_RELATED | eOCPP_CALL_BLOCKING);
 
-	/* if(esp_websocket_client_is_connected(client)){ */
-	/* 	//Only awailable in newer versions of esp-idf */
-	/* 	esp_websocket_client_close(client, pdMS_TO_TICKS(5000)); */
-	/* } */
+	if(esp_websocket_client_is_connected(client)){
+		esp_websocket_client_close(client, pdMS_TO_TICKS(5000));
+	}
+
 	if(client != NULL){
 		esp_websocket_client_destroy(client); // Calls esp_websocket_client_stop internaly
 		client = NULL;

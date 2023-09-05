@@ -3351,11 +3351,11 @@ static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
 		// TODO: see if there is a better way to check connectivity
-		while(connectivity_GetActivateInterface() == eCONNECTION_NONE){
+		while(connectivity_GetActivateInterface() != eCONNECTION_WIFI){
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			ESP_LOGI(TAG, "Waiting for connection...");
+			ESP_LOGI(TAG, "Waiting for WIFI connection...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 		}
 
@@ -3493,7 +3493,6 @@ static void ocpp_task(){
 		time_t last_problem_timestamp = time(NULL);
 		int enqueued_calls = enqueued_call_count();;
 
-
 		bool awaiting_response = false;
 		while(should_run && should_reboot == false){
 			uint32_t data = 0;
@@ -3510,13 +3509,22 @@ static void ocpp_task(){
 			const uint task_event = (data & TASK_EVENT_MASK) >> TASK_EVENT_OFFSET;
 			const uint main_event = (data & MAIN_EVENT_MASK) >> MAIN_EVENT_OFFSET;
 
+
+			if(connectivity_GetActivateInterface() == eCONNECTION_LTE){
+				ESP_LOGW(TAG, "Connection mode set to LTE and prohibited by in this version");
+				ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR, "Switched to LTE. Closing OCPP until WIFI is active",
+							CONFIG_OCPP_VENDOR_ID, OCPP_CP_VENDOR_ERROR_COMMUNICATION_MODE_PROHIBITED, true, false);
+
+				ocpp_end_and_reconnect(true);
+			}
+
 			if(main_event != eOCPP_NO_EVENT){
 				ESP_LOGI(TAG, "Handling main event");
 
-				if(data & eOCPP_QUIT){
+				if(main_event & eOCPP_QUIT){
 					esp_err_t reset_result = prepare_reset(graceful_exit);
 					if(reset_result != ESP_OK && graceful_exit){
-						ESP_LOGE(TAG, "Failed to restart attempting to continue with ocpp.");
+						ESP_LOGE(TAG, "Failed to restart attempting to continue with ocpp");
 						if(reset_from_cs){
 							switch(reset_result){
 							case ESP_ERR_TIMEOUT:

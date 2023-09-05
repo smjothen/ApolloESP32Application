@@ -2,6 +2,13 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_VENDOR_ID
+       string "Vendor id"
+       help
+	Vendor id is used by OCPP to define vendor specific implementations. It is used by StatusNotification.req
+	when error code is set to "OtherError" and "vendorErrorCode" is used. It is also used by DataTransfer.req.
+       default zaptec
+
 config OCPP_URL_MAX_LENGTH
        int "Maximum length of the of OCPP connection URL"
        help

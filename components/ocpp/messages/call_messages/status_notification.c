@@ -108,7 +108,7 @@ cJSON * ocpp_create_status_notification_request(unsigned int connector_id, const
 		if(vendor_error_json == NULL){
 			goto error;
 		}
-		cJSON_AddItemToObject(payload, "vendorErrorConde", vendor_error_json);
+		cJSON_AddItemToObject(payload, "vendorErrorCode", vendor_error_json);
 	}
 
 	cJSON * result =  ocpp_create_call(OCPPJ_ACTION_STATUS_NOTIFICATION, payload);

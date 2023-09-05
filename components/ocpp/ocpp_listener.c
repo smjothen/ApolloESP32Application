@@ -235,7 +235,7 @@ void text_frame_handler(esp_websocket_client_handle_t client, const char * data)
 
 	case eOCPPJ_MESSAGE_ID_RESULT:
 	case eOCPPJ_MESSAGE_ID_ERROR:
-		if(handle_active_call_if_match(unique_id, eOCPPJ_MESSAGE_ID_RESULT, payload, error_code, error_description, error_details, 500) == pdTRUE && task_to_notify != NULL)
+		if(handle_active_call_if_match(unique_id, message_type_id, payload, error_code, error_description, error_details, 500) == pdTRUE && task_to_notify != NULL)
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_RECEIVED_MATCHING<<notify_offset, eSetBits);
 
 		break;

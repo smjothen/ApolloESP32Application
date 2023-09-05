@@ -31,4 +31,13 @@
 #define OCPP_CP_ERROR_UNDER_VOLTAGE "UnderVoltage" ///< "Voltage has dropped below an acceptable level"
 #define OCPP_CP_ERROR_WEAK_SIGNAL "WeakSignal" ///< "Wireless communication device reports a weak signal"
 ///@}
+
+
+/** @name ChargePointVendorErrorCode
+ * @brief Error codes to be used with OCPP_CP_ERROR_OTHER_ERROR and specified by zaptec
+ */
+///@{
+#define OCPP_CP_VENDOR_ERROR_COMMUNICATION_MODE_PROHIBITED "ProhibitedByCommunicationMode"
+///@}
+
 #endif /*OCPP_CHARGE_POINT_ERROR_CODE_H*/
