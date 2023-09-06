@@ -853,8 +853,24 @@ int test_bg(){
 	char signal_string[256];
 	snprintf(signal_string, 256, "[AT+QCSQ] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d\r\n", sysmode, rssi, rsrp, sinr, rsrq);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, signal_string);
+	
+	int maxAttempts = 6;
+	int attempt = 0;
+	int http_result = 0;
 
-	int http_result = at_command_http_test();
+	while (attempt++ < maxAttempts) {
+		// Clear potential "pdpdeact" line and try again...
+		clear_lines();
+		http_result = at_command_http_test();
+		if (!http_result) {
+			break;
+		}
+
+		sprintf(payload, "bad http get: %d, retrying\r\n", http_result);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+		vTaskDelay(pdMS_TO_TICKS(10000));
+	}
+
 	if(http_result<0){
 		sprintf(payload, "bad http get: %d\r\n", http_result);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
