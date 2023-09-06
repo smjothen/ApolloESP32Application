@@ -244,6 +244,12 @@ int NFCReadTag()
 		uidLength = 7;
 		printf("Double UID: ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
 	}
+	//Detect 03 44 (DESFIRE)
+	else if ((UIDsizeBits == 1) && (BitFrameAnticollisionOK == true) && (message[1] != 0x0))
+	{
+		uidLength = 7;
+		printf("Double UID DESFIRE: ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
+	}
 	else
 	{
 		printf("Unknown ATQA: %02X %02X  %i:%i\n", message[1], message[0], UIDsizeBits, BitFrameAnticollisionOK);
