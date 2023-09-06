@@ -924,7 +924,7 @@ int test_proximity(){
 
 	esp_err_t err = SFH7776_detect();
 
-	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	bool should_exist = HasTamperDetection();
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
 		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "present" : "missing");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
@@ -1288,7 +1288,7 @@ int test_speed_hwid(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 
-    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5) || (speed_hw_id == 6) || (speed_hw_id == 7)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
