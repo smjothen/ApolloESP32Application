@@ -569,7 +569,7 @@ void app_main(void)
 
 #ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
 	if(storage_Get_DiagnosticsLogEnabled())
-		diagnostics_log_init();
+		ESP_LOGI(TAG_MAIN, "Enabeling diagnsotics log: %s ", esp_err_to_name(diagnostics_log_init()));
 #endif
 
 	i2cReadDeviceInfoFromEEPROM();

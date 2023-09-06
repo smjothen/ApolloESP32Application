@@ -634,7 +634,7 @@ void upload_diagnostics_ocpp(){
 #define BOUNDARY_SIZE 32
 
 	char boundary[BOUNDARY_SIZE];
-	snprintf(boundary, BOUNDARY_SIZE, "%*x", BOUNDARY_SIZE-1, esp_random());
+	snprintf(boundary, BOUNDARY_SIZE, "%*" PRIx32, BOUNDARY_SIZE-1, esp_random());
 	//Shouldn't this be a standard way to upload? is it just the server that is incomplete?
 	/* esp_http_client_set_header(client, "Content-Type", "text/plain"/\*"application/octet-stream"*\/); */
 	/* esp_http_client_set_header(client, "Content-Disposition", "attachment; filename=\"diagnostics_log.txt\""); */
@@ -822,8 +822,8 @@ void get_diagnostics_cb(const char * unique_id, const char * action, cJSON * pay
 		goto error;
 	}
 
-	const char * uri_end = NULL;
-	if(!rfc3986_is_valid_uri(upload_info.location, &uri_end) || uri_end[0] != '\0'){
+	const unsigned char * uri_end = NULL;
+	if(!rfc3986_is_valid_uri((unsigned char *)upload_info.location, &uri_end) || uri_end[0] != '\0'){
 		err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
 		sprintf(err_str, "'location' does not contain a valid URI");
 		goto error;

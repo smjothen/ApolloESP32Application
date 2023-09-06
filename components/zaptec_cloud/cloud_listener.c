@@ -3226,6 +3226,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString, "EnableLogDiagnostics"))
 			{
 				storage_Set_DiagnosticsLogEnabled(true);
+				storage_SaveConfiguration();
 				if(diagnostics_log_init() == ESP_OK){
 					responseStatus = 200;
 				}else{
@@ -3235,6 +3236,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString, "DisabletLogDiagnostics"))
 			{
 				storage_Set_DiagnosticsLogEnabled(false);
+				storage_SaveConfiguration();
 				if(diagnostics_log_deinit() == ESP_OK){
 					responseStatus = 200;
 				}else{
@@ -3244,10 +3246,11 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString, "EmptyLogDiagnostics"))
 			{
 				ESP_LOGW(TAG, "Emptying Diagnostics_log");
-				if(diagnostics_log_empty() == ESP_OK){
+				esp_err_t err = diagnostics_log_empty();
+				if(err == ESP_OK){
 					responseStatus = 200;
 				}else{
-					ESP_LOGE(TAG, "Unable to empty diagnostics log: %s", strerror(errno));
+					ESP_LOGE(TAG, "Unable to empty diagnostics log: %s | %s", esp_err_to_name(err), strerror(errno));
 					responseStatus = 500;
 				}
 			}
