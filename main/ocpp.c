@@ -1614,6 +1614,37 @@ esp_err_t add_configuration_ocpp_max_charging_profiles_installed(cJSON * key_lis
 	}
 }
 
+// TODO: remove unnecessary write_configuration calls for readonly configurations
+
+esp_err_t add_configuration_ocpp_additional_root_certificate_check(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_certificate_signed_max_chain_size(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_certificate_store_max_length(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_cpo_name(cJSON * key_list){
+	return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t add_configuration_ocpp_security_profile(cJSON * key_list){
+	if(write_configuration_u8(storage_Get_ocpp_security_profile(), value_buffer) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_SECURITY_PROFILE, false, value_buffer);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_SECURITY_PROFILE);
+		cJSON_Delete(key_value_json);
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
 
 // Non-standard configuration keys
 
@@ -1768,9 +1799,16 @@ static esp_err_t get_ocpp_configuration(const char * key, cJSON * configuration_
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED) == 0){
 		return add_configuration_ocpp_connector_switch_3_to_1_phase_supported(configuration_out);
 
-	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED) == 0){
-		return add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
-
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_ADDITIONAL_ROOT_CERTIFICATE_CHECK) == 0){
+		return add_configuration_ocpp_additional_root_certificate_check(configuration_out);
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CERTIFICATE_SIGNED_MAX_CHAIN_SIZE) == 0){
+		return add_configuration_ocpp_certificate_signed_max_chain_size(configuration_out);
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CERTIFICATE_STORE_MAX_LENGTH) == 0){
+		return add_configuration_ocpp_certificate_store_max_length(configuration_out);
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CPO_NAME) == 0){
+		return add_configuration_ocpp_cpo_name(configuration_out);
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SECURITY_PROFILE) == 0){
+		return add_configuration_ocpp_security_profile(configuration_out);
 
 		// Non-standard configuration keys
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
@@ -1828,6 +1866,11 @@ void get_all_ocpp_configurations(cJSON * configuration_out){
 	add_configuration_ocpp_charging_schedule_max_periods(configuration_out);
 	add_configuration_ocpp_connector_switch_3_to_1_phase_supported(configuration_out);
 	add_configuration_ocpp_max_charging_profiles_installed(configuration_out);
+	add_configuration_ocpp_additional_root_certificate_check(configuration_out);
+	add_configuration_ocpp_certificate_signed_max_chain_size(configuration_out);
+	add_configuration_ocpp_certificate_store_max_length(configuration_out);
+	add_configuration_ocpp_cpo_name(configuration_out);
+	add_configuration_ocpp_security_profile(configuration_out);
 
 	// Non-standard configuration keys
 	add_configuration_ocpp_default_id_token(configuration_out);
@@ -1958,6 +2001,25 @@ static bool is_true(bool value){
 	return value;
 }
 
+static bool is_valid_security_profile(uint8_t security_profile){
+
+	//If the Charge Point receives a lower value then currently configured, the Charge Point SHALL Rejected the ChangeConfiguration.req
+	if(security_profile < storage_Get_ocpp_security_profile() || security_profile > 3) // Highest defined securityProfile is 3
+		return false;
+
+	if(security_profile == 0){
+		return true;
+
+	}else if(security_profile == 1){
+		if(storage_Get_ocpp_authorization_key()[0] == '\0')
+			return false;
+
+		return true;
+	}
+
+	return false;
+}
+
 static long validate_u(const char * value, uint32_t upper_bounds){
 	char * endptr;
 
@@ -1976,10 +2038,13 @@ static long validate_u(const char * value, uint32_t upper_bounds){
 	return value_long;
 }
 
-static int set_config_u8(void (*config_function)(uint8_t), const char * value){
+static int set_config_u8(void (*config_function)(uint8_t), const char * value, bool (*additional_validation)(uint8_t)){
 	long value_long = validate_u(value, UINT8_MAX);
 
 	if(value_long == -1)
+		return -1;
+
+	if(additional_validation != NULL && additional_validation((uint8_t)value_long) == false)
 		return -1;
 
 	config_function((uint8_t)value_long);
@@ -2200,7 +2265,12 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	const char * key = key_json->valuestring;
 	const char * value = value_json->valuestring;
 
-	ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
+	if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_KEY) == 0){
+		ESP_LOGI(TAG, "Given configurationkey: \n\tkey: ********REDACTED********");
+	}else{
+		ESP_LOGI(TAG, "Given configuration: \n\tkey: '%s'\n\tvalue: '%s'", key, value);
+	}
+
 	int err = -1;
 	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0){
 		err = set_config_bool(storage_Set_ocpp_allow_offline_tx_for_unknown_id, value, NULL);
@@ -2408,7 +2478,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_RESET_RETRIES) == 0){
-		err = set_config_u8(storage_Set_ocpp_reset_retries, value);
+		err = set_config_u8(storage_Set_ocpp_reset_retries, value, NULL);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TRANSACTION_ON_EV_SIDE_DISCONNECT) == 0){
 		/*
@@ -2444,7 +2514,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_ATTEMPTS) == 0){
-		err = set_config_u8(storage_Set_ocpp_transaction_message_attempts, value);
+		err = set_config_u8(storage_Set_ocpp_transaction_message_attempts, value, NULL);
 		if(err == 0)
 			update_transaction_message_related_config(
 				storage_Get_ocpp_transaction_message_attempts(),
@@ -2488,6 +2558,13 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		}else{
 			err = ESP_FAIL;
 		}
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_SECURITY_PROFILE) == 0){
+		uint8_t active_security_profile = storage_Get_ocpp_security_profile();
+		err = set_config_u8(storage_Set_ocpp_security_profile, value, is_valid_security_profile);
+
+		if(active_security_profile != storage_Get_ocpp_security_profile())
+			ocpp_end_and_reconnect(true);
+
 		// Non-standard configuration keys
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
 		if(is_ci_string_type(value, 20)){
@@ -3387,21 +3464,29 @@ static void ocpp_task(){
 		unsigned int retry_attempts = 0;
 		unsigned int retry_delay = 5;
 
-		const char * cbid = storage_Get_chargebox_identity_ocpp();
-		const char * authorization_key = storage_Get_ocpp_authorization_key();
+		struct ocpp_client_config ocpp_config = {
+			.url = storage_Get_url_ocpp(),
+			.authorization_key = storage_Get_ocpp_authorization_key(),
+			.heartbeat_interval = storage_Get_ocpp_heartbeat_interval(),
+			.transaction_message_attempts = storage_Get_ocpp_transaction_message_attempts(),
+			.transaction_message_retry_interval = storage_Get_ocpp_transaction_message_retry_interval(),
+			.websocket_ping_interval = storage_Get_ocpp_websocket_ping_interval(),
+			.security_profile = storage_Get_ocpp_security_profile()
+		};
+
+		if(storage_Get_chargebox_identity_ocpp()[0] == '\0'){
+			ocpp_config.cbid = i2cGetLoadedDeviceInfo().serialNumber;
+		}else{
+			ocpp_config.cbid = storage_Get_chargebox_identity_ocpp();
+		}
+
 		do{
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			err = start_ocpp(storage_Get_url_ocpp(),
-					(authorization_key[0] == '\0') ? NULL : authorization_key,
-					(cbid[0] == '\0') ? i2cGetLoadedDeviceInfo().serialNumber : cbid,
-					storage_Get_ocpp_heartbeat_interval(),
-					storage_Get_ocpp_transaction_message_attempts(),
-					storage_Get_ocpp_transaction_message_retry_interval(),
-					storage_Get_ocpp_websocket_ping_interval());
+			err = start_ocpp(&ocpp_config);
 
-			if(err != 0){
+			if(err != ESP_OK){
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
 					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);

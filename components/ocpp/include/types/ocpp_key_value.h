@@ -65,7 +65,12 @@
 #define OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED "ConnectorSwitch3to1PhaseSupported"
 #define OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED "MaxChargingProfilesInstalled"
 //Security whitepaper 3.0
+#define OCPP_CONFIG_KEY_ADDITIONAL_ROOT_CERTIFICATE_CHECK "AdditionalRootCertificateCheck"
 #define OCPP_CONFIG_KEY_AUTHORIZATION_KEY "AuthorizationKey"
+#define OCPP_CONFIG_KEY_CERTIFICATE_SIGNED_MAX_CHAIN_SIZE "CertificateSignedMaxChainSize"
+#define OCPP_CONFIG_KEY_CERTIFICATE_STORE_MAX_LENGTH "CertificateStoreMaxLength"
+#define OCPP_CONFIG_KEY_CPO_NAME "CpoName"
+#define OCPP_CONFIG_KEY_SECURITY_PROFILE "SecurityProfile"
 // Non-standard configuration keys
 #define OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN "DefaultIdToken"
 ///@}

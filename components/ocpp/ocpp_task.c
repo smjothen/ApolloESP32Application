@@ -56,7 +56,6 @@ QueueHandle_t ocpp_blocking_call_queue = NULL; // For messages that prevent sign
 
 enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
 
-uint32_t default_heartbeat_interval = 60 * 60 * 24;
 long heartbeat_interval = -1;
 TimerHandle_t heartbeat_handle = NULL;
 
@@ -66,13 +65,11 @@ TimerHandle_t heartbeat_handle = NULL;
 #define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
 #define WEBSOCKET_WRITE_TIMEOUT 5000
 
+struct ocpp_client_config current_config;
 static uint16_t ocpp_call_timeout = 10;
 static uint32_t ocpp_minimum_status_duration = 3;
 
 TimerHandle_t message_timeout_handle = NULL;
-
-static uint8_t transaction_message_attempts = 3;
-static uint8_t transaction_message_retry_interval = 60;
 
 struct ocpp_active_call * failed_transaction_call = NULL; // Transaction message that should be attempted again
 struct ocpp_active_call * awaiting_failed = NULL; // Transaction message that was attempted to be sent, but blocked by failed transaction.
@@ -573,7 +570,7 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 			if(call->retries < UINT_MAX)
 				call->retries++;
 
-			if(call->retries < transaction_message_attempts){
+			if(call->retries < current_config.transaction_message_attempts){
 				ESP_LOGW(TAG, "Preparing for retransmit after error code '%s'", error_code  != NULL ? error_code : "UNKNOWN");
 
 				failed_transaction_call = calloc(sizeof(struct ocpp_active_call), 1);
@@ -615,7 +612,7 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t wait, uint * min_wait_out){
 
 	if(failed_transaction_call != NULL){
-		uint fail_wait = (transaction_message_retry_interval * failed_transaction_call->retries * (failed_transaction_call->retries+1)) / 2;
+		uint fail_wait = (current_config.transaction_message_retry_interval * failed_transaction_call->retries * (failed_transaction_call->retries+1)) / 2;
 
 		if(time(NULL) > fail_wait + failed_transaction_call->timestamp){
 
@@ -845,8 +842,8 @@ void heartbeat_result_cb(const char * unique_id, cJSON * payload, void * data){
 }
 
 void update_transaction_message_related_config(uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval){
-	transaction_message_attempts = ocpp_transaction_message_attempts;
-	transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
+	current_config.transaction_message_attempts = ocpp_transaction_message_attempts;
+	current_config.transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
 }
 
 void update_heartbeat_timer(uint sec){
@@ -926,37 +923,47 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
-int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval, uint32_t ocpp_websocket_ping_interval){
+esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 	ESP_LOGI(TAG, "Starting ocpp");
 
-	default_heartbeat_interval = ocpp_heartbeat_interval;
-
-	transaction_message_attempts = ocpp_transaction_message_attempts;
-	transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
+	memcpy(&current_config, ocpp_config, sizeof(struct ocpp_client_config));
 
 	char uri[256];
-	int written_length = snprintf(uri, sizeof(uri), "%s/%s", url, charger_id);
+	int written_length = snprintf(uri, sizeof(uri), "%s/%s", current_config.url, current_config.cbid);
 
 	if(written_length < 0 || written_length >= sizeof(uri)){
 		ESP_LOGE(TAG, "Unable to write uri to buffer");
-		return -1;
+		return ESP_ERR_INVALID_SIZE;
 	}
+
 	ESP_LOGI(TAG, "Websocket url used is: %s", uri);
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = uri,
 		.subprotocol = "ocpp1.6",
-		.password = authorization_key,
 		.task_stack = 4096,
 		.buffer_size = WEBSOCKET_BUFFER_SIZE,
 		.reconnect_timeout_ms = 10000,
 		.network_timeout_ms = 10000,
-		.ping_interval_sec = ocpp_websocket_ping_interval
+		.ping_interval_sec = current_config.websocket_ping_interval
 	};
+
+	switch(current_config.security_profile){
+	case 0: // No security whitepaper profile in use
+		break;
+	case 1: // Unsecured transport with basic authentication
+		websocket_cfg.username = current_config.cbid;
+		websocket_cfg.password = current_config.authorization_key;
+		break;
+	case 2: // TLS with basic authentication
+		return ESP_ERR_NOT_SUPPORTED;
+	case 3: // TLS with client side certificates
+		return ESP_ERR_NOT_SUPPORTED;
+	}
 
 	client = esp_websocket_client_init(&websocket_cfg);
 	if(client == NULL){
 		ESP_LOGE(TAG, "Unable to create websocket client");
-		return -1;
+		return ESP_FAIL;
 	}
 
 	esp_err_t err = esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
@@ -1018,7 +1025,7 @@ int start_ocpp(const char * url, const char * authorization_key, const char * ch
 
 error:
 	stop_ocpp();
-	return -1;
+	return ESP_FAIL;
 }
 
 void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
@@ -1034,7 +1041,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 
 	if(cJSON_HasObjectItem(payload, "interval")){
 		heartbeat_interval = cJSON_GetObjectItem(payload, "interval")->valueint;
-		ESP_LOGI(TAG, "Heartbeat interval is: %ld", heartbeat_interval);
+		ESP_LOGI(TAG, "Heartbeat interval is: %" PRIu32, heartbeat_interval);
 	}else{
 		ESP_LOGE(TAG, "Boot result is lacking interval");
 	}
@@ -1069,7 +1076,7 @@ void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 	// "If the Central System returns something other than Accepted, the value of the interval field
 	// indicates the minimum wait time before sending a next BootNotification request"
     	if(registration_status == eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
-		heartbeat_interval = default_heartbeat_interval;
+		heartbeat_interval = current_config.heartbeat_interval;
 
 	}else if(registration_status != eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
 		// No recommendations are given for delay to next BootNotification request

@@ -63,6 +63,8 @@ void storage_Set_ocpp_websocket_ping_interval(uint32_t newValue);
 void storage_Set_ocpp_local_auth_list_enabled(bool newValue);
 void storage_Set_ocpp_authorization_key(const char * newValue);
 void storage_Set_ocpp_default_id_token(const char * newValue);
+/* void storage_Set_ocpp_cpo_name(const char * newValue); */
+void storage_Set_ocpp_security_profile(uint8_t newValue);
 
 //Set Local settings
 void storage_Set_session_controller(enum session_controller type);
@@ -135,6 +137,8 @@ uint32_t storage_Get_ocpp_websocket_ping_interval();
 bool storage_Get_ocpp_local_auth_list_enabled();
 const char * storage_Get_ocpp_authorization_key();
 const char * storage_Get_ocpp_default_id_token();
+/* const char * storage_Get_ocpp_cpo_name(); */
+uint8_t storage_Get_ocpp_security_profile();
 
 //Get Local settings
 enum session_controller storage_Get_session_controller();

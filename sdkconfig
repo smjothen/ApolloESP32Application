@@ -1953,6 +1953,14 @@ CONFIG_OCPP_MAX_CHARGING_PROFILES_INSTALLED=24
 # end of Smart Charging Profile
 
 #
+# Security whitepaper
+#
+# CONFIG_OCPP_ADDITIONAL_ROOT_CERTIFICATE_CHECK is not set
+CONFIG_OCPP_CERTIFICATE_SIGNED_MAX_CHAIN_SIZE=0
+CONFIG_OCPP_CERTIFICATE_STORE_MAX_LENGTH=0
+# end of Security whitepaper
+
+#
 # Debug
 #
 # end of Debug

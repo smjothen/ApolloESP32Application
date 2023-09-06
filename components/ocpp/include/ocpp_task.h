@@ -16,6 +16,19 @@
  * Handles websocket creation, registration with the CS, heatbeats, sending messages and synchronization of CS/CP communication.
  */
 
+/**
+ * @brief configuration struct containing read/write values that could be persisted through boot
+ */
+struct ocpp_client_config{
+	const char * url;
+	const char * cbid;
+	const char * authorization_key;
+	uint32_t heartbeat_interval;
+	uint8_t transaction_message_attempts;
+	uint16_t transaction_message_retry_interval;
+	uint32_t websocket_ping_interval;
+	uint8_t security_profile;
+};
 
 /**
  * @brief changes the maximum time before a call is considered timed out.
@@ -128,15 +141,9 @@ size_t enqueued_call_count();
 /**
  * @brief starts ocpp connection with CS
  *
- * @param url the base URL address for the websocket request.
- * @param authorization_key password used for websocket http basic auth
- * @param charger_id the id appended to the websocket URL address for the CS to identify the CP.
- * @param ocpp_heartbeat_interval the default heatbeat interval used unless bootNotification.req specifies a different interval.
- * @param ocpp_transaction_message_attempts maximum number of retries for failed transaction related messages.
- * @param ocpp_transaction_message_retry_interval wait in seconds between each failed transaction related message retries.
- * @param ocpp_websocket_ping_interval time between ping sent as part of the websocket protocol. 0 is not treated as "no ping"
+ * @param ocpp_config structure containing read/write values persisted through boot
  */
-int start_ocpp(const char * url, const char * authorization_key, const char * charger_id, uint32_t ocpp_heartbeat_interval, uint8_t ocpp_transaction_message_attempts, uint16_t ocpp_transaction_message_retry_interval, uint32_t ocpp_websocket_ping_interval);
+esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config);
 
 /**
  * @brief stops ocpp connection with CS and cleans up resources.

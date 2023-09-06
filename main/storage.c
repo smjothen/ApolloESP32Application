@@ -390,6 +390,14 @@ void storage_Set_ocpp_default_id_token(const char * newValue)
 	strcpy(configurationStruct.ocpp_default_id_token, newValue);
 }
 
+/* void storage_Set_ocpp_cpo_name(const char * newValue){ */
+/* 	strcpy(configurationStruct.ocpp_cpo_name, newValue); */
+/* } */
+
+void storage_Set_ocpp_security_profile(uint8_t newValue){
+	configurationStruct.ocpp_security_profile = newValue;
+}
+
 //Local settings
 
 
@@ -786,6 +794,14 @@ const char * storage_Get_ocpp_default_id_token()
 	return configurationStruct.ocpp_default_id_token;
 }
 
+/* const char * storage_Get_ocpp_cpo_name(){ */
+/* 	return configurationStruct.ocpp_cpo_name; */
+/* } */
+
+uint8_t storage_Get_ocpp_security_profile(){
+	return configurationStruct.ocpp_security_profile;
+}
+
 //Local settings
 
 uint8_t storage_Get_CommunicationMode()
@@ -1035,6 +1051,8 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_u8(configuration_handle, "oAuthLEnabled", configurationStruct.ocpp_local_auth_list_enabled);
 	err += nvs_set_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key);
 	err += nvs_set_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token);
+    	/* err += nvs_set_str(configuration_handle, "oCpoName", configurationStruct.ocpp_cpo_name); */
+	err += nvs_set_u8(configuration_handle, "oSecProfile", configurationStruct.ocpp_security_profile);
 
 	//Local settings
 	err += nvs_set_u8(configuration_handle, "ComMode", configurationStruct.communicationMode);
@@ -1149,6 +1167,11 @@ esp_err_t storage_ReadConfiguration()
 	readSize = sizeof(configurationStruct.ocpp_default_id_token);
 	if(nvs_get_str(configuration_handle, "oDefaultToken", configurationStruct.ocpp_default_id_token, &readSize) != ESP_OK)
 		configurationStruct.ocpp_default_id_token[0] = '\0';
+	/* readSize = sizeof(configurationStruct.ocpp_cpo_name); */
+	/* if(nvs_get_str(configuration_handle, "oCpoName", configurationStruct.ocpp_cpo_name, &readSize) != ESP_OK) */
+	/* 	configurationStruct.ocpp_cpo_name[0] = '\0'; */
+	if(nvs_get_u8(configuration_handle, "oSecProfile", &configurationStruct.ocpp_security_profile))
+		configurationStruct.ocpp_security_profile = 0;
 
 	readSize = 128;
 
