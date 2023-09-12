@@ -906,8 +906,8 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			nrOfParameters++;
 
 			cJSON * authorization_key = cJSON_GetObjectItem(settings, "863");
-			if(cJSON_IsString(authorization_key) && strlen(authorization_key->valuestring) <= 40){
-				if(strlen(authorization_key->valuestring) == 0 || (storage_Get_ocpp_authorization_key()[0] != '\0' && strcmp(authorization_key->valuestring, storage_Get_ocpp_authorization_key()) == 0)){
+			if(cJSON_IsString(authorization_key) && strlen(authorization_key->valuestring) >= 16 && strlen(authorization_key->valuestring) <= 40){
+				if(strcmp(authorization_key->valuestring, storage_Get_ocpp_authorization_key()) == 0){
 					ESP_LOGI(TAG, "Old: 863 authorization_key: ******");
 				}else{
 					storage_Set_ocpp_authorization_key(authorization_key->valuestring);

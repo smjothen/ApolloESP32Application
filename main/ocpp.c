@@ -2552,7 +2552,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		ocpp_change_auth_list_enabled(storage_Get_ocpp_local_auth_list_enabled());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_KEY) == 0){
-		if(is_ci_string_type(value, 40)){ // Type is string not ci_string, but validation should be same
+		if(is_ci_string_type(value, 40) && strlen(value) >= 16){ // Type is string not ci_string, but validation should be same
 			storage_Set_ocpp_authorization_key(value);
 			err = ESP_OK;
 		}else{
