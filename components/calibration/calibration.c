@@ -46,7 +46,11 @@ static TaskHandle_t handle = NULL;
 // Moved out of functions to save stack space
 static char raddr_name[32] = { 0 };
 static char buf[256] = { 0 };
-static char recvbuf[128] = { 0 };
+
+// Buffer must be large enough for N serials (8 at Sanmina was too large
+// for a 128 byte buffer)
+static char recvbuf[512] = { 0 };
+
 static char hexbuf[256] = { 0 };
 
 static CalibrationCtx ctx = { 0 };

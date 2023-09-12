@@ -59,7 +59,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.1.0.6";
+char softwareVersion[] = "2.3.0.0";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -607,7 +607,7 @@ void app_main(void)
 		//Invalid EEPROM content
 		int id_result = prodtest_getNewId(false);
 		if(id_result<0){
-			ESP_LOGE(TAG_MAIN, "ID assign failed");
+			ESP_LOGE(TAG_MAIN, "ID assign failed %d", id_result);
 			vTaskDelay(pdMS_TO_TICKS(500));
 			esp_restart();
 		}
