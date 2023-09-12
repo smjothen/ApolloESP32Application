@@ -189,7 +189,6 @@ struct Configuration
 	// ocpp core profile settings ((commented out settings are optional AND currently not in use) OR superseded by other settings)
 	// See Open charge point protocol 1.6 section 9.1 for more information
 
-	bool permitted_ocpp;
 	bool ocpp_authorization_cache_enabled;
 	char url_ocpp[CONFIG_OCPP_URL_MAX_LENGTH];
 	char chargebox_identity_ocpp[CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH];

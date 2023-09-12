@@ -288,7 +288,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 	if(settings != NULL)
 	{
-		cJSON * reported = cJSON_CreateObject();
 
 		//Authorization
 		if(cJSON_HasObjectItem(settings, "120"))
@@ -328,8 +327,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid useAuthorization: %d \n", useAuthorization);
 			}
-
-			cJSON_AddNumberToObject(reported, "120", storage_Get_AuthenticationRequired());
 		}
 
 
@@ -368,8 +365,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid currentInMaximum: %f \n", currentInMaximum);
 			}
-
-			cJSON_AddNumberToObject(reported, "510", storage_Get_CurrentInMaximum());
 		}
 
 
@@ -408,8 +403,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid currentInMinimum: %f \n", currentInMinimum);
 			}
-
-			cJSON_AddNumberToObject(reported, "511", storage_Get_CurrentInMinimum());
 		}
 
 
@@ -460,7 +453,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid maxPhases: %d \n", maxPhases);
 			}*/
-			cJSON_AddNumberToObject(reported, "520", GetMaxPhases()); //TODO: checki if this is intended behaviour
 		}
 
 		//DefaultOfflinePhase
@@ -500,8 +492,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid defaultOfflinePhase: %d \n", defaultOfflinePhase);
 			}
-
-			cJSON_AddNumberToObject(reported, "522", storage_Get_DefaultOfflinePhase());
 		}
 
 		//DefaultOfflineCurrent
@@ -539,8 +529,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid defaultOfflineCurrent: %f \n", defaultOfflineCurrent);
 			}
-
-			cJSON_AddNumberToObject(reported, "523", storage_Get_DefaultOfflineCurrent());
 		}
 
 		//IsEnable
@@ -579,8 +567,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid isEnabled: %d \n", isEnabled);
 			}
-
-			cJSON_AddNumberToObject(reported, "711", storage_Get_IsEnabled());
 		}
 
 		//Standalone
@@ -624,8 +610,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			{
 				ESP_LOGI(TAG, "Invalid standalone: %d \n", standalone);
 			}
-
-			cJSON_AddNumberToObject(reported, "712", storage_Get_Standalone());
 		}
 
 		//InstallationId
@@ -659,8 +643,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					ESP_LOGI(TAG, "Old: 800 InstallationId: %s", storage_Get_InstallationId());
 				}
 			}
-
-			cJSON_AddStringToObject(reported, "800", storage_Get_InstallationId());
 		}
 
 		//RoutingId
@@ -694,8 +676,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					ESP_LOGI(TAG, "Old: 801 RoutingId: %s", storage_Get_RoutingId());
 				}
 			}
-
-			cJSON_AddStringToObject(reported, "801", storage_Get_RoutingId());
 		}
 
 		//ChargerName
@@ -731,8 +711,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					}
 				}
 			}
-
-			cJSON_AddStringToObject(reported, "802", storage_Get_ChargerName());
 		}
 
 		//Due to this being set to SWAP_COMMUNICATION_MODE in earlier versions up to 0.0.1.22,
@@ -748,41 +726,50 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 		bool controller_change = false;
 
-		//OcppBoxPermitted and SessionController
-		if(cJSON_HasObjectItem(settings, "860") || cJSON_HasObjectItem(settings, "861"))
+		//Managementmode or session_controller
+		if(cJSON_HasObjectItem(settings, "860"))
 		{
-			bool old_permitted = storage_Get_permitted_ocpp();
-			bool new_permitted = old_permitted;
 			enum session_controller old_session_controller = storage_Get_session_controller();
 			enum session_controller new_session_controller = old_session_controller;
 
 			if(cJSON_HasObjectItem(settings, "860")){
 				nrOfParameters++;
 
-				cJSON * session_controller_json = cJSON_GetObjectItem(settings, "860");
+				cJSON * management_mode_json = cJSON_GetObjectItem(settings, "860");
+				int management_mode = -1;
 
-				char * session_controller_str = cJSON_IsString(session_controller_json) ? session_controller_json->valuestring : "";
-				if(strcmp(session_controller_str, "zaptec_cloud") == 0){
+				if(cJSON_IsString(management_mode_json)){
+					errno = 0;
+					long tmp_mode = strtol(management_mode_json->valuestring, NULL, 10);
+					if(tmp_mode == 0 && errno != 0){
+						ESP_LOGE(TAG, "Unable to convert Management mode string: %s", strerror(errno));
+					}else{
+						if(tmp_mode < 0 || tmp_mode > 3){
+							ESP_LOGE(TAG, "Management mode out of range");
+						}else{
+							management_mode = tmp_mode;
+						}
+					}
+				}else if(cJSON_IsNumber(management_mode_json)){
+					management_mode = cJSON_GetNumberValue(management_mode_json);
+				}else{
+					ESP_LOGE(TAG, "Management mode has incorrect type");
+				}
+
+				switch(management_mode){
+				case 0:
 					new_session_controller = eSESSION_ZAPTEC_CLOUD;
-				}else if(strcmp(session_controller_str, "ocpp") == 0){
-					new_session_controller = eSESSION_OCPP;
-				}else if(strcmp(session_controller_str, "standalone") == 0){
+					break;
+				case 1:
 					new_session_controller = eSESSION_STANDALONE;
+					break;
+				case 2:
+					new_session_controller = eSESSION_OCPP;
+					break;
+				default:
+					ESP_LOGE(TAG, "Invalid management mode: %d", management_mode);
 				}
 			}
-
-			if(cJSON_HasObjectItem(settings, "861")){
-				nrOfParameters++;
-
-				cJSON * permitted_json = cJSON_GetObjectItem(settings, "861");
-
-				if(cJSON_IsBool(permitted_json)){
-					new_permitted = cJSON_IsTrue(permitted_json);
-				}
-			}
-
-			if(!new_permitted && !(new_session_controller & eCONTROLLER_OCPP_STANDALONE))
-				new_session_controller = eSESSION_STANDALONE;
 
 			if(new_session_controller != old_session_controller || cJSON_HasObjectItem(settings, "860")){
 				if(new_session_controller != old_session_controller){
@@ -794,54 +781,32 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				}else{
 					ESP_LOGI(TAG, "Old: 860 session controller: %x", old_session_controller);
 				}
-
-				if(new_session_controller == eSESSION_STANDALONE){
-					cJSON_AddStringToObject(reported, "860", "standalone");
-
-				}else if(new_session_controller == eSESSION_ZAPTEC_CLOUD){
-					cJSON_AddStringToObject(reported, "860", "zaptec_cloud");
-
-				}else{
-					cJSON_AddStringToObject(reported, "860", "ocpp");
-				}
-			}
-
-			if(new_permitted != old_permitted || cJSON_HasObjectItem(settings, "861")){
-
-				if(new_permitted != old_permitted){
-					ESP_LOGW(TAG, "New: 861 ocpp permitted: %s", new_permitted ? "True" : "False");
-					storage_Set_permitted_ocpp(new_permitted);
-					doSave = true;
-				}else{
-					ESP_LOGI(TAG, "Old: 861 ocpp permitted: %s", old_permitted ? "True" : "False");
-				}
-				cJSON_AddNumberToObject(reported, "861", new_permitted);
 			}
 		}
 
 		//OcppBoxURL
-		if(cJSON_HasObjectItem(settings, "862"))
+		if(cJSON_HasObjectItem(settings, "861"))
 		{
 			nrOfParameters++;
 
-			cJSON * url_json = cJSON_GetObjectItem(settings, "862");
+			cJSON * url_json = cJSON_GetObjectItem(settings, "861");
 
 			if(cJSON_IsNull(url_json)){
 				if(storage_Get_url_ocpp()[0] != '\0'){
 					storage_Set_url_ocpp("");
 					doSave = true;
 
-					ESP_LOGW(TAG, "New: 862 ocpp url: %s", storage_Get_url_ocpp());
+					ESP_LOGW(TAG, "New: 861 ocpp url: %s", storage_Get_url_ocpp());
 					controller_change = true;
 				}else{
-					ESP_LOGI(TAG, "Old: 862 ocpp url:%s", storage_Get_url_ocpp());
+					ESP_LOGI(TAG, "Old: 861 ocpp url:%s", storage_Get_url_ocpp());
 				}
 
 			}else if(cJSON_IsString(url_json)){
 
 				char * url = url_json->valuestring;
 				if(strcmp(storage_Get_url_ocpp(), url) == 0){
-					ESP_LOGI(TAG, "Old: 862 ocpp url: %s", storage_Get_url_ocpp());
+					ESP_LOGI(TAG, "Old: 861 ocpp url: %s", storage_Get_url_ocpp());
 				}else{
 					bool url_is_valid = true;
 
@@ -858,83 +823,111 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 
 					if(url_is_valid){
-						ESP_LOGW(TAG, "New: 862 ocpp url: %s", url);
+						ESP_LOGW(TAG, "New: 861 ocpp url: %s", url);
 						storage_Set_url_ocpp(url);
 						doSave = true;
 
 						controller_change = true;
 					}else{
 						ESP_LOGW(TAG, "Recieved invalid url '%s' for ocpp", url);
-						ESP_LOGI(TAG, "Err: 862 ocpp url: %s", storage_Get_url_ocpp());
+						ESP_LOGI(TAG, "Err: 861 ocpp url: %s", storage_Get_url_ocpp());
 					}
 				}
 			}
-			cJSON_AddStringToObject(reported, "862", storage_Get_url_ocpp());
 		}
 
 		//OcppBoxCBID
-		if(true || cJSON_HasObjectItem(settings, "863"))
+		if(cJSON_HasObjectItem(settings, "862"))
 		{
 			nrOfParameters++;
 
-			cJSON * cbid_json = cJSON_GetObjectItem(settings, "863");
+			cJSON * cbid_json = cJSON_GetObjectItem(settings, "862");
 			if(cJSON_IsNull(cbid_json)){
 				if(storage_Get_url_ocpp()[0] != '\0'){
 					storage_Set_chargebox_identity_ocpp("");
 					doSave = true;
-					ESP_LOGW(TAG, "New: 863 CBID: %s", storage_Get_chargebox_identity_ocpp());
+					ESP_LOGW(TAG, "New: 862 CBID: %s", storage_Get_chargebox_identity_ocpp());
 					controller_change = true;
 				}else{
-					ESP_LOGI(TAG, "Old: 863 CBID: %s", storage_Get_chargebox_identity_ocpp());
+					ESP_LOGI(TAG, "Old: 862 CBID: %s", storage_Get_chargebox_identity_ocpp());
 				}
 
 			}else if(cJSON_IsString(cbid_json)){
-				bool cbid_accepted = false;
-				bool free_cbid = false;
-
 				char * cbid = cbid_json->valuestring;
 
-				if(strlen(cbid) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
-					ESP_LOGE(TAG, "CBID is too long");
-
-				}else if(!rfc3986_is_percent_encode_compliant((unsigned char *)cbid)){
-					char * cbid_encoded = malloc(strlen(cbid) * 3);
-					if(cbid_encoded == NULL){
-						ESP_LOGE(TAG, "Unable to allocate buffer for encoded CBID");
-					}else{
-						rfc3986_percent_encode((unsigned char *)cbid, cbid_encoded);
-						if(strlen(cbid_encoded) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
-							ESP_LOGE(TAG, "Percent encoding increased CBID length beyound allowed limit");
-							free(cbid_encoded);
-						}else{
-							cbid = cbid_encoded;
-							free_cbid = true;
-							cbid_accepted = true;
-						}
-					}
+				if(strcmp(cbid, storage_Get_chargebox_identity_ocpp()) == 0){
+					ESP_LOGI(TAG, "Old: 862 CBID: %s", storage_Get_chargebox_identity_ocpp());
 				}else{
-					cbid_accepted = true;
+					bool cbid_accepted = false;
+					bool free_cbid = false;
+
+					if(strlen(cbid) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
+						ESP_LOGE(TAG, "CBID is too long");
+
+					}else if(!rfc3986_is_percent_encode_compliant((unsigned char *)cbid)){
+						char * cbid_encoded = malloc(strlen(cbid) * 3);
+						if(cbid_encoded == NULL){
+							ESP_LOGE(TAG, "Unable to allocate buffer for encoded CBID");
+						}else{
+							rfc3986_percent_encode((unsigned char *)cbid, cbid_encoded);
+							if(strlen(cbid_encoded) > CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH){
+								ESP_LOGE(TAG, "Percent encoding increased CBID length beyound allowed limit");
+								free(cbid_encoded);
+							}else{
+								cbid = cbid_encoded;
+								free_cbid = true;
+								cbid_accepted = true;
+							}
+						}
+					}else{
+						cbid_accepted = true;
+					}
+
+					if(cbid_accepted){
+						storage_Set_chargebox_identity_ocpp(cbid);
+						doSave = true;
+
+						controller_change = true;
+
+						ESP_LOGI(TAG, "New: 862 CBID: %s", storage_Get_chargebox_identity_ocpp());
+					}else{
+						ESP_LOGW(TAG, "Err: 862 CBID: %s", storage_Get_chargebox_identity_ocpp());
+					}
+
+					if(free_cbid)
+						free(cbid);
 				}
+			}
+		}
 
-				if(cbid_accepted){
-					storage_Set_chargebox_identity_ocpp(cbid);
+		// OCPP AuthorizationKey
+		if(cJSON_HasObjectItem(settings, "863"))
+		{
+			nrOfParameters++;
+
+			cJSON * authorization_key = cJSON_GetObjectItem(settings, "863");
+			if(cJSON_IsString(authorization_key) && strlen(authorization_key->valuestring) <= 40){
+				if(storage_Get_ocpp_authorization_key()[0] != '\0' && strcmp(authorization_key->valuestring, storage_Get_ocpp_authorization_key()) == 0){
+					ESP_LOGI(TAG, "Old: 863 authorization_key: ******");
+				}else{
+					storage_Set_ocpp_authorization_key(authorization_key->valuestring);
+					ESP_LOGW(TAG, "New: 863 authorization_key: ******");
+
 					doSave = true;
-
 					controller_change = true;
 
-					ESP_LOGI(TAG, "Set CBID to %s", storage_Get_chargebox_identity_ocpp());
-				}else{
-					ESP_LOGW(TAG, "CBID is not valid. Parsed '%s'", cbid);
+					if(storage_Get_ocpp_security_profile() == 0 || storage_Get_ocpp_security_profile() == 1){
+						storage_Set_ocpp_security_profile(1);
+					}
 				}
-
-				if(free_cbid)
-					free(cbid);
+			}else{
+				ESP_LOGE(TAG, "Err: 863 authorization_key: ******");
 			}
-			cJSON_AddStringToObject(reported, "863", storage_Get_chargebox_identity_ocpp());
 		}
 
 		if(controller_change){
 			enum session_controller wanted_controller = storage_Get_session_controller();
+			ESP_LOGI(TAG, "Controller changed: %d", wanted_controller);
 			bool reboot_required = false;
 
 			if(wanted_controller & eCONTROLLER_OCPP_STANDALONE || storage_Get_url_ocpp()[0] == '\0'){
@@ -980,26 +973,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 
 			if(reboot_required)
 				esp_restart();
-		}
-
-		if(reported != NULL){
-			uint16_t request_id;
-			esp_fill_random(&request_id, sizeof(uint16_t)); // NOTE: Should be changed if it is necessary to match request with failed update
-
-			char * reported_str = cJSON_PrintUnformatted(reported);
-			char reported_topic[64];
-
-			sprintf(reported_topic, "$iothub/twin/PATCH/properties/reported/?$rid=%u", request_id);
-
-			if(reported_str != NULL){
-				ESP_LOGI(TAG, "Reporting result of desired device twin settings");
-				publish_to_iothub(reported_str, reported_topic);
-				free(reported_str);
-			}else{
-				ESP_LOGE(TAG, "Unable to create report result of desired device twin settings");
-			}
-
-			cJSON_Delete(reported);
 		}
 
 		ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
@@ -3434,6 +3407,19 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			ESP_LOGI(TAG, "MCU Granted command FAILED");
 		}
 		responseStatus = 200;
+	}
+	else if(strstr(commandEvent->topic, "iothub/methods/POST/864/"))
+	{
+		ESP_LOGI(TAG, "Resetting OCPP security profile");
+		storage_Set_ocpp_security_profile(0);
+		storage_Set_ocpp_authorization_key("");
+
+		storage_SaveConfiguration();
+
+		responseStatus = 200;
+
+		if(ocpp_is_running())
+			ocpp_end_and_reconnect(true);
 	}
 
 	return responseStatus;

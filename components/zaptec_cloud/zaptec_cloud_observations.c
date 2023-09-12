@@ -172,7 +172,7 @@ void cloud_observation_ClearTimeStruct()
 
 
 
-cJSON *create_observation(int observation_id, char *value){
+cJSON *create_observation(int observation_id, const char *value){
     cJSON *result = cJSON_CreateObject();
     if(result == NULL){return NULL;}
 
@@ -368,6 +368,11 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, storage_Get_DiagnosticsMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
+    add_observation_to_collection(observations, create_uint32_t_observation(ManagementMode, (uint32_t)storage_Get_session_controller()));
+
+    add_observation_to_collection(observations, create_observation(OcppBoxURL, storage_Get_url_ocpp()));
+    add_observation_to_collection(observations, create_observation(OcppBoxCBID, storage_Get_chargebox_identity_ocpp()));
+
     return publish_json(observations);
 }
 
@@ -482,6 +487,29 @@ int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
 
     return publish_json(observations);
 }
+
+int publish_debug_telemetry_observation_ocpp_box_security_profile(uint32_t security_profile)
+{
+    ESP_LOGD(TAG, "sending OCPP info");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_uint32_t_observation(OcppBoxSecurityProfile, security_profile));
+
+    return publish_json(observations);
+}
+
+int publish_debug_telemetry_observation_ocpp_box_connected(bool connected)
+{
+    ESP_LOGD(TAG, "sending OCPP connected");
+
+    cJSON *observations = create_observation_collection();
+
+    add_observation_to_collection(observations, create_observation(OcppBoxConnected, connected ? "1" : "0"));
+
+    return publish_json(observations);
+}
+
 
 //TODO: consider changing event_name to id/enum value
 /**

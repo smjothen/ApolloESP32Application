@@ -205,6 +205,13 @@
         PilotTestResults = 854,
         //..
 
+	ManagementMode = 860,
+	OcppBoxURL = 861,
+	OcppBoxCBID = 862,
+	//OcppBoxAuthorizationKey = 863,
+	OcppBoxSecurityProfile = 864,
+	OcppBoxConnected = 865,
+
         ServoCheckStartPosition = 870,
         ServoCheckStartCurrent  = 871,
         ServoCheckStopPosition 	= 872,

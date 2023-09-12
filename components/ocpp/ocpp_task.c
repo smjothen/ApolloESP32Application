@@ -949,15 +949,23 @@ esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 
 	switch(current_config.security_profile){
 	case 0: // No security whitepaper profile in use
+		ESP_LOGI(TAG, "Security profile 0: No additional security");
 		break;
 	case 1: // Unsecured transport with basic authentication
+		ESP_LOGI(TAG, "Security profile 1: Unsecured Transport with Basic Authentication");
+
 		websocket_cfg.username = current_config.cbid;
 		websocket_cfg.password = current_config.authorization_key;
 		break;
 	case 2: // TLS with basic authentication
+		ESP_LOGE(TAG, "Security profile 2: TLS with Basic Authentication");
 		return ESP_ERR_NOT_SUPPORTED;
 	case 3: // TLS with client side certificates
+		ESP_LOGE(TAG, "Security profile 3: TLS with Client Side Certificate");
 		return ESP_ERR_NOT_SUPPORTED;
+	default:
+		ESP_LOGE(TAG, "Security profile invalid");
+		return ESP_ERR_INVALID_ARG;
 	}
 
 	client = esp_websocket_client_init(&websocket_cfg);

@@ -51,7 +51,7 @@
 #include "types/ocpp_firmware_status.h"
 #include "protocol_task.h"
 
-#define TASK_OCPP_STACK_SIZE 3200
+#define TASK_OCPP_STACK_SIZE 3400
 #define OCPP_PROBLEM_RESET_INTERVAL 30
 #define OCPP_PROBLEMS_COUNT_BEFORE_RETRY 50
 #define OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT 18000 // 5 hours
@@ -2562,8 +2562,9 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		uint8_t active_security_profile = storage_Get_ocpp_security_profile();
 		err = set_config_u8(storage_Set_ocpp_security_profile, value, is_valid_security_profile);
 
-		if(active_security_profile != storage_Get_ocpp_security_profile())
+		if(active_security_profile != storage_Get_ocpp_security_profile()){
 			ocpp_end_and_reconnect(true);
+		}
 
 		// Non-standard configuration keys
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
@@ -3302,6 +3303,8 @@ static void transition_online(){
 	}
 
 	connected = true;
+
+	publish_debug_telemetry_observation_ocpp_box_connected(connected);
 }
 
 static void transition_offline(){
@@ -3314,6 +3317,8 @@ static void transition_offline(){
 	sessionHandler_OcppSaveState();
 
 	connected = false;
+
+	publish_debug_telemetry_observation_ocpp_box_connected(connected);
 }
 
 #define MAIN_EVENT_OFFSET 0
@@ -3498,6 +3503,7 @@ static void ocpp_task(){
 				}
 			}
 		}while(err != 0);
+		publish_debug_telemetry_observation_ocpp_box_security_profile(ocpp_config.security_profile);
 
 		ocpp_configure_task_notification(task_ocpp_handle, TASK_EVENT_OFFSET);
 		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
@@ -3546,6 +3552,7 @@ static void ocpp_task(){
 				}
 			}
 		}while(err != 0);
+		publish_debug_telemetry_observation_ocpp_box_connected(connected);
 
 		/*
 		 * From ocpp errata
