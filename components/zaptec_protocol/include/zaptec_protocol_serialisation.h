@@ -205,12 +205,13 @@
         PilotTestResults = 854,
         //..
 
-	ManagementMode = 860,
+	SessionController = 860,
 	OcppBoxURL = 861,
 	OcppBoxCBID = 862,
 	//OcppBoxAuthorizationKey = 863,
-	OcppBoxSecurityProfile = 864,
-	OcppBoxConnected = 865,
+	OcppBoxAuthorizationKeyFromZaptec = 864,
+	OcppBoxSecurityProfile = 865,
+	OcppBoxConnected = 866,
 
         ServoCheckStartPosition = 870,
         ServoCheckStartCurrent  = 871,

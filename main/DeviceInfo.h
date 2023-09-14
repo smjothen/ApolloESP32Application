@@ -197,6 +197,7 @@ struct Configuration
 	char url_ocpp[CONFIG_OCPP_URL_MAX_LENGTH];
 	char chargebox_identity_ocpp[CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH];
 	bool availability_ocpp;
+	bool authorization_key_set_from_zaptec_ocpp;
 	bool ocpp_allow_offline_tx_for_unknown_id;
 	bool ocpp_authorize_remote_tx_requests;
 	//int configurationStruct.ocpp_blink_repeats;

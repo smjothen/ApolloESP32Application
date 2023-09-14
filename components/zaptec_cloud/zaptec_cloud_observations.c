@@ -7,7 +7,7 @@
 #include "string.h"
 #include "esp_ota_ops.h"
 #include "esp_mac.h"
-
+#include "esp_tls.h"
 #include "../../main/storage.h"
 #include "../../main/main.h"
 #include "zaptec_cloud_listener.h"
@@ -368,10 +368,12 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, storage_Get_DiagnosticsMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(ManagementMode, (uint32_t)storage_Get_session_controller()));
+    add_observation_to_collection(observations, create_uint32_t_observation(SessionController, (uint32_t)storage_Get_session_controller()));
 
     add_observation_to_collection(observations, create_observation(OcppBoxURL, storage_Get_url_ocpp()));
     add_observation_to_collection(observations, create_observation(OcppBoxCBID, storage_Get_chargebox_identity_ocpp()));
+
+    add_observation_to_collection(observations, create_observation(OcppBoxAuthorizationKeyFromZaptec, storage_Get_authorization_key_set_from_zaptec_ocpp() ? "1" : "0"));
 
     return publish_json(observations);
 }

@@ -901,17 +901,38 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		}
 
 		// OCPP AuthorizationKey
-		if(cJSON_HasObjectItem(settings, "863"))
+		if(cJSON_HasObjectItem(settings, "863") && cJSON_HasObjectItem(settings, "864"))
 		{
-			nrOfParameters++;
+			nrOfParameters += 2;
 
 			cJSON * authorization_key = cJSON_GetObjectItem(settings, "863");
-			if(cJSON_IsString(authorization_key) && strlen(authorization_key->valuestring) >= 16 && strlen(authorization_key->valuestring) <= 40){
-				if(strcmp(authorization_key->valuestring, storage_Get_ocpp_authorization_key()) == 0){
-					ESP_LOGI(TAG, "Old: 863 authorization_key: ******");
+			cJSON * set_from_zaptec_json = cJSON_GetObjectItem(settings, "864");
+
+			bool set_from_zaptec = false;
+
+			if(cJSON_IsBool(set_from_zaptec_json)){
+				set_from_zaptec = cJSON_IsTrue(set_from_zaptec_json);
+			}else if(cJSON_IsString(set_from_zaptec_json)){
+				char * set_from_zaptec_str = set_from_zaptec_json->valuestring;
+				set_from_zaptec = (strcmp(set_from_zaptec_str, "1") == 0 || strcasecmp(set_from_zaptec_str, "true") == 0);
+			}else{
+				ESP_LOGE(TAG, "Err: 864 authorization_key_set_from_zaptec: %s", set_from_zaptec ? "true" : "false");
+			}
+
+			if((cJSON_IsString(authorization_key) &&
+					(strlen(authorization_key->valuestring) == 0 || (strlen(authorization_key->valuestring) >= 16 && strlen(authorization_key->valuestring) <= 40)))
+					|| cJSON_IsNull(authorization_key)
+				){
+
+				char * new_key = cJSON_IsString(authorization_key) ? authorization_key->valuestring : "";
+
+				if(strcmp(new_key, storage_Get_ocpp_authorization_key()) == 0
+					|| !set_from_zaptec){
+					ESP_LOGI(TAG, "Old: 863 authorization_key");
 				}else{
-					storage_Set_ocpp_authorization_key(authorization_key->valuestring);
-					ESP_LOGW(TAG, "New: 863 authorization_key: ******");
+					storage_Set_ocpp_authorization_key(new_key);
+					storage_Set_authorization_key_set_from_zaptec_ocpp(true);
+					ESP_LOGW(TAG, "New: 863 authorization_key");
 
 					doSave = true;
 					controller_change = true;
@@ -921,7 +942,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					}
 				}
 			}else{
-				ESP_LOGE(TAG, "Err: 863 authorization_key: ******");
+				ESP_LOGE(TAG, "Err: 863 authorization_key");
 			}
 		}
 
@@ -3408,20 +3429,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		}
 		responseStatus = 200;
 	}
-	else if(strstr(commandEvent->topic, "iothub/methods/POST/864/"))
-	{
-		ESP_LOGI(TAG, "Resetting OCPP security profile");
-		storage_Set_ocpp_security_profile(0);
-		storage_Set_ocpp_authorization_key("");
-
-		storage_SaveConfiguration();
-
-		responseStatus = 200;
-
-		if(ocpp_is_running())
-			ocpp_end_and_reconnect(true);
-	}
-
 	return responseStatus;
 }
 

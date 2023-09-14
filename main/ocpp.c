@@ -2554,6 +2554,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_KEY) == 0){
 		if(is_ci_string_type(value, 40) && strlen(value) >= 16){ // Type is string not ci_string, but validation should be same
 			storage_Set_ocpp_authorization_key(value);
+			storage_Set_authorization_key_set_from_zaptec_ocpp(false);
+
 			err = ESP_OK;
 		}else{
 			err = ESP_FAIL;

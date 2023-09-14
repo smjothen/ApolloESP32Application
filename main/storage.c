@@ -248,6 +248,11 @@ void storage_Set_availability_ocpp(bool newValue)
 	configurationStruct.availability_ocpp = newValue;
 }
 
+void storage_Set_authorization_key_set_from_zaptec_ocpp(bool newValue)
+{
+	configurationStruct.authorization_key_set_from_zaptec_ocpp = newValue;
+}
+
 void storage_Set_chargebox_identity_ocpp(const char * newValue)
 {
 	strcpy(configurationStruct.chargebox_identity_ocpp, newValue);
@@ -651,6 +656,11 @@ bool storage_Get_availability_ocpp()
 	return configurationStruct.availability_ocpp;
 }
 
+bool storage_Get_authorization_key_set_from_zaptec_ocpp()
+{
+	return configurationStruct.authorization_key_set_from_zaptec_ocpp;
+}
+
 const char * storage_Get_chargebox_identity_ocpp()
 {
 	return configurationStruct.chargebox_identity_ocpp;
@@ -1009,6 +1019,7 @@ esp_err_t storage_SaveConfiguration()
 	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
 	err += nvs_set_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp);
 	err += nvs_set_u8(configuration_handle, "availOcpp", configurationStruct.availability_ocpp);
+	err += nvs_set_u8(configuration_handle, "authKeyFromOcpp", configurationStruct.authorization_key_set_from_zaptec_ocpp);
 	err += nvs_set_u8(configuration_handle, "sessionCtrl", configurationStruct.session_controller);
 	err += nvs_set_u8(configuration_handle, "oAllowTxUnknown", configurationStruct.ocpp_allow_offline_tx_for_unknown_id);
 	err += nvs_set_u8(configuration_handle, "oAuthCachEnable", configurationStruct.ocpp_authorization_cache_enabled);
@@ -1110,6 +1121,8 @@ esp_err_t storage_ReadConfiguration()
 		configurationStruct.chargebox_identity_ocpp[0] = '\0';
 	if(nvs_get_u8(configuration_handle, "availOcpp", (uint8_t *)&configurationStruct.availability_ocpp) != 0)
 		configurationStruct.availability_ocpp = configurationStruct.isEnabled;
+	if(nvs_get_u8(configuration_handle, "authKeyFromOcpp", (uint8_t *)&configurationStruct.authorization_key_set_from_zaptec_ocpp) != 0)
+		configurationStruct.authorization_key_set_from_zaptec_ocpp = false;
 	err += nvs_get_u8(configuration_handle, "sessionCtrl", (uint8_t *)&configurationStruct.session_controller);
 	if(nvs_get_u8(configuration_handle, "oAllowTxUnknown", (uint8_t *)&configurationStruct.ocpp_allow_offline_tx_for_unknown_id) != 0)
 		configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
