@@ -30,6 +30,14 @@ static char buf[1024];
 extern const uint8_t zap_cert_pem_start[] asm("_binary_zaptec_ca_cer_start");
 extern const uint8_t zap_cert_pem_end[] asm("_binary_zaptec_ca_cer_end");
 
+#ifndef CALIBRATION_DEVELOPMENT
+	#define CALIBRATION_DEVICES_URL "https://devices.zaptec.com"
+	#define CALIBRATION_DEVICES_CERT zap_cert_pem_start
+#else
+	#define CALIBRATION_DEVICES_URL "https://10.0.1.65:5000"
+	#define CALIBRATION_DEVICES_CERT NULL
+#endif
+
 bool calibration_https_upload_to_cloud(CalibrationCtx *ctx, const char *raw) {
 
 		memset(buf, 0, sizeof (buf));
@@ -91,9 +99,9 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 
 		memset(buf, 0, sizeof (buf));
 
-    char *url = "https://devices.zaptec.com/production/mid/calibration";
+		char *url = CALIBRATION_DEVICES_URL "/production/mid/calibration";
 		if (verification) {
-    	url = "https://devices.zaptec.com/production/mid/verification";
+			url = CALIBRATION_DEVICES_URL "/production/mid/verification";
 		}
 
 		esp_http_client_config_t config = {
@@ -101,14 +109,14 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 			.transport_type = HTTP_TRANSPORT_OVER_SSL,
 			.event_handler = NULL,
 			.user_data = buf,
-			.cert_pem = (char *)zap_cert_pem_start,
-			.timeout_ms = 30000,
+			.cert_pem = (char *)CALIBRATION_DEVICES_CERT,
+			.timeout_ms = 10000,
 			.buffer_size = 1536,
 		};
 
 		esp_http_client_handle_t client = esp_http_client_init(&config);
 
-    struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
+		struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 
 		size_t data_len = 0;
 		char *data_str = NULL;
@@ -234,7 +242,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 			esp_http_client_close(client);
 			esp_http_client_cleanup(client);
 
-      return false;
+			return false;
 		}
 
 		err = esp_http_client_write(client, data_str, data_len);
@@ -259,7 +267,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 
 		if(read_len <= 0) {
 			ESP_LOGE(TAG, "Didn't get any data from production server!");
-      return false;
+			return false;
 		}
 
 		ESP_LOGI(TAG, "Got response from production server: %s", buf);
@@ -312,5 +320,5 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 			cJSON_Delete(body);
 		}
 
-    return true;
+		return true;
 }

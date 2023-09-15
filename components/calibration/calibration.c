@@ -607,6 +607,12 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             if (!(ctx->Flags & CAL_FLAG_UPLOAD_VER)) {
                 // Upload parameters
                 if (!calibration_https_upload_parameters(ctx, NULL, true)) {
+                    if (ctx->Retries < 5) {
+                        ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
+                        ctx->Retries++;
+                    } else {
+                        calibration_fail(ctx, "Couldn't upload calibration data to production server!");
+                    }
                     return false;
                 } else {
                     ctx->Flags |= CAL_FLAG_UPLOAD_VER;
@@ -1165,7 +1171,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
 
         if (strcmp(msg->Run.SetupName, "dev") == 0) {
             ESP_LOGI(TAG, "Run is a simulation, uploading disabled!");
-            ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
+            //ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
             calibration_set_simulation(true);
         } else {
             calibration_set_simulation(false);

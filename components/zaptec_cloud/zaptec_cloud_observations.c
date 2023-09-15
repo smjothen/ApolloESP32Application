@@ -412,7 +412,7 @@ int publish_debug_telemetry_observation_local_settings()
 int publish_debug_telemetry_observation_Calibration(char *calibrationJSON) {
     cJSON *observations = create_observation_collection();
     add_observation_to_collection(observations, create_observation(MIDCalibration, calibrationJSON));
-    return publish_json_blocked(observations, 10 * 1000);
+    return publish_json(observations);
 }
 
 int publish_debug_telemetry_observation_Connectivity_None()
