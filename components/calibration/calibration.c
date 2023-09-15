@@ -133,7 +133,8 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     }
     *ptr = 0;
 
-    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+    uint8_t errorCode = 0;
+    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header), &errorCode) != MsgCommandAck || errorCode != 0) {
         ESP_LOGE(TAG, "%s: Writing default calibration to MCU failed!", calibration_state_to_string(ctx));
         return false;
     }
@@ -548,7 +549,8 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
                 return false;
             }
         } else {
-            if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+            uint8_t errorCode = 0;
+            if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header), &errorCode) != MsgCommandAck || errorCode != 0) {
                 ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
                 return false;
             }
@@ -638,7 +640,8 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
             ESP_LOGI(TAG, "Marking calibration as verified ID %d CRC 0x%04X", calId, crc);
 
-            if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes)) != MsgCommandAck) {
+            uint8_t errorCode = 0;
+            if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes), &errorCode) != MsgCommandAck || errorCode != 0) {
                 calibration_fail(ctx, "Failed to mark calibration as verified!");
                 return false;
             }
