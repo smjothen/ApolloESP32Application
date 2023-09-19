@@ -76,7 +76,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
         case Calibrating: {
             float avg[3];
 
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
                     double offset = avg[phase] / EMETER_SYS_GAIN;
 
@@ -103,7 +103,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             float avg[3];
 
             // Verify offset as well
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
                     ESP_LOGI(TAG, "%s: IOFFS(%d) Verification = %f (%f)", calibration_state_to_string(ctx), phase, average, avg[phase]);
@@ -127,7 +127,7 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
             float avg[3];
 
             // Verify RMS gain as well
-            if (calibration_get_emeter_averages(extra_type, avg)) {
+            if (calibration_get_emeter_averages(ctx, extra_type, avg)) {
                 float max_error = CALIBRATION_IOFF_MAX_RMS;
 
                 for (int phase = 0; phase < 3; phase++) {

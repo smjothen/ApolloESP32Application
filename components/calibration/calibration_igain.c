@@ -62,7 +62,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
         case Calibrating: {
             float avg[3];
 
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 if (calibration_ref_current_is_recent(ctx)) {
                     for (int phase = 0; phase < 3; phase++) {
                         double average = calibration_scale_emeter(unit, avg[phase]);
@@ -96,7 +96,7 @@ bool calibration_step_calibrate_current_gain(CalibrationCtx *ctx) {
 
             float avg[3];
 
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
 

@@ -16,6 +16,23 @@
 
 static const char *TAG = "CALIBRATION    ";
 
+double _test_currents[] = {
+    [Starting] = 0.0,
+    [WarmingUp] = 0.15, // Simulate overload for 32A warmup
+    [WarmupSteadyStateTemp] = 0.0,
+    [CalibrateCurrentOffset] = 0.0,
+    [CalibrateVoltageOffset] = 0.0,
+    [CalibrateVoltageGain] = 0.0,
+    [CalibrateCurrentGain] = 5.0,
+    [VerificationStart] = 0.0,
+    [VerificationRunning] = 0.5,
+    [VerificationDone] = 0.0,
+    [WriteCalibrationParameters] = 0.0,
+    [Done] = 0.0, 
+    [CloseRelays] = 0.0,
+    [ContactCleaning] = 0.0
+};
+
 const char *calibration_mode_to_string(CalibrationMode mode) {
     switch(mode) {
         case Idle: return "Idle";
@@ -97,6 +114,11 @@ double calibration_inv_scale_emeter(CalibrationUnit unit, float raw) {
 bool calibration_get_current_snapshot(CalibrationCtx *ctx, float *iv) {
     MessageType ret;
 
+    if (calibration_is_simulation()) {
+        iv[0] = iv[1] = iv[2] = _test_currents[ctx->State];
+        return true;
+    }
+
     if ((ret = MCU_SendCommandId(CommandCurrentSnapshot)) != MsgCommandAck) {
         ESP_LOGE(TAG, "Couldn't send current snapshot command!");
         return false;
@@ -115,7 +137,7 @@ bool calibration_get_emeter_snapshot(CalibrationCtx *ctx, uint8_t *source, float
     MessageType ret;
 
     if (calibration_is_simulation()) {
-        iv[0] = iv[1] = iv[2] = 5.0;
+        iv[0] = iv[1] = iv[2] = _test_currents[ctx->State];
         vv[0] = vv[1] = vv[2] = 230.0;
         return true;
     }
@@ -151,7 +173,7 @@ uint16_t calibration_read_samples(void) {
     return 0;
 }
 
-bool calibration_read_average(CalibrationType type, int phase, float *average) {
+bool calibration_read_average(CalibrationCtx *ctx, CalibrationType type, int phase, float *average) {
     (void)type;
 
     if (calibration_is_simulation()) {
@@ -166,7 +188,7 @@ bool calibration_read_average(CalibrationType type, int phase, float *average) {
         switch(mode) {
             case CHARGE_OPERATION_STATE_CHARGING:
                 voltage = 230.0;
-                current = 0.5;
+                current = _test_currents[ctx->State];
                 break;
             default:
                 voltage = 0.0;
@@ -193,7 +215,7 @@ bool calibration_read_average(CalibrationType type, int phase, float *average) {
     return false;
 }
 
-uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages) {
+uint16_t calibration_get_emeter_averages(CalibrationCtx *ctx, CalibrationType type, float *averages) {
     uint16_t samples = calibration_read_samples();
 
     uint16_t expected_samples;
@@ -209,7 +231,7 @@ uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages) 
 
     if (samples == expected_samples) {
         for (int phase = 0; phase < 3; phase++) {
-            if (!calibration_read_average(type, phase, &averages[phase])) {
+            if (!calibration_read_average(ctx, type, phase, &averages[phase])) {
                 ESP_LOGE(TAG, "Couldn't read phase %d average!", phase);
                 return 0;
             }

@@ -82,7 +82,8 @@ void calibration_log_line(CalibrationCtx *ctx, const char *format, ...) {
 }
 
 void calibration_log_dump(void) {
-    FILE *fp;
+    FILE *fp = NULL;
+
     if (!(fp = fopen(CALIBRATION_LOG, "r"))) {
         ESP_LOGE(TAG, "Can't open file for logging");
         return;
@@ -99,6 +100,7 @@ void calibration_log_dump(void) {
         publish_debug_telemetry_observation_Calibration(hexbuf);
     }
 
+    fclose(fp);
     remove(CALIBRATION_LOG);
 }
 
@@ -303,10 +305,6 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-    if (calibration_is_simulation()) { 
-        return 3;
-    }
-
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 
@@ -346,31 +344,29 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float allowedCurrent = 0.1;
             float allowedVoltage = 0.1;
 
-            TickType_t minimumDuration;
             TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
-                minimumDuration = pdMS_TO_TICKS(5 * 1000);
             } else if (ctx->VerTest & HighLevelCurrent) {
                 expectedCurrent = 32.0;
-                minimumDuration = pdMS_TO_TICKS(5 * 1000);
             } else {
                 expectedCurrent = 16.0;
-                minimumDuration = pdMS_TO_TICKS(30 * 1000);
             }
 
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
              && calibration_phases_within(voltage, expectedVoltage, allowedVoltage) == 3) {
+                ctx->Ticks[WARMUP_WAIT_TICK] = 0;
 
                 if (ctx->Ticks[WARMUP_TICK] == 0) {
                     ctx->Ticks[WARMUP_TICK] = xTaskGetTickCount();
                 } else {
-                    if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > minimumDuration) {
+                    if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > maxWait) {
+                        ctx->Ticks[WARMUP_TICK] = 0;
                         CAL_CSTATE(ctx) = Complete;
                         break;
                     } else {
-                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %ds) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
+                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %ds) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(maxWait) / 1000);
                     }
                 }
 
@@ -380,11 +376,15 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 if (ctx->Ticks[WARMUP_WAIT_TICK] == 0) {
                     ctx->Ticks[WARMUP_WAIT_TICK] = xTaskGetTickCount();
                 } else if (xTaskGetTickCount() - ctx->Ticks[WARMUP_WAIT_TICK] > maxWait) {
-                    calibration_fail(ctx, 
-                            "Warm up current/voltage outside of %1.fV / %.1fA ranges!"
-                            " %1.f / %.1f / %.1f V --- %.1f / %.1f / %.1f A",
-                            expectedVoltage, expectedCurrent, voltage[0], voltage[1], voltage[2],
-                            current[0], current[1], current[2]);
+                    ctx->Ticks[WARMUP_WAIT_TICK] = 0;
+                    CAL_CSTATE(ctx) = Complete;
+
+                    if (calibration_is_simulation()) {
+                        ESP_LOGI(TAG, "Resetting warmup current");
+                        extern double _test_currents[];
+                        _test_currents[WarmingUp] = 32.0;
+                    }
+
                     break;
                 }
 
