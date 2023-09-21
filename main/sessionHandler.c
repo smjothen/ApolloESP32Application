@@ -569,6 +569,35 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 #endif
 }
 
+void resume_if_allowed(){
+
+	if(ocpp_max_limit >= 0.0f && ocpp_max_limit <= 0.05f) // Suspended evse
+		return;
+
+	ESP_LOGI(TAG, "Allowed to resume charging");
+
+	MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during resume check");
+		SetFinalStopActiveStatus(0);
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during resume check");
+	}
+
+	ret = MCU_SendCommandId(CommandStartCharging);
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU CommandStartCharging OK during resume check");
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during resume check");
+	}
+}
+
 void sessionHandler_OcppTransitionToFaulted(){
 	ocpp_faulted = true;
 	ocpp_faulted_exit_state = ocpp_old_state;
@@ -1080,6 +1109,13 @@ void start_charging_on_tag_deny(const char * tag){
 	}
 
 	SetAuthorized(false);
+
+	ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_NOT_AUTHORIZED);
+	if(ret == MsgWriteAck)
+		ESP_LOGI(TAG, "Ack on SESSION_NOT_AUTHORIZED");
+	else
+		ESP_LOGW(TAG, "NACK on SESSION_NOT_AUTHORIZED!!!");
+
 }
 
 void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
@@ -1283,6 +1319,9 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_CHARGING:
+		if(charge_mode == eCAR_CONNECTED) // Car reports connected but not charging
+			return eOCPP_CP_STATUS_SUSPENDED_EV;
+
 		return eOCPP_CP_STATUS_CHARGING;
 
 	case CHARGE_OPERATION_STATE_STOPPING:
@@ -1554,7 +1593,18 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 	if(err != eOCPPJ_NO_ERROR)
 		goto error;
 
-	if(cJSON_HasObjectItem(payload, "chargingProfile")){
+	bool accept_request;
+
+	enum ocpp_cp_status_id state = get_ocpp_state();
+	//TODO: Check if intended behaviour when reserved is to accept tag and only validate against reservation when AuthorizeRemoteTxRequests
+	if(state == eOCPP_CP_STATUS_AVAILABLE || state == eOCPP_CP_STATUS_PREPARING || state == eOCPP_CP_STATUS_FINISHING || state == eOCPP_CP_STATUS_RESERVED){
+		accept_request = true;
+
+	}else{
+		accept_request = false;
+	}
+
+	if(accept_request && cJSON_HasObjectItem(payload, "chargingProfile")){
 
 		struct ocpp_charging_profile * charging_profile = calloc(sizeof(struct ocpp_charging_profile), 1);
 		if(charging_profile == NULL){
@@ -1588,7 +1638,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 		}
 	}
 
-	bool accept_request = get_ocpp_state() == eOCPP_CP_STATUS_PREPARING;
 	cJSON * response;
 	if(accept_request){
 		response = ocpp_create_remote_start_transaction_confirmation(unique_id, OCPP_REMOTE_START_STOP_STATUS_ACCEPTED);
@@ -1598,7 +1647,6 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 
 	if(response == NULL){
 		ESP_LOGE(TAG, "Unable to create remote start transaction response");
-		return;
 	}else{
 		send_call_reply(response);
 	}
@@ -1606,16 +1654,27 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 	if(!accept_request)
 		return;
 
-
 	if(storage_Get_ocpp_authorize_remote_tx_requests()){
 		struct TagInfo tag ={
 			.tagIsValid = true,
 		};
 		strcpy(tag.idAsString, id_tag);
 
-		authorize(tag, start_charging_on_tag_accept, start_charging_on_tag_deny);
+		if(state == eOCPP_CP_STATUS_RESERVED){
+			ocpp_authorize_compare(id_tag, NULL,
+					reservation_info->id_tag, reservation_info->parent_id_tag,
+					reserved_on_tag_accept, reserved_on_tag_deny);
+		}else{
+			ocpp_finishing_session = false; // Only relevant if state is Finishing
+			authorize(tag, start_charging_on_tag_accept, start_charging_on_tag_deny);
+		}
 	}else{
-		start_charging_on_tag_accept(id_tag);
+		if(state != eOCPP_CP_STATUS_RESERVED){
+			ocpp_finishing_session = false; // Only relevant if state is Finishing
+			start_charging_on_tag_accept(id_tag);
+		}else{
+			reserved_on_tag_accept(id_tag, reservation_info != NULL ? reservation_info->id_tag : id_tag);
+		}
 	}
 
 	return;
@@ -1862,7 +1921,10 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
 		case eOCPP_CP_STATUS_CHARGING:
+			break;
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
+			resume_if_allowed();
+			break;
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 		case eOCPP_CP_STATUS_FAULTED:
 			break;

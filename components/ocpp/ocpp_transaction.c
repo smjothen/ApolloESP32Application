@@ -443,6 +443,10 @@ size_t ocpp_transaction_message_count(){
 		known_message_count = -1;
 	}
 
+	if(ocpp_transaction_call_queue != NULL){
+		known_message_count += uxQueueMessagesWaiting(ocpp_transaction_call_queue);
+	}
+
 	xSemaphoreGive(file_lock);
 
 	ESP_LOGI(TAG, "Transaction message count: %d", known_message_count);
@@ -539,10 +543,10 @@ esp_err_t read_meter_value_string(FILE * fp, unsigned char ** meter_data, size_t
 		goto error;
 	}
 
-	struct meter_crc_buffer crc_buffer = {
-		.crc_meter_data = esp_crc32_le(0, (uint8_t *)*meter_data, *meter_data_length),
-		.timestamp = *timestamp
-	};
+	struct meter_crc_buffer crc_buffer = {0};
+
+	crc_buffer.crc_meter_data = esp_crc32_le(0, (uint8_t *)*meter_data, *meter_data_length);
+	crc_buffer.timestamp = *timestamp;
 
 	if(crc != esp_crc32_le(0, (uint8_t *)&crc_buffer, sizeof(struct meter_crc_buffer))){
 		ESP_LOGE(TAG, "crc mismatch for meter value");
@@ -552,6 +556,8 @@ esp_err_t read_meter_value_string(FILE * fp, unsigned char ** meter_data, size_t
 	return ESP_OK;
 error:
 	free(*meter_data);
+	*meter_data = NULL;
+
 	return ESP_FAIL;
 }
 
@@ -709,7 +715,12 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
 esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp){
 
 	if(meter_data_length > MAX_METER_VALUE_LENGTH){
-		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %ud > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
+		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %u > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
+		return ESP_ERR_INVALID_SIZE;
+	}
+
+	if(meter_data_length <= 0){
+		ESP_LOGE(TAG, "Rejecting write of meter data with no or invalid length: %u <= 0", meter_data_length);
 		return ESP_ERR_INVALID_SIZE;
 	}
 
@@ -756,10 +767,10 @@ esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, 
 		return ESP_FAIL;
 	}
 
-	struct meter_crc_buffer crc_buffer = {
-		.crc_meter_data = esp_crc32_le(0, (uint8_t *)meter_data, meter_data_length),
-		.timestamp = timestamp
-	};
+	struct meter_crc_buffer crc_buffer = {0};
+
+	crc_buffer.crc_meter_data = esp_crc32_le(0, (uint8_t *)meter_data, meter_data_length);
+	crc_buffer.timestamp = timestamp;
 
 	uint32_t crc = esp_crc32_le(0, (uint8_t *)&crc_buffer, sizeof(struct meter_crc_buffer));
 
@@ -913,6 +924,13 @@ size_t loaded_transaction_size;
 int loaded_transaction_entry = -1;
 long loaded_transaction_on_confirmed_offset;
 enum transaction_message_type_id loaded_transaction_type;
+
+void loaded_transaction_reset(){
+	loaded_transaction_timestamp = LONG_MAX;
+	free(loaded_transaction_data);
+	loaded_transaction_data = NULL;
+	loaded_transaction_entry = -1;
+}
 
 /*
  * This function will try to correct the file as much as possible to keep the transaction state consistent if possible.
@@ -1147,7 +1165,7 @@ esp_err_t load_next_transaction_message(){
 		return ESP_OK;
 	}
 
-	loaded_transaction_timestamp = LONG_MAX;
+	loaded_transaction_reset();
 
 	char file_path[32];
 	FILE * fp = NULL;
@@ -1283,8 +1301,10 @@ cleanup:
 	if(fp != NULL)
 		fclose(fp);
 
-	if(ret == ESP_FAIL)
+	if(ret == ESP_FAIL){
 		fail_transaction_message_on_file(file_path);
+		loaded_transaction_reset();
+	}
 
 	return ret;
 }
@@ -2059,6 +2079,9 @@ int ocpp_transaction_clear_all(){
 	if(foreach_transaction_file(remove_transaction_file, &failed_removal_count, false) != ESP_OK){
 		ESP_LOGE(TAG, "Unable to loop over transaction file to clear all");
 	}
+
+	loaded_transaction_reset();
+	known_message_count = -1;
 
 	xSemaphoreGive(file_lock);
 

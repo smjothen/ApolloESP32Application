@@ -923,6 +923,10 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_interval = -1;
 }
 
+bool ocpp_is_connected(){
+	return esp_websocket_client_is_connected(client);
+}
+
 esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 	ESP_LOGI(TAG, "Starting ocpp");
 
@@ -1305,6 +1309,7 @@ cJSON * ocpp_task_get_diagnostics(){
 	cJSON_AddStringToObject(res, "b_meter_nr", boot_parameter_meter_nr);
 	cJSON_AddStringToObject(res, "b_meter_type", boot_parameter_meter_type);
 
+	cJSON_AddBoolToObject(res, "is_connected", ocpp_is_connected());
 	cJSON_AddBoolToObject(res, "active_call", (ocpp_active_call_queue != NULL && !uxQueueSpacesAvailable(ocpp_active_call_queue)));
 	cJSON_AddNumberToObject(res, "last_call_time", last_call_timestamp);
 

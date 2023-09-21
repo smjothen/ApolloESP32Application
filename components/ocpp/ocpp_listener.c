@@ -25,16 +25,9 @@ struct ocpp_call_callback_with_data{
 	void * cb_data;
 };
 
-static bool is_connected = false;
-
 static struct ocpp_call_callback_with_data callbacks[OCPP_CALL_ACTION_ID_COUNT] = {0};
 
-bool ocpp_is_connected(){
-	return is_connected;
-}
-
 void clean_listener(){
-	is_connected = false;
 	task_to_notify = NULL;
 	notify_offset = 0;
 
@@ -261,7 +254,8 @@ cJSON * ocpp_listener_get_diagnostics(){
 		return res;
 	}
 
-	cJSON_AddBoolToObject(res, "is_connected", is_connected);
+	cJSON_AddBoolToObject(res, "dynamic_buffer exists", dynamic_buffer != NULL);
+	cJSON_AddBoolToObject(res, "dynamic_failed", dynamic_failed);
 	return res;
 }
 
@@ -272,21 +266,13 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 	switch (event_id) {
 	case WEBSOCKET_EVENT_CONNECTED:
 		ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
-		if(is_connected == false){
-			is_connected = true;
-
-			if(task_to_notify != NULL)
-				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
-		}
+		if(task_to_notify != NULL)
+			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
 		break;
 	case WEBSOCKET_EVENT_DISCONNECTED:
 		ESP_LOGW(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-		if(is_connected == true){
-			is_connected = false;
-
-			if(task_to_notify != NULL)
-				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
-		}
+		if(task_to_notify != NULL)
+			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CONNECTION_CHANGED<<notify_offset, eSetBits);
 		break;
 	case WEBSOCKET_EVENT_DATA:
 		switch(data->op_code){

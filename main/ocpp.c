@@ -3713,6 +3713,8 @@ static void ocpp_task(){
 
 					case ESP_FAIL:
 						ESP_LOGE(TAG, "Unable to handle ocpp call");
+
+						connected = ocpp_is_connected(); // Check if problem is caused by unregistered disconnect
 						problem_count++; //TODO: integrate with problem count restart
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
 					}

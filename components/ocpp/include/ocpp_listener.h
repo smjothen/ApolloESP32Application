@@ -39,11 +39,6 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 void clean_listener();
 
 /**
- * @brief True if websocket connection to central system is available.
- */
-bool ocpp_is_connected();
-
-/**
  * @brief get a json object containing information about the ocpp listener state.
  */
 cJSON * ocpp_listener_get_diagnostics();

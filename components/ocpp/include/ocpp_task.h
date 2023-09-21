@@ -139,6 +139,11 @@ uint8_t get_blocked_enqueue_mask();
 size_t enqueued_call_count();
 
 /**
+ * @brief True if websocket connection to central system is available.
+ */
+bool ocpp_is_connected();
+
+/**
  * @brief starts ocpp connection with CS
  *
  * @param ocpp_config structure containing read/write values persisted through boot

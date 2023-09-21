@@ -1163,7 +1163,7 @@ esp_err_t get_normalized_time(time_t relative_start, int time_since_start, const
  * @brief returns the time when it will become valid starting at relative_start + relative_offset.
  */
 static time_t get_when_schedule_is_active(time_t relative_start, int relative_offset, struct ocpp_charging_profile * profile, int * transaction_id){
-	if(profile->transaction_id != NULL && (transaction_id == NULL || transaction_id != profile->transaction_id)) // Invalid due to transaction id mismatch
+	if(profile->transaction_id != NULL && (transaction_id != NULL && *transaction_id != *profile->transaction_id)) // Invalid due to transaction id mismatch
 		return LONG_MAX;
 
 	// Find the earliest time it can be active from
