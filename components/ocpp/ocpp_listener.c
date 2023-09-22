@@ -351,5 +351,20 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 		if(task_to_notify != NULL)
 			xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_FAILURE<<notify_offset, eSetBits);
 		break;
+
+	case WEBSOCKET_EVENT_CLOSED:
+			ESP_LOGW(TAG, "WEBSOCKET_EVENT_CLOSED");
+			if(task_to_notify != NULL)
+				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CLOSED<<notify_offset, eSetBits);
+
+			break;
+
+	case WEBSOCKET_EVENT_BEFORE_CONNECT:
+			ESP_LOGI(TAG, "WEBSOCKET_EVENT_BEFORE_CONNECT");
+			break;
+
+	default:
+			ESP_LOGW(TAG, "Unhandled websocket event: %" PRId32, event_id);
+
 	}
 }

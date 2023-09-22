@@ -3311,6 +3311,7 @@ static void transition_online(){
 
 static void transition_offline(){
 	last_online_timestamp = time(NULL);
+	ESP_LOGW(TAG, "Transition offline at: %" PRId64, last_online_timestamp);
 
 	previous_enqueue_mask = get_blocked_enqueue_mask();
 	ESP_LOGW(TAG, "Blocking generic and transaction messages. Storing current mask: %d", previous_enqueue_mask);
@@ -3692,6 +3693,9 @@ static void ocpp_task(){
 
 				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
 					break;
+
+				if(websocket_event & eOCPP_WEBSOCKET_CLOSED)
+						ocpp_end_and_reconnect(true); // TODO: Check if eOCPP_WEBSOCKET_CLOSED is ever sent in a state where the websocket auto-reconnect is active
 			}
 
 			if(task_event & eOCPP_TASK_CALL_TIMEOUT){
@@ -3714,8 +3718,10 @@ static void ocpp_task(){
 					case ESP_FAIL:
 						ESP_LOGE(TAG, "Unable to handle ocpp call");
 
-						connected = ocpp_is_connected(); // Check if problem is caused by unregistered disconnect
+						if(connected && !ocpp_is_connected()) // Check if problem is caused by unregistered disconnect
+								transition_offline();
 						problem_count++; //TODO: integrate with problem count restart
+						last_problem_timestamp = time(NULL);
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
 					}
 				}else{
@@ -3724,7 +3730,7 @@ static void ocpp_task(){
 			}
 
 			if(!connected && last_online_timestamp + OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT <= time(NULL)){
-				ESP_LOGE(TAG, "%d seconds since OCPP was last online, attempting reboot", OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT);
+				ESP_LOGE(TAG, "%" PRId64 " seconds since OCPP was last online, attempting reboot", time(NULL) - last_online_timestamp);
 				esp_restart(); // TODO: write reason for reboot;
 			}
 		}

@@ -45,10 +45,14 @@ cJSON * ocpp_listener_get_diagnostics();
 
 /**
  * @brief events that the listener can send with xTaskNotify
+ * @note Difference between disconnect and closed in the description is that disconnect is usually the result of failure.
+ * in case of a disconnect the websocket_client_config_t.disable_auto_reconnect will have an effect. disable_auto_reconnect
+ * will not have an effect on closed.
  */
 enum ocpp_websocket_event{
 	eOCPP_WEBSOCKET_CONNECTION_CHANGED = 1<<0, ///< Websocket changed to connected or disconnected
 	eOCPP_WEBSOCKET_FAILURE = 1<<1, ///< A failure occured in the websocket
 	eOCPP_WEBSOCKET_RECEIVED_MATCHING = 1<<2, ///< A .conf matching the active call was received
+	eOCPP_WEBSOCKET_CLOSED = 1<<3, //< Websocket message sent with request to closed connection
 };
 #endif /*OCPP_LISTENER_H*/
