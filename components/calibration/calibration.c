@@ -344,7 +344,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float allowedCurrent = 0.1;
             float allowedVoltage = 0.1;
 
-            TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
+            TickType_t maxWait = pdMS_TO_TICKS(5 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
@@ -1070,6 +1070,8 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
         ESP_LOGE(TAG, "Unknown CalibrationUdpMessage.Data type!");
     }
 
+    CalibrationOverload overloadBefore = ctx->Overloaded;
+
     // Do simplified overload checking
     ctx->Overloaded = None;
 
@@ -1099,6 +1101,14 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
                 ctx->Overloaded |= (1 << i);
             }
         }
+    }
+
+    if (overloadBefore != ctx->Overloaded) {
+        CALLOG(ctx, "- Overload %d%d%d %.2f %.2f %.2f",
+                !!(ctx->Overloaded & (1 << 0)),
+                !!(ctx->Overloaded & (1 << 1)),
+                !!(ctx->Overloaded & (1 << 2)),
+                localCurrents[0], localCurrents[1], localCurrents[2]);
     }
 }
 
