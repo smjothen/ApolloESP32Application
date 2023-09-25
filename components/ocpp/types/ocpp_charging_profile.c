@@ -164,7 +164,7 @@ enum ocppj_err_t charging_schedule_from_json(cJSON * chargingSchedule, const cha
 		if(cJSON_IsArray(periods_json)){
 
 			int periods_count = cJSON_GetArraySize(periods_json);
-			if(periods_count > 0 && periods_count <  max_periods){
+			if(periods_count > 0 && periods_count <= max_periods){
 
 				struct ocpp_charging_schedule_period_list * entry = &(charging_schedule_out->schedule_period);
 				for(int i = 0; i < periods_count; i++){

@@ -1903,6 +1903,13 @@ static void ocpp_smart_task(){
 
 		if(!last_is_active && transaction_is_active){
 			ESP_LOGI(TAG, "Transaction changed from inactive to active");
+
+			// Indicate that last period is not active for current transaction
+			last_period.start_period = -1;
+			last_period.limit = -1;
+			last_period.number_phases = -1;
+			last_min  = -1.0f;
+
 			data |= eACTIVE_PROFILE_TX_CHANGE;
 			data |= eACTIVE_PROFILE_MAX_CHANGE;
 		}
