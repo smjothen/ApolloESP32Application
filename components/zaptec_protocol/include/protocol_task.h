@@ -37,6 +37,7 @@ char * MCU_GetSwVersionString();
 hw_speed_revision MCU_GetHwIdMCUSpeed();
 hw_power_revision MCU_GetHwIdMCUPower();
 bool IsUKOPENPowerBoardRevision();
+bool HasTamperDetection();
 bool IsProgrammableFPGAUsed();
 
 float MCU_GetOPENVoltage();
