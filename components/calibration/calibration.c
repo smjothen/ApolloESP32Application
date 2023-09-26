@@ -932,14 +932,22 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
+    uint32_t allowedMidBits = MID_STATUS_ALL_PAGES_EMPTY | MID_STATUS_NOT_CALIBRATED | MID_STATUS_NOT_VERIFIED | MID_STATUS_NOT_INITIALIZED | MID_STATUS_TICK_TIMEOUT;
+    switch(CAL_STATE(ctx)) {
+        case VerificationStart:
+        case VerificationRunning:
+        case VerificationDone:
+        case Done:
+            // Any other bits here would not allow verification
+            allowedMidBits = MID_STATUS_NOT_VERIFIED;
+            break;
+        default:
+            break;
+    }
+
     uint32_t status;
     if (calibration_read_mid_status(&status)) {
-        status &= ~MID_STATUS_ALL_PAGES_EMPTY;
-        status &= ~MID_STATUS_NOT_CALIBRATED;
-        status &= ~MID_STATUS_NOT_VERIFIED;
-        // These can occur if we MIDInit when starting calibration
-        status &= ~MID_STATUS_NOT_INITIALIZED;
-        status &= ~MID_STATUS_TICK_TIMEOUT;
+        status &= ~allowedMidBits;
 
         if (status) {
             calibration_fail(ctx, "Unexpected MID status 0x%08X", status);
@@ -1129,25 +1137,6 @@ void calibration_reset(CalibrationCtx *ctx) {
 
 void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMessage *msg) {
     bool isRun = msg->State == Starting && msg->has_Run;
-
-    /*
-    static TickType_t stateTick = 0;
-
-    if (msg->State != CAL_STATE(ctx) || stateTick == 0) {
-        if (stateTick != 0) {
-            ESP_LOGI(TAG, "State %d -> %d took %ds", CAL_STATE(ctx), msg->State, pdTICKS_TO_MS(xTaskGetTickCount() - stateTick) / 1000);
-        }
-
-        stateTick = xTaskGetTickCount();
-    } else {
-
-        // Same state - allow 60s in current state before transitioning
-        if (xTaskGetTickCount() - stateTick > pdMS_TO_TICKS(60 * 1000)) {
-            calibration_fail(ctx, "State timeout");
-        }
-
-    }
-    */
 
     // If failed, allow starting a new run
     if (!isRun && CAL_CSTATE(ctx) == Failed) {
