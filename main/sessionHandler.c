@@ -508,6 +508,15 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 	}
 
 	if(ocpp_max_limit != max_charging_limit){
+		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
+		if(ret == MsgWriteAck){
+			ESP_LOGI(TAG, "Max current updated");
+			ocpp_max_limit = max_charging_limit;
+		}else{
+			ESP_LOGE(TAG, "Unable to update max current");
+		}
+
 		if(max_charging_limit >= 0.0f && max_charging_limit <= 0.05f){
 			ESP_LOGI(TAG, "OCPP charging variable set to 0. Attempting to pausing charging");
 
@@ -522,7 +531,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 				ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED during ocpp set charging variables");
 			}
 
-		}else if(ocpp_max_limit >= 0.0f && ocpp_max_limit <= 0.05f){
+		}else if(ocpp_max_limit >= 0.0f && ocpp_max_limit <= 0.05f && max_charging_limit > 0.05f){
 			ESP_LOGI(TAG, "OCPP charging variable no longer set to 0. Attempting to resume charging");
 
 			MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
@@ -545,15 +554,6 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 			{
 				ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp set charging variables");
 			}
-		}
-
-		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
-		if(ret == MsgWriteAck){
-			ESP_LOGI(TAG, "Max current updated");
-			ocpp_max_limit = max_charging_limit;
-		}else{
-			ESP_LOGE(TAG, "Unable to update max current");
 		}
 	}
 
@@ -2035,7 +2035,8 @@ static void handle_preparing(){
 		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
 
 		//Use standalone until changed by ocpp_smart_charging
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, storage_Get_StandaloneCurrent());
+		ocpp_max_limit = storage_Get_StandaloneCurrent();
+		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, ocpp_max_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Max Current set to %f", storage_Get_StandaloneCurrent());
 		}else{

@@ -1690,8 +1690,8 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 		return ESP_ERR_NO_MEM;
 	}
 
-	*tx_schedule.start_schedule = relative_start + sec_since_start;
-	*max_schedule.start_schedule = relative_start + sec_since_start;
+	*tx_schedule.start_schedule = relative_start;
+	*max_schedule.start_schedule = relative_start;
 
 
 	tx_schedule.min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
