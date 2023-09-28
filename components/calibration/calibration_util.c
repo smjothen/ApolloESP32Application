@@ -46,7 +46,7 @@ const char *calibration_state_to_string(CalibrationCtx *ctx) {
     const char *_calibration_states[] = { FOREACH_CS(CS_STRING) };
     size_t max_state = sizeof (_calibration_states) / sizeof (_calibration_states[0]);
     if (state < 0 || state > max_state || !_calibration_states[state]) {
-        return "UnknownCalibrationState";
+        return "Unknown";
     }
     return _calibration_states[state];
 }
@@ -56,7 +56,7 @@ const char *calibration_step_to_string(CalibrationCtx *ctx) {
     const char *_calibration_steps[] = { FOREACH_CLS(CS_STRING) };
     size_t max_state = sizeof (_calibration_steps) / sizeof (_calibration_steps[0]);
     if (state < 0 || state > max_state || !_calibration_steps[state]) {
-        return "UnknownStep";
+        return "Unknown";
     }
     return _calibration_steps[state];
 }
@@ -66,7 +66,7 @@ const char *charger_state_to_string(CalibrationCtx *ctx) {
     const char *_charger_states[] = { FOREACH_CHS(CS_STRING) };
     size_t max_state = sizeof (_charger_states) / sizeof (_charger_states[0]);
     if (state < 0 || state > max_state || !_charger_states[state]) {
-        return "UnknownChargerState";
+        return "Unknown";
     }
     return _charger_states[state];
 }

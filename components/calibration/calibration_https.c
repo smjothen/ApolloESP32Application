@@ -203,7 +203,7 @@ bool calibration_https_upload_parameters(CalibrationCtx *ctx, const char *raw, b
 		}
 
 		if (verification) {
-			// If we'ves gotten this far into Done state, we should've passed?
+			// If we've gotten this far into Done state, we should've passed?
 			cJSON_AddBoolToObject(data, "pass", true);
 
 			// TODO: Add more??

@@ -85,7 +85,9 @@ void calibration_log_line(CalibrationCtx *ctx, const char *format, ...) {
     fclose(fp);
 }
 
-void calibration_log_dump(void) {
+int calibration_send_state(CalibrationCtx *);
+
+void calibration_log_dump(CalibrationCtx *ctx) {
     FILE *fp = NULL;
 
     if (!(fp = fopen(CALIBRATION_LOG, "r"))) {
@@ -93,16 +95,26 @@ void calibration_log_dump(void) {
         return;
     }
 
-    while (fgets(hexbuf, sizeof (hexbuf), fp) != NULL) {
-        char *end = strchr(hexbuf, '\n');
-        if (end) {
-            *end = 0;
-        }
-
-        ESP_LOGI(TAG, "Log: %s", hexbuf);
-
-        publish_debug_telemetry_observation_Calibration(hexbuf);
+    struct stat st;
+    if (stat(CALIBRATION_LOG, &st) != 0) {
+        ESP_LOGE(TAG, "Can't stat log");
+        return;
     }
+
+    char *buf = calloc(st.st_size + 1, 1);
+    if (!buf) {
+        ESP_LOGE(TAG, "Can't alloc buffer");
+        return;
+    }
+
+    if(fread(buf, st.st_size, 1, fp) != 1) {
+        ESP_LOGE(TAG, "Short read of file");
+        return;
+    }
+
+    publish_debug_telemetry_observation_Calibration(buf);
+
+    free(buf);
 
     fclose(fp);
     remove(CALIBRATION_LOG);
@@ -260,7 +272,7 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
             }
 
             // Enter MID mode
-            if (calibration_set_mode(ctx, Closed)) {
+            if (calibration_set_mode(ctx, Open)) {
                 CAL_CSTATE(ctx) = Complete;
             }
 
@@ -329,10 +341,6 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float voltage[3];
             float current[3];
 
-            if (!calibration_set_mode(ctx, Closed)) {
-                return false;
-            }
-
             if (!calibration_get_emeter_snapshot(ctx, &source, current, voltage)) {
                 break;
             }
@@ -348,7 +356,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float allowedCurrent = 0.1;
             float allowedVoltage = 0.1;
 
-            TickType_t maxWait = pdMS_TO_TICKS(5 * 1000);
+            TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
                 expectedCurrent = 10.0;
@@ -380,6 +388,10 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 if (ctx->Ticks[WARMUP_WAIT_TICK] == 0) {
                     ctx->Ticks[WARMUP_WAIT_TICK] = xTaskGetTickCount();
                 } else if (xTaskGetTickCount() - ctx->Ticks[WARMUP_WAIT_TICK] > maxWait) {
+                    if (!calibration_set_mode(ctx, Open)) {
+                        return false;
+                    }
+
                     ctx->Ticks[WARMUP_WAIT_TICK] = 0;
                     CAL_CSTATE(ctx) = Complete;
 
@@ -861,7 +873,7 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             isCalibratedFlag = true;
         }
 
-        calibration_log_dump();
+        calibration_log_dump(ctx);
 
         ctx->Flags |= CAL_FLAG_DONE;
     }
@@ -1082,8 +1094,6 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
         ESP_LOGE(TAG, "Unknown CalibrationUdpMessage.Data type!");
     }
 
-    CalibrationOverload overloadBefore = ctx->Overloaded;
-
     // Do simplified overload checking
     ctx->Overloaded = None;
 
@@ -1113,14 +1123,6 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
                 ctx->Overloaded |= (1 << i);
             }
         }
-    }
-
-    if (overloadBefore != ctx->Overloaded) {
-        CALLOG(ctx, "- Overload %d%d%d %.2f %.2f %.2f",
-                !!(ctx->Overloaded & (1 << 0)),
-                !!(ctx->Overloaded & (1 << 1)),
-                !!(ctx->Overloaded & (1 << 2)),
-                localCurrents[0], localCurrents[1], localCurrents[2]);
     }
 }
 
@@ -1347,20 +1349,29 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
 void calibration_task(void *pvParameters) {
     devInfo = i2cGetLoadedDeviceInfo();
 
-    //calibration_mode_test(&ctx);
+    CALLOGTIME(&ctx, "- Task Started");
 
     while (1) {
-        if (connectivity_GetActivateInterface() != eCONNECTION_WIFI) {
-            ESP_LOGI(TAG, "Activating WiFi interface ...");
-            connectivity_ActivateInterface(eCONNECTION_WIFI);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            continue;
-        }
-
         if (!network_WifiIsConnected()) {
             ESP_LOGI(TAG, "Waiting for WiFi connection ...");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
+        }
+
+        tcpip_adapter_ip_info_t ip_info; 
+        tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ip_info);
+
+        wifi_ap_record_t wifidata;
+        if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
+            CALLOGTIME(&ctx, "- Connected %s BSSID %02X:%02X:%02X:%02X:%02X:%02X RSSI %d IP " IPSTR, wifidata.ssid, 
+                    wifidata.bssid[0],
+                    wifidata.bssid[1],
+                    wifidata.bssid[2],
+                    wifidata.bssid[3],
+                    wifidata.bssid[4],
+                    wifidata.bssid[5],
+                    wifidata.rssi,
+                    IP2STR(&ip_info.ip));
         }
 
         int sock = create_multicast_ipv4_socket();
@@ -1370,6 +1381,8 @@ void calibration_task(void *pvParameters) {
             continue;
         }
 
+                 
+        CALLOGTIME(&ctx, "- Socket Created");
         ESP_LOGI(TAG, "UDP socket created ...");
 
         serv.Socket = sock;
@@ -1455,16 +1468,21 @@ void calibration_task(void *pvParameters) {
                     }
 
                     static TickType_t periodicLog = 0;
+                    if (periodicLog == 0) {
+                        periodicLog = xTaskGetTickCount();
+                    }
 
-                    if (xTaskGetTickCount() - periodicLog > pdMS_TO_TICKS(30000)) {
+                    if (xTaskGetTickCount() - periodicLog > pdMS_TO_TICKS(60000)) {
                         int8_t rssi = 0;
                         wifi_ap_record_t wifidata;
-			                  if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
+                        if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
                             rssi = wifidata.rssi;
                         }
 
-                        // Every 30 seconds update log with some state
-                        CALLOGTIME(&ctx, "- RSSI %d - (%d TX / %d RX)", rssi, ctx.PktsSent, ctx.PktsAckd);
+			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+
+                        // Every 60 seconds update log with some state
+                        CALLOGTIME(&ctx, "- RSSI %d - (%d TX / %d RX) - DMA %d", rssi, ctx.PktsSent, ctx.PktsAckd, min_dma);
 
                         periodicLog = xTaskGetTickCount();
                     }
@@ -1488,6 +1506,7 @@ void calibration_task(void *pvParameters) {
             }
         }
 
+        CALLOGTIME(&ctx, "- Socket error");
         ESP_LOGE(TAG, "Shutting down socket and restarting...");
         shutdown(sock, 0);
         close(sock);

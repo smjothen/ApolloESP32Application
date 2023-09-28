@@ -84,6 +84,8 @@ bool calibration_step_calibrate_current_offset(CalibrationCtx *ctx) {
 
                     calibration_write_parameter(ctx, type, phase, offset);
 
+                    CALLOG(ctx, "- L%d = %f", phase + 1, offset);
+
                     if (!emeter_write_float(I1_OFFS + phase, offset, 23)) {
                         ESP_LOGE(TAG, "%s: IOFFS(%d) write failed!", calibration_state_to_string(ctx), phase);
                         return false;
