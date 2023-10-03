@@ -359,11 +359,12 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
-                expectedCurrent = 10.0;
+                expectedCurrent = 5.0;
             } else if (ctx->VerTest & HighLevelCurrent) {
                 expectedCurrent = 32.0;
             } else {
-                expectedCurrent = 16.0;
+                maxWait = pdMS_TO_TICKS(20 * 1000);
+                expectedCurrent = 0.5;
             }
 
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
@@ -396,9 +397,9 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                     CAL_CSTATE(ctx) = Complete;
 
                     if (calibration_is_simulation()) {
-                        ESP_LOGI(TAG, "Resetting warmup current");
+                        ESP_LOGI(TAG, "Resetting test warmup current");
                         extern double _test_currents[];
-                        _test_currents[WarmingUp] = 32.0;
+                        _test_currents[WarmingUp] = expectedCurrent;
                     }
 
                     break;
