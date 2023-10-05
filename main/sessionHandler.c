@@ -1905,6 +1905,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
+			start_transaction();
+			break;
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_UNAVAILABLE:
@@ -1920,6 +1922,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_PREPARING:
+			start_transaction();
+			break;
 		case eOCPP_CP_STATUS_CHARGING:
 			break;
 		case eOCPP_CP_STATUS_SUSPENDED_EV:

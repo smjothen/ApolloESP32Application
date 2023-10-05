@@ -91,6 +91,7 @@ static esp_err_t read_header(FILE * fp, struct log_header * header){
 	if(fread(header, sizeof(struct log_header), 1, fp) != 1){
 
 		if(feof(diagnostics_file) != 0){
+			printf("No diagnostics log header written\n");
 			return ESP_ERR_NOT_FOUND;
 		}else{
 			printf("Unable to read header: %s\n", strerror(errno));
@@ -114,15 +115,13 @@ static esp_err_t read_header(FILE * fp, struct log_header * header){
 
 static esp_err_t update_header_if_required(){
 
-	esp_err_t err;
 	if(is_header_valid){
-		err = ESP_OK;
+		return ESP_OK;
 	}else{
-		err = read_header(diagnostics_file, &header);
-		is_header_valid = (err != ESP_OK);
+		esp_err_t err = read_header(diagnostics_file, &header);
+		is_header_valid = (err == ESP_OK);
+		return err;
 	}
-
-	return err;
 }
 
 struct entry_crc_buffer{
@@ -134,14 +133,18 @@ struct entry_crc_buffer{
 static esp_err_t read_entry(FILE * fp, struct log_entry_info * entry_info_out, char * entry_content_out){
 	if(fread(entry_info_out, sizeof(struct log_entry_info), 1, fp) != 1){
 		if(ferror(fp) == 0){
+			printf("No entry info found\n");
 			return ESP_ERR_NOT_FOUND;
 		}else{
+			printf("Failed to read entry info\n");
 			return ESP_FAIL;
 		}
 	}
 
-	if(entry_info_out->length > CONFIG_ZAPTEC_DIAGNOSTICS_LOG_ENTRY_SIZE)
+	if(entry_info_out->length > CONFIG_ZAPTEC_DIAGNOSTICS_LOG_ENTRY_SIZE){
+		printf("Invalid length in entry_info\n");
 		return ESP_ERR_INVALID_SIZE;
+	}
 
 	int date_length = ocpp_print_date_time(entry_info_out->timestamp, entry_content_out, 30);
 	if(date_length > 30)
@@ -149,20 +152,26 @@ static esp_err_t read_entry(FILE * fp, struct log_entry_info * entry_info_out, c
 
 	entry_content_out[date_length++] = ' ';
 
-	if(fread(entry_content_out + date_length, entry_info_out->length, 1, fp) != 1)
+	if(fread(entry_content_out + date_length, entry_info_out->length, 1, fp) != 1){
+		printf("Unable to read entry content %ld, length %u\n", ftell(fp), entry_info_out->length);
 		return ESP_FAIL;
+	}
 
 	uint32_t crc_written;
-	if(fread(&crc_written, sizeof(uint32_t), 1, fp) != 1)
+	if(fread(&crc_written, sizeof(uint32_t), 1, fp) != 1){
+		printf("Unable to read entry crc\n");
 		return ESP_FAIL;
+	}
 
 	struct entry_crc_buffer crc_buffer = {
 		.crc_info = esp_crc32_le(0, (uint8_t *)entry_info_out, sizeof(struct log_entry_info)),
 		.crc_content = esp_crc32_le(0, (uint8_t *)(entry_content_out + date_length), entry_info_out->length)
 	};
 
-	if(crc_written != esp_crc32_le(0, (uint8_t *)&crc_buffer, sizeof(struct entry_crc_buffer)))
+	if(crc_written != esp_crc32_le(0, (uint8_t *)&crc_buffer, sizeof(struct entry_crc_buffer))){
+		printf("CRC did not match for entry\n");
 		return ESP_ERR_INVALID_CRC;
+	}
 
 	entry_content_out[entry_info_out->length += date_length] = '\0';
 	return ESP_OK;
@@ -410,16 +419,17 @@ esp_err_t diagnostics_log_write(const char * fmt, va_list ap){
 		// An alternative would be to use fflush which works on the filedes and not of FILE *.
 
 		if(!should_truncate){
-			if(fflush(diagnostics_file) != 0)
-				printf("Failed to fflush file: %s", strerror(errno));
+			if(fflush(diagnostics_file) != 0){
+				printf("Failed to fflush file: %s\n", strerror(errno));
+			}
+			fsync(fileno(diagnostics_file)); // https://github.com/espressif/esp-idf/issues/2820
 
 		}else{
-			if(fclose(diagnostics_file) != 0){
-				printf("Failed to close file: %s", strerror(errno));
-			}
+			if(fclose(diagnostics_file) != 0)
+				printf("Failed to close file: %s\n", strerror(errno));
 
-			if(should_truncate && truncate(file_path, truncate_length) != 0)
-				printf("Failed to truncate file: %s", strerror(errno));
+			if(truncate(file_path, truncate_length) != 0)
+				printf("Failed to truncate file: %s\n", strerror(errno));
 
 			// We reopen the file regardless of wheter or not close succeeded as if it fails the FILE * can not be trusted
 			diagnostics_file = fopen(file_path, "rb+");
@@ -551,21 +561,25 @@ void upload_diagnostics_ocpp(){
 	esp_err_t result = ESP_FAIL;
 
 	if(!filesystem_is_ready()){
+		printf("Filesyste Not ready for diagnostics upload\n");
 		goto error;
 	}
 
 	// "timer callback function must not [...] specify a non zero block time when accessing [...] a semaphore"
-	if(xSemaphoreTake(file_lock, 0) != pdTRUE)
+	if(xSemaphoreTake(file_lock, 0) != pdTRUE){
+		printf("Unable to take semaphore for diagnostics upload\n");
 		goto error;
+	}
 
 	release_lock = true;
 
 	if(update_header_if_required() != ESP_OK)
 		goto error;
 
-	if(fseek(diagnostics_file, header.read_offset, SEEK_SET) != 0)
+	if(fseek(diagnostics_file, header.read_offset, SEEK_SET) != 0){
+		printf("Unable to seek to read offset for diagnostics upload");
 		goto error;
-
+	}
 	long offset_from;
 
 	esp_http_client_config_t config = {
@@ -1022,7 +1036,11 @@ esp_err_t diagnostics_log_init(){
 			}else{
 				if(update_header_if_required() != ESP_OK){
 
-					struct log_header header = {.version = 1, .write_offset = OFFSET_CONTENT, .read_offset = OFFSET_CONTENT};
+					header.version = 1;
+					header.write_offset = OFFSET_CONTENT;
+					header.read_offset = OFFSET_CONTENT;
+					header.wrapped = false;
+
 					esp_err_t header_result = write_header(diagnostics_file, &header);
 
 					if(header_result != ESP_OK){
@@ -1031,8 +1049,6 @@ esp_err_t diagnostics_log_init(){
 					}else{
 						is_header_valid = true;
 					}
-				}else{
-					is_header_valid = true;
 				}
 			}
 		}
