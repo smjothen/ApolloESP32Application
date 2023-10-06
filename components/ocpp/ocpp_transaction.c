@@ -2113,8 +2113,8 @@ int ocpp_transaction_init(){
 		return -1;
 	}
 
-	file_lock = xSemaphoreCreateMutex();
-	if(file_lock == NULL){
+	SemaphoreHandle_t initial_lock = xSemaphoreCreateMutex();
+	if(initial_lock == NULL){
 		ESP_LOGE(TAG, "Unable to create file lock");
 		goto error;
 	}
@@ -2135,7 +2135,8 @@ int ocpp_transaction_init(){
 		ESP_LOGI(TAG, "Directory path '%s' exists", DIRECTORY_PATH);
 	}
 
-	xSemaphoreGive(file_lock);
+	xSemaphoreGive(initial_lock);
+	file_lock = initial_lock;
 
 	if(task_to_notify != NULL && start_result_cb != NULL && ocpp_transaction_get_oldest_timestamp() < LONG_MAX)
 		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
@@ -2148,10 +2149,8 @@ error:
 		ocpp_transaction_call_queue = NULL;
 	}
 
-	if(file_lock != NULL){
-		vSemaphoreDelete(file_lock);
-		file_lock = NULL;
-	}
+	if(initial_lock != NULL)
+		vSemaphoreDelete(initial_lock);
 
 	return -1;
 }

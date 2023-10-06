@@ -1690,8 +1690,8 @@ static esp_err_t create_composite_schedule(time_t relative_start, int sec_since_
 		return ESP_ERR_NO_MEM;
 	}
 
-	*tx_schedule.start_schedule = relative_start + sec_since_start;
-	*max_schedule.start_schedule = relative_start + sec_since_start;
+	*tx_schedule.start_schedule = relative_start;
+	*max_schedule.start_schedule = relative_start;
 
 
 	tx_schedule.min_charging_rate = profile_tx->charging_schedule.min_charging_rate;
@@ -1856,7 +1856,7 @@ static void ocpp_smart_task(){
 	transaction_is_active = false;
 
 	while(true){
-
+		ESP_LOGI(TAG, "Awaiting renewal (%"PRIu32" sec) or notification", next_renewal_delay);
 		uint32_t data = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(next_renewal_delay * 1000));
 		current_time = time(NULL);
 
@@ -1865,7 +1865,7 @@ static void ocpp_smart_task(){
 
 		bool last_is_active = transaction_is_active;
 
-		ESP_LOGI(TAG, "Handling event mask %" PRIx32 ", Renewal delay was: %"PRIu32, data, next_renewal_delay);
+		ESP_LOGI(TAG, "Handling event mask %" PRIx32 ", transaction duration '%" PRId64 "'", data, current_time - transaction_start_time);
 
 		if(data & eNOT_NEEDED){
 			ESP_LOGI(TAG, "Smart charging stopped");

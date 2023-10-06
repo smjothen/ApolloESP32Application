@@ -224,6 +224,18 @@ enum ocppj_err_t ocpp_charging_profile_from_json(cJSON * csChargingProfiles, int
 				int max_periods, struct ocpp_charging_profile * charging_profile_out,
 				char * error_description_out, size_t error_description_length){
 
+	if(!cJSON_IsObject(csChargingProfiles)){
+			enum ocppj_err_t ret;
+			if(cJSON_IsNull(csChargingProfiles)){
+					snprintf(error_description_out, error_description_length, "Expected 'ChargingProfile' object was missing");
+					ret = eOCPPJ_ERROR_FORMATION_VIOLATION;
+			}else{
+					snprintf(error_description_out, error_description_length, "Expected 'ChargingProfile' object, but had incorrect type");
+					ret = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			}
+			return ret;
+	}
+
 	enum ocppj_err_t ocppj_error = ocppj_get_int_field(csChargingProfiles, "chargingProfileId", true,
 							&charging_profile_out->profile_id,
 							error_description_out, error_description_length);
