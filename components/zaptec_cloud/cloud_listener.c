@@ -3406,6 +3406,44 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				chargeSession_SetTestFileCorrection();
 				responseStatus = 200;
 			}
+			else if(strstr(commandString, "OCPP"))
+			{
+				if(strstr(commandString, "OCPPURL:"))
+				{
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					int len = strlen(&commandString[10]);
+					if(len <= CONFIG_OCPP_URL_MAX_LENGTH)
+					{
+						ESP_LOGI(TAG, "Setting OCPP URL: %s", &commandString[10]);
+					
+						storage_Set_url_ocpp(&commandString[10]);
+						storage_SaveConfiguration();
+
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
+				else if(strstr(commandString, "OCPPMODE:"))
+				{
+					enum session_controller new_session_controller = new_session_controller;
+					if(strstr(commandString, "OCPPMODE: 1"))
+						new_session_controller = eSESSION_STANDALONE;
+					else if (strstr(commandString, "OCPPMODE: 2"))
+						new_session_controller = eSESSION_ZAPTEC_CLOUD;
+					else if (strstr(commandString, "OCPPMODE: 3"))
+						new_session_controller = eSESSION_OCPP;
+
+					ESP_LOGW(TAG, "New:  session controller: %x", new_session_controller);
+					storage_Set_session_controller(new_session_controller);
+					storage_SaveConfiguration();
+					
+				}
+			}
 			else
 			{
 				responseStatus = 400;
