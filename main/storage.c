@@ -105,6 +105,10 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_transaction_message_attempts = 3;
 	configurationStruct.ocpp_transaction_message_retry_interval = 60;
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = true;
+	configurationStruct.ocpp_websocket_ping_interval = 10;
+	configurationStruct.ocpp_authorization_key[0] = 0;
+	configurationStruct.ocpp_default_id_token[0] = 0;
+	configurationStruct.ocpp_security_profile = 0;
 
 	// ocpp local auth list profile settings
 	configurationStruct.ocpp_local_auth_list_enabled = true;
@@ -1115,7 +1119,8 @@ esp_err_t storage_ReadConfiguration()
 
 	//OCPP settings
 	readSize = CONFIG_OCPP_URL_MAX_LENGTH;
-	err += nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize);
+	if(nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize) != 0)
+		strcpy(configurationStruct.url_ocpp, "");
 	readSize = CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH;
 	if(nvs_get_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp, &readSize) != 0)
 		configurationStruct.chargebox_identity_ocpp[0] = '\0';
@@ -1123,43 +1128,67 @@ esp_err_t storage_ReadConfiguration()
 		configurationStruct.availability_ocpp = configurationStruct.isEnabled;
 	if(nvs_get_u8(configuration_handle, "authKeyFromOcpp", (uint8_t *)&configurationStruct.authorization_key_set_from_zaptec_ocpp) != 0)
 		configurationStruct.authorization_key_set_from_zaptec_ocpp = false;
-	err += nvs_get_u8(configuration_handle, "sessionCtrl", (uint8_t *)&configurationStruct.session_controller);
+	if(nvs_get_u8(configuration_handle, "sessionCtrl", (uint8_t *)&configurationStruct.session_controller) != 0)
+		configurationStruct.session_controller = 0; // Invalid session: require read of "standalone" configuration to determin value
 	if(nvs_get_u8(configuration_handle, "oAllowTxUnknown", (uint8_t *)&configurationStruct.ocpp_allow_offline_tx_for_unknown_id) != 0)
 		configurationStruct.ocpp_allow_offline_tx_for_unknown_id = false;
 	if(nvs_get_u8(configuration_handle, "oAuthCachEnable", (uint8_t *)&configurationStruct.ocpp_authorization_cache_enabled) != 0)
 		configurationStruct.ocpp_authorization_cache_enabled = true;
-	err += nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests);
-	//err += nvs_get_u8(configuration_handle, "oBlinkRequest", &configurationStruct.ocpp_blink_repeats);
-	err += nvs_get_u32(configuration_handle, "oClockAligned", &configurationStruct.ocpp_clock_aligned_data_interval);
-	err += nvs_get_u32(configuration_handle, "oConTimeout", &configurationStruct.ocpp_connection_timeout);
-	//err += nvs_get_str(configuration_handle, "oConPhaseRotate", &configurationStruct.ocpp_connector_phase_rotation);
-	err += nvs_get_u32(configuration_handle, "oHeartbeatInter", &configurationStruct.ocpp_heartbeat_interval);
-	//err += nvs_get_u8(configuration_handle, "oLightIntensity", &configurationStruct.ocpp_light_intensity);
-	err += nvs_get_u8(configuration_handle, "oAuthOffline", (uint8_t *)&configurationStruct.ocpp_local_authorize_offline);
-	err += nvs_get_u8(configuration_handle, "oPreAuth", (uint8_t *)&configurationStruct.ocpp_local_pre_authorize);
-	//err += nvs_get_u32(configuration_handle, "oEnergyOnInv_m", &configurationStruct.ocpp_max_energy_on_invalid_id);
-	err += nvs_get_u16(configuration_handle, "oMessageTimeOut", &configurationStruct.ocpp_message_timeout);
+	if(nvs_get_u8(configuration_handle, "oAuthRemoteTx", (uint8_t *)&configurationStruct.ocpp_authorize_remote_tx_requests) != 0)
+		configurationStruct.ocpp_authorize_remote_tx_requests = true;
+	//if(nvs_get_u8(configuration_handle, "oBlinkRequest", &configurationStruct.ocpp_blink_repeats))
+	//
+	if(nvs_get_u32(configuration_handle, "oClockAligned", &configurationStruct.ocpp_clock_aligned_data_interval) != 0)
+		configurationStruct.ocpp_clock_aligned_data_interval = 0;
+	if(nvs_get_u32(configuration_handle, "oConTimeout", &configurationStruct.ocpp_connection_timeout) != 0)
+		configurationStruct.ocpp_connection_timeout = 60;
+	//if(nvs_get_str(configuration_handle, "oConPhaseRotate", &configurationStruct.ocpp_connector_phase_rotation) != 0)
+	//
+	if(nvs_get_u32(configuration_handle, "oHeartbeatInter", &configurationStruct.ocpp_heartbeat_interval) != 0)
+		configurationStruct.ocpp_heartbeat_interval = 86400;
+	//if(nvs_get_u8(configuration_handle, "oLightIntensity", &configurationStruct.ocpp_light_intensity) != 0)
+	//
+	if(nvs_get_u8(configuration_handle, "oAuthOffline", (uint8_t *)&configurationStruct.ocpp_local_authorize_offline) != 0)
+		configurationStruct.ocpp_local_authorize_offline = true;
+	if(nvs_get_u8(configuration_handle, "oPreAuth", (uint8_t *)&configurationStruct.ocpp_local_pre_authorize) != 0)
+		configurationStruct.ocpp_local_pre_authorize = true;
+	//if(nvs_get_u32(configuration_handle, "oEnergyOnInv_m", &configurationStruct.ocpp_max_energy_on_invalid_id) != 0)
+	//
+	if(nvs_get_u16(configuration_handle, "oMessageTimeOut", &configurationStruct.ocpp_message_timeout) != 0)
+		configurationStruct.ocpp_message_timeout = 10;
 	readSize = DEFAULT_CSL_SIZE;
-	err += nvs_get_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data, &readSize);
+	if(nvs_get_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data, &readSize) != 0)
+		strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
 	readSize = DEFAULT_CSL_SIZE;
-	err += nvs_get_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data, &readSize);
-	err += nvs_get_u32(configuration_handle, "oMtrValSamplInt", &configurationStruct.ocpp_meter_value_sample_interval);
+	if(nvs_get_str(configuration_handle, "oMtrValSampl", configurationStruct.ocpp_meter_values_sampled_data, &readSize) != 0)
+		strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
+	if(nvs_get_u32(configuration_handle, "oMtrValSamplInt", &configurationStruct.ocpp_meter_value_sample_interval) != 0)
+		configurationStruct.ocpp_meter_value_sample_interval = 0;
 	if(nvs_get_u32(configuration_handle, "oStatusDur_min", &configurationStruct.ocpp_minimum_status_duration) != 0)
 		configurationStruct.ocpp_minimum_status_duration = 3;
 
-	err += nvs_get_u8(configuration_handle, "oResetRetries", &configurationStruct.ocpp_reset_retries);
-	err += nvs_get_u8(configuration_handle, "oStopTxnEvDisc", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect);
-	err += nvs_get_u8(configuration_handle, "oStopTxnOnInval", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_invalid_id);
+	if(nvs_get_u8(configuration_handle, "oResetRetries", &configurationStruct.ocpp_reset_retries) != 0)
+		configurationStruct.ocpp_reset_retries = 0;
+	if(nvs_get_u8(configuration_handle, "oStopTxnEvDisc", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect) != 0)
+		configurationStruct.ocpp_stop_transaction_on_ev_side_disconnect = true;
+	if(nvs_get_u8(configuration_handle, "oStopTxnOnInval", (uint8_t *)&configurationStruct.ocpp_stop_transaction_on_invalid_id) != 0)
+		configurationStruct.ocpp_stop_transaction_on_invalid_id = true;
 	readSize = DEFAULT_CSL_SIZE;
-	err += nvs_get_str(configuration_handle, "oStopTxnAlign", configurationStruct.ocpp_stop_txn_aligned_data, &readSize);
+	if(nvs_get_str(configuration_handle, "oStopTxnAlign", configurationStruct.ocpp_stop_txn_aligned_data, &readSize) != 0)
+		strcpy(configurationStruct.ocpp_stop_txn_aligned_data, "");
 	readSize = DEFAULT_CSL_SIZE;
-	err += nvs_get_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data, &readSize);
-	err += nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts);
-	err += nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval);
-	err += nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect);
+	if(nvs_get_str(configuration_handle, "oStopTxnSamp", configurationStruct.ocpp_stop_txn_sampled_data, &readSize) != 0)
+		strcpy(configurationStruct.ocpp_stop_txn_sampled_data, "");
+	if(nvs_get_u8(configuration_handle, "oTxnAttempts", &configurationStruct.ocpp_transaction_message_attempts) != 0)
+		configurationStruct.ocpp_transaction_message_attempts = 3;
+	if(nvs_get_u16(configuration_handle, "oTxnRetryInter", &configurationStruct.ocpp_transaction_message_retry_interval) != 0)
+		configurationStruct.ocpp_transaction_message_retry_interval = 60;
+	if(nvs_get_u8(configuration_handle, "oUlockConEvDisc", (uint8_t *)&configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect) != 0)
+		configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = true;
 	if(nvs_get_u32(configuration_handle, "oWebSockPingInt", &configurationStruct.ocpp_websocket_ping_interval))
 		configurationStruct.ocpp_websocket_ping_interval = 10;
-	err += nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled);
+	if(nvs_get_u8(configuration_handle, "oAuthLEnabled", (uint8_t *)&configurationStruct.ocpp_local_auth_list_enabled) != 0)
+		configurationStruct.ocpp_local_auth_list_enabled = true;
 	readSize = sizeof(configurationStruct.ocpp_authorization_key);
 	if(nvs_get_str(configuration_handle, "oAuthKey", configurationStruct.ocpp_authorization_key, &readSize) != ESP_OK)
 		configurationStruct.ocpp_authorization_key[0] = '\0';
