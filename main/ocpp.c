@@ -1361,10 +1361,10 @@ esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_li
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
-	if(write_configuration_bool(storage_Get_ocpp_stop_txn_sampled_data(), value_buffer) != 0)
+	if(strlen(storage_Get_ocpp_stop_txn_sampled_data()) > 500)
 		return ESP_FAIL;
 
-	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA, false, value_buffer);
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA, false, storage_Get_ocpp_stop_txn_sampled_data());
 	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
 		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA);
 		cJSON_Delete(key_value_json);
