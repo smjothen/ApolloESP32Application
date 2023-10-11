@@ -598,6 +598,39 @@ void resume_if_allowed(){
 	}
 }
 
+bool led_state_overwritten = false;
+
+enum ocpp_led_overwrite{
+	eOCPP_LED_PREPARING = LED_GREEN_CONTINUOUS, // Only used when authorization is accepted and awaiting cable connect
+	eOCPP_LED_RESERVED = LED_YELLOW_CONTINUOUS
+};
+
+void set_ocpp_state_led_overwrite(enum ocpp_led_overwrite led_overwrite){
+	ESP_LOGE(TAG, "Overwriting led state");
+
+	led_state_overwritten = true;
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverride, led_overwrite);
+	if(ret != MsgWriteAck)
+	{
+		ESP_LOGE(TAG, "Unable to set LED overwrite for ocpp state");
+	}
+}
+
+void clear_ocpp_state_led_overwrite(){
+	ESP_LOGE(TAG, "Checking for led overwrite");
+	if(!led_state_overwritten)
+		return;
+
+	led_state_overwritten = false;
+
+	ESP_LOGE(TAG, "Clearing led state overwrite");
+	MessageType ret = MCU_SendUint8Parameter(ParamLedOverrideClear, LED_CLEAR_WHITE);
+	if(ret != MsgWriteAck)
+	{
+		ESP_LOGE(TAG, "Unable to clear LED overwrite for ocpp state");
+	}
+}
+
 void sessionHandler_OcppTransitionToFaulted(){
 	ocpp_faulted = true;
 	ocpp_faulted_exit_state = ocpp_old_state;
@@ -645,6 +678,9 @@ void sessionHandler_OcppTransitionFromFaulted(){
  */
 void transition_to_preparing(){
 	preparing_started = time(NULL);
+	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED){
+		set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
+	}
 }
 
 void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
@@ -1123,15 +1159,6 @@ void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
 	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_accepted();
-	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
-	if(ret == MsgCommandAck)
-	{
-		ESP_LOGI(TAG, "MCU authorization denied command OK");
-	}
-	else
-	{
-		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
-	}
 	SetAuthorized(false);
 	sessionHandler_InitiateResetChargeSession();
 	chargeSession_ClearAuthenticationCode();
@@ -1142,6 +1169,15 @@ void cancel_authorization_on_tag_deny(const char * tag_1, const char * tag_2){
 	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_denied();
+	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied); // Will only change led, not actual authorization status on dsPIC
+	if(ret == MsgCommandAck)
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command OK");
+	}
+	else
+	{
+		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
+	}
 }
 
 void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
@@ -1844,6 +1880,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	if(old_state == eOCPP_CP_STATUS_FINISHING && new_state != eOCPP_CP_STATUS_FAULTED)
 		ocpp_finishing_session = false;
 
+	clear_ocpp_state_led_overwrite();
+
 	switch(new_state){
 	case eOCPP_CP_STATUS_AVAILABLE:
 		ESP_LOGI(TAG, "OCPP STATE AVAILABLE");
@@ -1948,7 +1986,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 			stop_transaction(new_state);
-			break;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
@@ -1957,7 +1994,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		break;
 	case eOCPP_CP_STATUS_RESERVED:
 		ESP_LOGI(TAG, "OCPP STATE RESERVED");
-
+		set_ocpp_state_led_overwrite(eOCPP_LED_RESERVED);
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
 		case eOCPP_CP_STATUS_FAULTED:
@@ -2001,7 +2038,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_RESERVED:
 			free(reservation_info);
 			reservation_info = NULL;
-			break;
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 			break;
 		default:
@@ -2063,7 +2099,7 @@ static void handle_preparing(){
 		if(isAuthorized){
 			pending_ocpp_authorize = true;
 
-			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING); // TODO: Improve signaling to user.
+			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
 			if(ret == MsgWriteAck)
 				ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
 			else
