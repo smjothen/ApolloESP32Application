@@ -506,13 +506,11 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 			ESP_LOGE(TAG, "Unable to update minimum current");
 		}
 	}
-
 	if(ocpp_max_limit != max_charging_limit){
 		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
-		if(ret == MsgWriteAck){
+		MessageType ret_limit = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
+		if(ret_limit == MsgWriteAck){
 			ESP_LOGI(TAG, "Max current updated");
-			ocpp_max_limit = max_charging_limit;
 		}else{
 			ESP_LOGE(TAG, "Unable to update max current");
 		}
@@ -554,6 +552,9 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 			{
 				ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp set charging variables");
 			}
+		}
+		if(ret_limit == MsgWriteAck){
+			ocpp_max_limit = max_charging_limit;
 		}
 	}
 
