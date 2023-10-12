@@ -4,3 +4,7 @@
 [submodule "components/mqtt/esp-mqtt"]
 	path = components/mqtt/esp-mqtt
 	url = https://github.com/ZaptecCharger/esp-mqtt
+[submodule "ApolloMCUApplication"]
+	path = ApolloMCUApplication
+	url = https://github.com/ZaptecCharger/ApolloMCUApplication
+	branch = feature-ci
