@@ -3,7 +3,7 @@
 #include "types/ocpp_enum.h"
 
 bool is_configuration_key(const char * key){
-	return ocpp_validate_enum(key, false, 47,
+	return ocpp_validate_enum(key, false, 48,
 				OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID,
 				OCPP_CONFIG_KEY_AUTHORIZATION_CACHE_ENABLED,
 				OCPP_CONFIG_KEY_AUTHORIZE_REMOTE_TX_REQUESTS,
@@ -50,5 +50,6 @@ bool is_configuration_key(const char * key){
 				OCPP_CONFIG_KEY_CHARGING_SCHEDULE_MAX_PERIODS,
 				OCPP_CONFIG_KEY_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED,
 				OCPP_CONFIG_KEY_MAX_CHARGING_PROFILES_INSTALLED,
-				OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0;
+				OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN,
+				OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED) == 0;
 }

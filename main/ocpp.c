@@ -1662,6 +1662,20 @@ esp_err_t add_configuration_ocpp_default_id_token(cJSON * key_list){
 	}
 }
 
+esp_err_t add_configuration_ocpp_authorization_required(cJSON * key_list){
+	if(write_configuration_bool(storage_Get_AuthenticationRequired(), value_buffer) != 0)
+		return ESP_FAIL;
+
+	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED, false, value_buffer);
+	if(cJSON_AddItemToArray(key_list, key_value_json) != true){
+		ESP_LOGE(TAG, "Unable to add value_buffer for configuration key '%s'", OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED);
+		cJSON_Delete(key_value_json);
+		return ESP_FAIL;
+	}else{
+		return ESP_OK;
+	}
+}
+
 static esp_err_t get_ocpp_configuration(const char * key, cJSON * configuration_out){
 
 	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0){
@@ -1813,6 +1827,8 @@ static esp_err_t get_ocpp_configuration(const char * key, cJSON * configuration_
 		// Non-standard configuration keys
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN) == 0){
 		return add_configuration_ocpp_default_id_token(configuration_out);
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED) == 0){
+		return add_configuration_ocpp_authorization_required(configuration_out);
 
 	}else{
 		return ESP_ERR_NOT_SUPPORTED;
@@ -1874,6 +1890,7 @@ void get_all_ocpp_configurations(cJSON * configuration_out){
 
 	// Non-standard configuration keys
 	add_configuration_ocpp_default_id_token(configuration_out);
+	add_configuration_ocpp_authorization_required(configuration_out);
 }
 
 static void get_configuration_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
@@ -2036,6 +2053,10 @@ static long validate_u(const char * value, uint32_t upper_bounds){
 	}
 
 	return value_long;
+}
+
+void set_AuthenticationRequired_bool(bool newValue){
+	storage_Set_AuthenticationRequired(newValue ? 1 : 0);
 }
 
 static int set_config_u8(void (*config_function)(uint8_t), const char * value, bool (*additional_validation)(uint8_t)){
@@ -2575,6 +2596,17 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			err = ESP_OK;
 		}else{
 			err = ESP_FAIL;
+		}
+	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED) == 0){
+		err = set_config_bool(set_AuthenticationRequired_bool, value, NULL);
+		MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, storage_Get_AuthenticationRequired());
+		if(ret == MsgWriteAck)
+		{
+			ESP_LOGI(TAG, "OCPP set AuthenticationRequired on dsPIC success: %" PRIu8, storage_Get_AuthenticationRequired());
+		}
+		else
+		{
+			ESP_LOGE(TAG, "OCPP set AuthenticationRequired on dsPIC failed: %" PRIu8, storage_Get_AuthenticationRequired());
 		}
 
 	}else if(is_configuration_key(key)){

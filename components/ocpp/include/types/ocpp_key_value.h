@@ -73,6 +73,7 @@
 #define OCPP_CONFIG_KEY_SECURITY_PROFILE "SecurityProfile"
 // Non-standard configuration keys
 #define OCPP_CONFIG_KEY_DEFAULT_ID_TOKEN "DefaultIdToken"
+#define OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED "AuthorizationRequired"
 ///@}
 
 /**
