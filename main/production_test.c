@@ -481,7 +481,26 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA375FEC")==0)
 		return "10.0.1.19";
 
-
+  // Sanmina line 1 RFIDs
+	if(strcmp(latest_tag.idAsString, "nfc-AA4FB11C")==0)
+		return "10.250.141.16";
+	if(strcmp(latest_tag.idAsString, "nfc-AAFF7FFC")==0)
+		return "10.250.141.17";
+	if(strcmp(latest_tag.idAsString, "nfc-BB9C29BE")==0)
+		return "10.250.141.18";
+	if(strcmp(latest_tag.idAsString, "nfc-BB6C76BE")==0)
+		return "10.250.141.19";
+	
+  // Sanmina line 1 alternate RFIDs
+	if(strcmp(latest_tag.idAsString, "nfc-BBCA17BE")==0)
+		return "10.250.141.16";
+	if(strcmp(latest_tag.idAsString, "nfc-BB8260BF")==0)
+		return "10.250.141.17";
+	if(strcmp(latest_tag.idAsString, "nfc-BB56FDBE")==0)
+		return "10.250.141.18";
+	if(strcmp(latest_tag.idAsString, "nfc-BBF062BE")==0)
+		return "10.250.141.19";
+	
 	ESP_LOGE(TAG, "Bad rfid tag");
 	return "BAD RFID TAG";
 }
@@ -841,8 +860,24 @@ int test_bg(){
 	char signal_string[256];
 	snprintf(signal_string, 256, "[AT+QCSQ] mode: %s, rssi: %d, rsrp: %d, sinr: %d, rsrq: %d\r\n", sysmode, rssi, rsrp, sinr, rsrq);
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, signal_string);
+	
+	int maxAttempts = 6;
+	int attempt = 0;
+	int http_result = 0;
 
-	int http_result = at_command_http_test();
+	while (attempt++ < maxAttempts) {
+		// Clear potential "pdpdeact" line and try again...
+		clear_lines();
+		http_result = at_command_http_test();
+		if (!http_result) {
+			break;
+		}
+
+		sprintf(payload, "bad http get: %d, retrying\r\n", http_result);
+		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
+		vTaskDelay(pdMS_TO_TICKS(10000));
+	}
+
 	if(http_result<0){
 		sprintf(payload, "bad http get: %d\r\n", http_result);
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_BG, payload);
@@ -912,7 +947,7 @@ int test_proximity(){
 
 	esp_err_t err = SFH7776_detect();
 
-	bool should_exist = (MCU_GetHwIdMCUSpeed() == 3);
+	bool should_exist = HasTamperDetection();
 	if((err == ESP_OK && !should_exist) || (err == ESP_FAIL && should_exist)){
 		sprintf(payload, "Proximity sensor %s", (err == ESP_OK) ? "present" : "missing");
 		prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_PROXIMITY, payload);
@@ -1276,7 +1311,7 @@ int test_speed_hwid(){
 
 	prodtest_send(TEST_STATE_MESSAGE, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 
-    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5)){
+    if((speed_hw_id == 1) || (speed_hw_id == 2) || (speed_hw_id == 3) || (speed_hw_id == 4) || (speed_hw_id == 5) || (speed_hw_id == 6) || (speed_hw_id == 7)){
 		prodtest_send(TEST_STATE_SUCCESS, TEST_ITEM_COMPONENT_SPEED_HWID, id_string);
 		return 0;
 	}else{
@@ -1760,7 +1795,8 @@ int charge_cycle_test(){
 	else
 	{
 		current_max = 8.0;
-		current_min = 6.5;
+    // Adjusted down for oven at Sanmina
+		current_min = 6.25;
 
 		/// Voltages2 3-phase
 		sprintf(payload, "Emeter voltages while charging: %f, %f, %f", emeter_voltages2[0], emeter_voltages2[1], emeter_voltages2[2]);

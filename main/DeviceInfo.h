@@ -82,8 +82,12 @@ struct RFIDTokens{
 typedef enum {
     HW_SPEED_UNKNOWN = 0,
     HW_SPEED_1       = 1,
+	HW_SPEED_2_EU    = 2,
     HW_SPEED_3_UK    = 3,	//MCU flashes FPGA
+	HW_SPEED_4_X804  = 4,
 	HW_SPEED_5_EU    = 5,   //MCU flashes FPGA
+	HW_SPEED_6_UK    = 6,   //MCU flashes FPGA, ICE5LP1K FPGA
+	HW_SPEED_7_EU    = 7,   //MCU flashes FPGA, ICE5LP1K FPGA
 } hw_speed_revision;
 
 

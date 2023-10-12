@@ -261,6 +261,25 @@ static void ota_task(void *pvParameters){
         	}
         }
 
+        // For chargers with new FPGA package, from Speed HW ID 6, don't allow download of older firmware versions
+        // than 2.3.0.0 because they will stop working without the correct FPGA image!
+		if(MCU_GetHwIdMCUSpeed() >= HW_SPEED_6_UK)
+		{
+			int a, b, c, d = 0;
+			int sscanfResult = sscanf(image_version, "%i.%i.%i.%i", &a, &b, &c, &d);
+			ESP_LOGI(TAG, "Parsed version number: %i.%i.%i.%i (Cnt:%d)", a, b, c, d, sscanfResult);
+			if((a > 2) || ((a == 2) && (b >= 3)))
+			{
+				ESP_LOGI(TAG, "Upgrade allowed");
+			}
+			else
+			{
+				log_message("Upgrade block due to unsupported FPGA version");
+				StopOTA(timeout_timer);
+				continue;
+			}
+		}
+
         // For chargers that are MID calibrated, ensure that they can't be downgraded to previous non-MID firmware below 2.1.0.0
         uint32_t MIDCharger = 0;
         MCU_GetMidStoredCalibrationId(&MIDCharger);
