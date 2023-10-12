@@ -414,27 +414,25 @@ esp_err_t diagnostics_log_write(const char * fmt, va_list ap){
 	off_t truncate_length;
 	esp_err_t write_result = write_entry(diagnostics_file, &entry_info, log_buffer, &should_truncate, &truncate_length);
 
-	if(last_sync + 60 < time(NULL) || should_truncate){
+	if(last_sync + 60 < time(NULL) && !should_truncate){
 		// We close the file routinely to make sure it is saved in case of reboot.
-		// An alternative would be to use fflush which works on the filedes and not of FILE *.
+		if(fflush(diagnostics_file) != 0)
+			printf("Failed to fflush file: %s\n", strerror(errno));
 
-		if(!should_truncate){
-			if(fflush(diagnostics_file) != 0){
-				printf("Failed to fflush file: %s\n", strerror(errno));
-			}
-			fsync(fileno(diagnostics_file)); // https://github.com/espressif/esp-idf/issues/2820
+		fsync(fileno(diagnostics_file)); // https://github.com/espressif/esp-idf/issues/2820
 
-		}else{
-			if(fclose(diagnostics_file) != 0)
-				printf("Failed to close file: %s\n", strerror(errno));
+		last_sync = time(NULL);
+	}
 
-			if(truncate(file_path, truncate_length) != 0)
-				printf("Failed to truncate file: %s\n", strerror(errno));
+	if(should_truncate || (write_result == ESP_FAIL && errno == EBADF)){ // We close the file to truncate or if filedes is invalid (file could point to dismounted file)
+		if(fclose(diagnostics_file) != 0)
+			printf("Failed to close file: %s\n", strerror(errno));
 
-			// We reopen the file regardless of wheter or not close succeeded as if it fails the FILE * can not be trusted
-			diagnostics_file = fopen(file_path, "rb+");
-		}
+		if(should_truncate && truncate(file_path, truncate_length) != 0)
+			printf("Failed to truncate file: %s\n", strerror(errno));
 
+		// We reopen the file regardless of wheter or not close succeeded as if it fails the FILE * can not be trusted
+		diagnostics_file = fopen(file_path, "rb+");
 		last_sync = time(NULL);
 	}
 
@@ -962,6 +960,9 @@ error:
 static vprintf_like_t default_esp_log = NULL;
 
 int custom_log_function(const char * fmt, va_list ap){
+	if(default_esp_log != NULL)
+		default_esp_log(fmt, ap);
+
 	if(!filesystem_is_ready()){
 		return ESP_ERR_INVALID_STATE;
 	}
@@ -973,9 +974,6 @@ int custom_log_function(const char * fmt, va_list ap){
 	/* esp_err_t err =  */diagnostics_log_write(fmt, ap);
 	/* if(err != ESP_OK) */
 	/* 	printf("log error: %s\n", esp_err_to_name(err)); */
-
-	if(default_esp_log != NULL)
-		default_esp_log(fmt, ap);
 
 	xSemaphoreGive(file_lock);
 	return 0;
