@@ -1,16 +1,13 @@
 name: Build 
 
-on:
-  push:
-    tags:
-      - "*"
+on: push
 
 permissions:
-  contents: read
+  id-token: write
+  contents: write
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
