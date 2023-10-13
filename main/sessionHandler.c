@@ -618,7 +618,6 @@ void set_ocpp_state_led_overwrite(enum ocpp_led_overwrite led_overwrite){
 }
 
 void clear_ocpp_state_led_overwrite(){
-	ESP_LOGE(TAG, "Checking for led overwrite");
 	if(!led_state_overwritten)
 		return;
 
