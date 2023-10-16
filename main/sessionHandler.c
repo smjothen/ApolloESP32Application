@@ -2665,7 +2665,8 @@ static void sessionHandler_task()
 
 		isOnline = isMqttConnected();
 
-		if(storage_Get_Standalone() == false)
+		/// Don't do Zaptec cloud ping-replies in OCPP-mode
+		if((storage_Get_Standalone() == false) && (storage_Get_session_controller() != eSESSION_OCPP))
 			offlineHandler_CheckPingReply();
 
 		enum PingReplyState pingReplyState = offlineHandler_GetPingReplyState();
@@ -2792,6 +2793,14 @@ static void sessionHandler_task()
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) && (previousChargeOperatingMode != CHARGE_OPERATION_STATE_REQUESTING) && (chargeSession_Get().StartDateTime[0] == '\0'))
 			InitiateHoldRequestTimeStamp();
 
+		//We need to inform the ChargeSession if a car is connected.
+		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
+		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
+			SetCarConnectedState(false);
+		else
+			SetCarConnectedState(true);
+
+
 		// Handle ocpp state if session type is ocpp
 		if(storage_Get_session_controller() == eSESSION_OCPP){
 			if(ocpp_startup && ocpp_transaction_is_ready()){
@@ -2862,17 +2871,12 @@ static void sessionHandler_task()
 			}
 		}
 
-		//We need to inform the ChargeSession if a car is connected.
-		//If car is disconnected just before a new sessionId is received, the sessionId should be rejected
-		if(chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED)
-			SetCarConnectedState(false);
-		else
-			SetCarConnectedState(true);
 
+		//Don't run in OCPP mode
 		//If we are charging when going from offline to online, send a stop command to change the state to requesting.
 		//This will make the Cloud send a new start command with updated current to take us out of offline current mode
 		//Check the requestCurrentWhenOnline to ensure we don't send at every token refresh, and only in system mode.
-		if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
+		else if((previousIsOnline == false) && (isOnline == true) && offlineHandler_IsRequestingCurrentWhenOnline())
 		{
 			if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_CHARGING) || (chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED))
 			{

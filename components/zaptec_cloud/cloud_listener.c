@@ -3457,13 +3457,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		if(ret == MsgCommandAck)
 		{
 			responseStatus = 200;
-			ESP_LOGI(TAG, "MCU Granted command OK");
+			ESP_LOGI(TAG, "MCU GridTest command OK");
 			reportGridTestResults = true;
 		}
 		else
 		{
 			responseStatus = 400;
-			ESP_LOGI(TAG, "MCU Granted command FAILED");
+			ESP_LOGI(TAG, "MCU GridTest command FAILED");
 		}
 		responseStatus = 200;
 	}
