@@ -618,7 +618,6 @@ void set_ocpp_state_led_overwrite(enum ocpp_led_overwrite led_overwrite){
 }
 
 void clear_ocpp_state_led_overwrite(){
-	ESP_LOGE(TAG, "Checking for led overwrite");
 	if(!led_state_overwritten)
 		return;
 
@@ -2074,6 +2073,7 @@ static void handle_preparing(){
 	 */
 	if((MCU_GetChargeMode() == eCAR_CONNECTED || MCU_GetChargeMode() == eCAR_CHARGING) && (isAuthorized || !storage_Get_AuthenticationRequired())){
 		ESP_LOGI(TAG, "User actions complete; Attempting to start charging");
+		isAuthorized = true; // Set authorized for consistency in case authorization is not required.
 
 		//Use standalone until changed by ocpp_smart_charging
 		ocpp_max_limit = storage_Get_StandaloneCurrent();

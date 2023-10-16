@@ -2293,6 +2293,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 	}
 
 	int err = -1;
+	bool cloud_settings_changed = false;
+
 	if(strcasecmp(key, OCPP_CONFIG_KEY_ALLOW_OFFLINE_TX_FOR_UNKNOWN_ID) == 0){
 		err = set_config_bool(storage_Set_ocpp_allow_offline_tx_for_unknown_id, value, NULL);
 		ocpp_change_allow_offline_for_unknown(storage_Get_ocpp_allow_offline_tx_for_unknown_id());
@@ -2599,6 +2601,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		}
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_AUTHORIZATION_REQUIRED) == 0){
 		err = set_config_bool(set_AuthenticationRequired_bool, value, NULL);
+		cloud_settings_changed = true;
+
 		MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, storage_Get_AuthenticationRequired());
 		if(ret == MsgWriteAck)
 		{
@@ -2623,6 +2627,11 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		ESP_LOGI(TAG, "Successfully configured %s", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_ACCEPTED);
 		storage_SaveConfiguration();
+
+		if(cloud_settings_changed){
+			if(publish_debug_telemetry_observation_cloud_settings() != 0)
+				ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+		}
 	}else{
 		ESP_LOGW(TAG, "Unsuccessfull in configuring %s", key);
 		change_config_confirm(unique_id, OCPP_CONFIGURATION_STATUS_REJECTED);

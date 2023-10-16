@@ -487,20 +487,20 @@ struct ocpp_charging_profile * read_profile_from_file(const char * profile_path)
 		}
 
 		char * base64_periods = malloc(sizeof(char) * out_length);
-		if(base64_str == NULL){
+		if(base64_periods == NULL){
 			ESP_LOGE(TAG, "Unable to allocate memory for base64 string of periods");
 			goto error;
 		}
 		if(fread(base64_periods, sizeof(char), out_length, fp) != out_length){
 			ESP_LOGE(TAG, "Unable to read base64 periods string");
-			free(base64_str);
+			free(base64_periods);
 			goto error;
 		}
 
 		uint32_t crc;
 		if(fread(&crc, sizeof(uint32_t), 1, fp) != 1){
 			ESP_LOGE(TAG, "Unable to read crc of periods");
-			free(base64_str);
+			free(base64_periods);
 			goto error;
 		}
 
