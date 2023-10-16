@@ -531,13 +531,31 @@ void certificate_clear()
 
 
 
+static int lastWaterMark = -1;
+int certificate_get_stack_watermark()
+{
+	if(taskCertHandle != NULL)
+	{
+		lastWaterMark = uxTaskGetStackHighWaterMark(taskCertHandle);
+		return lastWaterMark;
+	}
+	else
+	{
+		return lastWaterMark;
+	}
+}
+
+#define TASK_CERT_STACK_SIZE 4096
+StackType_t task_cert_stack[TASK_CERT_STACK_SIZE];
+StaticTask_t task_cert_buffer;
+
 void certificate_update(int tls_error)
 {
 	//Only allow one instance
 	if(taskRunning == false)
 	{
 		taskRunning = true;
-		xTaskCreate(certificate_task, "certificate_task", 8192, (void*)tls_error, 2, &taskCertHandle);
+		taskCertHandle = xTaskCreateStatic(certificate_task, "certificate_task", TASK_CERT_STACK_SIZE, (void*)tls_error, 2, task_cert_stack, &task_cert_buffer);
 	}
 
 }

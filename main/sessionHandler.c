@@ -4180,7 +4180,7 @@ void sessionHandler_TestOfflineSessions(int nrOfSessions, int nrOfSignedValues)
 void sessionHandler_init(){
 
 	ocmf_sync_semaphore = xSemaphoreCreateBinary();
-	xTaskCreate(ocmf_sync_task, "ocmf", 5000, NULL, 3, &taskSessionHandleOCMF);
+	xTaskCreate(ocmf_sync_task, "ocmf", 3000, NULL, 3, &taskSessionHandleOCMF);
 
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000

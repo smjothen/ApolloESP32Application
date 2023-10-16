@@ -45,14 +45,14 @@ const int uart_num = UART_NUM_2;
 void zaptecProtocolStart(){
     ESP_LOGI(TAG, "starting protocol task");
     static uint8_t ucParameterToPass = {0};
-    int stack_size = 6000;//8192;//4096;
+    int stack_size = 3000;//6000;//8192;//4096;
     xTaskCreate( uartRecvTask, "uartRecvTask", stack_size, &ucParameterToPass, 6, &uartRecvTaskHandle );
     configASSERT(uartRecvTaskHandle);
 }
 
 void dspic_periodic_poll_start(){
     static uint8_t ucParameterToPass = {0};
-    int stack_size = 8192;
+    int stack_size = 5000;//8192;
     xTaskCreate( uartSendTask, "UARTSendTask", stack_size, &ucParameterToPass, 5, &sendTaskHandle );
     configASSERT( sendTaskHandle );
 }

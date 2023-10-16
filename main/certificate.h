@@ -18,6 +18,7 @@ void certifcate_setBundleVersion(int newBundleVersion);
 int certificate_GetCurrentBundleVersion();
 void certifcate_setOverrideVersion(int override);
 bool certificate_CheckIfReceivedNew();
+int certificate_get_stack_watermark();
 
 
 #ifdef __cplusplus

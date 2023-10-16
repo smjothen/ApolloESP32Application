@@ -2077,6 +2077,16 @@ cleanup:
 	vTaskDelete(NULL);
 }
 
+
+int ocpp_smart_get_stack_watermark(){
+	if(ocpp_smart_task_handle != NULL){
+		return uxTaskGetStackHighWaterMark(ocpp_smart_task_handle);
+	}else{
+		return -1;
+	}
+}
+
+
 esp_err_t ocpp_smart_charging_init(){
 	ESP_LOGI(TAG, "Initializing smart charging");
 
@@ -2119,6 +2129,7 @@ esp_err_t ocpp_smart_charging_init(){
 
 	return ESP_OK;
 }
+
 
 #define MAX_DEINIT_WAIT 5000
 void ocpp_smart_charging_deinit(){

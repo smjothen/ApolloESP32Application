@@ -51,6 +51,7 @@
 	#include "apollo_console.h"
 #endif
 #include "ocpp.h"
+#include "ocpp_smart_charging.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -458,7 +459,7 @@ void app_main(void)
 	}
 #endif
 	//First check hardware revision in order to configure io accordingly
-	adc_init();
+	//adc_init();
 
 	eeprom_wp_pint_init();
 	cellularPinsInit();
@@ -696,7 +697,7 @@ void app_main(void)
 
     	if(onTimeCounter % 10 == 0)
     	{
-		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d cal: %d ota: %d ocpp %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), calibration_task_watermark(), ota_GetStackWatermark(), ocpp_get_stack_watermark());
+		ESP_LOGI(TAG_MAIN, "Stacks: i2c:%d mcu:%d %d adc: %d, lte: %d conn: %d, sess: %d, ocmf: %d cal: %d ota: %d ocpp: %d %d cert: %d", I2CGetStackWatermark(), MCURxGetStackWatermark(), MCUTxGetStackWatermark(), adcGetStackWatermark(), pppGetStackWatermark(), connectivity_GetStackWatermark(), sessionHandler_GetStackWatermark(), sessionHandler_GetStackWatermarkOCMF(), calibration_task_watermark(), ota_GetStackWatermark(), ocpp_get_stack_watermark(), ocpp_smart_get_stack_watermark(), certificate_get_stack_watermark());
 
     		GetTimeOnString(onTimeString);
     		size_t free_heap_size = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);

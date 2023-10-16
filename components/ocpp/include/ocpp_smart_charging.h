@@ -10,6 +10,13 @@
  * charging session handler to notify it of wanted change of charging limits and used nr of phases.
  */
 
+
+/**
+ * @brief returns free bytes on ocpp smart
+ */
+int ocpp_smart_get_stack_watermark();
+
+
 /**
  * @brief Initializes smart charging.
  *
