@@ -1258,11 +1258,11 @@ void ocpp_on_id_tag_info_recieved(const char * id_token, struct ocpp_id_tag_info
 
 			struct ocpp_id_tag_info * local_id_tag = auth_data.id_tag_info;
 
-			if(id_tag_info->expiry_date == local_id_tag->expiry_date
+			if(id_tag_info->expiry_date != local_id_tag->expiry_date
 				|| id_tag_info->status != local_id_tag->status
 				|| ((id_tag_info->parent_id_tag != NULL || local_id_tag->parent_id_tag != NULL)
 					&& ((id_tag_info->parent_id_tag == NULL || local_id_tag->parent_id_tag == NULL)
-						|| strcmp(id_tag_info->parent_id_tag, local_id_tag->parent_id_tag) == 0))){
+						|| strcmp(id_tag_info->parent_id_tag, local_id_tag->parent_id_tag) != 0))){
 
 				ESP_LOGW(TAG, "local Authorization list mismatch");
 				ocpp_send_status_notification(-1, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT,
