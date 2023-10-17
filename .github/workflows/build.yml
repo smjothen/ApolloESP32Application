@@ -52,9 +52,10 @@ jobs:
     - name: Build AppWithBootloader
       run: |
         docker pull "${{ env.containerRepository }}:${{ env.buildImageTag }}"
+        cd ApolloMCUApplication
         docker run --entrypoint "./entrypoint.sh" --workdir /mnt --rm -v /out:/out -v "${PWD}:/mnt" "${{ env.containerRepository }}:${{ env.buildImageTag }}" AppWithBootloader
         pip install click==8.1.7 intelhex==2.3.0
-        sudo ./ApolloMCUApplication/hex2bin.py /out/AppWithBootloader.hex ./bin/dspic.bin
+        ./hex2bin.py /out/AppWithBootloader.hex ../bin/dspic.bin
 
     - name: Build ESP
       uses: espressif/esp-idf-ci-action@v1
