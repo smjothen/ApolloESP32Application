@@ -7,8 +7,8 @@ permissions:
   contents: write
 
 env:
-  github_apps_id: "195169"
-  github_apps_install_id: "25261292"
+  GITHUB_APP_ID: "195169"
+  GITHUB_INSTALL_ID: "25261292"
 
 jobs:
   build:
@@ -16,44 +16,53 @@ jobs:
     environment: development
 
     steps:
+    - name: Get install token
+      id: my-app
+      uses: getsentry/action-github-app-token@v2
+      with:
+        app_id: ${{ secrets.APP_ID }}
+        private_key: ${{ secrets.ZAPTEC_GIT_CONTENTS_APP_PRIVATE_KEY }}
+
     - name: Checkout repository
       uses: actions/checkout@v3
+        token: ${{ steps.my-app.outputs.token }}
+        submodules: recursive
 
-    - name: Install git config parser
-      run: npm install --save parse-git-config
+#     - name: Install git config parser
+#       run: npm install --save parse-git-config
 
-    # Gets a token that is used for authenticating to the github api
-    - name: Generate token
-      env:
-        APPS_ID: ${{ env.github_apps_id }}
-        INSTALL_ID: ${{ env.github_apps_install_id }}
-        PRIVATE_KEY: ${{ secrets.ZAPTEC_GIT_CONTENTS_APP_PRIVATE_KEY }}
-      run: |
-        # Run ruby script to create a signed json web token used to generate a token that is used in github api calls
-        appsAccessToken=$(ruby .github/scripts/create-jwt.rb "$PRIVATE_KEY" "$APPS_ID")
+#     # Gets a token that is used for authenticating to the github api
+#     - name: Generate token
+#       env:
+#         APPS_ID: ${{ env.github_apps_id }}
+#         INSTALL_ID: ${{ env.github_apps_install_id }}
+#         PRIVATE_KEY: ${{ secrets.ZAPTEC_GIT_CONTENTS_APP_PRIVATE_KEY }}
+#       run: |
+#         # Run ruby script to create a signed json web token used to generate a token that is used in github api calls
+#         appsAccessToken=$(ruby .github/scripts/create-jwt.rb "$PRIVATE_KEY" "$APPS_ID")
 
-        # Generate github apps install token
-        appsInstallToken=$(curl -s -X POST \
-          -H "Authorization: Bearer $appsAccessToken" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/app/installations/$INSTALL_ID/access_tokens | jq .token)
-        # Trim quotes from the token
-        installToken=$(echo "${appsInstallToken:1:${#appsInstallToken}-2}")
+#         # Generate github apps install token
+#         appsInstallToken=$(curl -s -X POST \
+#           -H "Authorization: Bearer $appsAccessToken" \
+#           -H "Accept: application/vnd.github.v3+json" \
+#           https://api.github.com/app/installations/$INSTALL_ID/access_tokens | jq .token)
+#         # Trim quotes from the token
+#         installToken=$(echo "${appsInstallToken:1:${#appsInstallToken}-2}")
 
-        # Set token as a variable
-        echo "app_token=$appsInstallToken" >> $GITHUB_ENV
+#         # Set token as a variable
+#         echo "app_token=$appsInstallToken" >> $GITHUB_ENV
 
-    # Clone all submodules repo defined in .gitmodules
-    - name: Clone submodule repos
-      shell: pwsh
-      env:
-        token: ${{ env.app_token }}
-      run: |
-        .github/scripts/clone-submodules.ps1 -token $env:token -jsParseFilePath ".github/scripts/parse-submodules.js"
+#     # Clone all submodules repo defined in .gitmodules
+#     - name: Clone submodule repos
+#       shell: pwsh
+#       env:
+#         token: ${{ env.app_token }}
+#       run: |
+#         .github/scripts/clone-submodules.ps1 -token $env:token -jsParseFilePath ".github/scripts/parse-submodules.js"
 
-    - name: esp-idf build
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        # We've agreed on tag v5.1.1 so don't change this :)
-        esp_idf_version: v5.1.1
-        target: esp32
+    # - name: esp-idf build
+    #   uses: espressif/esp-idf-ci-action@v1
+    #   with:
+    #     # We've agreed on tag v5.1.1 so don't change this :)
+    #     esp_idf_version: v5.1.1
+    #     target: esp32
