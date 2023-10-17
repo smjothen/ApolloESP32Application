@@ -15,22 +15,32 @@ jobs:
     environment: development
 
     steps:
-    - name: Get install token
-      id: my-app
+    - name: Get Install Token
+      id: app-token
       uses: getsentry/action-github-app-token@v2
       with:
         app_id: ${{ env.GITHUB_APP_ID }}
         private_key: ${{ secrets.ZAPTEC_GIT_CONTENTS_APP_PRIVATE_KEY }}
 
-    - name: Checkout repository
+    - name: Checkout Repo
       uses: actions/checkout@v3
       with:
-        token: ${{ steps.my-app.outputs.token }}
+        token: ${{ steps.app-token.outputs.token }}
         submodules: recursive
 
-    - name: esp-idf build
+    - name: Call MCU Action
+      uses: ./ApolloMCUApplication/.github/workflows/build.yaml
+
+    - name: Build ESP
       uses: espressif/esp-idf-ci-action@v1
       with:
         # We've agreed on tag v5.1.1 so don't change this :)
         esp_idf_version: v5.1.1
         target: esp32
+
+    - name: Release ESP
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          build/ApolloEsp32Application.bin
