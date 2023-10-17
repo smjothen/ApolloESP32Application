@@ -8,9 +8,16 @@ permissions:
 
 env:
   GITHUB_APP_ID: "195169"
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_DEV_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_DEV_WORKFLOW_CLIENT_ID }}
+  AZURE_ACR_NAME: zapcloud
+  containerRepository: zapcloud.azurecr.io/zaptec-go-mcu
+  buildImageTag: "2f0dc9d" # latest or short hash of build image to use
 
 jobs:
   build:
+    name: Build ESP Firmware
     runs-on: ubuntu-latest
     environment: development
 
@@ -28,8 +35,26 @@ jobs:
         token: ${{ steps.app-token.outputs.token }}
         submodules: recursive
 
-    - name: Call MCU Action
-      uses: ./ApolloMCUApplication/.github/workflows/build.yaml
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ env.AZURE_CLIENT_ID }}
+        tenant-id: ${{ env.AZURE_TENANT_ID }}
+        subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Azure container registry login
+      run: az acr login --name ${{ env.AZURE_ACR_NAME }}
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Build AppWithBootloader
+      run: |
+        docker pull "${{ env.containerRepository }}:${{ env.buildImageTag }}"
+        docker run --entrypoint "./entrypoint.sh" --workdir /mnt --rm -v /out:/out -v "${PWD}:/mnt" "${{ env.containerRepository }}:${{ env.buildImageTag }}" AppWithBootloader
+        pip install click==8.1.7 intelhex==2.3.0
+        sudo ./ApolloMCUApplication/hex2bin.py /out/AppWithBootloader.hex ./bin/dspic.bin
 
     - name: Build ESP
       uses: espressif/esp-idf-ci-action@v1
