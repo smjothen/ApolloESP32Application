@@ -64,9 +64,25 @@ jobs:
         esp_idf_version: v5.1.1
         target: esp32
 
+    - name: Mark build
+      run: |
+        ./mark_build.py
+        cp build/ApolloEsp32Application_gitref*.bin .
+        cp bin/dspic.bin .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        path: dspic.bin
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        path: ApolloEsp32Application_gitref*.bin
+
     - name: Release ESP
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          build/ApolloEsp32Application.bin
+          ApolloEsp32Application_gitref*.bin
