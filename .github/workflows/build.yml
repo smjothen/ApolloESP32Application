@@ -56,6 +56,8 @@ jobs:
         docker run --entrypoint "./entrypoint.sh" --workdir /mnt --rm -v /out:/out -v "${PWD}:/mnt" "${{ env.containerRepository }}:${{ env.buildImageTag }}" AppWithBootloader
         pip install click==8.1.7 intelhex==2.3.0
         ./hex2bin.py /out/AppWithBootloader.hex ../bin/dspic.bin
+        # Repo can be dirty now if newly built dspic.bin isn't the same as one checked into ApolloESP32Application
+        # TODO: Get permissions to commit and push the new dspic.bin or just fail the build if different?
 
     - name: Build ESP
       uses: espressif/esp-idf-ci-action@v1
@@ -66,7 +68,8 @@ jobs:
 
     - name: Mark build
       run: |
-        ./mark_build.py
+        git status
+        sudo ./mark_build.py
         cp build/ApolloEsp32Application_gitref*.bin .
         cp bin/dspic.bin .
 
