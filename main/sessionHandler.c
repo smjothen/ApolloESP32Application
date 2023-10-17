@@ -687,6 +687,7 @@ void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
 	ESP_LOGI(TAG, "Stopping charging");
 
 	SetAuthorized(false);
+	ocpp_start_token[0] = '\0';
 	sessionHandler_InitiateResetChargeSession();
 	chargeSession_SetStoppedReason(reason);
 }
@@ -773,6 +774,7 @@ static void start_transaction_response_cb(const char * unique_id, cJSON * payloa
 		if(is_current_transaction){
 			ESP_LOGW(TAG, "Current transaction deauthorized");
 			SetAuthorized(false);
+			ocpp_start_token[0] = '\0';
 
 			if(storage_Get_ocpp_stop_transaction_on_invalid_id()){
 				ESP_LOGW(TAG, "Attempting to stop transaction");
@@ -1145,6 +1147,7 @@ void start_charging_on_tag_deny(const char * tag){
 	}
 
 	SetAuthorized(false);
+	ocpp_start_token[0] = '\0';
 
 	ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_NOT_AUTHORIZED);
 	if(ret == MsgWriteAck)
@@ -1160,6 +1163,8 @@ void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
 
 	audio_play_nfc_card_accepted();
 	SetAuthorized(false);
+	ocpp_start_token[0] = '\0';
+
 	sessionHandler_InitiateResetChargeSession();
 	chargeSession_ClearAuthenticationCode();
 }
@@ -1186,6 +1191,7 @@ void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
 
 	ESP_LOGI(TAG, "Authorized to stop transaction");
 	SetAuthorized(false);
+	ocpp_start_token[0] = '\0';
 
 	audio_play_nfc_card_accepted();
 
@@ -1364,12 +1370,8 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		return eOCPP_CP_STATUS_FINISHING;
 
 	case CHARGE_OPERATION_STATE_PAUSED:
-		if(charge_mode == eCAR_CHARGING || GetFinalStopActiveStatus() == 1){
+		return eOCPP_CP_STATUS_SUSPENDED_EVSE;
 
-			return eOCPP_CP_STATUS_SUSPENDED_EVSE;
-		}else{
-			return eOCPP_CP_STATUS_SUSPENDED_EV;
-		}
 	case CHARGE_OPERATION_STATE_STOPPED:
 		return eOCPP_CP_STATUS_AVAILABLE;
 
@@ -1777,6 +1779,8 @@ static void remote_stop_transaction_cb(const char * unique_id, const char * acti
 	if(stop_charging_accepted){
 	        sessionHandler_InitiateResetChargeSession();
 		SetAuthorized(false);
+		ocpp_start_token[0] = '\0';
+
 		chargeSession_SetStoppedReason(eOCPP_REASON_REMOTE);
 	}
 	//TODO: "[...]and, if applicable, unlock the connector"
@@ -1894,6 +1898,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 			stop_transaction(new_state);
 			SetAuthorized(false);
+			ocpp_start_token[0] = '\0';
 			break;
 		case eOCPP_CP_STATUS_FINISHING:
 		case eOCPP_CP_STATUS_RESERVED:
@@ -1978,6 +1983,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		ESP_LOGI(TAG, "OCPP STATE FINISHING");
 		ocpp_finishing_session = true;
 		SetAuthorized(false);
+		ocpp_start_token[0] = '\0';
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
@@ -2011,6 +2017,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_CHARGING:
 			stop_transaction(new_state);
 			SetAuthorized(false);
+			ocpp_start_token[0] = '\0';
+
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
