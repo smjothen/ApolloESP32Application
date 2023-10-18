@@ -69,6 +69,8 @@ jobs:
     - name: Mark build
       run: |
         git status
+        cat dependencies.lock
+        sha256sum bin/dspic.bin
         sudo ./mark_build.py
         cp build/ApolloEsp32Application_gitref*.bin .
         cp bin/dspic.bin .
