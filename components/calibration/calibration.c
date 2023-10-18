@@ -85,24 +85,38 @@ void calibration_log_line(CalibrationCtx *ctx, const char *format, ...) {
     fclose(fp);
 }
 
-void calibration_log_dump(void) {
-    FILE *fp;
+int calibration_send_state(CalibrationCtx *);
+
+void calibration_log_dump(CalibrationCtx *ctx) {
+    FILE *fp = NULL;
+
     if (!(fp = fopen(CALIBRATION_LOG, "r"))) {
         ESP_LOGE(TAG, "Can't open file for logging");
         return;
     }
 
-    while (fgets(hexbuf, sizeof (hexbuf), fp) != NULL) {
-        char *end = strchr(hexbuf, '\n');
-        if (end) {
-            *end = 0;
-        }
-
-        ESP_LOGI(TAG, "Log: %s", hexbuf);
-
-        publish_debug_telemetry_observation_Calibration(hexbuf);
+    struct stat st;
+    if (stat(CALIBRATION_LOG, &st) != 0) {
+        ESP_LOGE(TAG, "Can't stat log");
+        return;
     }
 
+    char *buf = calloc(st.st_size + 1, 1);
+    if (!buf) {
+        ESP_LOGE(TAG, "Can't alloc buffer");
+        return;
+    }
+
+    if(fread(buf, st.st_size, 1, fp) != 1) {
+        ESP_LOGE(TAG, "Short read of file");
+        return;
+    }
+
+    publish_debug_telemetry_observation_Calibration(buf);
+
+    free(buf);
+
+    fclose(fp);
     remove(CALIBRATION_LOG);
 }
 
@@ -137,7 +151,8 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     }
     *ptr = 0;
 
-    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+    uint8_t errorCode = 0;
+    if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header), &errorCode) != MsgCommandAck || errorCode != 0) {
         ESP_LOGE(TAG, "%s: Writing default calibration to MCU failed!", calibration_state_to_string(ctx));
         return false;
     }
@@ -257,7 +272,7 @@ bool calibration_tick_starting(CalibrationCtx *ctx) {
             }
 
             // Enter MID mode
-            if (calibration_set_mode(ctx, Closed)) {
+            if (calibration_set_mode(ctx, Open)) {
                 CAL_CSTATE(ctx) = Complete;
             }
 
@@ -306,10 +321,6 @@ bool calibration_tick_close_relays(CalibrationCtx *ctx) {
 }
 
 int calibration_phases_within(float *phases, float nominal, float range) {
-    if (calibration_is_simulation()) { 
-        return 3;
-    }
-
     float min = nominal * (1.0 - range);
     float max = nominal * (1.0 + range);
 
@@ -330,10 +341,6 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float voltage[3];
             float current[3];
 
-            if (!calibration_set_mode(ctx, Closed)) {
-                return false;
-            }
-
             if (!calibration_get_emeter_snapshot(ctx, &source, current, voltage)) {
                 break;
             }
@@ -349,27 +356,26 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
             float allowedCurrent = 0.1;
             float allowedVoltage = 0.1;
 
-            TickType_t minimumDuration;
             TickType_t maxWait = pdMS_TO_TICKS(10 * 1000);
 
             if (ctx->VerTest & MediumLevelCurrent) {
-                expectedCurrent = 10.0;
-                minimumDuration = pdMS_TO_TICKS(5 * 1000);
+                expectedCurrent = 5.0;
             } else if (ctx->VerTest & HighLevelCurrent) {
                 expectedCurrent = 32.0;
-                minimumDuration = pdMS_TO_TICKS(5 * 1000);
             } else {
-                expectedCurrent = 16.0;
-                minimumDuration = pdMS_TO_TICKS(30 * 1000);
+                maxWait = pdMS_TO_TICKS(20 * 1000);
+                expectedCurrent = 0.5;
             }
 
             if (calibration_phases_within(current, expectedCurrent, allowedCurrent) == 3
              && calibration_phases_within(voltage, expectedVoltage, allowedVoltage) == 3) {
+                ctx->Ticks[WARMUP_WAIT_TICK] = 0;
 
                 if (ctx->Ticks[WARMUP_TICK] == 0) {
                     ctx->Ticks[WARMUP_TICK] = xTaskGetTickCount();
                 } else {
-                    if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > minimumDuration) {
+                    if (xTaskGetTickCount() - ctx->Ticks[WARMUP_TICK] > maxWait) {
+                        ctx->Ticks[WARMUP_TICK] = 0;
                         CAL_CSTATE(ctx) = Complete;
                         break;
                     } else {
@@ -383,11 +389,19 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                 if (ctx->Ticks[WARMUP_WAIT_TICK] == 0) {
                     ctx->Ticks[WARMUP_WAIT_TICK] = xTaskGetTickCount();
                 } else if (xTaskGetTickCount() - ctx->Ticks[WARMUP_WAIT_TICK] > maxWait) {
-                    calibration_fail(ctx, 
-                            "Warm up current/voltage outside of %1.fV / %.1fA ranges!"
-                            " %1.f / %.1f / %.1f V --- %.1f / %.1f / %.1f A",
-                            expectedVoltage, expectedCurrent, voltage[0], voltage[1], voltage[2],
-                            current[0], current[1], current[2]);
+                    if (!calibration_set_mode(ctx, Open)) {
+                        return false;
+                    }
+
+                    ctx->Ticks[WARMUP_WAIT_TICK] = 0;
+                    CAL_CSTATE(ctx) = Complete;
+
+                    if (calibration_is_simulation()) {
+                        ESP_LOGI(TAG, "Resetting test warmup current");
+                        extern double _test_currents[];
+                        _test_currents[WarmingUp] = expectedCurrent;
+                    }
+
                     break;
                 }
 
@@ -552,7 +566,8 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
                 return false;
             }
         } else {
-            if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header)) != MsgCommandAck) {
+            uint8_t errorCode = 0;
+            if (MCU_SendCommandWithData(CommandMidInitCalibration, bytes, sizeof (header), &errorCode) != MsgCommandAck || errorCode != 0) {
                 ESP_LOGE(TAG, "%s: Writing calibration to MCU failed!", calibration_state_to_string(ctx));
                 return false;
             }
@@ -611,6 +626,12 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             if (!(ctx->Flags & CAL_FLAG_UPLOAD_VER)) {
                 // Upload parameters
                 if (!calibration_https_upload_parameters(ctx, NULL, true)) {
+                    if (ctx->Retries < 5) {
+                        ESP_LOGE(TAG, "%s: Failure to upload parameters, retrying!", calibration_state_to_string(ctx));
+                        ctx->Retries++;
+                    } else {
+                        calibration_fail(ctx, "Couldn't upload calibration data to production server!");
+                    }
                     return false;
                 } else {
                     ctx->Flags |= CAL_FLAG_UPLOAD_VER;
@@ -636,7 +657,8 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
 
             ESP_LOGI(TAG, "Marking calibration as verified ID %" PRIu32 " CRC 0x%04X", calId, crc);
 
-            if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes)) != MsgCommandAck) {
+            uint8_t errorCode = 0;
+            if (MCU_SendCommandWithData(CommandMidMarkCalibrationVerified, (const char *)crcBytes, sizeof (crcBytes), &errorCode) != MsgCommandAck || errorCode != 0) {
                 calibration_fail(ctx, "Failed to mark calibration as verified!");
                 return false;
             }
@@ -852,7 +874,7 @@ void calibration_finish(CalibrationCtx *ctx, bool failed) {
             isCalibratedFlag = true;
         }
 
-        calibration_log_dump();
+        calibration_log_dump(ctx);
 
         ctx->Flags |= CAL_FLAG_DONE;
     }
@@ -923,14 +945,22 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
         return;
     }
 
+    uint32_t allowedMidBits = MID_STATUS_ALL_PAGES_EMPTY | MID_STATUS_NOT_CALIBRATED | MID_STATUS_NOT_VERIFIED | MID_STATUS_NOT_INITIALIZED | MID_STATUS_TICK_TIMEOUT;
+    switch(CAL_STATE(ctx)) {
+        case VerificationStart:
+        case VerificationRunning:
+        case VerificationDone:
+        case Done:
+            // Any other bits here would not allow verification
+            allowedMidBits = MID_STATUS_NOT_VERIFIED;
+            break;
+        default:
+            break;
+    }
+
     uint32_t status;
     if (calibration_read_mid_status(&status)) {
-        status &= ~MID_STATUS_ALL_PAGES_EMPTY;
-        status &= ~MID_STATUS_NOT_CALIBRATED;
-        status &= ~MID_STATUS_NOT_VERIFIED;
-        // These can occur if we MIDInit when starting calibration
-        status &= ~MID_STATUS_NOT_INITIALIZED;
-        status &= ~MID_STATUS_TICK_TIMEOUT;
+        status &= ~allowedMidBits;
 
         if (status) {
             calibration_fail(ctx, "Unexpected MID status 0x%08X", status);
@@ -1111,25 +1141,6 @@ void calibration_reset(CalibrationCtx *ctx) {
 void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMessage *msg) {
     bool isRun = msg->State == Starting && msg->has_Run;
 
-    /*
-    static TickType_t stateTick = 0;
-
-    if (msg->State != CAL_STATE(ctx) || stateTick == 0) {
-        if (stateTick != 0) {
-            ESP_LOGI(TAG, "State %d -> %d took %ds", CAL_STATE(ctx), msg->State, pdTICKS_TO_MS(xTaskGetTickCount() - stateTick) / 1000);
-        }
-
-        stateTick = xTaskGetTickCount();
-    } else {
-
-        // Same state - allow 60s in current state before transitioning
-        if (xTaskGetTickCount() - stateTick > pdMS_TO_TICKS(60 * 1000)) {
-            calibration_fail(ctx, "State timeout");
-        }
-
-    }
-    */
-
     // If failed, allow starting a new run
     if (!isRun && CAL_CSTATE(ctx) == Failed) {
         return;
@@ -1169,7 +1180,7 @@ void calibration_handle_state(CalibrationCtx *ctx, CalibrationUdpMessage_StateMe
 
         if (strcmp(msg->Run.SetupName, "dev") == 0) {
             ESP_LOGI(TAG, "Run is a simulation, uploading disabled!");
-            ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
+            //ctx->Flags |= CAL_FLAG_UPLOAD_PAR | CAL_FLAG_UPLOAD_VER;
             calibration_set_simulation(true);
         } else {
             calibration_set_simulation(false);
@@ -1339,20 +1350,29 @@ void calibration_debug_udp_message(CalibrationUdpMessage *msg) {
 void calibration_task(void *pvParameters) {
     devInfo = i2cGetLoadedDeviceInfo();
 
-    //calibration_mode_test(&ctx);
+    CALLOGTIME(&ctx, "- Task Started");
 
     while (1) {
-        if (connectivity_GetActivateInterface() != eCONNECTION_WIFI) {
-            ESP_LOGI(TAG, "Activating WiFi interface ...");
-            connectivity_ActivateInterface(eCONNECTION_WIFI);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            continue;
-        }
-
         if (!network_WifiIsConnected()) {
             ESP_LOGI(TAG, "Waiting for WiFi connection ...");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
+        }
+
+        tcpip_adapter_ip_info_t ip_info; 
+        tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ip_info);
+
+        wifi_ap_record_t wifidata;
+        if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
+            CALLOGTIME(&ctx, "- Connected %s BSSID %02X:%02X:%02X:%02X:%02X:%02X RSSI %d IP " IPSTR, wifidata.ssid, 
+                    wifidata.bssid[0],
+                    wifidata.bssid[1],
+                    wifidata.bssid[2],
+                    wifidata.bssid[3],
+                    wifidata.bssid[4],
+                    wifidata.bssid[5],
+                    wifidata.rssi,
+                    IP2STR(&ip_info.ip));
         }
 
         int sock = create_multicast_ipv4_socket();
@@ -1362,6 +1382,8 @@ void calibration_task(void *pvParameters) {
             continue;
         }
 
+                 
+        CALLOGTIME(&ctx, "- Socket Created");
         ESP_LOGI(TAG, "UDP socket created ...");
 
         serv.Socket = sock;
@@ -1447,16 +1469,21 @@ void calibration_task(void *pvParameters) {
                     }
 
                     static TickType_t periodicLog = 0;
+                    if (periodicLog == 0) {
+                        periodicLog = xTaskGetTickCount();
+                    }
 
-                    if (xTaskGetTickCount() - periodicLog > pdMS_TO_TICKS(30000)) {
+                    if (xTaskGetTickCount() - periodicLog > pdMS_TO_TICKS(60000)) {
                         int8_t rssi = 0;
                         wifi_ap_record_t wifidata;
-			                  if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
+                        if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
                             rssi = wifidata.rssi;
                         }
 
-                        // Every 30 seconds update log with some state
-                        CALLOGTIME(&ctx, "- RSSI %d - (%d TX / %d RX)", rssi, ctx.PktsSent, ctx.PktsAckd);
+			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+
+                        // Every 60 seconds update log with some state
+                        CALLOGTIME(&ctx, "- RSSI %d - (%d TX / %d RX) - DMA %d", rssi, ctx.PktsSent, ctx.PktsAckd, min_dma);
 
                         periodicLog = xTaskGetTickCount();
                     }
@@ -1480,6 +1507,7 @@ void calibration_task(void *pvParameters) {
             }
         }
 
+        CALLOGTIME(&ctx, "- Socket error");
         ESP_LOGE(TAG, "Shutting down socket and restarting...");
         shutdown(sock, 0);
         close(sock);
