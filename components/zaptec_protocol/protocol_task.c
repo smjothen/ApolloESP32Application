@@ -211,6 +211,7 @@ static uint16_t mcuPilotAvg = 0;
 static uint16_t mcuProximityInst = 0;
 static float mcuChargeCurrentInstallationMaxLimit = -1.0;
 static float mcuStandAloneCurrent = -1.0;
+static float mcuInstantPilotCurrent = 0;
 
 static uint16_t espNotifications = 0;
 static uint16_t mcuNotifications = 0;
@@ -348,7 +349,7 @@ bool MCU_IsReady()
 static uint32_t offsetCount = 0;
 void MCU_PrintReadings()
 {
-	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d F: %d Timeouts: %" PRIi32 ", Off: %" PRId32 ", - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, finalStopActive, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
+	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d P:%d %.1f F: %d Timeouts: %" PRIi32 ", Off: %" PRId32 ", - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, IsChargingAllowed(), MCU_GetInstantPilotState(), finalStopActive, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
 }
 
 uint32_t mcuComErrorCount = 0;
@@ -385,12 +386,14 @@ void uartSendTask(void *pvParameters){
     //Send settings to MCU
     ActivateMCUWatchdog();
     MCU_SendMaxCurrent();
+	MCU_UpdateUseZaptecFinishedTimeout();
 
     //Read settings from MCU
     MCU_UpdateOverrideGridType();
     MCU_UpdateIT3OptimizationState();
     MCU_ReadHwIdMCUSpeed();
     MCU_ReadHwIdMCUPower();
+	MCU_ReadResetSource();
 
     uint32_t count = 0;
     uint32_t printCount = 0;
@@ -401,6 +404,8 @@ void uartSendTask(void *pvParameters){
     	{
     		ActivateMCUWatchdog();
     		MCU_SendMaxCurrent();
+			MCU_UpdateUseZaptecFinishedTimeout();
+			MCU_ReadResetSource();
     		ESP_LOGW(TAG, "MCU restart detected");
 
     		previousMcuDebugCounter = mcuDebugCounter;
@@ -475,7 +480,7 @@ void uartSendTask(void *pvParameters){
 				txMsg.identifier = DebugCounter;
 				break;
 			case 17:
-				txMsg.identifier = MCUResetSource;
+				txMsg.identifier = ParamInstantPilotCurrent;
 				break;
 			case 18:
 				txMsg.identifier = ParamWarnings;
@@ -578,8 +583,8 @@ void uartSendTask(void *pvParameters){
 	    	previousMcuDebugCounter = mcuDebugCounter;
 	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
 	    }
-		else if(rxMsg.identifier == MCUResetSource)
-			mcuResetSource = rxMsg.data[0];
+		else if(rxMsg.identifier == ParamInstantPilotCurrent)
+			mcuInstantPilotCurrent = GetFloat(rxMsg.data);
 		else if(rxMsg.identifier == ParamWarnings)
 			mcuWarnings = GetUint32_t(rxMsg.data);
 
@@ -1090,6 +1095,75 @@ uint8_t MCU_GetResetSource()
 {
 	return mcuResetSource;
 }
+
+uint8_t MCU_ReadResetSource()
+{
+	ZapMessage rxMsgm = MCU_ReadParameter(MCUResetSource);
+	if((rxMsgm.length == 1) && (rxMsgm.identifier == MCUResetSource))
+	{
+		mcuResetSource = rxMsgm.data[0];
+		ESP_LOGW(TAG, "Read MCUResetSource: %d ", mcuResetSource);
+		return 0;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Read MCUResetSource FAILED");
+		return 1;
+	}
+}
+
+
+void MCU_UpdateUseZaptecFinishedTimeout()
+{
+	uint8_t zft = 1;
+	if(storage_Get_session_controller() == eSESSION_OCPP)
+		zft = 0;
+
+	ESP_LOGI(TAG, "Send ZFT %i command to MCU", zft);
+	MessageType ret = MCU_SendUint8Parameter(ParamUseZaptecFinishedTimeout, zft);
+	if(ret == MsgWriteAck)
+	{
+		ESP_LOGI(TAG, "OK");
+	}
+	else
+	{
+		ESP_LOGE(TAG, "FAILED");
+	}
+}
+
+
+
+
+/*
+ * Returns 100 if pilot state is 100% PWM 
+ * Returns 0 if plot state is 0% PWM
+ * Otherwise returns current value communicated to car in A.
+ */
+float MCU_GetInstantPilotState()
+{
+	return mcuInstantPilotCurrent;
+}
+
+/*
+ * For OCPP: If a car is connected and authorized then: 
+ * -false indicate SuspendedEVSE state - Charger does not allow charging
+ * -true indicates SuspendedEV state - Charger allows charging and is waiting on the car
+ */
+bool IsChargingAllowed()
+{
+	float mcuInstantPilotCurrentHold = mcuInstantPilotCurrent;
+
+	if(mcuInstantPilotCurrentHold == 100.0)
+	{
+		return false;
+	}
+	else
+	{
+		// Also State F - 0.0 is a temporary car wakeup state and should be regarded as charging allowed
+		return true;
+	}
+}
+
 
 float MCU_GetMaxInstallationCurrentSwitch()
 {

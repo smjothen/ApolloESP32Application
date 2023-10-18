@@ -47,11 +47,11 @@ double get_accumulated_energy(){
 
 	float dspic_session_energy_max = chargeSession_GetEnergy();
 
-	ESP_LOGW(TAG, "dspic max %f (session: %f) opMode %i", dspic_session_energy_max, MCU_GetEnergy(), MCU_GetChargeOperatingMode());
+	ESP_LOGI(TAG, "dspic max %f (session: %f) opMode %i", dspic_session_energy_max, MCU_GetEnergy(), MCU_GetChargeOperatingMode());
 
 	if(previousEnergyMax > dspic_session_energy_max){
 		storage_update_accumulated_energy(0.0);
-		ESP_LOGW(TAG, "previousEnergyMax (%f > %f) dspic_session_energy_max - passing 0.0 max value to STORAGE", previousEnergyMax, dspic_session_energy_max);
+		ESP_LOGI(TAG, "previousEnergyMax (%f > %f) dspic_session_energy_max - passing 0.0 max value to STORAGE", previousEnergyMax, dspic_session_energy_max);
 	}
 
 	double accumulated_energy_tmp = storage_update_accumulated_energy(dspic_session_energy_max);
@@ -172,7 +172,7 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 
 	if(logReaderArray != NULL)
 	{
-		ESP_LOGW(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
+		ESP_LOGI(TAG, "CompletedSession OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
 
 		double sessEnergy = cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble;
 		double signedEnergy = GetEnergySigned();
@@ -251,7 +251,7 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 
 	strcpy(messageString, buf);
 
-	ESP_LOGW(TAG, "\r\nOCMF: %i:: %s\r\n", strlen(messageString), messageString);
+	ESP_LOGI(TAG, "\r\nOCMF: %i:: %s\r\n", strlen(messageString), messageString);
 
 	ESP_LOGI(TAG, "Made CompletedSessionObject");
 
@@ -302,7 +302,7 @@ cJSON * OCMF_AddElementToOCMFLog_no_lock(char *tx, time_t time_in, double energy
 
 			cJSON_AddItemToArray(logReaderArray, logArrayElement);
 
-			ESP_LOGW(TAG, "OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
+			ESP_LOGI(TAG, "OCMF Array size: %i: ", cJSON_GetArraySize(logReaderArray));
 		}
 		else
 		{

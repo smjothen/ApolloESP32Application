@@ -498,7 +498,7 @@ void storage_Set_Location(char * newString)
 	if(strlen(newString) == 3) //Shall always be 3 chars
 	{
 		strcpy(configurationStruct.location, newString);
-		ESP_LOGW(TAG, "Set location");
+		ESP_LOGI(TAG, "Set location");
 		return;
 	}
 }
@@ -508,7 +508,7 @@ void storage_Set_Timezone(char * newString)
 	if(strlen(newString) < DEFAULT_STR_SIZE)
 	{
 		strcpy(configurationStruct.timezone, newString);
-		ESP_LOGW(TAG, "Set timezone");
+		ESP_LOGI(TAG, "Set timezone");
 		return;
 	}
 }
@@ -531,7 +531,7 @@ void storage_Set_TimeSchedule(char * newString)
 	if(strlen(newString) < SCHEDULE_SIZE)
 	{
 		strcpy(configurationStruct.timeSchedule, newString);
-		ESP_LOGW(TAG, "Set timeSchedule");
+		ESP_LOGI(TAG, "Set timeSchedule");
 		return;
 	}
 }
@@ -1852,7 +1852,7 @@ double storage_update_accumulated_energy(float session_energy){
 		   (session_read_result == ESP_ERR_NVS_NOT_FOUND) 
 		&& (accumulated_read_result == ESP_ERR_NVS_NOT_FOUND)
 	){
-		ESP_LOGW(TAG, "initing energy accumulation");
+		ESP_LOGI(TAG, "initing energy accumulation");
 		previous_session_energy = 0.0;
 		previous_accumulated_energy = 0.0;
 		accumulator_initialised = true;
@@ -1864,12 +1864,12 @@ double storage_update_accumulated_energy(float session_energy){
 		goto err;
 	}
 
-	ESP_LOGW(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
+	ESP_LOGI(TAG, "Energy accumulation inputs: ses %f, pses %f, pacc %f",
 		session_energy, previous_session_energy, previous_accumulated_energy
 	);
 
 	if(session_energy<0.0){
-		ESP_LOGW(TAG, "energy count not updated from dsPIC yet, using stale value: %f",
+		ESP_LOGI(TAG, "energy count not updated from dsPIC yet, using stale value: %f",
 			previous_accumulated_energy
 		);
 		result = previous_accumulated_energy;
@@ -1884,22 +1884,22 @@ double storage_update_accumulated_energy(float session_energy){
 	else if (session_energy < previous_session_energy){
 		// dspic has started new session
 		result = previous_accumulated_energy + session_energy;
-		ESP_LOGW(TAG, "### Energy reset - new session ### %f < %f", session_energy, previous_session_energy);
+		ESP_LOGI(TAG, "### Energy reset - new session ### %f < %f", session_energy, previous_session_energy);
 	}
 	else{
 		if(accumulator_initialised == true){
 			result = 0.0;
 		}else{
-			ESP_LOGW(TAG, "no change in energy");
+			ESP_LOGI(TAG, "no change in energy");
 			result = previous_accumulated_energy;
-			ESP_LOGW(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
+			ESP_LOGI(TAG, "updating total energy not needed %f -> %f (%f -> %f )",
 				previous_accumulated_energy, result, previous_session_energy, session_energy
 			);
 			goto err;
 		}
 	}
 
-	ESP_LOGW(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
+	ESP_LOGI(TAG, "UPDATING total energy %f -> %f (%f -> %f )",
 		previous_accumulated_energy, result, previous_session_energy, session_energy
 	);
 

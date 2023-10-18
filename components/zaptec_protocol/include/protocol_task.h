@@ -66,6 +66,11 @@ bool MCU_GetEmeterSnapshot(int param, uint8_t *source, float *ret);
 uint32_t MCU_GetDebugCounter();
 uint32_t MCU_GetWarnings();
 uint8_t MCU_GetResetSource();
+uint8_t MCU_ReadResetSource();
+void MCU_UpdateUseZaptecFinishedTimeout();
+float MCU_GetInstantPilotState();
+bool IsChargingAllowed();
+
 char * MCU_GetGridTypeString();
 uint8_t MCU_GetGridType();
 float MCU_GetChargeCurrentUserMax();

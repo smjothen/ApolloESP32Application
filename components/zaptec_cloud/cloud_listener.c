@@ -775,6 +775,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				if(new_session_controller != old_session_controller){
 					ESP_LOGW(TAG, "New: 860 session controller: %x", new_session_controller);
 					storage_Set_session_controller(new_session_controller);
+					MCU_UpdateUseZaptecFinishedTimeout();
 					doSave = true;
 
 					controller_change = true;
@@ -3440,6 +3441,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					ESP_LOGW(TAG, "New:  session controller: %x", new_session_controller);
 					storage_Set_session_controller(new_session_controller);
+					MCU_UpdateUseZaptecFinishedTimeout();
 					storage_SaveConfiguration();
 					
 				}

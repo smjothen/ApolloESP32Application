@@ -153,6 +153,7 @@
         ParamWarningValue = 732,
         ParamGridTypeOverride = 733,
         ParamIT3OptimizationEnabled = 734,
+        ParamUseZaptecFinishedTimeout = 735,
 
         NrOfChargeCards = 749,
         NewChargeCard = 750,

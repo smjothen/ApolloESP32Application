@@ -1361,7 +1361,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_CHARGING:
-		if(charge_mode == eCAR_CONNECTED) // Car reports connected but not charging
+		if((charge_mode == eCAR_CONNECTED) || (charge_mode == eCAR_STATE_F))//&& (IsChargingAllowed() == true))// Car reports connected but not charging
 			return eOCPP_CP_STATUS_SUSPENDED_EV;
 
 		return eOCPP_CP_STATUS_CHARGING;
@@ -1888,7 +1888,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 
 	switch(new_state){
 	case eOCPP_CP_STATUS_AVAILABLE:
-		ESP_LOGI(TAG, "OCPP STATE AVAILABLE");
+		ESP_LOGW(TAG, "OCPP STATE AVAILABLE");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
@@ -1910,7 +1910,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_PREPARING: // When adding to Preparing transition, make sure to update reserved_on_tag_accept
-		ESP_LOGI(TAG, "OCPP STATE PREPARING");
+		ESP_LOGW(TAG, "OCPP STATE PREPARING");
 
 		transition_to_preparing();
 
@@ -1926,7 +1926,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_CHARGING:
-		ESP_LOGI(TAG, "OCPP STATE CHARGING");
+		ESP_LOGW(TAG, "OCPP STATE CHARGING");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -1943,7 +1943,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_SUSPENDED_EV:
-		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_EV");
+		ESP_LOGW(TAG, "OCPP STATE SUSPENDED_EV");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -1960,7 +1960,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
-		ESP_LOGI(TAG, "OCPP STATE SUSPENDED_EVSE");
+		ESP_LOGW(TAG, "OCPP STATE SUSPENDED_EVSE");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -1980,7 +1980,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
-		ESP_LOGI(TAG, "OCPP STATE FINISHING");
+		ESP_LOGW(TAG, "OCPP STATE FINISHING");
 		ocpp_finishing_session = true;
 		SetAuthorized(false);
 		ocpp_start_token[0] = '\0';

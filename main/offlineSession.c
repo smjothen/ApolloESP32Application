@@ -466,7 +466,7 @@ int offlineSession_FindNewFileNumber()
 	FILE *file;
 	char buf[32] = {0};
 
-	ESP_LOGW(TAG, "Searching for first unused OfflineSession file...");
+	ESP_LOGI(TAG, "Searching for first unused OfflineSession file...");
 
 	//for (fileNo = 0; fileNo < max_offline_session_files; fileNo++)
 	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo--)
@@ -495,7 +495,7 @@ int offlineSession_FindNewFileNumber()
 		}
 	}
 
-	ESP_LOGW(TAG, "Found from top as first unused OfflineSession file: %d", fileNo);
+	ESP_LOGI(TAG, "Found from top as first unused OfflineSession file: %d", fileNo);
 
 	return fileNo;
 }
@@ -522,7 +522,7 @@ int offlineSession_FindOldestFile()
 		if(file != NULL)
 		{
 			fclose(file);
-			ESP_LOGW(TAG, "OfflineSession file: %d", fileNo);
+			ESP_LOGI(TAG, "OfflineSession file: %d", fileNo);
 			return fileNo; ///Return the current file number
 		}
 
@@ -553,11 +553,11 @@ int offlineSession_FindNrOfFiles()
 		{
 			fclose(file);
 			fileCount++;
-			ESP_LOGW(TAG, "OfflineSession found file: %d", fileNo);
+			ESP_LOGI(TAG, "OfflineSession found file: %d", fileNo);
 		}
 
 	}
-	ESP_LOGW(TAG, "Nr of OfflineSession files: %d", fileCount);
+	ESP_LOGI(TAG, "Nr of OfflineSession files: %d", fileCount);
 
 	if(fileCount > maxOfflineSessionsCount)
 		maxOfflineSessionsCount = fileCount;
@@ -667,7 +667,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 			/// Found the last file from top
 			fclose(lastUsedFile);
 
-			ESP_LOGW(TAG, "OfflineSession found last used file from top: %d", fileNo);
+			ESP_LOGI(TAG, "OfflineSession found last used file from top: %d", fileNo);
 
 			/// End loop with fileNo >= 0 if last session was Incomplete
 			break;
@@ -751,7 +751,7 @@ int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	char * base64SessionData = base64_encode(sessionData, sessionDataLen, &outLen);
 	volatile int base64SessionDataLen = strlen(base64SessionData);
 
-	ESP_LOGW(TAG,"%d: %s\n", strlen(sessionData), sessionData);
+	ESP_LOGI(TAG,"%d: %s\n", strlen(sessionData), sessionData);
 	//ESP_LOGW(TAG,"%d: %s\n", strlen(base64SessionData), base64SessionData);
 	if(base64SessionDataLen != outLen)
 	{
@@ -971,7 +971,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	uint8_t fileVersion = 0;
 	fread(&fileVersion, 1, 1, sessionFile);
-	ESP_LOGW(TAG, "File version: %d", fileVersion);
+	ESP_LOGI(TAG, "File version: %d", fileVersion);
 
 	/// Read session CRC
 	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
@@ -988,7 +988,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
 
-	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
+	ESP_LOGI(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
 	if(crcRead != crcCalc)
 	{
@@ -1022,7 +1022,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 				memset(sessionData, 0, outLen+1);
 				strncpy(sessionData, sessionDataCreated, outLen);
-				ESP_LOGW(TAG,"%d->%d==%d %s\n",strlen(sessionDataCreated), outLen, strlen(sessionData), sessionData);
+				ESP_LOGI(TAG,"%d->%d==%d %s\n",strlen(sessionDataCreated), outLen, strlen(sessionData), sessionData);
 				offlineSession_AppendLogStringWithInt("3 SessLen: ", outLen);
 			}
 			else
@@ -1098,7 +1098,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 	uint8_t fileVersion = 0;
 	fread(&fileVersion, 1, 1, sessionFile);
-	ESP_LOGW(TAG, "File version: %d", fileVersion);
+	ESP_LOGI(TAG, "File version: %d", fileVersion);
 
 
 
@@ -1130,7 +1130,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 
 			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
 
-			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
+			ESP_LOGI(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 
 			if((crcCalc == packetCrc))
 			{
@@ -1221,12 +1221,12 @@ void offlineSession_append_energy(char label, time_t timestamp, double energy)
 	{
 		uint8_t fileVersion = 0;
 		fread(&fileVersion, 1, 1, sessionFile);
-		ESP_LOGW(TAG, "File version: %d", fileVersion);
+		ESP_LOGI(TAG, "File version: %d", fileVersion);
 
 		/// Find end of file to get size
 		fseek(sessionFile, 0L, SEEK_END);
 		size_t readSize = ftell(sessionFile);
-		ESP_LOGW(TAG, "FileNo %d: %c, filesize: %d", activeFileNumber, label, readSize);
+		ESP_LOGI(TAG, "FileNo %d: %c, filesize: %d", activeFileNumber, label, readSize);
 
 		fseek(sessionFile, FILE_NR_OF_OCMF_ADDR_1000, SEEK_SET);
 
@@ -1291,7 +1291,7 @@ void offlineSession_append_energy(char label, time_t timestamp, double energy)
 			}
 		}
 
-		ESP_LOGW(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %" PRId32 "", activeFileNumber, label, nrOfOCMFElements);
+		ESP_LOGI(TAG, "FileNo %d: &1000: Nr of OCMF elements: %c: %" PRId32 "", activeFileNumber, label, nrOfOCMFElements);
 
 		/// And add 1.
 
@@ -1307,8 +1307,8 @@ void offlineSession_append_energy(char label, time_t timestamp, double energy)
 		//ESP_LOGW(TAG, "FileNo %d: writing to OFFS-file with crc=%u", activeFileNumber, line.crc);
 
 		int newElementPosition = (FILE_OCMF_START_ADDR_1004) + (nrOfOCMFElements * sizeof(struct LogOCMFData));
-		ESP_LOGW(TAG, "FileNo %d: New element position: #%" PRId32 ": %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
-		ESP_LOGW(TAG, "OCMF Write %" PRIi32 " addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 "", nrOfOCMFElements, newElementPosition, line.label, timestamp, line.energy, line.crc);
+		ESP_LOGI(TAG, "FileNo %d: New element position: #%" PRId32 ": %d", activeFileNumber, nrOfOCMFElements, newElementPosition);
+		ESP_LOGI(TAG, "OCMF Write %" PRIi32 " addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 "", nrOfOCMFElements, newElementPosition, line.label, timestamp, line.energy, line.crc);
 
 		/// Write new element
 		fseek(sessionFile, newElementPosition, SEEK_SET);
@@ -1327,7 +1327,7 @@ void offlineSession_append_energy(char label, time_t timestamp, double energy)
 
 		nrOfOCMFElements = 99;
 		fread(&nrOfOCMFElements, sizeof(uint32_t), 1, sessionFile);
-		ESP_LOGW(TAG, "FileNo %d: Nr elements: #%" PRId32 "", activeFileNumber, nrOfOCMFElements);
+		ESP_LOGI(TAG, "FileNo %d: Nr elements: #%" PRId32 "", activeFileNumber, nrOfOCMFElements);
 		fclose(sessionFile);
 	}
 
