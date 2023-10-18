@@ -379,7 +379,7 @@ bool calibration_tick_warming_up(CalibrationCtx *ctx) {
                         CAL_CSTATE(ctx) = Complete;
                         break;
                     } else {
-                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %" PRIu32 "s) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(minimumDuration) / 1000);
+                        ESP_LOGI(TAG, "%s: Warming up (%.1fA for %" PRIu32 "s) ...", calibration_state_to_string(ctx), expectedCurrent, pdTICKS_TO_MS(maxWait) / 1000);
                     }
                 }
 
@@ -1359,8 +1359,11 @@ void calibration_task(void *pvParameters) {
             continue;
         }
 
-        tcpip_adapter_ip_info_t ip_info; 
-        tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ip_info);
+        esp_netif_ip_info_t ip_info = {0}; 
+        esp_netif_t *netif = esp_netif_get_default_netif();
+        if (netif) {
+            esp_netif_get_ip_info(netif, &ip_info);
+        }
 
         wifi_ap_record_t wifidata;
         if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
