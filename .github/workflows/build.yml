@@ -36,19 +36,15 @@ jobs:
         fetch-depth: 0
         submodules: recursive
 
-    - name: Azure login
+    - name: Azure Login
       uses: azure/login@v1
       with:
         client-id: ${{ env.AZURE_CLIENT_ID }}
         tenant-id: ${{ env.AZURE_TENANT_ID }}
         subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Azure container registry login
+    - name: Azure CR Login
       run: az acr login --name ${{ env.AZURE_ACR_NAME }}
-
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
 
     - name: Build AppWithBootloader
       run: |
@@ -66,7 +62,7 @@ jobs:
         esp_idf_version: v5.1.1
         target: esp32
 
-    - name: Mark build
+    - name: Mark Build
       run: |
         git status
         cat dependencies.lock
@@ -75,12 +71,12 @@ jobs:
         cp build/ApolloEsp32Application_gitref*.bin .
         cp bin/dspic.bin .
 
-    - name: Upload artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
         path: dspic.bin
 
-    - name: Upload artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
         path: ApolloEsp32Application_gitref*.bin
