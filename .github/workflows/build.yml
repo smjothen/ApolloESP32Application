@@ -13,7 +13,7 @@ env:
   AZURE_CLIENT_ID: ${{ vars.AZURE_DEV_WORKFLOW_CLIENT_ID }}
   AZURE_ACR_NAME: zapcloud
   containerRepository: zapcloud.azurecr.io/zaptec-go-mcu
-  buildImageTag: "2f0dc9d" # latest or short hash of build image to use
+  buildImageTag: "6537a70" # latest or short hash of build image to use
 
 jobs:
   build:
@@ -55,8 +55,7 @@ jobs:
         docker pull "${{ env.containerRepository }}:${{ env.buildImageTag }}"
         cd ApolloMCUApplication
         docker run --entrypoint "./entrypoint.sh" --workdir /mnt --rm -v /out:/out -v "${PWD}:/mnt" "${{ env.containerRepository }}:${{ env.buildImageTag }}" AppWithBootloader
-        pip install click==8.1.7 intelhex==2.3.0
-        ./hex2bin.py /out/AppWithBootloader.hex ../bin/dspic.bin
+        sudo mv /out/dspic.bin ../bin/dspic.bin
         # Repo can be dirty now if newly built dspic.bin isn't the same as one checked into ApolloESP32Application
         # TODO: Get permissions to commit and push the new dspic.bin or just fail the build if different?
 
