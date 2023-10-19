@@ -52,6 +52,8 @@
 #endif
 #include "ocpp.h"
 #include "ocpp_smart_charging.h"
+#include "ocpp_task.h"
+#include "types/ocpp_charge_point_error_code.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -689,6 +691,14 @@ void app_main(void)
 					ESP_LOGE(TAG_MAIN, "LOW MEM - RESTARTING");
 					storage_Set_And_Save_DiagnosticsLog("#12 Low dma mem. Memory leak?");
 					esp_restart();
+
+				}else if(lowMemCounter == 15 && free_dma > 1000 && storage_Get_session_controller() == eSESSION_OCPP){
+					// We notify via OCPP if we have enough memory to do so and session is ocpp. Due to the 50 char limitation
+					// of status notification we do not inform CS on wheter or not free memory has increased beyound minimum value.
+					// If the freed memory becomes important and should be sent to the CS, then a vendor error code with description
+					// could be used.
+					ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Low memory. Will restart soon for consistency.",
+												NULL, NULL, true, false);
 				}
 			}
 
