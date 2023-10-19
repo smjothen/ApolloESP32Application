@@ -110,7 +110,7 @@ typedef enum {
 #define DIAGNOSTICS_STRING_SIZE 100
 
 #define CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH 32
-#define DEFAULT_CSL_LENGTH 6//ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
+#define DEFAULT_CSL_LENGTH 10 //ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
 
 // Network IDs

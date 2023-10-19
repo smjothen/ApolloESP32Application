@@ -231,7 +231,7 @@ static int populate_sample_current_import(char * phase, enum ocpp_reading_contex
 
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 		//Phase 1
-		sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -240,7 +240,7 @@ static int populate_sample_current_import(char * phase, enum ocpp_reading_contex
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
 		//Phase 2
 		new_value.phase = eOCPP_PHASE_L2;
-		sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(1));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -248,7 +248,7 @@ static int populate_sample_current_import(char * phase, enum ocpp_reading_contex
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
 		//Phase 3
 		new_value.phase = eOCPP_PHASE_L3;
-		sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(2));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -265,7 +265,7 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 		.unit = eOCPP_UNIT_A
 	};
 
-	sprintf(new_value.value, "%f", MCU_GetChargeCurrentUserMax());
+	sprintf(new_value.value, "%.1f", MCU_GetChargeCurrentUserMax());
 	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
 		return 0;
 
@@ -307,11 +307,11 @@ static int populate_sample_energy_active_import_interval(enum ocpp_reading_conte
 
 	switch(context){
 	case eOCPP_CONTEXT_SAMPLE_CLOCK:
-		sprintf(new_value.value, "%f", aligned_energy_active_import_end - aligned_energy_active_import_begin);
+		sprintf(new_value.value, "%.2f", aligned_energy_active_import_end - aligned_energy_active_import_begin);
 		break;
 	case eOCPP_CONTEXT_SAMPLE_PERIODIC:
 	case eOCPP_CONTEXT_TRANSACTION_END:
-		sprintf(new_value.value, "%f", sampled_energy_active_import_end - sampled_energy_active_import_begin);
+		sprintf(new_value.value, "%.2f", sampled_energy_active_import_end - sampled_energy_active_import_begin);
 		break;
 	default:
 		return 0;
@@ -332,7 +332,7 @@ static float populate_sample_power_active_import(enum ocpp_reading_context_id co
 		.unit = eOCPP_UNIT_W
 	};
 
-	sprintf(new_value.value, "%f", MCU_GetPower());
+	sprintf(new_value.value, "%.1f", MCU_GetPower());
 	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
 		return 0;
 
@@ -350,12 +350,12 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 
 	if(connector_id == 0){
 		// Body
-		sprintf(new_value.value, "%f", MCU_GetTemperaturePowerBoard(0));
+		sprintf(new_value.value, "%.1f", MCU_GetTemperaturePowerBoard(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
 			return 0;
 		}
 
-		sprintf(new_value.value, "%f", MCU_GetTemperaturePowerBoard(1));
+		sprintf(new_value.value, "%.1f", MCU_GetTemperaturePowerBoard(1));
 		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
 			return 1;
 		}
@@ -369,7 +369,7 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 			//phase 1
 			new_value.phase = eOCPP_PHASE_L1;
-			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(0));
+			sprintf(new_value.value, "%.1f", MCU_GetEmeterTemperature(0));
 			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 				new_values_count++;
 		}
@@ -377,7 +377,7 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
 			//phase 2
 			new_value.phase = eOCPP_PHASE_L2;
-			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(1));
+			sprintf(new_value.value, "%.1f", MCU_GetEmeterTemperature(1));
 			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 				new_values_count++;
 		}
@@ -385,7 +385,7 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
 			//phase 3
 			new_value.phase = eOCPP_PHASE_L3;
-			sprintf(new_value.value, "%f", MCU_GetEmeterTemperature(2));
+			sprintf(new_value.value, "%.1f", MCU_GetEmeterTemperature(2));
 			if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 				new_values_count++;
 		}
@@ -410,7 +410,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	size_t new_values_count = 0;
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 		//Phase 1
-		sprintf(new_value.value, "%f", MCU_GetCurrents(0));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -418,7 +418,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
 		//Phase 2
 		new_value.phase = eOCPP_PHASE_L2;
-		sprintf(new_value.value, "%f", MCU_GetCurrents(1));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(1));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -426,7 +426,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
 		//Phase 3
 		new_value.phase = eOCPP_PHASE_L3;
-		sprintf(new_value.value, "%f", MCU_GetCurrents(2));
+		sprintf(new_value.value, "%.1f", MCU_GetCurrents(2));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -496,6 +496,13 @@ void save_interval_measurands(enum ocpp_reading_context_id context){
 
 int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connector_id, enum ocpp_reading_context_id context,
 		struct ocpp_sampled_value_list * value_list_out){
+
+	if(phase == NULL){
+		uint8_t rotation = storage_Get_PhaseRotation();
+		if((rotation > 0 && rotation < 4) || (rotation > 9 && rotation < 13))
+			phase = OCPP_PHASE_L1;
+	}
+
 	switch(measurand){
 	case eOCPP_MEASURAND_CURRENT_IMPORT:
 		return populate_sample_current_import(phase, context, value_list_out);
@@ -2479,9 +2486,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				OCPP_MEASURAND_VOLTAGE
 				);
 
-		// TODO: "where applicable, the Measurand is combined with the optional phase; for instance: Voltage.L1"
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUES_SAMPLED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
+		err = set_config_csl(storage_Set_ocpp_meter_values_sampled_data, value, DEFAULT_CSL_LENGTH, 7,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
@@ -2515,7 +2521,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_bool(storage_Set_ocpp_stop_transaction_on_invalid_id, value, NULL);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 6,
+		err = set_config_csl(storage_Set_ocpp_stop_txn_aligned_data, value, DEFAULT_CSL_LENGTH, 7,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
@@ -2526,7 +2532,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA) == 0){
-		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_LENGTH, 6,
+		err = set_config_csl(storage_Set_ocpp_stop_txn_sampled_data, value, DEFAULT_CSL_LENGTH, 7,
 				OCPP_MEASURAND_CURRENT_IMPORT,
 				OCPP_MEASURAND_CURRENT_OFFERED,
 				OCPP_MEASURAND_ENERGY_ACTIVE_IMPORT_REGISTER,
