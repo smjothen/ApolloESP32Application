@@ -215,6 +215,13 @@ error:
 
 }
 
+float current_offered_from_pilot_state(float pilot_state){
+	if(pilot_state < 6 || pilot_state > 80)
+		return 0;
+
+	return pilot_state;
+}
+
 static int populate_sample_current_import(char * phase, enum ocpp_reading_context_id context, struct ocpp_sampled_value_list * value_list_out){
 	//Because the go only has 1 connector, we can get the current in the same way regardless of connector id
 
@@ -265,7 +272,7 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 		.unit = eOCPP_UNIT_A
 	};
 
-	sprintf(new_value.value, "%.1f", MCU_GetChargeCurrentUserMax());
+	sprintf(new_value.value, "%.1f", current_offered_from_pilot_state(MCU_GetInstantPilotState()));
 	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
 		return 0;
 
