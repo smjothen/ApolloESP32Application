@@ -195,6 +195,7 @@ struct Configuration
 
 	bool ocpp_authorization_cache_enabled;
 	char url_ocpp[CONFIG_OCPP_URL_MAX_LENGTH];
+	bool allow_lte_ocpp;
 	char chargebox_identity_ocpp[CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH];
 	bool availability_ocpp;
 	bool authorization_key_set_from_zaptec_ocpp;
