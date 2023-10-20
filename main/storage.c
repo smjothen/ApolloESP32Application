@@ -83,6 +83,7 @@ void storage_Init_Configuration()
 
 	// ocpp settings
 	strcpy(configurationStruct.url_ocpp, "");
+	configurationStruct.allow_lte_ocpp = false;
 	configurationStruct.session_controller = eSESSION_STANDALONE;
 	configurationStruct.availability_ocpp = configurationStruct.isEnabled;
 	// ocpp core profile settings
@@ -245,6 +246,11 @@ void storage_Set_TransmitChangeLevel(float newValue)
 void storage_Set_url_ocpp(const char * newValue)
 {
 	strcpy(configurationStruct.url_ocpp, newValue);
+}
+
+void storage_Set_allow_lte_ocpp(bool newValue)
+{
+	configurationStruct.allow_lte_ocpp = newValue;
 }
 
 void storage_Set_availability_ocpp(bool newValue)
@@ -655,6 +661,11 @@ const char * storage_Get_url_ocpp()
 	return configurationStruct.url_ocpp;
 }
 
+bool storage_Get_allow_lte_ocpp()
+{
+	return configurationStruct.allow_lte_ocpp;
+}
+
 bool storage_Get_availability_ocpp()
 {
 	return configurationStruct.availability_ocpp;
@@ -1021,6 +1032,7 @@ esp_err_t storage_SaveConfiguration()
 
 	//OCPP settings
 	err += nvs_set_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp);
+	err += nvs_set_u8(configuration_handle, "allowLteOcpp", configurationStruct.allow_lte_ocpp);
 	err += nvs_set_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp);
 	err += nvs_set_u8(configuration_handle, "availOcpp", configurationStruct.availability_ocpp);
 	err += nvs_set_u8(configuration_handle, "authKeyFromOcpp", configurationStruct.authorization_key_set_from_zaptec_ocpp);
@@ -1121,6 +1133,9 @@ esp_err_t storage_ReadConfiguration()
 	readSize = CONFIG_OCPP_URL_MAX_LENGTH;
 	if(nvs_get_str(configuration_handle, "urlOcpp", configurationStruct.url_ocpp, &readSize) != 0)
 		strcpy(configurationStruct.url_ocpp, "");
+	if(nvs_get_u8(configuration_handle, "allowLteOcpp", (uint8_t *)&configurationStruct.allow_lte_ocpp) != 0)
+		configurationStruct.allow_lte_ocpp = false;
+
 	readSize = CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH;
 	if(nvs_get_str(configuration_handle, "cbidOcpp", configurationStruct.chargebox_identity_ocpp, &readSize) != 0)
 		configurationStruct.chargebox_identity_ocpp[0] = '\0';

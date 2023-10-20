@@ -3483,7 +3483,8 @@ static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
 		// TODO: see if there is a better way to check connectivity
-		while(connectivity_GetActivateInterface() != eCONNECTION_WIFI){
+		while(connectivity_GetActivateInterface() != eCONNECTION_WIFI
+			&& (!storage_Get_allow_lte_ocpp() || connectivity_GetActivateInterface() != eCONNECTION_LTE)){
 			if(should_run == false || should_reboot)
 				goto clean;
 
@@ -3652,7 +3653,7 @@ static void ocpp_task(){
 			const uint main_event = (data & MAIN_EVENT_MASK) >> MAIN_EVENT_OFFSET;
 
 
-			if(connectivity_GetActivateInterface() == eCONNECTION_LTE){
+			if(connectivity_GetActivateInterface() == eCONNECTION_LTE && !storage_Get_allow_lte_ocpp()){
 				ESP_LOGW(TAG, "Connection mode set to LTE and prohibited by in this version");
 				ocpp_send_status_notification(-1, OCPP_CP_ERROR_OTHER_ERROR, "Switched to LTE. Closing OCPP until WIFI is active",
 							CONFIG_OCPP_VENDOR_ID, OCPP_CP_VENDOR_ERROR_COMMUNICATION_MODE_PROHIBITED, true, false);

@@ -3446,6 +3446,44 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					
 				}
 			}
+			else if(strstr(commandString, "ocpp allow lte"))
+			{
+				ESP_LOGI(TAG, "Requested to allow/disallow OCPP on LTE");
+				char * param_index = strstr(commandString, "ocpp allow lte") + strlen("ocpp allow lte");
+
+				while(isblank(*param_index))
+					param_index++;
+
+				bool allow = false;
+				if(param_index == NULL){
+					responseStatus = 400;
+				}else if(strncasecmp(param_index, "true", strlen("true")) == 0){
+					param_index = param_index + strlen("true");
+					responseStatus = 200;
+					allow = true;
+
+				}else if(strncasecmp(param_index, "false", strlen("false")) == 0){
+					param_index = param_index + strlen("false");
+					responseStatus = 200;
+					allow = false;
+
+				}else{
+					responseStatus = 400;
+				}
+
+				if(responseStatus == 200){
+					while(isblank(*param_index))
+						param_index++;
+
+					if(*param_index != '\"' || *(param_index+1) != ']' || *(param_index+2) != '\0')
+						responseStatus = 400;
+				}
+
+				if(responseStatus == 200){
+					storage_Set_allow_lte_ocpp(allow);
+					ESP_LOGI(TAG, "New allow_lte_ocpp value is: %s", storage_Get_allow_lte_ocpp() ? "True" : "False");
+				}
+			}
 			else
 			{
 				responseStatus = 400;
