@@ -27,9 +27,9 @@ void zntp_init()
     // Note: Sanmina seems to block pool.ntp.org, but no.pool.ntp.org should
     // work everywhere? Otherwise we need to set this differently in production test vs. 
     // in the field.
-    sntp_setservername(0, "pool.ntp.org");
-    sntp_setservername(1, "no.pool.ntp.org");
-    sntp_setservername(2, "europe.pool.ntp.org");
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_setservername(1, "no.pool.ntp.org");
+    esp_sntp_setservername(2, "europe.pool.ntp.org");
 
     //sntp_setserver(1,"216.239.35.12");//0xD8EF230C);// 216.239.35.12)
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);

@@ -1,0 +1,89 @@
+name: Build 
+
+on: push
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  GITHUB_APP_ID: "195169"
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_DEV_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_DEV_WORKFLOW_CLIENT_ID }}
+  AZURE_ACR_NAME: zapcloud
+  containerRepository: zapcloud.azurecr.io/zaptec-go-mcu
+  buildImageTag: "6537a70" # latest or short hash of build image to use
+
+jobs:
+  build:
+    name: Build ESP Firmware
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+    - name: Get Install Token
+      id: app-token
+      uses: getsentry/action-github-app-token@v2
+      with:
+        app_id: ${{ env.GITHUB_APP_ID }}
+        private_key: ${{ secrets.ZAPTEC_GIT_CONTENTS_APP_PRIVATE_KEY }}
+
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+      with:
+        token: ${{ steps.app-token.outputs.token }}
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ env.AZURE_CLIENT_ID }}
+        tenant-id: ${{ env.AZURE_TENANT_ID }}
+        subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Azure CR Login
+      run: az acr login --name ${{ env.AZURE_ACR_NAME }}
+
+    - name: Build AppWithBootloader
+      run: |
+        docker pull "${{ env.containerRepository }}:${{ env.buildImageTag }}"
+        cd ApolloMCUApplication
+        docker run --entrypoint "./entrypoint.sh" --workdir /mnt --rm -v /out:/out -v "${PWD}:/mnt" "${{ env.containerRepository }}:${{ env.buildImageTag }}" AppWithBootloader
+        sudo mv /out/dspic.bin ../bin/dspic.bin
+        # Repo can be dirty now if newly built dspic.bin isn't the same as one checked into ApolloESP32Application
+        # TODO: Get permissions to commit and push the new dspic.bin or just fail the build if different?
+
+    - name: Build ESP
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        # We've agreed on tag v5.1.1 so don't change this :)
+        esp_idf_version: v5.1.1
+        target: esp32
+
+    - name: Mark Build
+      run: |
+        git status
+        cat dependencies.lock
+        sha256sum bin/dspic.bin
+        sudo ./mark_build.py
+        cp build/ApolloEsp32Application_gitref*.bin .
+        cp bin/dspic.bin .
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        path: dspic.bin
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        path: ApolloEsp32Application_gitref*.bin
+
+    - name: Release ESP
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          ApolloEsp32Application_gitref*.bin

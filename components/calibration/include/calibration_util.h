@@ -27,8 +27,7 @@ bool calibration_stop_mid_mode(CalibrationCtx *ctx);
 
 bool calibration_start_calibration_run(CalibrationType type);
 
-bool calibration_read_average(CalibrationType type, int phase, float *average) ;
-uint16_t calibration_get_emeter_averages(CalibrationType type, float *averages);
+uint16_t calibration_get_emeter_averages(CalibrationCtx *ctx, CalibrationType type, float *averages);
 
 bool calibration_open_relays(CalibrationCtx *ctx);
 bool calibration_close_relays(CalibrationCtx *ctx);

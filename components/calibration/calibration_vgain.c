@@ -59,7 +59,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
             float avg[3];
 
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 if (calibration_ref_voltage_is_recent(ctx)) {
 
                     for (int phase = 0; phase < 3; phase++) {
@@ -95,7 +95,7 @@ bool calibration_step_calibrate_voltage_gain(CalibrationCtx *ctx) {
 
             float avg[3];
 
-            if (calibration_get_emeter_averages(type, avg)) {
+            if (calibration_get_emeter_averages(ctx, type, avg)) {
                 for (int phase = 0; phase < 3; phase++) {
                     float average = calibration_scale_emeter(unit, avg[phase]);
 

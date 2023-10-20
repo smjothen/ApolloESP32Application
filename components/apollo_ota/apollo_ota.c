@@ -281,7 +281,7 @@ static void ota_task(void *pvParameters){
 			int a, b, c, d = 0;
 			int sscanfResult = sscanf(image_version, "%i.%i.%i.%i", &a, &b, &c, &d);
 			ESP_LOGI(TAG, "Parsed version number: %i.%i.%i.%i (Cnt:%d)", a, b, c, d, sscanfResult);
-			if((a >= 2) && (b >= 3))
+			if((a > 2) || ((a == 2) && (b >= 3)))
 			{
 				ESP_LOGI(TAG, "Upgrade allowed");
 			}

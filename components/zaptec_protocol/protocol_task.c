@@ -690,7 +690,7 @@ MessageType MCU_SendCommandId(uint16_t paramIdentifier)
 	return rxMsg.type;
 }
 
-MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, size_t length)
+MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, size_t length, uint8_t *errorCode)
 {
 	ZapMessage txMsg;
 	txMsg.type = MsgCommand;
@@ -699,7 +699,10 @@ MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, 
 	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
 	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 	uint16_t encoded_length = ZEncodeMessageHeaderAndByteArray(&txMsg, data, length, txBuf, encodedTxBuf);
+
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	*errorCode = rxMsg.data[0];
+
 	freeZapMessageReply();
 
 	return rxMsg.type;

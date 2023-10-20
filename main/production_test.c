@@ -441,6 +441,11 @@ char *host_from_rfid(){
 	if(strcmp(latest_tag.idAsString, "nfc-AA47047D")==0) // fredrik
 		return "192.168.0.104";
 
+	if(strcmp(latest_tag.idAsString, "nfc-B3A87ECC")==0) // steve
+		return "10.0.1.65";
+	if(strcmp(latest_tag.idAsString, "nfc-F3F9BBCB")==0) // steve
+		return "10.0.1.65";
+
 	//Wet line 1
 	if(strcmp(latest_tag.idAsString, "nfc-AAF895AC")==0)
 		return "10.0.1.15";
