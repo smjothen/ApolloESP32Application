@@ -517,7 +517,7 @@ void app_main(void)
 
 #ifndef CONFIG_ZAPTEC_MCU_APPLICATION_ONLY
 
-    //validate_booted_image();
+    validate_booted_image();
 
 #endif
 

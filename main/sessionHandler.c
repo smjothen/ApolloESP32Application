@@ -4088,8 +4088,16 @@ void sessionHandler_Pulse()
 	if(connectivity_GetMQTTInitialized())
 	{
 		pulseOnline = isMqttConnected();
+		
+		if(storage_Get_session_controller() == eSESSION_OCPP)
+		{
+			pulseInterval = PULSE_OCPP;
 
-		if(storage_Get_Standalone() == true)
+			/// If other than default on storage, use this to override pulseInterval
+			if(storage_Get_PulseInterval() != 60)
+				pulseInterval = storage_Get_PulseInterval();
+		}
+		else if(storage_Get_Standalone() == true)
 		{
 			pulseInterval = PULSE_STANDALONE;
 
@@ -4146,8 +4154,8 @@ void sessionHandler_Pulse()
 
 		/// If going from offline to online - ensure new pulse is sent instantly
 		/// Cloud sets charger as online within one minute after new pulse is received.
-		//if((pulseOnline == true) && (previousPulseOnline == false))
-			//pulseCounter = PULSE_INIT_TIME;
+		if((pulseOnline == true) && (previousPulseOnline == false))
+			pulseCounter = PULSE_INIT_TIME;
 
 		///Send pulse at interval or when there has been a change in interval
 		if(((pulseCounter >= pulseInterval) && (pulseOnline == true)) || ((sendPulseOnChange == true) && (pulseOnline == true)))

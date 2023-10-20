@@ -4119,9 +4119,9 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
     //Ping is sent if no other communication has occured since timer.
     if(storage_Get_Standalone() == 0) {
     	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
-		} else {
+	} else {
     	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
-		}
+	}
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;
