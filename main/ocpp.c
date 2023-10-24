@@ -1471,7 +1471,11 @@ esp_err_t add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(cJSON * 
 }
 
 esp_err_t add_configuration_ocpp_websocket_ping_interval(cJSON * key_list){
-	if(write_configuration_u32(storage_Get_ocpp_websocket_ping_interval(), value_buffer) != 0)
+	uint32_t ping_interval = storage_Get_ocpp_websocket_ping_interval();
+	if(ping_interval == UINT32_MAX)
+		ping_interval = 0;
+
+	if(write_configuration_u32(ping_interval, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL, false, value_buffer);
