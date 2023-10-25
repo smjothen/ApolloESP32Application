@@ -683,7 +683,7 @@ void sessionHandler_OcppTransitionFromFaulted(){
  */
 void transition_to_preparing(){
 	preparing_started = time(NULL);
-	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED){
+	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED && isAuthorized){
 		set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
 	}
 }
