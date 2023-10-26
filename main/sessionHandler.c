@@ -986,7 +986,6 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 
 	if(reason == eOCPP_REASON_OTHER){ // No reason has been set, try to detect more specific reason
 		ESP_LOGW(TAG, "OCPP reason not explicitly set");
-
 		/*
 		 * We use a low counter to detect reboot, as it is possible that ocpp connected quickly and transaction
 		 * was very short.
@@ -999,7 +998,7 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 				reason = eOCPP_REASON_REBOOT;
 			}
 
-		}else if(ocpp_state == eOCPP_CP_STATUS_AVAILABLE){
+		}else if(ocpp_state != eOCPP_CP_STATUS_FAULTED && MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED){
 			ESP_LOGI(TAG, "Looks like transaction stopped due to car disconnect");
 			reason = eOCPP_REASON_EV_DISCONNECT;
 		}
