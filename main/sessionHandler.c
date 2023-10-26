@@ -612,6 +612,9 @@ enum ocpp_led_overwrite{
 };
 
 void set_ocpp_state_led_overwrite(enum ocpp_led_overwrite led_overwrite){
+	if(led_state_overwritten)
+		return;
+
 	ESP_LOGE(TAG, "Overwriting led state");
 
 	led_state_overwritten = true;
@@ -683,9 +686,6 @@ void sessionHandler_OcppTransitionFromFaulted(){
  */
 void transition_to_preparing(){
 	preparing_started = time(NULL);
-	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED && isAuthorized){
-		set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
-	}
 }
 
 void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
@@ -2092,7 +2092,14 @@ static void handle_preparing(){
 		ocpp_min_limit = storage_Get_CurrentInMinimum();
 		ocpp_max_limit = storage_Get_StandaloneCurrent();
 
-		MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, ocpp_min_limit);
+		// In case of quick disconnect that did not cause transition on esp side
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+		if(ret != MsgCommandAck)
+		{
+			ESP_LOGE(TAG, "Unable to grant authorization to MCU when starting charging");
+		}
+
+		ret = MCU_SendFloatParameter(ParamCurrentInMinimum, ocpp_min_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Min current set to %f", storage_Get_CurrentInMinimum());
 		}else{
@@ -2138,7 +2145,7 @@ static void handle_preparing(){
 
 	}else if(isAuthorized && MCU_GetChargeMode() == eCAR_DISCONNECTED){
 		if(preparing_started + storage_Get_ocpp_connection_timeout() < time(NULL)){
-			ESP_LOGW(TAG, "Cable was not connected within connection timeout, removind authorization");
+			ESP_LOGW(TAG, "Cable was not connected within connection timeout, removing authorization");
 
 			audio_play_nfc_card_denied();
 			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
@@ -2161,6 +2168,7 @@ static void handle_preparing(){
 			}
 		}
 		else{
+			set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
 			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %" PRIu64 "/%" PRIu32, time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
 		}
 	}
