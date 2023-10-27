@@ -140,6 +140,21 @@ config OCPP_SEND_LOCAL_LIST_MAX_LENGTH # 9.2.3
 	Maximum number of identifications that can be send in a single SendLocalList.req
        default 255
 
+config OCPP_LIST_CONFLICT_FULL
+       bool "Rigid list conflict check"
+       help
+    The OCPP specification defines LocalListConflict in two ways:
+    "The authorization information received from the Central System is in conflict with the
+    LocalAuthorizationList."
+    and:
+    "Conflicts between the local authorization list and the validity reported in, for instance, a
+    StartTransaction.conf message might occur. When this happens the Charge Point SHALL inform the Central System
+    by sending a StatusNotification with Connector set to 0, and ErrorCode set to 'LocalListConflict'"
+    The first description could indicate that any difference in the idTagInfo could cause a conflict. The
+    second could indicate that only the Status part of the idTagInfo may cause a conflict.
+    If this menuconfig option is y selected, then the first description is used else the second is used when
+    testing for conflict.
+       default n
 endmenu
 
 menu "Reservation Profile"
