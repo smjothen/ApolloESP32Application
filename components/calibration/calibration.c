@@ -213,9 +213,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
     cloud_observations_disable(true);
 
     // Disable offline sessions as well, chargers should be online during calibration but just in case...
-    fat_disable_mounting(eFAT_ID_FILES, true);
-    fat_unmount(eFAT_ID_FILES);
-
     offlineSession_disable();
     offline_log_disable();
 
