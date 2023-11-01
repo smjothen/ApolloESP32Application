@@ -741,9 +741,7 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				ESP_LOGW(TAG, "No meter values to send");
 
 			}else{
-				if(transaction_related){
-					ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list);
-
+				if(transaction_related && ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list) == 0){
 					if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0'){
 						ESP_LOGI(TAG, "Creating stoptxn meter values");
 

@@ -1898,6 +1898,7 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 	int entry = find_active_entry(1);
 	if(entry == -1){
 		ESP_LOGE(TAG, "Unable to find active transaction to write meter value");
+		xSemaphoreGive(file_lock);
 		return ESP_ERR_NOT_FOUND;
 	}
 
@@ -1913,6 +1914,7 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 
 	if(fseek(fp, 0, SEEK_END) != 0){
 		ESP_LOGE(TAG, "Unable to seek to end to write meter value");
+		xSemaphoreGive(file_lock);
 		return ESP_FAIL;
 	}
 
@@ -1925,6 +1927,7 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 	if(offset_end < OFFSET_METER_VALUES){
 		if(fseek(fp, OFFSET_METER_VALUES, SEEK_SET) != 0){
 			ESP_LOGE(TAG, "Unable to seek to end to write first meter value");
+			xSemaphoreGive(file_lock);
 			return ESP_FAIL;
 		}
 	}
