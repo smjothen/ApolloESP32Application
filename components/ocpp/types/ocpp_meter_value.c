@@ -459,6 +459,11 @@ enum ocpp_measurand_id ocpp_measurand_to_id(const char * measurand){
 	}
 }
 
+bool ocpp_measurand_is_interval(const char * measurand){
+	const char * interval_part = strcasestr(measurand,"interval");
+	return interval_part != NULL && strlen(interval_part) == strlen("interval");
+}
+
 const char * ocpp_phase_from_id(enum ocpp_phase_id id){
 	switch(id){
 	case eOCPP_PHASE_L1:

@@ -191,6 +191,13 @@ const char * ocpp_measurand_from_id(enum ocpp_measurand_id id);
  */
 enum ocpp_measurand_id ocpp_measurand_to_id(const char * measurand);
 
+
+/**
+ * @brief Indicate that the value is associated with a start time and end time.
+ * @brief measurand The measurand to check
+ */
+bool ocpp_measurand_is_interval(const char * measurand);
+
 /** @name Phase
 * @brief "Phase as used in SampledValue. Phase specifies how a measured value is to be interpreted. Please note that not
 * all values of Phase are applicable to all Measurands."
