@@ -2,7 +2,7 @@
 #define OCPP_METER_VALUE_H
 
 #include <stdbool.h>
-
+#include <esp_err.h>
 
 /** @file
 * @brief Contains the OCPP type MeterValue and related functions
@@ -486,5 +486,16 @@ unsigned char * ocpp_meter_list_to_contiguous_buffer(struct ocpp_meter_value_lis
  * @param is_stop_txn_data if true then list should be for a StopTransaction.req else it is for MeterValues.req
  */
 struct ocpp_meter_value_list * ocpp_meter_list_from_contiguous_buffer(const unsigned char * buffer, size_t buffer_length, bool * is_stop_txn_data);
+
+/**
+ * @brief Indicate if the contiguous buffer is part of a StopTransaction without requiring allocation or covertation to meter list
+ *
+ * @param buffer the contiguous buffer to check
+ * @param buffer_length the length of buffer
+ * @param is_stop_txn_data_out output parameter for the result
+ *
+ * @return ESP_OK if result is valid, ESP_ERR_INVALID_ARG if buffer or length is invalid
+ */
+esp_err_t ocpp_is_stop_txn_data_from_contiguous_buffer(const unsigned char * buffer, size_t buffer_length, bool * is_stop_txn_data_out);
 
 #endif /*OCPP_METER_VALUE_H*/

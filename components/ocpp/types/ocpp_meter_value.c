@@ -895,3 +895,11 @@ error:
 
 	return NULL;
 }
+
+esp_err_t ocpp_is_stop_txn_data_from_contiguous_buffer(const unsigned char * buffer, size_t buffer_length, bool * is_stop_txn_data_out){
+	if(buffer == NULL || buffer_length < sizeof(bool))
+		return ESP_ERR_INVALID_ARG;
+
+	memcpy(is_stop_txn_data_out, buffer, sizeof(bool));
+	return ESP_OK;
+}
