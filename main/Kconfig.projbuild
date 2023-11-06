@@ -146,4 +146,8 @@ menu "Zaptec"
 	    default 3 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_INFO
 	    default 4 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_DEBUG
 	    default 5 if ZAPTEC_DIAGNOSTICS_LOG_LEVEL_VERBOSE
+
+    config ZAPTEC_OCPP_ALWAYS_ALLOW_LTE
+           bool "Always allow OCPP on LTE"
+        default y
 endmenu
