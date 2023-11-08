@@ -272,8 +272,7 @@ void storage_Set_chargebox_identity_ocpp(const char * newValue)
 void storage_Set_session_controller(enum session_controller newValue)
 {
 	configurationStruct.session_controller = newValue;
-
-	storage_Set_Standalone((newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0);
+	configurationStruct.standalone = (newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0;
 }
 
 void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue)
@@ -427,13 +426,15 @@ void storage_Set_PermanentLock(uint8_t newValue)
 
 void storage_Set_Standalone(uint8_t newValue)
 {
-	configurationStruct.standalone = newValue;
-
-	if(newValue == 1){
-		configurationStruct.session_controller |= eCONTROLLER_ESP_STANDALONE;
-	}else{
-		configurationStruct.session_controller &= ~eCONTROLLER_ESP_STANDALONE;
+	if(newValue != configurationStruct.standalone){
+		if(newValue == 1){
+			configurationStruct.session_controller = eSESSION_STANDALONE;
+		}else{
+			configurationStruct.session_controller = eSESSION_ZAPTEC_CLOUD;
+		}
 	}
+
+	configurationStruct.standalone = newValue;
 }
 
 void storage_Set_StandalonePhase(uint8_t newValue)
