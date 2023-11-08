@@ -207,12 +207,12 @@
         //..
 
         SessionController = 860,
-        OcppBoxURL = 861,
-        OcppBoxCBID = 862,
-        //OcppBoxAuthorizationKey = 863,
-        OcppBoxAuthorizationKeyFromZaptec = 864,
-        OcppBoxSecurityProfile = 865,
-        OcppBoxConnected = 866,
+        OcppNativeURL = 861,
+        OcppNativeCBID = 862,
+        OcppNativeAuthorizationKey = 863,
+        OcppNativeAuthorizationKeyFromZaptec = 864,
+        OcppNativeSecurityProfile = 865,
+        OcppNativeConnected = 866,
 
         ServoCheckStartPosition = 870,
         ServoCheckStartCurrent  = 871,

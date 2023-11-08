@@ -792,7 +792,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			}
 		}
 
-		//OcppBoxURL
+		//OcppNativeURL
 		if(cJSON_HasObjectItem(settings, "861"))
 		{
 			nrOfParameters++;
@@ -844,7 +844,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 			}
 		}
 
-		//OcppBoxCBID
+		//OcppNativeCBID
 		if(cJSON_HasObjectItem(settings, "862"))
 		{
 			nrOfParameters++;

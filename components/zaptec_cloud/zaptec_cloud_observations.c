@@ -370,10 +370,10 @@ int publish_debug_telemetry_observation_cloud_settings()
 
     add_observation_to_collection(observations, create_uint32_t_observation(SessionController, (uint32_t)storage_Get_session_controller()));
 
-    add_observation_to_collection(observations, create_observation(OcppBoxURL, storage_Get_url_ocpp()));
-    add_observation_to_collection(observations, create_observation(OcppBoxCBID, storage_Get_chargebox_identity_ocpp()));
+    add_observation_to_collection(observations, create_observation(OcppNativeURL, storage_Get_url_ocpp()));
+    add_observation_to_collection(observations, create_observation(OcppNativeCBID, storage_Get_chargebox_identity_ocpp()));
 
-    add_observation_to_collection(observations, create_observation(OcppBoxAuthorizationKeyFromZaptec, storage_Get_authorization_key_set_from_zaptec_ocpp() ? "1" : "0"));
+    add_observation_to_collection(observations, create_observation(OcppNativeAuthorizationKeyFromZaptec, storage_Get_authorization_key_set_from_zaptec_ocpp() ? "1" : "0"));
 
     return publish_json(observations);
 }
@@ -496,7 +496,7 @@ int publish_debug_telemetry_observation_ocpp_box_security_profile(uint32_t secur
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_uint32_t_observation(OcppBoxSecurityProfile, security_profile));
+    add_observation_to_collection(observations, create_uint32_t_observation(OcppNativeSecurityProfile, security_profile));
 
     return publish_json(observations);
 }
@@ -507,7 +507,7 @@ int publish_debug_telemetry_observation_ocpp_box_connected(bool connected)
 
     cJSON *observations = create_observation_collection();
 
-    add_observation_to_collection(observations, create_observation(OcppBoxConnected, connected ? "1" : "0"));
+    add_observation_to_collection(observations, create_observation(OcppNativeConnected, connected ? "1" : "0"));
 
     return publish_json(observations);
 }
