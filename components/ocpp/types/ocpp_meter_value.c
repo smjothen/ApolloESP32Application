@@ -459,6 +459,11 @@ enum ocpp_measurand_id ocpp_measurand_to_id(const char * measurand){
 	}
 }
 
+bool ocpp_measurand_is_interval(const char * measurand){
+	const char * interval_part = strcasestr(measurand,"interval");
+	return interval_part != NULL && strlen(interval_part) == strlen("interval");
+}
+
 const char * ocpp_phase_from_id(enum ocpp_phase_id id){
 	switch(id){
 	case eOCPP_PHASE_L1:
@@ -889,4 +894,12 @@ error:
 	}
 
 	return NULL;
+}
+
+esp_err_t ocpp_is_stop_txn_data_from_contiguous_buffer(const unsigned char * buffer, size_t buffer_length, bool * is_stop_txn_data_out){
+	if(buffer == NULL || buffer_length < sizeof(bool))
+		return ESP_ERR_INVALID_ARG;
+
+	memcpy(is_stop_txn_data_out, buffer, sizeof(bool));
+	return ESP_OK;
 }

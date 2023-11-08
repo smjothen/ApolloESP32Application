@@ -482,92 +482,97 @@ time_t sessionHandler_OcppTransactionStartTime(){
 float ocpp_min_limit = -1.0f;
 float ocpp_max_limit = -1.0f;
 uint8_t ocpp_active_phases = 0;
-uint8_t ocpp_requested_phases = 0;
 
 void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases){
 	ESP_LOGI(TAG, "Got new charging variables: minimum: %f -> %f, maximum: %f -> %f, phases %d -> %d",
-		ocpp_min_limit, min_charging_limit, ocpp_max_limit, max_charging_limit, ocpp_requested_phases, number_phases);
+		ocpp_min_limit, min_charging_limit, ocpp_max_limit, max_charging_limit, ocpp_active_phases, number_phases);
 
 	if(ocpp_min_limit == -1){
 		ESP_LOGI(TAG, "Initializing ocpp charging values");
 		ocpp_min_limit = storage_Get_CurrentInMinimum();
 		ocpp_max_limit = storage_Get_StandaloneCurrent();
 		ocpp_active_phases = storage_Get_StandalonePhase();
-		ocpp_requested_phases = ocpp_active_phases;
 	}
+
+	float new_min_limit = ocpp_min_limit;
+	float new_max_limit = ocpp_max_limit;
+	uint8_t new_active_phases = ocpp_active_phases;
 
 	if(ocpp_min_limit != min_charging_limit){
  		ESP_LOGI(TAG, "Changing minimum current: %f -> %f", ocpp_min_limit, min_charging_limit);
 		MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, min_charging_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Minimum current updated");
-			ocpp_min_limit = min_charging_limit;
+			new_min_limit = min_charging_limit;
 		}else{
 			ESP_LOGE(TAG, "Unable to update minimum current");
 		}
 	}
+
 	if(ocpp_max_limit != max_charging_limit){
 		ESP_LOGI(TAG, "Changing maximum current: %f -> %f", ocpp_max_limit, max_charging_limit);
 		MessageType ret_limit = MCU_SendFloatParameter(ParamChargeCurrentUserMax, max_charging_limit);
 		if(ret_limit == MsgWriteAck){
 			ESP_LOGI(TAG, "Max current updated");
+			new_max_limit = max_charging_limit;
 		}else{
 			ESP_LOGE(TAG, "Unable to update max current");
 		}
+	}
 
-		if(max_charging_limit >= 0.0f && max_charging_limit <= 0.05f){
-			ESP_LOGI(TAG, "OCPP charging variable set to 0. Attempting to pausing charging");
+	// Pause charging if new current is 0 or less than minimum and charging is active.
+	if((new_max_limit < 0.1f || new_min_limit > new_max_limit) && !(ocpp_max_limit < 0.1f || ocpp_min_limit > ocpp_max_limit)){
+		ESP_LOGI(TAG, "OCPP charging variable set to 0. Attempting to pausing charging");
 
-			MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK during set charging variables");
-				SetFinalStopActiveStatus(1);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED during ocpp set charging variables");
-			}
-
-		}else if(ocpp_max_limit >= 0.0f && ocpp_max_limit <= 0.05f && max_charging_limit > 0.05f){
-			ESP_LOGI(TAG, "OCPP charging variable no longer set to 0. Attempting to resume charging");
-
-			MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during ocpp set charging variables");
-				SetFinalStopActiveStatus(0);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during ocpp set charging variables");
-			}
-
-			ret = MCU_SendCommandId(CommandStartCharging);
-			if(ret == MsgCommandAck)
-			{
-				ESP_LOGI(TAG, "MCU CommandStartCharging OK during ocpp set charging variables");
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp set charging variables");
-			}
+		MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU CommandStopChargingFinal command OK during set charging variables");
+			SetFinalStopActiveStatus(1);
 		}
-		if(ret_limit == MsgWriteAck){
-			ocpp_max_limit = max_charging_limit;
+		else
+		{
+			ESP_LOGE(TAG, "MCU CommandStopChargingFinal command FAILED during ocpp set charging variables");
+		}
+
+		// Resume charging if current is no longer active or less than minimum and charging is currently paused.
+	}else if((new_max_limit > 0.1f && new_min_limit <= new_max_limit) && !(ocpp_max_limit > 0.1f && ocpp_min_limit <= ocpp_max_limit)){
+		ESP_LOGI(TAG, "OCPP charging variable no longer set to 0. Attempting to resume charging");
+
+		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during ocpp set charging variables");
+			SetFinalStopActiveStatus(0);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during ocpp set charging variables");
+		}
+
+		ret = MCU_SendCommandId(CommandStartCharging);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU CommandStartCharging OK during ocpp set charging variables");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp set charging variables");
 		}
 	}
 
-	ocpp_requested_phases = number_phases;
-
 #ifdef OCPP_CONNECTOR_SWITCH_3_TO_1_PHASE_SUPPORTED
-	if(ocpp_requested_phases != ocpp_active_phases && !sessionHandler_OcppTransactionIsActive(1)){
+	if(number_phases != ocpp_active_phases && !sessionHandler_OcppTransactionIsActive(1)){
 
 		ESP_LOGW(TAG, "OCPP requested a legal change of number of phases, but this is currently not supported or meaningfull in current context");
 
-		ocpp_active_phases = ocpp_requested_phases;
+		new_active_phases = number_phases;
 	}
 #endif
+
+	ocpp_min_limit = new_min_limit;
+	ocpp_max_limit = new_max_limit;
+	ocpp_active_phases = new_active_phases;
 }
 
 void resume_if_allowed(){
@@ -607,6 +612,9 @@ enum ocpp_led_overwrite{
 };
 
 void set_ocpp_state_led_overwrite(enum ocpp_led_overwrite led_overwrite){
+	if(led_state_overwritten)
+		return;
+
 	ESP_LOGE(TAG, "Overwriting led state");
 
 	led_state_overwritten = true;
@@ -678,9 +686,6 @@ void sessionHandler_OcppTransitionFromFaulted(){
  */
 void transition_to_preparing(){
 	preparing_started = time(NULL);
-	if(MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED){
-		set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
-	}
 }
 
 void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason){
@@ -981,7 +986,6 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 
 	if(reason == eOCPP_REASON_OTHER){ // No reason has been set, try to detect more specific reason
 		ESP_LOGW(TAG, "OCPP reason not explicitly set");
-
 		/*
 		 * We use a low counter to detect reboot, as it is possible that ocpp connected quickly and transaction
 		 * was very short.
@@ -994,7 +998,7 @@ void stop_transaction(enum ocpp_cp_status_id ocpp_state){
 				reason = eOCPP_REASON_REBOOT;
 			}
 
-		}else if(ocpp_state == eOCPP_CP_STATUS_AVAILABLE){
+		}else if(ocpp_state != eOCPP_CP_STATUS_FAULTED && MCU_GetChargeOperatingMode() == CHARGE_OPERATION_STATE_DISCONNECTED){
 			ESP_LOGI(TAG, "Looks like transaction stopped due to car disconnect");
 			reason = eOCPP_REASON_EV_DISCONNECT;
 		}
@@ -2084,8 +2088,24 @@ static void handle_preparing(){
 		isAuthorized = true; // Set authorized for consistency in case authorization is not required.
 
 		//Use standalone until changed by ocpp_smart_charging
+		ocpp_min_limit = storage_Get_CurrentInMinimum();
 		ocpp_max_limit = storage_Get_StandaloneCurrent();
-		MessageType ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, ocpp_max_limit);
+
+		// In case of quick disconnect that did not cause transition on esp side
+		MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
+		if(ret != MsgCommandAck)
+		{
+			ESP_LOGE(TAG, "Unable to grant authorization to MCU when starting charging");
+		}
+
+		ret = MCU_SendFloatParameter(ParamCurrentInMinimum, ocpp_min_limit);
+		if(ret == MsgWriteAck){
+			ESP_LOGI(TAG, "Min current set to %f", storage_Get_CurrentInMinimum());
+		}else{
+			ESP_LOGE(TAG, "Unable to set min current");
+		}
+
+		ret = MCU_SendFloatParameter(ParamChargeCurrentUserMax, ocpp_max_limit);
 		if(ret == MsgWriteAck){
 			ESP_LOGI(TAG, "Max Current set to %f", storage_Get_StandaloneCurrent());
 		}else{
@@ -2124,7 +2144,7 @@ static void handle_preparing(){
 
 	}else if(isAuthorized && MCU_GetChargeMode() == eCAR_DISCONNECTED){
 		if(preparing_started + storage_Get_ocpp_connection_timeout() < time(NULL)){
-			ESP_LOGW(TAG, "Cable was not connected within connection timeout, removind authorization");
+			ESP_LOGW(TAG, "Cable was not connected within connection timeout, removing authorization");
 
 			audio_play_nfc_card_denied();
 			MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
@@ -2147,6 +2167,7 @@ static void handle_preparing(){
 			}
 		}
 		else{
+			set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
 			ESP_LOGI(TAG, "Waiting for cable to connect... Timeout: %" PRIu64 "/%" PRIu32, time(NULL) - preparing_started, storage_Get_ocpp_connection_timeout());
 		}
 	}

@@ -3,12 +3,12 @@ ApolloESP32Application
 
 This is the Zaptec Go/Apollo ESP application.
 
-The application uses a fork of [Espressif IoT Development Framework](https://github.com/espressif/esp-idf).
-Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/v4.2.4/get-started/index.html) for getting started instructions.
+The application uses a [Espressif IoT Development Framework](https://github.com/espressif/esp-idf).
+Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/v5.1.1/esp32/index.html) for getting started instructions.
 
 ## Build instructions ##
 
-The application can be built for development or production. Once build type has been selected run `idf.py build`. Once built `idf.py flash` can be used to flash a charger or `python mark_build.py` can be used to create a version for OTA.
+The application can be built for development or production. Once build type has been selected, run `idf.py build`. Once built `idf.py flash` can be used to flash a charger or `python mark_build.py` can be used to create a version for OTA.
 
 #### Development build #####
 

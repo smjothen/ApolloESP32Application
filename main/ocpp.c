@@ -549,12 +549,11 @@ char * csl_token_get_phase_index(const char * csl_token){
 
 //TODO: "All "per-period" data [...] should be [...] transmitted [...] at the end of each interval, bearing the interval start time timestamp"
 //TODO: Optionally add ISO8601 duration to meter value timestamp
-int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id context,
-			const char * measurand_csl, struct ocpp_meter_value_list * meter_value_out){
+int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
+					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
 
-	if(strlen(measurand_csl) == 0){
+	if(measurand_csl == NULL || strlen(measurand_csl) == 0)
 		return 0;
-	}
 
 	/**
 	 * The amount of samples to add to any ocpp meter value may depend on:
@@ -573,75 +572,7 @@ int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id c
 	char * item = strtok(measurands, ",");
 
 	while(item != NULL){
-
 		ESP_LOGI(TAG, "Attempting to add %s to meter value", item);
-
-		struct ocpp_meter_value * meter_value = malloc(sizeof(struct ocpp_meter_value));
-		if(meter_value == NULL){
-			ESP_LOGE(TAG, "Unable to create new meter_value");
-			free(measurands);
-			return -1;
-		}
-
-		meter_value->timestamp = time(NULL);
-		meter_value->sampled_value = ocpp_create_sampled_list();
-		if(meter_value->sampled_value == NULL){
-			ESP_LOGE(TAG, "Unable to create new sample");
-			free(meter_value);
-			free(measurands);
-			return -1;
-		}
-		ESP_LOGI(TAG, "Creating %s value", item);
-
-		char * phase_index = csl_token_get_phase_index(item);
-		if(phase_index != NULL){
-			*phase_index = '\0'; // Terminate the item at end of measurand
-			phase_index++;
-		}
-
-		int new_item_count = populate_sample(ocpp_measurand_to_id(item), phase_index, connector_id, context, meter_value->sampled_value);
-
-		if(new_item_count < 1){
-			if(new_item_count < 0)
-				ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
-
-			free(meter_value->sampled_value);
-			free(meter_value);
-		}else{
-			struct ocpp_meter_value_list * new_node = ocpp_meter_list_add_reference(meter_value_out, meter_value);
-			if(new_node == NULL){
-				ESP_LOGE(TAG, "Unable to add sample to meter value");
-				free(meter_value->sampled_value);
-				free(meter_value);
-				return -1;
-			}
-		}
-
-		item = strtok(NULL, ",");
-	}
-
-	free(measurands);
-
-	return ocpp_meter_list_get_length(meter_value_out);
-}
-
-// TODO: move similarity with ocpp_populate_meter_values to new function
-int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
-					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
-
-	if(measurand_csl == NULL)
-		return 0;
-
-	char * measurands = strdup(measurand_csl);
-	if(measurands == NULL){
-		ESP_LOGE(TAG, "Unable to duplicate measurands");
-		return -1;
-	}
-
-	char * item = strtok(measurands, ",");
-
-	while(item != NULL){
-		ESP_LOGI(TAG, "Looking through existing for: '%s'", item);
 
 		bool added = false;
 		struct ocpp_meter_value_list * existing_value = existing_list;
@@ -660,6 +591,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 					if(ocpp_meter_list_add(meter_value_out, *existing_value->value) == NULL){
 						ESP_LOGE(TAG, "Unable to add exiting measurand");
 					}else{
+						ESP_LOGI(TAG, "Added from existing");
 						added = true;
 					}
 					break;
@@ -669,7 +601,6 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 		}
 
 		if(added == false){
-			ESP_LOGW(TAG, "Not found, creating new");
 			struct ocpp_meter_value * meter_value = malloc(sizeof(struct ocpp_meter_value));
 			if(meter_value == NULL){
 				ESP_LOGE(TAG, "Unable to create new meter_value");
@@ -677,7 +608,19 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 				return -1;
 			}
 
-			meter_value->timestamp = time(NULL);
+			if(ocpp_measurand_is_interval(item)){
+				if(context == eOCPP_CONTEXT_SAMPLE_CLOCK){
+					meter_value->timestamp = aligned_timestamp_end;
+
+				}else if(context == eOCPP_CONTEXT_SAMPLE_PERIODIC || context == eOCPP_CONTEXT_TRANSACTION_END){
+					meter_value->timestamp = sampled_timestamp_end;
+
+				}else{ // Will probably be rejected by populate_sample_<measurand>
+					meter_value->timestamp = time(NULL);
+				}
+			}else{
+				meter_value->timestamp = time(NULL);
+			}
 			meter_value->sampled_value = ocpp_create_sampled_list();
 			if(meter_value->sampled_value == NULL){
 				ESP_LOGE(TAG, "Unable to create new sample");
@@ -685,9 +628,9 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 				free(measurands);
 				return -1;
 			}
+			ESP_LOGI(TAG, "Creating %s value", item);
 
 			char * phase_index = csl_token_get_phase_index(item);
-
 			if(phase_index != NULL){
 				*phase_index = '\0'; // Terminate the item at end of measurand
 				phase_index++;
@@ -698,6 +641,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 			if(new_item_count < 1){
 				if(new_item_count < 0)
 					ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
+
 				free(meter_value->sampled_value);
 				free(meter_value);
 			}else{
@@ -735,15 +679,13 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				return;
 			}
 
-			int length = ocpp_populate_meter_values(connector, context, csl, meter_value_list);
+			int length = ocpp_populate_meter_values_from_existing(connector, context, csl, NULL, meter_value_list);
 
 			if(length < 0){
 				ESP_LOGW(TAG, "No meter values to send");
 
 			}else{
-				if(transaction_related){
-					ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list);
-
+				if(transaction_related && ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list) == 0){
 					if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0'){
 						ESP_LOGI(TAG, "Creating stoptxn meter values");
 
@@ -1471,7 +1413,11 @@ esp_err_t add_configuration_ocpp_unlock_connector_on_ev_side_disconnect(cJSON * 
 }
 
 esp_err_t add_configuration_ocpp_websocket_ping_interval(cJSON * key_list){
-	if(write_configuration_u32(storage_Get_ocpp_websocket_ping_interval(), value_buffer) != 0)
+	uint32_t ping_interval = storage_Get_ocpp_websocket_ping_interval();
+	if(ping_interval == UINT32_MAX)
+		ping_interval = 0;
+
+	if(write_configuration_u32(ping_interval, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_WEBSOCKET_PING_INTERVAL, false, value_buffer);

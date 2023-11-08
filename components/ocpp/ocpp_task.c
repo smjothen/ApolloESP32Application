@@ -847,8 +847,17 @@ void update_transaction_message_related_config(uint8_t ocpp_transaction_message_
 }
 
 void update_heartbeat_timer(uint sec){
+
+	heartbeat_interval = sec;
+
 	if(heartbeat_handle != NULL){
-		xTimerChangePeriod(heartbeat_handle, pdMS_TO_TICKS(sec * 1000), pdMS_TO_TICKS(100));
+		if(sec > 0){
+			xTimerChangePeriod(heartbeat_handle, pdMS_TO_TICKS(sec * 1000), pdMS_TO_TICKS(100));
+		}else{
+			stop_ocpp_heartbeat();
+		}
+	}else if(sec > 0){
+		start_ocpp_heartbeat();
 	}
 }
 
@@ -883,6 +892,11 @@ void ocpp_trigger_heartbeat(){
 
 int start_ocpp_heartbeat(void){
 	long actual_interval = heartbeat_interval;
+
+	if(heartbeat_interval == 0){
+		ESP_LOGW(TAG, "Heartbeat interval is 0. Heartbeat disabled");
+		return 0;
+	}
 
 	if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL || heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
 		ESP_LOGE(TAG, "Unable to start heartbeat with interval %ld", heartbeat_interval);

@@ -670,7 +670,7 @@ const char * storage_Get_url_ocpp()
 
 bool storage_Get_allow_lte_ocpp()
 {
-	return configurationStruct.allow_lte_ocpp;
+	return configurationStruct.allow_lte_ocpp || CONFIG_ZAPTEC_OCPP_ALWAYS_ALLOW_LTE;
 }
 
 bool storage_Get_availability_ocpp()

@@ -1258,13 +1258,19 @@ void ocpp_on_id_tag_info_recieved(const char * id_token, struct ocpp_id_tag_info
 
 			struct ocpp_id_tag_info * local_id_tag = auth_data.id_tag_info;
 
+#ifdef CONFIG_OCPP_LIST_CONFLICT_FULL
 			if(id_tag_info->expiry_date != local_id_tag->expiry_date
 				|| id_tag_info->status != local_id_tag->status
 				|| ((id_tag_info->parent_id_tag != NULL || local_id_tag->parent_id_tag != NULL)
 					&& ((id_tag_info->parent_id_tag == NULL || local_id_tag->parent_id_tag == NULL)
 						|| strcmp(id_tag_info->parent_id_tag, local_id_tag->parent_id_tag) != 0))){
+#else
+			if(ocpp_get_status_from_id_tag_info(id_tag_info) != ocpp_get_status_from_id_tag_info(local_id_tag)){
+#endif
+				ESP_LOGW(TAG, "local Authorization list mismatch. expiry: %" PRIu64 " - %" PRIu64 ", status: %d - %d, parent: %s - %s, ",
+						id_tag_info->expiry_date, local_id_tag->expiry_date, id_tag_info->status, local_id_tag->status,
+						id_tag_info->parent_id_tag == NULL ? "NULL" : id_tag_info->parent_id_tag, local_id_tag->parent_id_tag == NULL ? "NULL" : local_id_tag->parent_id_tag);
 
-				ESP_LOGW(TAG, "local Authorization list mismatch");
 				ocpp_send_status_notification(-1, OCPP_CP_ERROR_LOCAL_LIST_CONFLICT,
 							NULL, NULL, NULL, true, false);
 			}else{
