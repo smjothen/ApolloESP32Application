@@ -75,7 +75,9 @@ uint32_t connectivity_GetNrOfLTEReconnects()
 static void OneSecondTimer()
 {
 	//ESP_LOGW(TAG,"OneSec?");
-	sessionHandler_Pulse();
+
+	if(storage_Get_PulseType() == ePULSE_IOT_HUB)
+		sessionHandler_Pulse();
 
 	if(storage_Get_CommunicationMode() != eCONNECTION_NONE)
 	{

@@ -257,6 +257,13 @@ bool GetDatalog()
 	return datalog;
 }
 
+static bool reconnectFlag = false;
+bool cloud_listener_test_reconnect()
+{
+	bool tmp = reconnectFlag;
+	reconnectFlag = false;
+	return tmp;
+}
 
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
@@ -3367,6 +3374,23 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					responseStatus = 200;
 				}
 			}
+			else if(strstr(commandString, "PulseType"))
+			{
+				if(strstr(commandString, "PulseType 0"))
+				{
+					storage_Set_PulseType(ePULSE_IOT_HUB);
+					ESP_LOGW(TAG, "Pulse: Iot-hub");
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+				else if(strstr(commandString, "PulseType 1"))
+				{
+					storage_Set_PulseType(eMQTT_KEEP_ALIVE);
+					ESP_LOGW(TAG, "Pulse: mqtt keep alive");
+					storage_SaveConfiguration();
+					responseStatus = 200;
+				}
+			}
 			else if(strstr(commandString, "listdirectory")){
 				char * directory_path = index(commandString, '/');
 				if(directory_path != NULL && strlen(directory_path) > 0){
@@ -3405,6 +3429,12 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			{
 				ESP_LOGI(TAG, "Testing FileCorrection");
 				chargeSession_SetTestFileCorrection();
+				responseStatus = 200;
+			}
+			else if(strstr(commandString, "Reconnect"))
+			{
+				ESP_LOGI(TAG, "Reconnect");
+				reconnectFlag = true;
 				responseStatus = 200;
 			}
 			else if(strstr(commandString, "OCPP"))
@@ -4056,8 +4086,38 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 	//ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
 }
 
-#define MQTT_KEEPALIVE_STANDALONE 1100
-#define MQTT_KEEPALIVE_SYSTEM 300
+#define MQTT_KEEPALIVE_WITH_PULSE_STANDALONE 1100
+#define MQTT_KEEPALIVE_WITH_PULSE_SYSTEM 300
+
+// Todo: Verify if mqtt client send at keepalive x 2, so could potentially be doubled without going offline.
+#define MQTT_KEEPALIVE_ONLY_STANDALONE 1100
+#define MQTT_KEEPALIVE_ONLY_SYSTEM 300
+
+///Use mode dependend MQTT keepalive value
+static int GetKeepAliveValue(uint8_t isStandalone)
+{
+	if(isStandalone == 0) {
+		if(storage_Get_PulseType() == eMQTT_KEEP_ALIVE)
+		{
+    		return MQTT_KEEPALIVE_ONLY_SYSTEM;	
+		}
+		else
+		{
+			return MQTT_KEEPALIVE_WITH_PULSE_SYSTEM;	
+		}
+	} else {
+		if(storage_Get_PulseType() == eMQTT_KEEP_ALIVE)
+		{
+			return MQTT_KEEPALIVE_ONLY_STANDALONE;
+		}
+		else	
+		{
+			return MQTT_KEEPALIVE_WITH_PULSE_STANDALONE;
+		}
+	}
+}
+
+
 void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
 	cloudDeviceInfo = deviceInfo;
@@ -4155,11 +4215,7 @@ void start_cloud_listener_task(struct DeviceInfo deviceInfo){
 
     //Max for Azure client is 1177: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
     //Ping is sent if no other communication has occured since timer.
-    if(storage_Get_Standalone() == 0) {
-    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
-	} else {
-    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
-	}
+	mqtt_config.session.keepalive = GetKeepAliveValue(storage_Get_Standalone());
 
     //Don't use, causes disconnect and reconnect
     //mqtt_config.refresh_connection_after_ms = 20000;
@@ -4278,10 +4334,7 @@ void periodic_refresh_token(uint8_t source)
 void cloud_listener_SetMQTTKeepAliveTime(uint8_t isStandalone)
 {
 	int previous = mqtt_config.session.keepalive;
-    if(isStandalone == 0)
-    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_SYSTEM;		//180;//1100; //300;//120 is default;
-    else
-    	mqtt_config.session.keepalive = MQTT_KEEPALIVE_STANDALONE;
+   	mqtt_config.session.keepalive = GetKeepAliveValue(isStandalone);
 
     ESP_LOGW(TAG, "Updated MQTT keepalive time: %d -> %d", previous, mqtt_config.session.keepalive);
 

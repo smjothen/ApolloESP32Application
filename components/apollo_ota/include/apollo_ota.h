@@ -14,7 +14,6 @@ void validate_booted_image(void);
 const char* OTAReadRunningPartition();
 void ota_rollback();
 bool ota_rollback_to_factory();
-bool otaIsRunning();
 bool ota_CheckIfHasBeenUpdated();
 int ota_GetStackWatermark();
 void ota_time_left();

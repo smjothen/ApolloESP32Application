@@ -206,13 +206,13 @@
         PilotTestResults = 854,
         //..
 
-	SessionController = 860,
-	OcppBoxURL = 861,
-	OcppBoxCBID = 862,
-	//OcppBoxAuthorizationKey = 863,
-	OcppBoxAuthorizationKeyFromZaptec = 864,
-	OcppBoxSecurityProfile = 865,
-	OcppBoxConnected = 866,
+        SessionController = 860,
+        OcppBoxURL = 861,
+        OcppBoxCBID = 862,
+        //OcppBoxAuthorizationKey = 863,
+        OcppBoxAuthorizationKeyFromZaptec = 864,
+        OcppBoxSecurityProfile = 865,
+        OcppBoxConnected = 866,
 
         ServoCheckStartPosition = 870,
         ServoCheckStartCurrent  = 871,

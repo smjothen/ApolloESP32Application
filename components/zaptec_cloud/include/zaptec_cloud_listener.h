@@ -35,6 +35,7 @@ void ClearNewInstallationIdFlag();
 bool GetNewInstallationIdFlag();
 
 bool GetDatalog();
+bool cloud_listener_test_reconnect();
 int InitiateOTASequence();
 bool IsOTADelayActive();
 void ClearOTADelay();

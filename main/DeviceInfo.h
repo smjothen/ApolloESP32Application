@@ -175,6 +175,13 @@ enum session_controller
 	eSESSION_OCPP = eCONTROLLER_ZAP_STANDALONE | eCONTROLLER_ESP_STANDALONE,
 };
 
+enum PulseType
+{
+	ePULSE_IOT_HUB = 0,
+	eMQTT_KEEP_ALIVE = 1,
+	eNR_OF_PULSE_TYPES = 2,
+};
+
 struct Configuration
 {
 	uint32_t saveCounter;
@@ -268,6 +275,7 @@ struct Configuration
 
 	uint16_t cover_on_value;
 	uint8_t connectToPortalType;
+	uint8_t pulseType;
 };
 
 

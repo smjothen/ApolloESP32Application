@@ -136,6 +136,7 @@ void storage_Init_Configuration()
 
 	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 	configurationStruct.connectToPortalType = 0;
+	configurationStruct.pulseType = ePULSE_IOT_HUB;
 }
 
 
@@ -559,6 +560,12 @@ void storage_Set_ConnectToPortalType(uint8_t newValue)
 {
 	configurationStruct.connectToPortalType = newValue;
 }
+
+void storage_Set_PulseType(uint8_t newValue)
+{
+	configurationStruct.pulseType = newValue;
+}
+
 
 
 //****************************************************
@@ -1003,6 +1010,15 @@ uint8_t storage_Get_ConnectToPortalType()
 	return configurationStruct.connectToPortalType;
 }
 
+uint8_t storage_Get_PulseType()
+{
+	//Default to old Pulse type if set incorrectly
+	if(configurationStruct.pulseType >= eNR_OF_PULSE_TYPES)
+		configurationStruct.pulseType = ePULSE_IOT_HUB;
+
+	return configurationStruct.pulseType;
+}
+
 //************************************************
 
 esp_err_t storage_SaveConfiguration()
@@ -1091,6 +1107,7 @@ esp_err_t storage_SaveConfiguration()
 
 	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
 	err += nvs_set_u8(configuration_handle, "ConPortType", configurationStruct.connectToPortalType);
+	err += nvs_set_u8(configuration_handle, "PulseType", configurationStruct.pulseType);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -1256,6 +1273,10 @@ esp_err_t storage_ReadConfiguration()
 
 	if(nvs_get_u8(configuration_handle, "ConPortType", &configurationStruct.connectToPortalType) != ESP_OK)
 		configurationStruct.connectToPortalType = PORTAL_TYPE_PROD_DEFAULT;
+
+	if(nvs_get_u8(configuration_handle, "PulseType", &configurationStruct.pulseType) != ESP_OK)
+		configurationStruct.pulseType = ePULSE_IOT_HUB;
+
 
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
