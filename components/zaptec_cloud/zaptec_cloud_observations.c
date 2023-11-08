@@ -368,7 +368,22 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, storage_Get_DiagnosticsMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
-    add_observation_to_collection(observations, create_uint32_t_observation(SessionController, (uint32_t)storage_Get_session_controller()));
+	int management_mode = 0;
+	switch(storage_Get_session_controller()){
+	case eSESSION_ZAPTEC_CLOUD:
+		management_mode = 0;
+		break;
+	case eSESSION_STANDALONE:
+		management_mode = 1;
+		break;
+	case eSESSION_OCPP:
+		management_mode = 2;
+		break;
+	default:
+		management_mode = -1;
+	}
+
+    add_observation_to_collection(observations, create_int32_t_observation(SessionController, management_mode));
 
     add_observation_to_collection(observations, create_observation(OcppNativeURL, storage_Get_url_ocpp()));
     add_observation_to_collection(observations, create_observation(OcppNativeCBID, storage_Get_chargebox_identity_ocpp()));
