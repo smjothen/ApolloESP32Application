@@ -486,6 +486,7 @@ esp_err_t read_start_transaction(FILE * fp, int * connector_id_out, ocpp_id_toke
 	}
 
 	*connector_id_out = data.connector_id;
+	data.id_tag[20] = '\0';
 	strcpy(id_tag_out, data.id_tag);
 	*meter_start_out = data.meter_start;
 	*valid_reservation_out = data.valid_reservation;
@@ -583,6 +584,7 @@ esp_err_t read_stop_transaction(FILE * fp, struct stop_transaction_data * stop_t
 		return ESP_ERR_INVALID_CRC;
 	}
 
+	stop_transaction_out->id_tag[20] = '\0';
 	return ESP_OK;
 }
 
@@ -673,7 +675,7 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
 		.reservation_id = reservation_id,
 		.valid_reservation = valid_reservation,
 	};
-	strcpy(data.id_tag, id_tag);
+	strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 
 	if(fseek(fp, OFFSET_START_TRANSACTION, SEEK_SET) != 0){
 		ESP_LOGE(TAG, "Unable to seek to start transaction during write: %s", strerror(errno));
@@ -799,7 +801,7 @@ esp_err_t write_stop_transaction(FILE * fp, const char * id_tag, int meter_stop,
 
 	if(id_tag != NULL){
 		data.token_is_valid = true;
-		strcpy(data.id_tag, id_tag);
+		strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 	}else{
 		data.token_is_valid = false;
 	}
