@@ -1980,8 +1980,8 @@ static bool is_true(bool value){
 
 static bool is_valid_security_profile(uint8_t security_profile){
 
-	//If the Charge Point receives a lower value then currently configured, the Charge Point SHALL Rejected the ChangeConfiguration.req
-	if(security_profile < storage_Get_ocpp_security_profile() || security_profile > 3) // Highest defined securityProfile is 3
+	//If the Charge Point receives a lower or equal value then currently configured, the Charge Point SHALL Rejected the ChangeConfiguration.req
+	if(security_profile <= storage_Get_ocpp_security_profile() || security_profile > 3) // Highest defined securityProfile is 3
 		return false;
 
 	if(security_profile == 0){
