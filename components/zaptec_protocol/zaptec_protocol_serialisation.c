@@ -1,6 +1,7 @@
 // this file is based on  https://github.com/ZaptecCharger/ZapChargerProMCU/blob/a202f6e862b1c9914f0e06d1aae4960ef60af998/smart/smart/src/zapProtocol.c
 #include "zaptec_protocol_serialisation.h"
 #include "string.h"
+#include <stdio.h>
 
 static uint32_t packetChecksumErrors = 0;
 static uint32_t packetFramingErr = 0;
@@ -123,12 +124,19 @@ uint16_t ZAppendChecksumAndStuffBytes(uint8_t* startOfMsg, uint16_t lengthOfMsg,
 {
     // Append checksum
     lengthOfMsg += ZEncodeUint16(checksum(startOfMsg, lengthOfMsg), startOfMsg + lengthOfMsg);
-    
+
     // Perform COBS-encoding
 int lengthOfEncodedMsg = StuffData(startOfMsg, lengthOfMsg, outByteStuffedMsg);
     outByteStuffedMsg[lengthOfEncodedMsg++] = 0; // Delimiter byte
-    
+
     return lengthOfEncodedMsg;
+}
+
+static bool MsgFirmwareAckHasLength = false;
+
+void ZEncodeFirmwareAckHasLength(bool hasLength) {
+    // For Pro bootloader, handle difference in encoding FirmwareAcks!
+    MsgFirmwareAckHasLength = hasLength;
 }
 
 uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin)
@@ -145,6 +153,11 @@ uint16_t ZEncodeMessageHeader(const ZapMessage* msg, uint8_t* begin)
         ptr += 2;
         ZEncodeUint16(msg->identifier, ptr);
         ptr += 2;
+
+        if (msg->type == MsgFirmwareAck && MsgFirmwareAckHasLength) {
+            ZEncodeUint16(msg->length, ptr);
+            ptr += 2;
+        }
     break;
 
     case MsgReadAck:
@@ -199,12 +212,12 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
 {
     static int encIdx = 0;
     static uint8_t encodedFrameBuffer[128];
-    
+
     if (nextChar != 0)
     {
         if(encIdx < 128)
             encodedFrameBuffer[encIdx++] = nextChar;
-        
+
         return false;
     }
     else if (encIdx == 0)
@@ -212,7 +225,7 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
         return false;
     }
     else
-    {        
+    {
         int frameLength = UnStuffData(encodedFrameBuffer, encIdx, frameBuffer) - 1;
 
         if (frameLength < 0)
@@ -262,11 +275,15 @@ bool ZParseFrame(uint8_t nextChar, ZapMessage* outMsg)
         }
         else if (outMsg->type == MsgFirmwareAck)
         {
-        	outMsg->length = 1;
+            if (MsgFirmwareAckHasLength) {
+                outMsg->length = ZDecodeUint16(ptr);
+                ptr += 2;
+            } else {
+                outMsg->length = 1;
+            }
             memcpy(outMsg->data, ptr, outMsg->length);
             ptr++;
         }
-        
 
         uint16_t receivedChecksum = ZDecodeUint16(ptr);
         ptr += 2;
@@ -347,18 +364,29 @@ uint16_t ZEncodeMessageHeaderAndOneUInt32(ZapMessage* msg, uint32_t val, uint8_t
 uint16_t ZEncodeMessageHeaderAndByteArray(ZapMessage* msg, const char* array, size_t length, uint8_t* txBuf, uint8_t* encodedTxBuf)
 {
     uint8_t* ptr = txBuf;
-    
+
     // Bad hack to prevent buffer overflows from long strings/arrays
     if(length > ZAP_PROTOCOL_MAX_DATA_LENGTH) {
         length = ZAP_PROTOCOL_MAX_DATA_LENGTH;
     }
-    
+
     msg->length = length;
     ptr += ZEncodeMessageHeader(msg, txBuf);
     memcpy(ptr, array, msg->length);
     ptr += msg->length;
     return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
 }
+
+uint16_t ZEncodeMessageHeaderAndByteArrayNoCheck(ZapMessage* msg, const char* array, size_t length, uint8_t* txBuf, uint8_t* encodedTxBuf)
+{
+    uint8_t* ptr = txBuf;
+    msg->length = length;
+    ptr += ZEncodeMessageHeader(msg, txBuf);
+    memcpy(ptr, array, msg->length);
+    ptr += msg->length;
+    return ZAppendChecksumAndStuffBytes(txBuf, ptr - txBuf, encodedTxBuf);
+}
+
 
 uint16_t ZEncodeMessageHeaderAndOneString(ZapMessage* msg, const char* str, uint8_t* txBuf, uint8_t* encodedTxBuf)
 {
@@ -376,7 +404,7 @@ uint16_t ZEncodeAck(const ZapMessage* request, uint8_t errorCode, uint8_t* txBuf
 
     if (request->type == MsgCommand)
         reply.type = MsgCommandAck;
-    
+
     if (request->type == MsgFirmware)
         reply.type = MsgFirmwareAck;
 
