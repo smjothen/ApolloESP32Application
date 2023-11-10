@@ -2540,9 +2540,6 @@ static bool isOnline = false;
 static bool previousIsOnline = true;
 static uint32_t pulseCounter = PULSE_INIT_TIME;
 
-static uint16_t autoClearLastCount = 0;
-static uint32_t autoClearLastTimeout = 0;
-
 static uint16_t memoryDiagnosticsFrequency = 0;
 void SetMemoryDiagnosticsFrequency(uint16_t freq)
 {
@@ -2566,7 +2563,7 @@ static void sessionHandler_task()
 {
 	int8_t rssi = 0;
 	wifi_ap_record_t wifidata;
-	
+
 	uint32_t onCounter = 0;
 
 	uint32_t onTime = 0;
@@ -3208,7 +3205,7 @@ static void sessionHandler_task()
 			chargeController_SetHasBeenDisconnected();
 			chargeController_SetRandomStartDelay();
 		}
-		
+
 
 		//If the FinalStopActive bit is set when a car disconnect, make sure to clear the status value used by Cloud
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (GetFinalStopActiveStatus() == true))
@@ -3708,23 +3705,6 @@ static void sessionHandler_task()
 				eMeterAlarmBlock = false;
 			}
 
-			uint32_t acTimeout = 0;
-			uint16_t acCount = 0, acTotalCount = 0;
-			
-			// Send event log entry if auto clear on MCU occurs or if a reset of the timeout occurs
-			if (MCU_GetAutoClearStatus(&acTimeout, &acCount, &acTotalCount) && 
-					(acTotalCount != autoClearLastCount || acTimeout < autoClearLastTimeout)) {
-
-				char buf[64];
-				snprintf(buf, sizeof (buf), "AutoClear: %" PRIu32 " / %d / %d", acTimeout, acCount, acTotalCount);
-
-				publish_debug_message_event(buf, cloud_event_level_warning);
-
-				ESP_LOGI(TAG, "AutoClear Timeout: %" PRIu32 " CurrenTime: %d TotalClears: %d", acTimeout, acCount, acTotalCount);
-
-				autoClearLastTimeout = acTimeout;
-				autoClearLastCount = acTotalCount;
-			}
 
 			if(onTime % 15 == 0)//15
 			{
@@ -4109,7 +4089,7 @@ void sessionHandler_Pulse()
 	if(connectivity_GetMQTTInitialized())
 	{
 		pulseOnline = isMqttConnected();
-		
+
 		if(storage_Get_session_controller() == eSESSION_OCPP)
 		{
 			pulseInterval = PULSE_OCPP;
