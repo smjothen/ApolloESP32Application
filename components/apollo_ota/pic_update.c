@@ -11,176 +11,384 @@
 #include "mcu_communication.h"
 #include "crc32.h"
 
-
 #define TAG "pic_update"
+
+// Commands accepted by Pro bootloader
+#define COMMAND_PRO_ERASE_APP   0x01
+#define COMMAND_PRO_WRITE_PM    0x02
+#define COMMAND_PRO_START_APP   0x03
+#define COMMAND_PRO_VERSION     0x04
+#define COMMAND_PRO_LED_BLUE    0x05
+
+// Debug commands
+#define COMMAND_PRO_READ_PM     0x06
+#define COMMAND_PRO_RUN_ID      0x07
+
+#define COMMAND_PRO_EVENT_LOG_ERROR 0x08
+
+#define MODE_APP_WITH_BOOTLOADER 3
+#define MODE_APP_ONLY 4
+
+// ZEncodeMessageHeader* does not check the length of the buffer!
+// This should not be a problem for most usages, but make sure strings are within a range that fits!
+//
+// Go+ bootloader sends whole pages so must be large enough to fit a page!
+#define ZAP_PLUS_PROTOCOL_BUFFER_SIZE 2100
+#define ZAP_PLUS_PROTOCOL_BUFFER_SIZE_ENCODED (ZAP_PROTOCOL_BUFFER_SIZE + 1 /* overhead byte */ + 1 /* delimiter byte */ + 0 /* ~one byte overhead per 256 bytes */ + 5 /*extra*/)
+
+#define PIC24_PAGE_SIZE (3 + 2 + 1536) // 3 addr bytes, 2 padding bytes, then 1536 bytes data
+
+extern const uint8_t _pic_bin_start[] asm("_binary_pic_bin_start");
+extern const uint8_t _pic_bin_end[] asm("_binary_pic_bin_end");
+
+static const char *image_version = NULL;
+static const uint8_t *image_start = NULL;
+static const uint8_t *image_end = NULL;
+
+extern uint8_t bootloaderVersion;
 
 static const int DSPIC_UPDATE_TIMEOUT_MS = 1000*50;
 static EventGroupHandle_t event_group;
 static const int DSPIC_COMMS_ERROR = BIT0;
 static const int DSPIC_UPDATE_COMPLETE = BIT1;
 
-extern const uint8_t dspic_bin_start[] asm("_binary_dspic_bin_start");
-extern const uint8_t dspic_bin_end[] asm("_binary_dspic_bin_end");
+static ZapMessage txMsg;
 
-#define _DSPIC_LINE_SIZE 128*4
-const uint32_t DSPIC_LINE_SIZE = _DSPIC_LINE_SIZE;
-#define DSPIC_APP_START 0x3C00
+static char versionBuf[32];
 
-ZapMessage txMsg;
-// ZEncodeMessageHeader* does not check the length of the buffer!
-// This should not be a problem for most usages, but make sure strings are within a range that fits!
-uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+static uint8_t txBuf[ZAP_PLUS_PROTOCOL_BUFFER_SIZE];
+static uint8_t encodedTxBuf[ZAP_PLUS_PROTOCOL_BUFFER_SIZE_ENCODED];
 
+static int is_bootloader(bool *result);
+static int enter_bootloader(void);
+static int get_application_mode(void);
+static int transfer_pic_fw(void);
+static int read_fw_version(void);
+static int boot_pic_app(void);
+static int delete_pic_fw(void);
 
-#define COMMAND_NACK               0x00
-#define COMMAND_ACK                0x01
-#define COMMAND_READ_PM            0x02
-#define COMMAND_WRITE_PM           0x03
-#define COMMAND_WRITE_CM           0x07
-#define COMMAND_START_APP          0x08
-#define COMMAND_START_BL           0x18
-#define COMMAND_READ_ID            0x09
-#define COMMAND_APP_CRC            0x0A
-#define COMMAND_APP_DELETE         0x0B
-#define COMMAND_WRITE_HEADER       0x0C
-#define COMMAND_BOOTLOADER_VERSION 0x0D
+bool is_goplus(void) {
+    // Hardcode for now!
+    return true;
+    /*
+    bool detected;
+    if (is_bootloader(&detected) || get_application_mode()) {
+        return true;
+    }
+    return false;
+    */
+}
 
-
-int transfer_dspic_fw(void);
-int boot_dspic_app(void);
-int delete_dspic_fw(void);
-int set_dspic_header(void);
-int is_bootloader(bool *result);
-int get_application_header(uint32_t *crc, uint32_t *length);
-int enter_bootloader(void);
-
-static void update_dspic_task(void *pvParameters){
+static void update_pic_task(void *pvParameters) {
     bool bootloader_detected = false;
 
-    uint32_t target_crc = crc32(0,(const char *) dspic_bin_start,dspic_bin_end - dspic_bin_start);
-    uint32_t crc = 0;
-    uint32_t app_length = 0;
+    // Go bootloader does not support FirmwareAck with length, it is always 1, so
+    // turn this on when talking to Go+ MCU
+    ZEncodeFirmwareAckHasLength(true);
 
-    if(get_application_header(&crc, &app_length)<0){
-        goto err_header_read;
+    if (get_application_mode() == MODE_APP_ONLY) {
+        ESP_LOGI(TAG, "app is without bootloader");
+        bootloaderVersion = 0x86;
+        goto success;
     }
 
-    ESP_LOGI(TAG, "header crc: %" PRIx32 ", header app len: %" PRIx32 " (target: %" PRIx32 ")", crc, app_length, target_crc);
+    if(is_bootloader(&bootloader_detected)==0){
+        ESP_LOGI(TAG, "already in bootloader, trying to start app!");
+        // First if in bootloader, try starting app
 
-    if(crc==target_crc){
-        ESP_LOGI(TAG, "Correct application found in dspic");
-
-        if(is_bootloader(&bootloader_detected)<0){
-            goto err_bootloader_detect;
+        if (boot_pic_app() < 0) {
+            // Fail to boot,
+            ESP_LOGI(TAG, "booting failed, trying to program!");
+            goto program;
         }
-    
-        if(bootloader_detected == true){
-            // our check for the crc may have caused the bootloader to stay active instead of time out
-            // OR the crc in the header may not match the app in the flash
-            ESP_LOGI(TAG, "starting app with correct header");
+    }
 
-            if(boot_dspic_app()<0){
-                ESP_LOGW(TAG, "failed to start application, reflashing it now");
-            }else{
-                ESP_LOGI(TAG, "Successful jump to the target app");
-                goto success;
-            }
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
-        }else{
-            ESP_LOGI(TAG, "target app already running");
+    // Check if Go+ application is running, if so, enter bootloader
+    if (get_application_mode() == MODE_APP_WITH_BOOTLOADER) {
+        if (read_fw_version() < 0) {
+            goto err_fw_version;
+        }
+
+        if (strcmp(versionBuf, image_version) == 0) {
+            ESP_LOGI(TAG, "application same as embedded image: %s", image_version);
             goto success;
+        } else {
+            ESP_LOGI(TAG, "application different, updating: %s -> %s!", versionBuf, image_version);
         }
-    }
 
-    ESP_LOGI(TAG, "Proceeding to flash dsPIC");
-
-    if(is_bootloader(&bootloader_detected)<0){
-        goto err_bootloader_detect;
-    }
-
-    if (bootloader_detected == true){
-        ESP_LOGI(TAG, "confirmed dspic in bootloader mode, proceeding" );
-    }else{
-        ESP_LOGI(TAG, "sending dspic to bootloader mode");
         int bootloader_enter_result = enter_bootloader();
         if(bootloader_enter_result<0){
             ESP_LOGW(TAG, "failure in enter bootloader comand");
             goto err_bootloader_enter;
         }
+
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         if(is_bootloader(&bootloader_detected)<0){
             ESP_LOGW(TAG, "failed to check for bootloader after command");
-            if(bootloader_detected!=true){
-                ESP_LOGW(TAG, "Could not enter bootloader correctly");
+            if(!bootloader_detected){
+                ESP_LOGW(TAG, "could not enter bootloader correctly");
+                goto err_bootloader_enter;
             }
+        }
+    }
+
+    // Confirm still in bootloader, or no application programmed yet
+    if(is_bootloader(&bootloader_detected)<0){
+        ESP_LOGW(TAG, "failed to check for bootloader after command");
+        if(!bootloader_detected){
+            ESP_LOGW(TAG, "could not enter bootloader correctly");
             goto err_bootloader_enter;
         }
     }
-        
-    if(delete_dspic_fw()>=0){
+
+program:
+
+    if(delete_pic_fw()>=0){
         ESP_LOGI(TAG, "update stage delete: success!");
     }else{
         goto err_delete;
     }
 
-    if(transfer_dspic_fw()>=0){
+    if(transfer_pic_fw()>=0){
         ESP_LOGI(TAG, "update stage transfer: success!");
     }else{
         goto err_flash;
     }
 
-    if(set_dspic_header()>=0){
-        ESP_LOGI(TAG, "update stage header: success!");
-    }else{
-        goto err_header;
-    }
-
-    if(get_application_header(&crc, &app_length)>=0){
-        ESP_LOGI(TAG, "new header crc: %" PRIx32 ", new header app len: %" PRIx32 "", crc, app_length);
-        if(crc==target_crc){
-            ESP_LOGI(TAG, "confirmed header match, ready to start app");
-        }else{
-            goto flash_confirm_error;
-        }
-    }else{
-        goto flash_confirm_error;
-    }
-    
-    
-    if(boot_dspic_app()>=0){
+    if(boot_pic_app()>=0){
         ESP_LOGI(TAG, "update stage boot: success!");
     }else{
         goto err_app_boot;
     }
 
-    success:
-        ESP_LOGI(TAG, "SUCCESS, dspic updated");
-        xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
-        vTaskSuspend(NULL); // halts the task, ensuring we dont run the error handeling 
+    ESP_LOGI(TAG, "SUCCESS, pic updated");
 
-    err_header_read:
-        ESP_LOGW(TAG, "failed to compare ap crc with target crc");
-    err_bootloader_detect:
-    err_bootloader_enter:
-        ESP_LOGW(TAG, "dspic failed to enter bootloader");
-    err_delete:
-        ESP_LOGW(TAG, "failed to delete dspic fw");
-    err_flash:
-        ESP_LOGW(TAG, "failed to flash dspic fw");
-    err_header:
-        ESP_LOGW(TAG, "failed to flash dspic header");
-    flash_confirm_error:
-        ESP_LOGW(TAG, "failed to confirm header");
-    err_app_boot:
-        ESP_LOGW(TAG, "failed to boot new fw");
+success:
+    xEventGroupSetBits(event_group, DSPIC_UPDATE_COMPLETE);
+    vTaskSuspend(NULL); // halts the task, ensuring we dont run the error handeling
+
+err_fw_version:
+    ESP_LOGW(TAG, "pic failed to read fw version");
+err_bootloader_enter:
+    ESP_LOGW(TAG, "pic failed to enter bootloader");
+err_delete:
+    ESP_LOGW(TAG, "failed to delete pic fw");
+err_flash:
+    ESP_LOGW(TAG, "failed to flash pic fw");
+err_app_boot:
+    ESP_LOGW(TAG, "failed to boot new fw");
 
     xEventGroupSetBits(event_group, DSPIC_COMMS_ERROR);
     vTaskSuspend(NULL);
 }
 
-int update_dspic(void){
+static int validate_dspic_reply(ZapMessage rxMsg, int type, int length, uint8_t error_code){
+    if(rxMsg.type != type){
+        ESP_LOGW(TAG, "unexpected rx message type (%d)", rxMsg.type);
+        return -1;
+    }
+
+    if(length > 0 && rxMsg.length != length){
+        ESP_LOGW(TAG, "unexpected rx message length (%d)", rxMsg.length);
+        return -2;
+    }
+
+    if(rxMsg.data[0] != error_code){
+        ESP_LOGW(TAG, "unexpected error code in rx message (error: %d)", rxMsg.data[0]);
+        return -3;
+    }
+
+    return 0;
+}
+
+static int is_bootloader(bool *result){
+    ESP_LOGI(TAG, "reading bootloader version");
+
+    int err = 0;
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = COMMAND_PRO_VERSION;
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, 0xff, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0x86)==0){
+        bootloaderVersion = rxMsg.data[0];
+    	ESP_LOGI(TAG, "detected bootloader version: %d", bootloaderVersion);
+        *result = true;
+    } else {
+        ESP_LOGE(TAG, "inconclusive bootloader test, assuming false");
+        err = -1;
+        *result = false;
+    }
+
+    freeZapMessageReply();
+    return err;
+}
+
+static int read_fw_version(void) {
+    ESP_LOGI(TAG, "reading current fw version");
+
+    txMsg.type = MsgRead;
+    txMsg.identifier = ParamSmartMainboardAppSwVersion;
+
+    uint encoded_length = ZEncodeMessageHeaderOnly(
+        &txMsg, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    if(rxMsg.type != MsgReadAck || rxMsg.length <= 0){
+        ESP_LOGW(TAG, "error in dspic response when reading FW version");
+        freeZapMessageReply();
+        return -1;
+    }
+
+    if (rxMsg.length >= sizeof (versionBuf)) {
+        ESP_LOGW(TAG, "too long version code");
+        return -1;
+    }
+
+    strncpy(versionBuf, (const char *)rxMsg.data, rxMsg.length);
+
+    freeZapMessageReply();
+    return 0;
+}
+
+
+#define CMD_ACK_SUCCESS 0
+#define CMD_ACK_COMPAT_OK 16
+
+static int transfer_pic_fw(void){
+    ESP_LOGI(TAG, "sending fw to pic");
+
+    assert(image_version);
+    assert(image_start);
+    assert(image_end);
+
+    assert((image_end - image_start) % PIC24_PAGE_SIZE == 0);
+
+    unsigned char *entry = (unsigned char *)image_start;
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = COMMAND_PRO_WRITE_PM;
+
+    while(entry < image_end) {
+        uint encoded_length = ZEncodeMessageHeaderAndByteArrayNoCheck(
+            &txMsg, (char *) entry, PIC24_PAGE_SIZE, txBuf, encodedTxBuf
+        );
+
+        uint32_t addr = (entry[0] << 16) | (entry[1] << 8) | entry[2];
+
+        ESP_LOGI(TAG, "sending fw page %d at addr %" PRIu32 " length %d", (entry - image_start) / PIC24_PAGE_SIZE, addr, encoded_length);
+
+        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+        int expected = CMD_ACK_SUCCESS;
+        if (addr == 0x13000) {
+            expected = CMD_ACK_COMPAT_OK;
+        }
+
+        if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, expected)<0){
+            ESP_LOGW(TAG, "error in dspic response when writing FW");
+            freeZapMessageReply();
+            return -1;
+        }
+
+        freeZapMessageReply();
+        entry += PIC24_PAGE_SIZE;
+    }
+
+    return 0;
+}
+
+static int boot_pic_app(void){
+    ESP_LOGI(TAG, "starting dsPIC app");
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = COMMAND_PRO_START_APP;
+
+    uint encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+        ESP_LOGW(TAG, "error in dspic response when giving boot command");
+        freeZapMessageReply();
+        return -1;
+    }
+
+    freeZapMessageReply();
+    return 0;
+}
+
+static int delete_pic_fw(void){
+    ESP_LOGI(TAG, "deleting PIC FW");
+
+    txMsg.type = MsgFirmware;
+    txMsg.identifier = COMMAND_PRO_ERASE_APP;
+
+    uint encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
+        ESP_LOGW(TAG, "error in dspic response when deleteing app");
+        freeZapMessageReply();
+        return -1;
+    }
+
+    freeZapMessageReply();
+    return 0;
+}
+
+static int get_application_mode(void) {
+    ESP_LOGI(TAG, "reading application mode");
+
+    txMsg.type = MsgRead;
+    // Pro responds to this but I don't think Go does, so can use this to detect if we're
+    // running the Pro MCU application.
+    txMsg.identifier = ParamMode;
+
+    uint encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    freeZapMessageReply();
+    return rxMsg.data[0];
+}
+
+static int enter_bootloader(void){
+    ESP_LOGI(TAG, "sending enter bootloader command");
+
+    txMsg.type = MsgCommand;
+    txMsg.identifier = CommandUpgradeMcuFirmware;
+
+    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
+        &txMsg, 42, txBuf, encodedTxBuf
+    );
+
+    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+
+    if(validate_dspic_reply(rxMsg, MsgCommandAck, 1, 0)<0){
+        ESP_LOGW(TAG, "failed start bootloader on dspic");
+        freeZapMessageReply();
+        return -1;
+    }
+
+    freeZapMessageReply();
+    return 0;
+}
+
+int update_goplus(void){
+    image_version = (char *)_pic_bin_start;
+    image_start = (uint8_t *)strchr((char *)_pic_bin_start, 0) + 1;
+    image_end = _pic_bin_end;
+
+    ESP_LOGI(TAG, "Embedded PIC MCU version %s", image_version);
+
     event_group = xEventGroupCreate();
     bool update_success = false;
 
@@ -189,7 +397,7 @@ int update_dspic(void){
         if(retry == 0){
             ESP_LOGI(TAG, "starting dspic update task");
         }else{
-            int delay = 1000 * retry; 
+            int delay = 1000 * retry;
             vTaskDelay(pdMS_TO_TICKS(delay));
             ESP_LOGI(TAG, "retrying dspic update task (attempt: %d, delay: %d ms)", retry+1, delay);
         }
@@ -200,8 +408,8 @@ int update_dspic(void){
         static uint8_t ucParameterToPass = {0};
         TaskHandle_t taskHandle = NULL;
         int stack_size = 4096*2;
-        xTaskCreate( 
-            &update_dspic_task, "picflash", stack_size, 
+        xTaskCreate(
+            &update_pic_task, "picflash", stack_size,
             &ucParameterToPass, 4, &taskHandle
         );
 
@@ -232,276 +440,12 @@ int update_dspic(void){
         if(update_success == true){
             break;
         }
-    
+
     }
 
     if(update_success == false){
         return -1;
     }
 
-    return 0;
-}
-
-int validate_dspic_reply(ZapMessage rxMsg, int type, int length, uint8_t error_code){
-    if(rxMsg.type != type){
-        ESP_LOGW(TAG, "unexpected rx message type (%d)", rxMsg.type);
-        return -1;
-    }
-
-    if(rxMsg.length != length){
-        ESP_LOGW(TAG, "unexpected rx message length (%d)", rxMsg.length);
-        return -2;
-    }
-
-    if(rxMsg.data[0] != error_code){
-        ESP_LOGW(TAG, "unexpected error code in rx message (error: %d)", rxMsg.data[0]);
-        return -3;
-    }
-
-    return 0;
-}
-
-int transfer_dspic_fw(void){
-    ESP_LOGI(TAG, "sending fw to dspic");
-
-    int32_t fw_byte_size = dspic_bin_end - dspic_bin_start;
-
-    if(fw_byte_size%DSPIC_LINE_SIZE!=0){
-        ESP_LOGE(TAG, "firmware for dsPIC not aligned to row size, fw_byte_size %" PRId32 "", fw_byte_size);
-    }
-
-    int32_t fw_line_count = fw_byte_size / DSPIC_LINE_SIZE;
-    ESP_LOGI(TAG, "will flash %" PRIu32 " lines, %" PRIu32 " bytes; each line is %" PRId32 " bytes", fw_line_count, fw_byte_size, DSPIC_LINE_SIZE);
-    //fw_line_count = 1;
-
-    int address_size = 4;
-    uint8_t message_data[1 + address_size +DSPIC_LINE_SIZE ];
-        
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = ParamRunTest; // ignored by bootloader
-
-    for(int line=0; line<fw_line_count; line++){
-        
-        uint32_t words_per_line = DSPIC_LINE_SIZE/2;
-        uint32_t address = DSPIC_APP_START + (line*words_per_line);
-        const uint8_t *start_of_line = dspic_bin_start + (line*DSPIC_LINE_SIZE);
-
-        message_data[0] = COMMAND_WRITE_PM;
-        memcpy(message_data+1, &address, address_size);
-        memcpy(message_data+1+address_size, start_of_line, DSPIC_LINE_SIZE);
-
-        uint encoded_length = ZEncodeMessageHeaderAndByteArray(
-            &txMsg, (char *) message_data, sizeof(message_data), txBuf, encodedTxBuf
-        );
-
-        ESP_LOGI(TAG, "sending fw line %d for addr %" PRId32 " message, %d bytes, %" PRId32 " lines to go",line, address, encoded_length, fw_line_count-line);
-
-        // printf(">>data to uart: \n\r\t");
-        // int i;
-        // for(i=0; i<sizeof(message_data);i++){
-        //     printf("%2x   ", message_data[i]);
-        //     if((i+1)%16==0) printf("\n\r\t");
-        //     else if ((i+1)%8 ==0) printf("\t\t");            
-        // }
-        
-        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-        
-        if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
-            ESP_LOGW(TAG, "error in dspic response when writing FW");
-            freeZapMessageReply();
-            return -1;
-        }
-
-        freeZapMessageReply(); 
-    }
-
-    return 0;
-}
-
-int boot_dspic_app(void){
-    ESP_LOGI(TAG, "starting dsPIC app");
-
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = ParamRunTest;
-
-    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-        &txMsg, COMMAND_START_APP, txBuf, encodedTxBuf
-    );
-
-    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
-    
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
-        ESP_LOGW(TAG, "error in dspic response when giving boot command");
-        freeZapMessageReply();
-        return -1;
-    }
-
-    freeZapMessageReply();
-    return 0;
-}
-
-int delete_dspic_fw(void){
-    ESP_LOGI(TAG, "deleting dsPIC FW");
-    
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = ParamRunTest; // ignored on bootloader?
-
-    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-        &txMsg, COMMAND_APP_DELETE, txBuf, encodedTxBuf
-    );
-
-    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
-    
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
-        ESP_LOGW(TAG, "error in dspic response when deleteing app");
-        freeZapMessageReply();
-        return -1;
-    }
-
-    freeZapMessageReply();
-    return 0;
-    
-}
-
-int set_dspic_header(void){
-    ESP_LOGI(TAG, "sending header to dsPIC");
-    
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = ParamRunTest; // ignored on bootloader?
-
-    uint8_t message_data[10];
-    message_data[0] = COMMAND_WRITE_HEADER;
-    message_data[1] = 1; // header version
-
-    uint32_t app_size = dspic_bin_end - dspic_bin_start; // this must be a multiple of 4
-
-    uint32_t app_crc = crc32(0,(const char *) dspic_bin_start, app_size);
-
-    memcpy(message_data+2, &app_size, sizeof(uint32_t));
-    memcpy(message_data+2+4, &app_crc, sizeof(uint32_t));
-
-    ESP_LOGI(TAG, "Sending crc %" PRIu32 " for %" PRIu32 " bytes", app_crc, app_size);
-
-    uint encoded_length = ZEncodeMessageHeaderAndByteArray(
-        &txMsg, (char *) message_data, sizeof(message_data), txBuf, encodedTxBuf
-    );
-
-    ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
-    
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 0)<0){
-        ESP_LOGW(TAG, "error in dspic response when writing header");
-        freeZapMessageReply();
-        return -1;
-    }
-    
-    freeZapMessageReply();
-    ESP_LOGI(TAG, "dsPIC flashed, and header updated");
-    return 0;
-
-}
-
-
-uint8_t bootloaderVersion = 0;
-
-uint8_t get_bootloader_version()
-{
-	return bootloaderVersion;
-}
-
-int is_bootloader(bool *result){
-    ESP_LOGI(TAG, "reading bootloader version");
-
-    int err = 0;
-
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = 0; // ignored on bootloader?
-
-    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-        &txMsg, COMMAND_BOOTLOADER_VERSION, txBuf, encodedTxBuf
-    );
-
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgFirmwareAck, 1, 99)==0){
-        ESP_LOGW(TAG, "detected communication with dsPIC app");
-        *result = false;
-    }else if(validate_dspic_reply(rxMsg, MsgReadAck, 2, 0)==0){
-    	if(rxMsg.length == 2)
-    	{
-    		if((0xff > rxMsg.data[1]) && (rxMsg.data[1] >= 1))
-			{
-				bootloaderVersion = rxMsg.data[1];
-			}
-    	}
-
-    	ESP_LOGI(TAG, "detected bootloader version: %d", bootloaderVersion);
-
-        *result = true;
-    }else{
-        ESP_LOGE(TAG, "inconclusive bootloader test, assuming false");
-        *result = false;
-        err = -1;
-    }
-
-    freeZapMessageReply();
-    return err;
-}
-
-
-int get_application_header(uint32_t *crc, uint32_t *length){
-    ESP_LOGI(TAG, "reading application header");
-
-    int result = 0;
-
-    txMsg.type = MsgFirmware;
-    txMsg.identifier = 0; // ignored on bootloader?
-
-    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-        &txMsg, COMMAND_APP_CRC, txBuf, encodedTxBuf
-    );
-
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgReadAck, 9, 0)<0){
-        ESP_LOGW(TAG, "invalid app header reply");
-        result = -2;
-        goto finnish;
-    }
-
-    *length = ZDecodeUint32(&(rxMsg.data[1]));
-    *crc = ZDecodeUint32(&(rxMsg.data[5]));
-
-    finnish:
-        freeZapMessageReply();
-        return result;
-
-
-}
-
-int enter_bootloader(void){
-    ESP_LOGI(TAG, "sending enter bootloader command");
-
-    txMsg.type = MsgCommand;
-    txMsg.identifier = CommandUpgradeMcuFirmware;
-
-    uint encoded_length = ZEncodeMessageHeaderAndOneByte(
-        &txMsg, 42, txBuf, encodedTxBuf
-    );
-
-    ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-
-    if(validate_dspic_reply(rxMsg, MsgCommandAck, 1, 0)<0){
-        ESP_LOGW(TAG, "failed start bootloader on dspic");
-        freeZapMessageReply();
-        return -1;
-    }
-
-    freeZapMessageReply();
     return 0;
 }

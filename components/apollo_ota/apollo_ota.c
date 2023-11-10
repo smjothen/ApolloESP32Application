@@ -115,7 +115,7 @@ void _do_sdk_ota(char *image_location){
 
 
         // give the system some time to finnish sending the log message
-        // a better solution would be to detect the message sent event, 
+        // a better solution would be to detect the message sent event,
         // though one must ensure there is a timeout, as the system NEEDS a reboot now
         vTaskDelay(pdMS_TO_TICKS(3000));
         esp_restart();
@@ -161,7 +161,7 @@ static void ota_task(void *pvParameters){
 
     TickType_t timeout_ticks = pdMS_TO_TICKS(OTA_GLOBAL_TIMEOUT_MINUTES*60*1000);
     timeout_timer = xTimerCreate( "global_ota_timeout", timeout_ticks, pdFALSE, NULL, on_ota_timeout );
-    
+
     bool hasNewCertificate = false;
 
     while (true)
@@ -338,7 +338,7 @@ static void ota_task(void *pvParameters){
         }else{
             ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }
-        
+
     	free_dram = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 		low_dram = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
 		ESP_LOGE(TAG, "MEM3: DRAM: %i Lo: %i", free_dram, low_dram);
@@ -353,7 +353,15 @@ void validate_booted_image(void){
     const esp_partition_t * partition = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Checking if VALID on partition %s ", partition->label);
 
-    int dspic_update_success = update_dspic();
+    int dspic_update_success = 0;
+
+    if (is_goplus()) {
+            ESP_LOGI(TAG, "Go Plus!");
+            dspic_update_success = update_goplus();
+    } else {
+            ESP_LOGI(TAG, "Go!");
+            dspic_update_success = update_dspic();
+    }
 
     if(dspic_update_success<0){
             ESP_LOGE(TAG, "FAILED to update dsPIC, restarting now...");
@@ -381,7 +389,7 @@ void validate_booted_image(void){
             }
 
         }
-        
+
     }
     else
     {
@@ -419,8 +427,8 @@ void start_ota_task(void){
     static uint8_t ucParameterToPass = {0};
 
     int stack_size = 4096*2;
-    xTaskCreate( 
-        ota_task, "otatask", stack_size, 
+    xTaskCreate(
+        ota_task, "otatask", stack_size,
         &ucParameterToPass, 7, &otaTaskHandle
     );
     ESP_LOGD(TAG, "...");
