@@ -3212,7 +3212,7 @@ error:
 	}
 }
 
-int set_firmware_update_state(){
+int set_firmware_update_state(bool check_if_updated){
 	ESP_LOGI(TAG, "Setting firmware update state");
 	int err = load_update_request(&update_info);
 	if(err != 0){
@@ -3221,12 +3221,13 @@ int set_firmware_update_state(){
 
 	if(update_info.retrieve_date < time(NULL)){ // An update should have been attempted
 		cJSON * call = NULL;
-		if(ota_CheckIfHasBeenUpdated()){
+		if(check_if_updated && ota_CheckIfHasBeenUpdated()){
 			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLED);
 
 			remove(firmware_update_request_path);
 		}else{
-			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
+			if(check_if_updated)
+				call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
 
 			if(update_info.retries > 0){
 				update_info.retries--;
@@ -3250,7 +3251,7 @@ int set_firmware_update_state(){
 				ESP_LOGE(TAG, "Unable to enqueue firmware_status_notification");
 				cJSON_Delete(call);
 			}
-		}else{
+		}else if(check_if_updated){
 			ESP_LOGE(TAG, "Expected firmware status call");
 		}
 
@@ -3259,6 +3260,21 @@ int set_firmware_update_state(){
 	}
 
 	return err;
+}
+
+void firmware_status_cb(const char * status){
+	cJSON * call = ocpp_create_firmware_status_notification_request(status);
+	if(call != NULL){
+		enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC);
+	}else{
+		ESP_LOGE(TAG, "Unable to create %s FirmwareStatusNotification", status);
+	}
+
+	if(strcmp(status, OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED) == 0
+		|| strcmp(status, OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED) == 0){
+
+		set_firmware_update_state(false);
+	}
 }
 
 uint8_t previous_enqueue_mask = 0;
@@ -3580,7 +3596,7 @@ static void ocpp_task(){
 		restart_clock_aligned_meter_values();
 
 		// Check if UpdateFormware.req is in progress or need to be restarted and update with FirmwareStatusNotification if needed
-		err = set_firmware_update_state();
+		err = set_firmware_update_state(true);
 		if(err != 0){
 			ESP_LOGE(TAG, "Error while attemptig to set firmware update status: %s", strerror(err));
 		}
@@ -3598,7 +3614,7 @@ static void ocpp_task(){
 			}else if(connected){
 				data = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 			}else{
-				data = ulTaskNotifyTake(pdTRUE, OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp));
+				data = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 * (OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp))));
 			}
 
 			const uint websocket_event = (data & WEBSOCKET_EVENT_MASK) >> WEBSOCKET_EVENT_OFFSET;
@@ -3655,7 +3671,7 @@ static void ocpp_task(){
 					{
 						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
 
-						start_ocpp_ota(update_info.location);
+						start_ocpp_ota(update_info.location, firmware_status_cb);
 					}
 					else
 					{

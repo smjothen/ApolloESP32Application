@@ -5,17 +5,9 @@
 
 #include "zaptec_cloud_observations.h"
 
-#include "ocpp_task.h"
-#include "messages/call_messages/ocpp_call_request.h"
-#include "types/ocpp_firmware_status.h"
-
 static const char *TAG = "ota_metrics";
 static time_t last_start_time = 0;
-static bool is_ocpp_initiated = false;
 
-void log_set_origin_ocpp(bool new_value){
-	is_ocpp_initiated = new_value;
-}
 int log_message(char *msg){
     time_t now = 0;
     struct tm timeinfo = { 0 };
@@ -31,22 +23,8 @@ int log_message(char *msg){
 
     char formated_message [256];
     snprintf(formated_message, 256, "[%s] %s %s", TAG, time_string, msg);
-    
+
     return publish_debug_message_event(formated_message, cloud_event_level_information);
-}
-
-int log_to_ocpp(char * status){
-	if(!is_ocpp_initiated)
-		return 0;
-
-	cJSON * call = ocpp_create_firmware_status_notification_request(status);
-	if(call != NULL){
-		enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC);
-		return 0;
-	}else{
-		ESP_LOGE(TAG, "Unable to create %s FirmwareStatusNotification", status);
-		return -1;
-	}
 }
 
 int ota_log_location_fetch(){
@@ -60,8 +38,6 @@ int ota_log_download_start(char *location){
 
     char formated_message [256];
     snprintf(formated_message, 256, "starting FW download, location: %s", location);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADING);
-
     return log_message(formated_message);
 }
 
@@ -71,9 +47,6 @@ int ota_log_flash_success(){
 
     char formated_message [128];
     snprintf(formated_message, 128, "FW validated rebooting, download time: %" PRId64 " seconds", now-last_start_time);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADED);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLING);
-
     return log_message(formated_message);
 }
 
@@ -83,7 +56,6 @@ int ota_log_lib_error(){
 
     char formated_message [128];
     snprintf(formated_message, 128, "failure after calling OTA library, failed after %" PRId64 " seconds", now-last_start_time);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
     return log_message(formated_message);
 }
 
@@ -93,8 +65,6 @@ int ota_log_timeout(){
 
     char formated_message [128];
     snprintf(formated_message, 128, "we timed out OTA after %" PRId64 " seconds, rebooting", now-last_start_time);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED);
-
     return log_message(formated_message);
 }
 
@@ -121,8 +91,6 @@ int ota_log_chunked_update_start(char *location){
 
     char formated_message [256];
     snprintf(formated_message, 256, "starting CHUNKED FW download, location: %s", location);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADING);
-
     return log_message(formated_message);
 }
 
@@ -156,8 +124,5 @@ int ota_log_all_chunks_success(){
 
     char formated_message [128];
     snprintf(formated_message, 128, "CHUNKED FW validated. Rebooting soon. Total time: %" PRId64 " seconds", now-last_start_time);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_DOWNLOADED);
-    log_to_ocpp(OCPP_FIRMWARE_STATUS_INSTALLING);
-
     return log_message(formated_message);
 }
