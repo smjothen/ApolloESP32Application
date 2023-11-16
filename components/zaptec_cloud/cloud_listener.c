@@ -594,7 +594,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				{
 					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)standalone);
 					//if(ret == MsgWriteAck)
-					if(chargeController_SetStandaloneState(standalone))
+					if(chargeController_SetStandaloneState(standalone == 1 ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD))
 					{
 						//storage_Set_Standalone((uint8_t)standalone);
 						ESP_LOGW(TAG, "New: 712 standalone=%d\n", standalone);
@@ -759,6 +759,9 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 					}
 				}else if(cJSON_IsNumber(management_mode_json)){
 					management_mode = cJSON_GetNumberValue(management_mode_json);
+				}else if(cJSON_IsNull(management_mode_json)){
+					management_mode = storage_Get_Standalone() ? 1 : 0;
+					ESP_LOGW(TAG, "Management mode cleared. Interpteting as %d", management_mode);
 				}else{
 					ESP_LOGE(TAG, "Management mode has incorrect type");
 				}
@@ -986,11 +989,9 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				}
 			}
 
-			MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(wanted_controller & eCONTROLLER_MCU_STANDALONE));
-			if(ret == MsgWriteAck)
+			if(chargeController_SetStandaloneState(wanted_controller))
 			{
-				ESP_LOGW(TAG, "mcu Standalone set to %s\n", (eSESSION_OCPP & eCONTROLLER_MCU_STANDALONE) ? "on" : "off");
-				storage_Set_session_controller(wanted_controller);
+				ESP_LOGW(TAG, "New 860 and session controller %d", storage_Get_session_controller());
 				doSave = true;
 
 				cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
@@ -1067,7 +1068,7 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				{
 					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
 					//if(ret == MsgWriteAck)
-					if(chargeController_SetStandaloneState(standalone))
+					if(chargeController_SetStandaloneState(standalone == 1 ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD))
 					{
 						//storage_Set_Standalone(standalone);
 						esp_err_t err = storage_SaveConfiguration();

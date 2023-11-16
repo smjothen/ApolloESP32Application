@@ -486,6 +486,7 @@ esp_err_t read_start_transaction(FILE * fp, int * connector_id_out, ocpp_id_toke
 	}
 
 	*connector_id_out = data.connector_id;
+	data.id_tag[20] = '\0';
 	strcpy(id_tag_out, data.id_tag);
 	*meter_start_out = data.meter_start;
 	*valid_reservation_out = data.valid_reservation;
@@ -583,6 +584,7 @@ esp_err_t read_stop_transaction(FILE * fp, struct stop_transaction_data * stop_t
 		return ESP_ERR_INVALID_CRC;
 	}
 
+	stop_transaction_out->id_tag[20] = '\0';
 	return ESP_OK;
 }
 
@@ -673,7 +675,7 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
 		.reservation_id = reservation_id,
 		.valid_reservation = valid_reservation,
 	};
-	strcpy(data.id_tag, id_tag);
+	strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 
 	if(fseek(fp, OFFSET_START_TRANSACTION, SEEK_SET) != 0){
 		ESP_LOGE(TAG, "Unable to seek to start transaction during write: %s", strerror(errno));
@@ -712,7 +714,7 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
  */
 //Consider using to overwrite completed messages and using truncate to ensure last
 
-esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp){
+esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp, bool stop_related){
 
 	if(meter_data_length > MAX_METER_VALUE_LENGTH){
 		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %u > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
@@ -742,7 +744,7 @@ esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, 
 		return ESP_ERR_INVALID_SIZE;
 	}
 
-	if(write_header(fp, NULL, NULL, NULL, NULL, 1, false) != ESP_OK){
+	if(write_header(fp, NULL, NULL, NULL, NULL, stop_related ? 0 : 1, false) != ESP_OK){
 		ESP_LOGE(TAG, "Unable to update header during stop transaction write");
 		return ESP_FAIL;
 	}
@@ -799,7 +801,7 @@ esp_err_t write_stop_transaction(FILE * fp, const char * id_tag, int meter_stop,
 
 	if(id_tag != NULL){
 		data.token_is_valid = true;
-		strcpy(data.id_tag, id_tag);
+		strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 	}else{
 		data.token_is_valid = false;
 	}
@@ -1847,17 +1849,7 @@ int ocpp_transaction_enqueue_start(int connector_id, const char * id_tag, int me
 }
 
 
-esp_err_t ocpp_transaction_write_stop(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason){
-	if(!filesystem_is_ready()){
-		ESP_LOGE(TAG, "Filesystem not ready for stop transaction");
-		return ESP_FAIL;
-	}
-
-	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
-	{
-		ESP_LOGE(TAG, "Failed to obtain lock to write stop transaction");
-		return ESP_FAIL;
-	}
+esp_err_t ocpp_transaction_write_stop_no_lock(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason){
 
 	int entry = find_active_entry(1);
 	if(entry == -1){
@@ -1881,22 +1873,23 @@ esp_err_t ocpp_transaction_write_stop(const char * id_tag, int meter_stop, time_
 	esp_err_t err = write_stop_transaction(fp, id_tag, meter_stop, timestamp, reason);
 
 	fclose(fp);
-	xSemaphoreGive(file_lock);
 
 	return err;
 }
 
-esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer, size_t buffer_length){
+esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer, size_t buffer_length, bool stop_related){
 
-	if(!filesystem_is_ready()){
-		ESP_LOGE(TAG, "Filesystem not ready for meter value");
-		return ESP_FAIL;
-	}
+	if(!stop_related){
+		if(!filesystem_is_ready()){
+			ESP_LOGE(TAG, "Filesystem not ready for meter value");
+			return ESP_FAIL;
+		}
 
-	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
-	{
-		ESP_LOGE(TAG, "Failed to obtain lock to write meter value");
-		return ESP_FAIL;
+		if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
+		{
+			ESP_LOGE(TAG, "Failed to obtain lock to write meter value");
+			return ESP_FAIL;
+		}
 	}
 
 	int entry = find_active_entry(1);
@@ -1936,10 +1929,12 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 		}
 	}
 
-	esp_err_t err = write_meter_value_string(fp, meter_buffer, buffer_length, time(NULL));
+	esp_err_t err = write_meter_value_string(fp, meter_buffer, buffer_length, time(NULL), stop_related);
 
 	fclose(fp);
-	xSemaphoreGive(file_lock);
+
+	if(!stop_related)
+		xSemaphoreGive(file_lock);
 
 	if(task_to_notify != NULL)
 		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
@@ -1978,7 +1973,7 @@ int ocpp_transaction_enqueue_meter_value(unsigned int connector_id, const int * 
 			ESP_LOGE(TAG, "Could not create meter value as string");
 			err = -1;
 		}else{
-			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length)!= ESP_OK){
+			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length, false)!= ESP_OK){
 				ESP_LOGE(TAG, "Unable to store transaction related meter value");
 				err = -1;
 			}else{
@@ -1993,6 +1988,17 @@ int ocpp_transaction_enqueue_meter_value(unsigned int connector_id, const int * 
 
 int ocpp_transaction_enqueue_stop(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason, struct ocpp_meter_value_list * transaction_data){
 
+	if(!filesystem_is_ready()){
+		ESP_LOGE(TAG, "Filesystem not ready for stop transaction");
+		return ESP_FAIL;
+	}
+
+	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
+	{
+		ESP_LOGE(TAG, "Failed to obtain lock to write stop transaction");
+		return ESP_FAIL;
+	}
+
 	if(transaction_data != NULL){
 		size_t meter_buffer_length;
 		unsigned char * meter_buffer = ocpp_meter_list_to_contiguous_buffer(transaction_data, true, &meter_buffer_length);
@@ -2000,16 +2006,18 @@ int ocpp_transaction_enqueue_stop(const char * id_tag, int meter_stop, time_t ti
 			ESP_LOGE(TAG, "Unable to create meter value as string for stop transaction request");
 		}else{
 			ESP_LOGI(TAG, "Storing stop transaction data as short string");
-			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length) != ESP_OK){
+			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length, true) != ESP_OK){
 				ESP_LOGE(TAG, "Unable to save stop transaction data");
 			}
 			free(meter_buffer);
 		}
 	}
 
-	if(ocpp_transaction_write_stop(id_tag, meter_stop, timestamp, reason)){
+	if(ocpp_transaction_write_stop_no_lock(id_tag, meter_stop, timestamp, reason)){
 		ESP_LOGE(TAG, "Unable to store stop transaction.");
 	}
+
+	xSemaphoreGive(file_lock);
 
 	if(task_to_notify != NULL)
 		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);

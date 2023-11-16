@@ -10,6 +10,7 @@
 #include "ota_location.h"
 #include "segmented_ota.h"
 #include "safe_ota.h"
+#include "ocpp_ota.h"
 #include "pic_update.h"
 #include "ota_log.h"
 #include "DeviceInfo.h"
@@ -28,7 +29,7 @@ static EventGroupHandle_t event_group;
 static const int OTA_UNBLOCKED = BIT0;
 static const int SEGMENTED_OTA_UNBLOCKED = BIT1;
 static const int SAFE_OTA_UNBLOCKED = BIT2;
-static const int OCPP_OTA = BIT7;
+static const int OCPP_OTA_UNBLOCKED = BIT7;
 static bool updateOnlyIfNewVersion = false;
 
 const uint OTA_TIMEOUT_MINUTES = 30;
@@ -141,6 +142,7 @@ static void StopOTA(TimerHandle_t timer)
 	xEventGroupClearBits(event_group,OTA_UNBLOCKED);
 	xEventGroupClearBits(event_group,SEGMENTED_OTA_UNBLOCKED);
 	xEventGroupClearBits(event_group,SAFE_OTA_UNBLOCKED);
+	xEventGroupClearBits(event_group,OCPP_OTA_UNBLOCKED);
 }
 
 static TimerHandle_t timeout_timer;
@@ -155,6 +157,7 @@ void ota_time_left()
 
 
 char image_location[1024] = {0};
+void (*status_cb)(const char * status) = NULL;
 static void ota_task(void *pvParameters){
 
     char image_version[16] = {0};
@@ -172,7 +175,7 @@ static void ota_task(void *pvParameters){
 
         ESP_LOGI(TAG, "waiting for ota event");
         EventBits_t ota_selection_field = xEventGroupWaitBits(
-            event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED | SAFE_OTA_UNBLOCKED,
+            event_group, OTA_UNBLOCKED | SEGMENTED_OTA_UNBLOCKED | SAFE_OTA_UNBLOCKED | OCPP_OTA_UNBLOCKED,
             pdFALSE, pdFALSE, portMAX_DELAY
         );
 
@@ -188,16 +191,14 @@ static void ota_task(void *pvParameters){
         ota_log_location_fetch();
 
 	int ret;
-	if(ota_selection_field & OCPP_OTA){ // OCPP defines a location, it can therefore not be based on the cloud api endpoint
-		// OCPP does not define a version for firmware. For testing version will be set to indicate validity for ZGB Prefix
+	if(ota_selection_field & OCPP_OTA_UNBLOCKED){ // OCPP defines a location, it can therefore not be based on the cloud api endpoint
+		// OCPP does not define a version for firmware. For testing version will be set to indicate validity for ZGB Prefix.
+		// The actuall firmware version is checked via the firmware header after esp_https_ota_begin.
 		strcpy(image_version, OCPP_IMAGE_VERSION);
 
-		log_set_origin_ocpp(true);
 		ret = 0;
 	}else{
 		ret = get_image_location(image_location,sizeof(image_location), image_version);
-
-		log_set_origin_ocpp(false);
 	}
         // strcpy( image_location,"http://api.zaptec.com/api/firmware/6476103f-7ef9-4600-9450-e72a282c192b/download");
         // strcpy( image_location,"https://api.zaptec.com/api/firmware/ZAP000001/current");
@@ -335,6 +336,10 @@ static void ota_task(void *pvParameters){
         	do_safe_ota(image_location);
 
         	StopOTA(timeout_timer);
+        }else if((ota_selection_field & OCPP_OTA_UNBLOCKED) != 0){
+			do_ocpp_ota(image_location, status_cb);
+
+			StopOTA(timeout_timer);
         }else{
             ESP_LOGE(TAG, "Bad ota selection, what did you do??");
         }
@@ -441,13 +446,14 @@ int start_safe_ota(void){
     return 0;
 }
 
-int start_ocpp_ota(const char * location){
+int start_ocpp_ota(const char * location, void (*status_update_cb)(const char * status)){
 	if(strlen(location) > sizeof(image_location))
 		return -1;
 
 	strcpy(image_location, location);
+	status_cb = status_update_cb;
 
-	xEventGroupSetBits(event_group, OCPP_OTA | SEGMENTED_OTA_UNBLOCKED);
+	xEventGroupSetBits(event_group, OCPP_OTA_UNBLOCKED);
 	return 0;
 }
 

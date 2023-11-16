@@ -9,7 +9,6 @@
 #include "protocol_task.h"
 #include "time.h"
 #include "../components/ntp/zntp.h"
-#include "storage.h"
 #include "zaptec_cloud_observations.h"
 #include "zaptec_cloud_listener.h"
 #include "utz.h"
@@ -78,7 +77,7 @@ void chargeController_Activation()
 	{
 		ESP_LOGI(TAG, "ENFORCING SCHEDULE AND DELAY");
 		enforceScheduleAndDelay = true;
-		chargeController_SetStandaloneState(storage_Get_Standalone());
+		chargeController_SetStandaloneState(storage_Get_session_controller());
 		/// Don't need to call storage_SaveConfiguration() here because only MCU will potentially be changed
 		chargeController_SetTimes();
 		isScheduleActive = true;
@@ -86,7 +85,7 @@ void chargeController_Activation()
 	else
 	{
 		enforceScheduleAndDelay = false;
-		chargeController_SetStandaloneState(storage_Get_Standalone());
+		chargeController_SetStandaloneState(storage_Get_session_controller());
 		isScheduleActive = false;
 	}
 
@@ -823,20 +822,22 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 /*
  * Ensure storage_SaveConfiguration() is called when this function returns true
  */
-bool chargeController_SetStandaloneState(uint8_t isStandalone)
+bool chargeController_SetStandaloneState(enum session_controller controller)
 {
-	enum session_controller controller = storage_Get_session_controller();
+	enum session_controller wanted_controller;
+	if(controller & eCONTROLLER_MCU_STANDALONE && enforceScheduleAndDelay){
+		wanted_controller = eSESSION_ZAPTEC_CLOUD;
+	}else{
+		wanted_controller = controller;
+	}
 
-	MessageType ret;
-	if(enforceScheduleAndDelay == true)
-		ret = MCU_SendUint8Parameter(ParamIsStandalone, 0); 	//MCU must be controlled by ESP due to schedule function
-	else
-		ret = MCU_SendUint8Parameter(ParamIsStandalone, (uint8_t)(controller & eCONTROLLER_MCU_STANDALONE));
-
+	MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (wanted_controller & eCONTROLLER_MCU_STANDALONE) ? 1 : 0); 	//MCU must be controlled by ESP due to schedule function
 	if(ret == MsgWriteAck)
 	{
-		storage_Set_Standalone((uint8_t)isStandalone);
-		ESP_LOGI(TAG, "Set Standalone: MCU=%d ESP=%d\n", (enforceScheduleAndDelay ? 0 : (controller & eCONTROLLER_MCU_STANDALONE) ? 1 : 0), isStandalone);
+		storage_Set_session_controller(controller);
+		ESP_LOGI(TAG, "Set Standalone: MCU=%s ESP=%s\n",
+				(wanted_controller & eCONTROLLER_MCU_STANDALONE) ? "True" : "False",
+				(controller & eCONTROLLER_ESP_STANDALONE) ? "True" : "False");
 		return true;
 	}
 	else
