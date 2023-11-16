@@ -378,6 +378,18 @@ void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue)
 void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue)
 {
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = newValue;
+
+	//Keep Zaptec lock and OCPP lock in sync
+	if(newValue)
+	{
+		// Do unlock equals not permanent
+		configurationStruct.permanentLock = 0;
+	}
+	else
+	{
+		// No unlock equals permanent lock
+		configurationStruct.permanentLock = 1;
+	}
 }
 
 void storage_Set_ocpp_websocket_ping_interval(uint32_t newValue)

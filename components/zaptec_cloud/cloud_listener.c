@@ -1958,6 +1958,10 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					ESP_LOGI(TAG, "MCU servo clear FAILED");
 				}
 			}
+			else if(strstr(commandString,"Unlock") != NULL)
+			{
+				MCU_SendCommandServoForceUnlock();
+			}
 
 			// Update certificate (without clearing old directly)
 			else if(strstr(commandString,"Update certificate") != NULL)
@@ -4086,11 +4090,11 @@ void GetInstallationIdBase64(char * instId, char *encodedString)
 	//ESP_LOGW(TAG,"InstallationId:  %s -> %s", instId, encodedString);
 }
 
-#define MQTT_KEEPALIVE_WITH_PULSE_STANDALONE 1100
+#define MQTT_KEEPALIVE_WITH_PULSE_STANDALONE (1100 * 2)
 #define MQTT_KEEPALIVE_WITH_PULSE_SYSTEM 300
 
 // Todo: Verify if mqtt client send at keepalive x 2, so could potentially be doubled without going offline.
-#define MQTT_KEEPALIVE_ONLY_STANDALONE 1100
+#define MQTT_KEEPALIVE_ONLY_STANDALONE (1100 * 2)
 #define MQTT_KEEPALIVE_ONLY_SYSTEM 300
 
 ///Use mode dependend MQTT keepalive value

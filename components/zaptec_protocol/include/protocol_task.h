@@ -96,6 +96,7 @@ void MCU_GetOPENSamples(char * samples);
 uint8_t MCU_GetRelayStates();
 uint8_t MCU_GetRCDButtonTestStates();
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen);
+bool MCU_SendCommandServoForceUnlock();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();

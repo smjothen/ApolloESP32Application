@@ -1041,11 +1041,16 @@ void start_transaction(){
 
 	int meter_start = floor(get_accumulated_energy() * 1000);
 
-	MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, !storage_Get_ocpp_unlock_connector_on_ev_side_disconnect());
-	if(ret != MsgWriteAck){
-		ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to apply UnlockConnectorOnEVSideDisconnect",
-					NULL, NULL, true, false);
-		ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect on MCU");
+	bool unlockOnEVSideDisconnect = storage_Get_ocpp_unlock_connector_on_ev_side_disconnect();
+	ESP_LOGW(TAG, "unlockOnEVSideDisconnect = %i", unlockOnEVSideDisconnect);
+	if(unlockOnEVSideDisconnect == false)
+	{
+		MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, 1);
+		if(ret != MsgWriteAck){
+			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to apply UnlockConnectorOnEVSideDisconnect",
+						NULL, NULL, true, false);
+			ESP_LOGE(TAG, "Unable to set UnlockConnectorOnEVSideDisconnect on MCU");
+		}
 	}
 
 	if(chargeSession_Get().AuthenticationCode[0] == '\0'){

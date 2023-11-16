@@ -169,25 +169,18 @@ void unlock_connector_cb(const char * unique_id, const char * action, cJSON * pa
 		ESP_LOGW(TAG, "Requested to unlock an unknown connector");
 		response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_NOT_SUPPORTED);
 	}else{
-
-		MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, true);
-		if(ret != MsgWriteAck){
-			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to lock connector to attempt unlock",
-						NULL, NULL, true, false);
-			ESP_LOGE(TAG, "Unlock connector preparation failed");
-		}
-
-		ret = MCU_SendUint8Parameter(PermanentCableLock, false);
-		if(ret != MsgWriteAck){
-			ESP_LOGE(TAG, "Unlock connector failed");
-			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCK_FAILED);
-
-		}else{
+		if(MCU_SendCommandServoForceUnlock())
+		{
 			if(sessionHandler_OcppTransactionIsActive(connector_id)){
 				sessionHandler_OcppStopTransaction(eOCPP_REASON_UNLOCK_COMMAND);
 			}
 
 			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCKED);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Unlock connector failed");
+			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCK_FAILED);
 		}
 	}
 

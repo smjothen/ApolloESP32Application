@@ -319,6 +319,7 @@
 		CommandTestHWTrig = 705,
         CommandOpenPENRelay = 706,
         CommandClosePENRelay = 707,
+        CommandServoForceUnlock = 708,
 
 		CommandFactoryReset = 710,
 		CommandRunGridTest = 804,
