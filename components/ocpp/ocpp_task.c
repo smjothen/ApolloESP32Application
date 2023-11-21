@@ -23,6 +23,7 @@
 #include "ocpp_listener.h"
 #include "messages/call_messages/ocpp_call_request.h"
 #include "ocpp_json/ocppj_message_structure.h"
+#include "ocpp_json/ocppj_validation.h"
 #include "types/ocpp_ci_string_type.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_date_time.h"
@@ -49,20 +50,24 @@ SemaphoreHandle_t ocpp_active_call_lock_1 = NULL;
  */
 QueueHandle_t ocpp_active_call_queue = NULL; // queue size 1
 
-time_t last_call_timestamp = {0};
+time_t last_call_timestamp = 0;
 
 QueueHandle_t ocpp_call_queue = NULL; // For normal messages
 QueueHandle_t ocpp_blocking_call_queue = NULL; // For messages that prevent significant ocpp behaviour (BootNotification)
 
 enum ocpp_registration_status registration_status = eOCPP_REGISTRATION_PENDING;
 
-long heartbeat_interval = -1;
+/*
+* "With JSON over WebSocket, sending heartbeats is not mandatory. However for time
+* synchronization it is advised to at least send one heartbeat per 24 hour."
+*/
+uint32_t heartbeat_interval = 60*60*24;
+long boot_retry_interval = CONFIG_OCPP_DEFAULT_BOOT_NOTIFICATION_INTERVAL_SEC;
+
 TimerHandle_t heartbeat_handle = NULL;
 
 #define OCPP_TIME_SYNC_MARGIN 5
 #define OCPP_MAX_EXPECTED_OFFSET 60*60 // 1 hour
-#define MAX_HEARTBEAT_INTERVAL UINT32_MAX
-#define MINIMUM_HEARTBEAT_INTERVAL 1 // To prevent flooding the central service with heartbeat
 #define WEBSOCKET_WRITE_TIMEOUT 5000
 
 struct ocpp_client_config current_config;
@@ -452,19 +457,27 @@ int check_send_legality(const char * action, bool is_trigger_message){
 		// before sending a next BootNotification request [...] unless requested to do so with a TriggerMessage.req[...]
 		// The Charge Point SHALL NOT send request messages to the Central System unless it has been instructed
 		// by the Central System to do so with a TriggerMessage.req request.
-		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0) && is_trigger_message == false)
+		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0) && is_trigger_message == false){
+			ESP_LOGE(TAG, "Send prohibited by not %s or trigger during pending", OCPPJ_ACTION_BOOT_NOTIFICATION);
 			return -1;
+		}
 
 		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) == 0) &&
-			time(NULL) < last_call_timestamp + heartbeat_interval && is_trigger_message == false)
+			time(NULL) < last_call_timestamp + boot_retry_interval && is_trigger_message == false){
+			ESP_LOGE(TAG, "Send prohibited by recent call (%lld < %lld + %ld) during reject", time(NULL), last_call_timestamp, boot_retry_interval);
 			return -1;
+		}
 		break;
 	case eOCPP_REGISTRATION_REJECTED:
-		if(strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0)
+		if(strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) != 0){
+			ESP_LOGE(TAG, "Send prohibited by not %s during reject", OCPPJ_ACTION_BOOT_NOTIFICATION);
 			return -1;
+		}
 
-		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) == 0) && time(NULL) < last_call_timestamp + heartbeat_interval)
+		if((strcmp(action, OCPPJ_ACTION_BOOT_NOTIFICATION) == 0) && time(NULL) < last_call_timestamp + boot_retry_interval){
+			ESP_LOGE(TAG, "Send prohibited by recent call (%lld < %lld + %ld) during reject", time(NULL), last_call_timestamp, boot_retry_interval);
 			return -1;
+		}
 		break;
 	}
 
@@ -606,8 +619,6 @@ void fail_active_call(struct ocpp_active_call * call, const char * error_code, c
 		call->call = NULL;
 	}
 }
-
-
 
 BaseType_t receive_transaction_call(struct ocpp_active_call * call, TickType_t wait, uint * min_wait_out){
 
@@ -846,9 +857,11 @@ void update_transaction_message_related_config(uint8_t ocpp_transaction_message_
 	current_config.transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
 }
 
-void update_heartbeat_timer(uint sec){
-
-	heartbeat_interval = sec;
+void update_heartbeat_timer(uint32_t sec){
+	if(sec > CONFIG_OCPP_TIMER_MAX_SEC){
+		ESP_LOGW(TAG, "Requested heartbeat interval exceed max. limiting value to %" PRIu32, sec);
+		sec = CONFIG_OCPP_TIMER_MAX_SEC;
+	}
 
 	if(heartbeat_handle != NULL){
 		if(sec > 0){
@@ -891,29 +904,15 @@ void ocpp_trigger_heartbeat(){
 }
 
 int start_ocpp_heartbeat(void){
-	long actual_interval = heartbeat_interval;
 
 	if(heartbeat_interval == 0){
 		ESP_LOGW(TAG, "Heartbeat interval is 0. Heartbeat disabled");
 		return 0;
 	}
 
-	if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL || heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
-		ESP_LOGE(TAG, "Unable to start heartbeat with interval %ld", heartbeat_interval);
+	ESP_LOGI(TAG, "starting heartbeat with interval %" PRIu32 " sec", heartbeat_interval);
 
-		if(heartbeat_interval < MINIMUM_HEARTBEAT_INTERVAL){
-			actual_interval = MINIMUM_HEARTBEAT_INTERVAL;
-
-		}else if(heartbeat_interval > MAX_HEARTBEAT_INTERVAL){
-			actual_interval = MAX_HEARTBEAT_INTERVAL;
-		}
-		ESP_LOGE(TAG, "Using an interval of %ld instead", actual_interval);
-	}
-
-	ESP_LOGI(TAG, "starting heartbeat with interval %ld sec", actual_interval);
-
-	heartbeat_handle = xTimerCreate("Ocpp Heartbeat", pdMS_TO_TICKS(actual_interval * 1000),
-					pdTRUE, NULL, ocpp_heartbeat);
+	heartbeat_handle = xTimerCreate("Ocpp Heartbeat", pdMS_TO_TICKS(heartbeat_interval * 1000), pdTRUE, NULL, ocpp_heartbeat);
 
 	if(heartbeat_handle == NULL){
 		ESP_LOGE(TAG, "Unable to allocate memory for heartbeat timer");
@@ -934,7 +933,6 @@ void stop_ocpp_heartbeat(void){
 		ESP_LOGE(TAG, "Unable to stop heartbeat timer");
 	}
 	heartbeat_handle = NULL;
-	heartbeat_interval = -1;
 }
 
 bool ocpp_is_connected(){
@@ -945,6 +943,9 @@ esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 	ESP_LOGI(TAG, "Starting ocpp");
 
 	memcpy(&current_config, ocpp_config, sizeof(struct ocpp_client_config));
+
+	boot_retry_interval = CONFIG_OCPP_DEFAULT_BOOT_NOTIFICATION_INTERVAL_SEC;
+	last_call_timestamp = 0;
 
 	char uri[256];
 	int written_length = snprintf(uri, sizeof(uri), "%s/%s", current_config.url, current_config.cbid);
@@ -1057,56 +1058,82 @@ error:
 void boot_result_cb(const char * unique_id, cJSON * payload, void * data){
 	ESP_LOGI(TAG, "Recieved boot notification result");
 	time_t charge_point_time = time(NULL);
+	char err_str[128];
+	char * cs_time_str;
+	time_t cs_time_t;
 
-	if(cJSON_HasObjectItem(payload, "currentTime")){
-		time_t central_system_time = ocpp_parse_date_time(cJSON_GetObjectItem(payload, "currentTime")->valuestring);
-		update_central_system_time_offset(charge_point_time, central_system_time);
+	enum ocppj_err_t err = ocppj_get_string_field(payload, "currentTime", true, &cs_time_str, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Unable to get CS time: %s", err_str);
+		cs_time_t = time(NULL);
 	}else{
-		ESP_LOGE(TAG, "Boot result is lacking currentTime");
-	}
 
-	if(cJSON_HasObjectItem(payload, "interval")){
-		heartbeat_interval = cJSON_GetObjectItem(payload, "interval")->valueint;
-		ESP_LOGI(TAG, "Heartbeat interval is: %" PRIu32, heartbeat_interval);
-	}else{
-		ESP_LOGE(TAG, "Boot result is lacking interval");
-	}
-
-	if(cJSON_HasObjectItem(payload, "status")){
-		char * status_string = cJSON_GetObjectItem(payload, "status")->valuestring;
-
-		if(strcmp(status_string, OCPP_REGISTRATION_ACCEPTED) == 0){
-			registration_status = eOCPP_REGISTRATION_ACCEPTED;
+		cs_time_t = ocpp_parse_date_time(cs_time_str);
+		if(cs_time_t == (time_t)-1){
+			ESP_LOGE(TAG, "Unable to interpret central system timestamp");
+			cs_time_t = time(NULL);
 		}
-		else if(strcmp(status_string, OCPP_REGISTRATION_PENDING) == 0){
+	}
+
+	update_central_system_time_offset(charge_point_time, cs_time_t);
+
+	int interval;
+	err = ocppj_get_int_field(payload, "interval", true, &interval, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Unable to get boot retry or heartbeat interval: %s", err_str);
+		interval = 0;
+	}
+
+	char * status;
+	err = ocppj_get_string_field(payload, "status", true, &status, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGE(TAG, "Unable to get status: %s", err_str);
+		status = OCPP_REGISTRATION_PENDING;
+	}
+
+	if(strcmp(status, OCPP_REGISTRATION_ACCEPTED) == 0){
+		registration_status = eOCPP_REGISTRATION_ACCEPTED;
+
+		heartbeat_interval = current_config.heartbeat_interval; // Default to configured value
+		if(interval < 0){
+			ESP_LOGE(TAG, "Boot request value for heartbeat interval is negativ. Using configuration value instead: %" PRIu32, heartbeat_interval);
+
+		}else if(interval > CONFIG_OCPP_TIMER_MAX_SEC){
+			ESP_LOGE(TAG, "Boot request value for heartbeat interval exceed max allowed value. Using configuration value instead: %" PRIu32, heartbeat_interval);
+
+		}else if(interval == 0){
+			ESP_LOGI(TAG, "Boot request value for heartbeat interval is 0. Using configuration value: %" PRIu32, heartbeat_interval);
+
+		}else{
+			heartbeat_interval = interval;
+			ESP_LOGI(TAG, "Boot request value for heartbeat interval sets value to %d", interval);
+		}
+	}else{
+		if(strcmp(status, OCPP_REGISTRATION_PENDING) == 0){
 			registration_status = eOCPP_REGISTRATION_PENDING;
-		}
-		else if(strcmp(status_string, OCPP_REGISTRATION_REJECTED) == 0){
+		}else{
+			if(strcmp(status, OCPP_REGISTRATION_REJECTED) != 0){
+				ESP_LOGE(TAG, "Got unrecognised registration status '%s'", status);
+				ESP_LOGE(TAG, "Assuming rejected");
+			}
 			registration_status = eOCPP_REGISTRATION_REJECTED;
 		}
-		else{
-			ESP_LOGE(TAG, "Got unrecognised registration status '%s'", status_string);
-			ESP_LOGE(TAG, "Assuming rejected");
-			registration_status = eOCPP_REGISTRATION_REJECTED;
+
+		if(interval == 0){ // If CS sets a heartbeat interval without accepting registration, then that SHOULD be used as delay for next boot request.
+			ESP_LOGW(TAG, "Using default boot notification interval");
+			interval = CONFIG_OCPP_DEFAULT_BOOT_NOTIFICATION_INTERVAL_SEC;
 		}
 
-	}else{
-		ESP_LOGE(TAG, "Boot result without error is lacking status, assuming REJECTED");
-		registration_status = eOCPP_REGISTRATION_REJECTED;
-	}
+		if(interval > CONFIG_OCPP_TIMER_MAX_SEC){
+			ESP_LOGE(TAG, "Requested boot notification interval exceed maximum setting to: %d", CONFIG_OCPP_TIMER_MAX_SEC);
+			interval = CONFIG_OCPP_TIMER_MAX_SEC;
 
-	// The specification indicates that interval can be 0 and that its meaning depends on the given status:
-	// "If that interval value is zero, the Charge Point chooses a waiting interval on its
-	// own, in a way that avoids flooding the Central System with requests"
-	//
-	// "If the Central System returns something other than Accepted, the value of the interval field
-	// indicates the minimum wait time before sending a next BootNotification request"
-    	if(registration_status == eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
-		heartbeat_interval = current_config.heartbeat_interval;
+		}else if(interval < ocpp_call_timeout +1){
+			ESP_LOGE(TAG, "Requested boot notification interval is less than call timeout. Increasing to detect call timeout");
+			interval = ocpp_call_timeout +1;
+		}
 
-	}else if(registration_status != eOCPP_REGISTRATION_ACCEPTED && heartbeat_interval == 0){
-		// No recommendations are given for delay to next BootNotification request
-		heartbeat_interval = 10; // We use relatively short delay as the websocket is active anyway
+		boot_retry_interval = interval;
 	}
 
 	xTaskNotify(task_to_notify, eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset, eSetBits);
@@ -1181,27 +1208,43 @@ int enqueue_boot_notification(bool is_trigger){
 	return 0;
 }
 
-void await_registration_status_change(uint32_t max_delay){
-	time_t end = time(NULL) + max_delay;
-	int call_count = 0;
+uint32_t await_registration_status_change(uint32_t max_delay_sec, uint32_t event_return_mask){
+	ESP_LOGI(TAG, "Awaiting registration change for a maximum of %" PRIu32 " seconds", max_delay_sec);
 
+	time_t end = time(NULL) + max_delay_sec;
+	uint32_t data;
 	while(true){
-		uint32_t data = ulTaskNotifyTake(pdTRUE, call_count > 0 ? 0 : pdMS_TO_TICKS((end - time(NULL)) * 1000));
-		if(data & (eOCPP_TASK_CALL_TIMEOUT << task_notify_offset))
+		int call_count  = enqueued_call_count();
+
+		data = ulTaskNotifyTake(pdTRUE, call_count > 0 ? 0 : pdMS_TO_TICKS((end - time(NULL)) * 1000));
+		if(data & (eOCPP_TASK_CALL_TIMEOUT << task_notify_offset)){
+			ESP_LOGE(TAG, "Await loop detected call timeout");
 			timeout_active_call();
+		}
 
 		if(data & (eOCPP_TASK_CALL_ENQUEUED << task_notify_offset) || call_count > 0)
 			send_next_call(&call_count);
 
 		if(data & (eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset))
 			break;
+
+		if(data & event_return_mask){
+			ESP_LOGW(TAG, "Awaiting registration change canceled: return event bit set");
+			break;
+		}
+
+		if(data == 0 && call_count == 0){
+			ESP_LOGE(TAG, "Await loop detected no registration status change within max delay");
+			break;
+		}
 	}
+	return data;
 }
 
 int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
 				const char * firmware_version, const char * iccid, const char * imsi,
-				const char * meter_serial_number, const char * meter_type){
+				const char * meter_serial_number, const char * meter_type, uint32_t event_return_mask){
 
 	if(chargebox_serial_number != NULL && chargebox_serial_number[0] != '\0'
 		&& is_ci_string_type(chargebox_serial_number, 25)){
@@ -1259,45 +1302,30 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	for(int i = 0; i < 5; i++){
 
 		registration_status = eOCPP_REGISTRATION_PENDING;
-		heartbeat_interval = -1;
 
 		if(enqueue_boot_notification(false) != 0){
 			ESP_LOGE(TAG, "Failed boot notification");
 			goto cleanup;
 		}
 
-		ESP_LOGI(TAG, "Sending boot notification message");
-		int remaining_call_count;
-		if(send_next_call(&remaining_call_count) != 0){
-			ESP_LOGE(TAG, "Unable to send boot message");
-			goto cleanup;
-		}
-
-		await_registration_status_change(ocpp_call_timeout * 2);
-		if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
-			ESP_LOGI(TAG, "Registration status: accepted");
-			ret = 0;
-			goto cleanup;
-
-		}else if (registration_status == eOCPP_REGISTRATION_PENDING){
-			ESP_LOGW(TAG, "Registration status: pending");
-		}else{
-			ESP_LOGE(TAG, "Registration status: rejected");
-		}
-
-		if(heartbeat_interval < 1){ // If CS sets a heartbeat interval without accepting registration, then that SHULD be used as delay for next boot request.
-			heartbeat_interval = 180; // Else decide the delay to not flood the CS
-		}
-		ESP_LOGW(TAG, "Will atempt a new BootNotification.req in %ld sec if not accepted earlier", heartbeat_interval);
+		ESP_LOGW(TAG, "Will atempt a new BootNotification.req in %" PRIu32 " sec if not accepted earlier", boot_retry_interval);
 		time_t start = time(NULL);
-		while(time(NULL) < start + heartbeat_interval){
-			await_registration_status_change(pdMS_TO_TICKS(heartbeat_interval * 1000));
+		while(time(NULL) < start + boot_retry_interval){
+			uint32_t notification_value = await_registration_status_change(boot_retry_interval+1, event_return_mask);
 
-			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){ // Updated by TriggerMessage
-				ESP_LOGI(TAG, "Registration status set as accepted while waiting to for new BootNotification delay");
+			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
+				ESP_LOGI(TAG, "Registration status: accepted");
 				ret = 0;
 				goto cleanup;
+
+			}else if (registration_status == eOCPP_REGISTRATION_PENDING){
+				ESP_LOGW(TAG, "Registration status: pending");
+			}else{
+				ESP_LOGE(TAG, "Registration status: rejected");
 			}
+
+			if(notification_value & event_return_mask)
+				goto cleanup;
 		}
 	}
 

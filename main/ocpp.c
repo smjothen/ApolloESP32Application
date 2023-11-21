@@ -1960,11 +1960,15 @@ static void change_config_confirm(const char * unique_id, const char * configura
 	}
 }
 
+static bool is_valid_interval(uint32_t sec){
+	return sec <= CONFIG_OCPP_TIMER_MAX_SEC;
+}
+
 static bool is_valid_alignment_interval(uint32_t sec){
 	if(sec == 0)
 		return true;
 
-	return (86400 % sec) == 0 ? true : false;
+	return (86400 % sec) == 0 && is_valid_interval(sec);
 }
 
 static bool is_true(bool value){
@@ -2378,7 +2382,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 			err = 0;
 		}
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, NULL);
+		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, is_valid_interval);
 		if(err == 0)
 			update_heartbeat_timer(storage_Get_ocpp_heartbeat_interval());
 
@@ -2444,7 +2448,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, NULL);
+		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, is_valid_interval);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION) == 0){
 		err = set_config_u32(storage_Set_ocpp_minimum_status_duration, value, NULL);
@@ -3506,8 +3510,10 @@ static void ocpp_task(){
 
 			if(err != ESP_OK){
 				if(retry_attempts < 7){
-					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
-					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
+					ESP_LOGE(TAG, "Unable to open socket for ocpp: %s. Attempt nr %u, retrying in %d sec",
+							esp_err_to_name(err), retry_attempts++, retry_delay);
+
+					ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 * retry_delay));
 					retry_delay *= 5;
 
 				}else{
@@ -3552,11 +3558,20 @@ static void ocpp_task(){
 
 			err = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
 								"Zaptec", GetSoftwareVersion(),
-								LTEGetIccid(), LTEGetImsi(), NULL, NULL);
-			if(err != 0){
+								LTEGetIccid(), LTEGetImsi(), NULL, NULL, eOCPP_QUIT >> MAIN_EVENT_OFFSET);
+			if(err != 0 && should_run){
 				if(retry_attempts < 7){
-					ESP_LOGE(TAG, "Unable to get accepted boot, retrying in %d sec", retry_delay);
-					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
+					ESP_LOGE(TAG, "Unable to get accepted boot. Attempt nr %u, retrying in %d sec", retry_attempts++, retry_delay);
+
+					time_t await_end = time(NULL) + retry_delay;
+					while(time(NULL) < await_end && should_run && get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
+						uint32_t actual_delay = await_end - time(NULL);
+						if(actual_delay > retry_delay) // Underflow
+							actual_delay = 1;
+
+						await_registration_status_change(actual_delay, eOCPP_QUIT >> MAIN_EVENT_OFFSET);
+					}
+
 					retry_delay *= 5;
 
 				}else{
