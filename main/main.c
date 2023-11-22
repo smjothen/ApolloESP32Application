@@ -54,21 +54,8 @@
 #include "ocpp_smart_charging.h"
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
-
 #include "../components/capabilities/Capabilities.c" 
 #include "../components/capabilities/include/list.h" 
-
-/*#include "../components/capabilities/include/CommunicationMode.h" 
-#include "../components/capabilities/include/CommunicationSharingMode.h" 
-#include "../components/capabilities/include/ConnectorType.h" 
-#include "../components/capabilities/include/DeviceType.h" 
-#include "../components/capabilities/include/GridType.h" 
-#include "../components/capabilities/include/HardwareVariant.h" 
-#include "../components/capabilities/include/InternalFuse.h" 
-#include "../components/capabilities/include/OcppVersion.h" 
-#include "../components/capabilities/include/ProductVariant.h" 
-#include "../components/capabilities/include/RcdType.h" 
-#include "../components/capabilities/include/SchemaVersion.h"*/
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -77,7 +64,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.3.0.306";
+char softwareVersion[] = "2.3.0.310";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -664,7 +651,22 @@ void app_main(void)
 
 	if(MCU_IsReady())
 	{
+		ESP_LOGW(TAG_MAIN, "MCU Ready");
+		
+		size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+		size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+		size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+		ESP_LOGI(TAG_MAIN, "1 DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+		
+
 		MakeCapabilityString();
+
+		free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+		min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+		blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+		ESP_LOGI(TAG_MAIN, "2 DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
 	}
 
 
