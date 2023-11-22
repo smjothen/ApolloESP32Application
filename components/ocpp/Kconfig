@@ -2,6 +2,22 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_TIMER_MAX_SEC
+       int "Max timer values in seconds"
+       help
+	OCPP does not define max values for heartbeat interval, meter value interval and similar timer related values.
+	These values may be used with freeRTOS or other places where infinite values could cause overflow.
+       default 4294967 # Close to portMAX_DELAY (2^32-1) as the result of pdMS_TO_TICKS if FREERTOS_HZ is maximum
+
+
+config OCPP_DEFAULT_BOOT_NOTIFICATION_INTERVAL_SEC
+       int "Default boot notification interval"
+       help
+	If the bootNotification.conf does not have status accepted and the interval value is zero, then the Charge Point
+	chooses a waiting interval on its own, in a way that avoids flooding the Central System with requests.
+       default 120
+       range 1 OCPP_TIMER_MAX_SEC
+
 config OCPP_VENDOR_ID
        string "Vendor id"
        help

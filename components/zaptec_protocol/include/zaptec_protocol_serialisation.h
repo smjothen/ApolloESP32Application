@@ -209,7 +209,7 @@
         SessionController = 860,
         OcppNativeURL = 861,
         OcppNativeCBID = 862,
-        OcppNativeAuthorizationKey = 863,
+        OcppNativeAuthorizationKey = 863, // The key itself should be WRITE only from Zaptec portal and CS(MS)
         OcppNativeAuthorizationKeyFromZaptec = 864,
         OcppNativeSecurityProfile = 865,
         OcppNativeConnected = 866,
