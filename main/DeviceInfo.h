@@ -132,7 +132,7 @@ typedef enum {
 #define DEFAULT_COVER_ON_VALUE 0xB2//0xd0
 
 //Numbers should match Pro
-enum CommunicationMode
+enum eCommunicationMode
 {
 	eCONNECTION_NONE 		 = 0,
 	eCONNECTION_WIFI		 = 1,

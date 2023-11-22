@@ -147,6 +147,7 @@ uint8_t storage_Get_ocpp_security_profile();
 
 //Get Local settings
 enum session_controller storage_Get_session_controller();
+int ocpp_get_session_controller_mode();
 uint8_t storage_Get_CommunicationMode();
 float storage_Get_HmiBrightness();
 uint8_t storage_Get_PermanentLock();

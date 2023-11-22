@@ -20,9 +20,9 @@
 static const char *TAG = "CONNECTIVITY   ";
 
 
-enum CommunicationMode activeInterface = eCONNECTION_NONE;
-static enum CommunicationMode staticNewInterface = eCONNECTION_NONE;
-static enum CommunicationMode previousInterface = eCONNECTION_NONE;
+enum eCommunicationMode activeInterface = eCONNECTION_NONE;
+static enum eCommunicationMode staticNewInterface = eCONNECTION_NONE;
+static enum eCommunicationMode previousInterface = eCONNECTION_NONE;
 
 static bool certificateInitialized = false;
 static bool sntpInitialized = false;
@@ -40,18 +40,18 @@ bool connectivity_GetMQTTInitialized()
 	return mqttInitialized;
 }
 
-void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
+void connectivity_ActivateInterface(enum eCommunicationMode selectedInterface)
 {
 	previousInterface = activeInterface;
 	staticNewInterface = selectedInterface;
 }
 
-enum CommunicationMode connectivity_GetActivateInterface()
+enum eCommunicationMode connectivity_GetActivateInterface()
 {
 	return activeInterface;
 }
 
-enum CommunicationMode connectivity_GetPreviousInterface()
+enum eCommunicationMode connectivity_GetPreviousInterface()
 {
 	return previousInterface;
 }
@@ -60,7 +60,7 @@ bool wifiInitialized = false;
 
 /// This timer-function is called every second to control pulses to Cloud
 static uint32_t mqttUnconnectedCounter = 0;
-static uint32_t carNotChargingCounter = 0;
+//static uint32_t carNotChargingCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
 static uint32_t restartTimeLimit = 3900;
 static uint32_t nrOfConnectsFailsBeforeReinit = 2;
@@ -117,20 +117,20 @@ static void OneSecondTimer()
 
 			if(mqttUnconnectedCounter % 10 == 0)
 			{
-				ESP_LOGE(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900 || noc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
+				ESP_LOGE(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter);
 			}
 
 			enum ChargerOperatingMode chOpMode = sessionHandler_GetCurrentChargeOperatingMode();
 
 			/// Check how long a car has not been charging
-			if(chOpMode != CHARGE_OPERATION_STATE_CHARGING)
+			/*if(chOpMode != CHARGE_OPERATION_STATE_CHARGING)
 			{
 				carNotChargingCounter++;
 			}
 			else
 			{
 				carNotChargingCounter = 0;
-			}
+			}*/
 
 			/// Check how long a car has been disconnected
 			if(chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)
@@ -148,10 +148,10 @@ static void OneSecondTimer()
 			if(mqttUnconnectedCounter >= restartTimeLimit)
 			{
 				/// Restart if car has been disconnected for 65 minutes(session has been saved) OR car has not charged for 65 minutes(more than energy sync interval)
-				if(((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900)) || (carNotChargingCounter >= 3900))
+				if((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900))
 				{
 					char buf[100]={0};
-					snprintf(buf, sizeof(buf), "#2 mqttUncon:%" PRId32 " disc:%" PRId32 " noc:%" PRId32 " op:%d", mqttUnconnectedCounter, carDisconnectedCounter, carNotChargingCounter, chOpMode);
+					snprintf(buf, sizeof(buf), "#2 mqttUncon:%" PRId32 " disc:%" PRId32 " op:%d", mqttUnconnectedCounter, carDisconnectedCounter, chOpMode);
 					storage_Set_And_Save_DiagnosticsLog(buf);
 					ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
 					esp_restart();
@@ -179,14 +179,14 @@ static void OneSecondTimer()
 static void connectivity_task()
 {
 	/// Read from Flash. If no interface is configured, use none and wait for setting
-	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
+	staticNewInterface = (enum eCommunicationMode)storage_Get_CommunicationMode();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()) {
 		staticNewInterface = eCONNECTION_WIFI;
 	}
 
-	enum CommunicationMode localNewInterface = eCONNECTION_NONE;
+	enum eCommunicationMode localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
 	bool zntpIsRunning = false;

@@ -2590,7 +2590,7 @@ static void sessionHandler_task()
 
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
     enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
-    enum CommunicationMode networkInterface = eCONNECTION_NONE;
+    enum eCommunicationMode networkInterface = eCONNECTION_NONE;
 
 #ifndef CONFIG_ZAPTEC_MCU_APPLICATION_ONLY
 
@@ -2790,7 +2790,7 @@ static void sessionHandler_task()
 		if(networkInterface == eCONNECTION_NONE)
 		{
 			if((onCounter % 10) == 0)
-				ESP_LOGI(TAG, "CommunicationMode == eCONNECTION_NONE");
+				ESP_LOGI(TAG, "eCommunicationMode == eCONNECTION_NONE");
 
 		}
 

@@ -19,7 +19,12 @@
     "cmake.cmakePath": "C:\\gitHub\\espressif\\.espressif511\\tools\\cmake\\3.24.0\\bin\\cmake.exe",
     "idf.gitPathWin": "C:\\gitHub\\espressif\\.espressif511\\tools\\tools\\idf-git\\2.39.2\\cmd\\git.exe",
     "files.associations": {
-        "ocpp_task.h": "c"
+        "ocpp_task.h": "c",
+        "cjson.h": "c",
+        "list.h": "c",
+        "freertos.h": "c",
+        "esp_websocket_client.h": "c",
+        "network.h": "c"
     }
 
 }

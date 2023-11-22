@@ -55,6 +55,21 @@
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
 
+#include "../components/capabilities/Capabilities.c" 
+#include "../components/capabilities/include/list.h" 
+
+/*#include "../components/capabilities/include/CommunicationMode.h" 
+#include "../components/capabilities/include/CommunicationSharingMode.h" 
+#include "../components/capabilities/include/ConnectorType.h" 
+#include "../components/capabilities/include/DeviceType.h" 
+#include "../components/capabilities/include/GridType.h" 
+#include "../components/capabilities/include/HardwareVariant.h" 
+#include "../components/capabilities/include/InternalFuse.h" 
+#include "../components/capabilities/include/OcppVersion.h" 
+#include "../components/capabilities/include/ProductVariant.h" 
+#include "../components/capabilities/include/RcdType.h" 
+#include "../components/capabilities/include/SchemaVersion.h"*/
+
 static const char *TAG_MAIN = "MAIN           ";
 
 //OUTPUT PIN
@@ -426,6 +441,63 @@ void log_efuse_info()
 	ESP_LOGI(TAG_MAIN, "");
 }
 
+
+static char * capabilityString = NULL;
+char * GetCapabilityString()
+{
+	return capabilityString;
+}
+
+void MakeCapabilityString()
+{
+	/// Device Type
+	enum DeviceType deviceType = DEVICETYPE_GO;
+
+	/// Meter calibrated
+	uint32_t calibrationId = 0;
+	bool isCalibrated = MCU_GetMidStoredCalibrationId(&calibrationId);
+	if((isCalibrated == true) && (calibrationId != 0))
+		ESP_LOGW(TAG_MAIN, "MID Calibration ID: %lu", calibrationId);
+	else
+		isCalibrated = false;
+
+	/// OCPP
+	list_t * ocppList = list_create(false, NULL);
+	enum CommunicationMode ocppMode = OCPPVERSION_V1_6;
+	list_add(ocppList, (void*)&ocppMode, sizeof(void*));
+
+	/// Communication Modes	
+	list_t * comList = list_create(false, NULL);
+	enum CommunicationMode LTEMode = COMMUNICATIONMODE_LTE;
+	enum CommunicationMode wifiMode = COMMUNICATIONMODE_WI_FI;
+	list_add(comList, (void*)&LTEMode, sizeof(void*));
+	list_add(comList, (void*)&wifiMode, sizeof(void*));
+
+	/// Make capabilites
+	const struct Capabilities capabilities = {
+		.device_type 			= &deviceType,
+		.meter_calibrated 		= &isCalibrated,
+		.ocpp_versions 			= ocppList,
+		.communication_modes 	= comList 
+	};
+
+	cJSON * capaObject = cJSON_CreateCapabilities(&capabilities);
+
+	capabilityString = cJSON_PrintUnformatted(capaObject);
+	/// Clean up, keep only string permanently in memory. 
+	list_release(comList);
+	list_release(ocppList);
+	cJSON_Delete(capaObject);
+ 
+	/// Frees JSON object and sublists by calling list_release() on each list used
+	//cJSON_DeleteCapabilities(&capabilities);	
+
+	ESP_LOGW(TAG_MAIN, "Capabilities4.2: %s", GetCapabilityString());
+}
+
+
+
+
 #ifdef CONFIG_HEAP_TRACING_STANDALONE
 #define TRACE_RECORD_COUNT 80
 static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
@@ -589,6 +661,12 @@ void app_main(void)
 		mcuTimeout--;
 		ESP_LOGW(TAG_MAIN, "Waiting for MCU: %d", mcuTimeout);
 	}
+
+	if(MCU_IsReady())
+	{
+		MakeCapabilityString();
+	}
+
 
 	///Check for MID calibrationHandle at boot
 	bool isCalibrationHandle = MCU_IsCalibrationHandle();

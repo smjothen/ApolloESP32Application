@@ -706,6 +706,26 @@ enum session_controller storage_Get_session_controller()
 	return configurationStruct.session_controller;
 }
 
+int ocpp_get_session_controller_mode()
+{
+	int management_mode = 0;
+	switch(storage_Get_session_controller()){
+	case eSESSION_ZAPTEC_CLOUD:
+		management_mode = 0;
+		break;
+	case eSESSION_STANDALONE:
+		management_mode = 1;
+		break;
+	case eSESSION_OCPP:
+		management_mode = 2;
+		break;
+	default:
+		management_mode = -1;
+	}
+
+	return management_mode;
+}
+
 bool storage_Get_ocpp_allow_offline_tx_for_unknown_id()
 {
 	return configurationStruct.ocpp_allow_offline_tx_for_unknown_id;

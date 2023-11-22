@@ -9,11 +9,11 @@ extern "C" {
 
 bool connectivity_GetSNTPInitialized();
 bool connectivity_GetMQTTInitialized();
-enum CommunicationMode connectivity_GetActivateInterface();
-enum CommunicationMode connectivity_GetPreviousInterface();
+enum eCommunicationMode connectivity_GetActivateInterface();
+enum eCommunicationMode connectivity_GetPreviousInterface();
 uint32_t connectivity_GetNrOfLTEReconnects();
 void connectivity_init();
-void connectivity_ActivateInterface(enum CommunicationMode selectedInterface);
+void connectivity_ActivateInterface(enum eCommunicationMode selectedInterface);
 int connectivity_GetStackWatermark();
 
 #ifdef __cplusplus
