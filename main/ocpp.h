@@ -10,6 +10,7 @@ extern "C" {
 
 cJSON * ocpp_get_diagnostics();
 int ocpp_get_stack_watermark();
+void ocpp_task_clear_connection_delay();
 void init_interval_measurands(enum ocpp_reading_context_id context);
 void save_interval_measurands(enum ocpp_reading_context_id context);
 void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, const char * stoptxn_csl,

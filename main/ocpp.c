@@ -3445,6 +3445,20 @@ static esp_err_t prepare_reset(){
 	return ESP_OK;
 }
 
+
+static unsigned int retry_attempts = 0;
+static unsigned int retry_delay = 5;
+
+/**
+ * When URL is updated, this function should be cleared to ensure new connection is attempted straight away
+*/
+void ocpp_task_clear_connection_delay()
+{
+	retry_attempts = 0;
+	retry_delay = 5;
+	xTaskAbortDelay(task_ocpp_handle);
+}
+
 static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
@@ -3483,8 +3497,8 @@ static void ocpp_task(){
 		ESP_LOGI(TAG, "Starting connection with Central System");
 
 		int err = -1;
-		unsigned int retry_attempts = 0;
-		unsigned int retry_delay = 5;
+		retry_attempts = 0;
+		retry_delay = 5;
 
 		struct ocpp_client_config ocpp_config = {
 			.url = storage_Get_url_ocpp(),
