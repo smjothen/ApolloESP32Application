@@ -796,6 +796,14 @@ static void restart_clock_aligned_meter_values(){
 	}
 }
 
+static void stop_clock_aligned_meter_values(){
+	ESP_LOGI(TAG, "Stopping clock aligned meter value timer");
+	if(clock_aligned_handle != NULL){
+		xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(2000));
+		clock_aligned_handle = NULL;
+	}
+}
+
 static int write_configuration_u8(uint8_t value, char * value_out){
 	if(value_out == NULL){
 		return -1;
@@ -3445,20 +3453,6 @@ static esp_err_t prepare_reset(){
 	return ESP_OK;
 }
 
-
-static unsigned int retry_attempts = 0;
-static unsigned int retry_delay = 5;
-
-/**
- * When URL is updated, this function should be cleared to ensure new connection is attempted straight away
-*/
-void ocpp_task_clear_connection_delay()
-{
-	retry_attempts = 0;
-	retry_delay = 5;
-	xTaskAbortDelay(task_ocpp_handle);
-}
-
 static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
@@ -3497,8 +3491,8 @@ static void ocpp_task(){
 		ESP_LOGI(TAG, "Starting connection with Central System");
 
 		int err = -1;
-		retry_attempts = 0;
-		retry_delay = 5;
+		unsigned int retry_attempts = 0;
+		unsigned int retry_delay = 5;
 
 		struct ocpp_client_config ocpp_config = {
 			.url = storage_Get_url_ocpp(),
@@ -3780,6 +3774,7 @@ clean:
 		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
 		stop_ocpp();
+		stop_clock_aligned_meter_values();
 
 		ESP_LOGI(TAG, "Teardown complete");
 

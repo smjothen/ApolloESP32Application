@@ -265,6 +265,36 @@ bool cloud_listener_test_reconnect()
 	return tmp;
 }
 
+void on_controller_change(){
+	enum session_controller wanted_controller = storage_Get_session_controller();
+	ESP_LOGI(TAG, "Controller changed: %d", wanted_controller);
+
+	MCU_UpdateUseZaptecFinishedTimeout();
+
+	if(wanted_controller & eCONTROLLER_OCPP_STANDALONE || storage_Get_url_ocpp()[0] == '\0'){
+		if(ocpp_is_running()){
+			ocpp_end(false);
+		}
+	}else{
+		if(!ocpp_is_running()){
+			ocpp_init();
+		}else{
+			ocpp_end_and_reconnect(true);
+		}
+	}
+
+	if(chargeController_SetStandaloneState(wanted_controller))
+	{
+		ESP_LOGW(TAG, "New 860 and session controller %d", storage_Get_session_controller());
+
+		cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
+	}
+	else
+	{
+		ESP_LOGE(TAG, "MCU standalone parameter error");
+	}
+}
+
 void ParseCloudSettingsFromCloud(char * message, int message_len)
 {
 	if ((message[0] != '{') || (message[message_len-1] != '}'))
@@ -785,7 +815,6 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 				if(new_session_controller != old_session_controller){
 					ESP_LOGW(TAG, "New: 860 session controller: %x", new_session_controller);
 					storage_Set_session_controller(new_session_controller);
-					MCU_UpdateUseZaptecFinishedTimeout();
 					doSave = true;
 
 					controller_change = true;
@@ -958,51 +987,8 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		}
 
 		if(controller_change){
-			enum session_controller wanted_controller = storage_Get_session_controller();
-			ESP_LOGI(TAG, "Controller changed: %d", wanted_controller);
-			bool reboot_required = false;
-
-			if(wanted_controller & eCONTROLLER_OCPP_STANDALONE || storage_Get_url_ocpp()[0] == '\0'){
-				if(ocpp_is_running()){
-					ocpp_end(false);
-
-					for(size_t i = 0; i < 30; i++){
-						if(ocpp_is_exiting()){
-							ESP_LOGW(TAG, "Waiting for ocpp to exit...");
-							vTaskDelay(pdMS_TO_TICKS(2000));
-						}else{
-							break;
-						}
-					}
-
-					if(ocpp_is_exiting()){
-						ESP_LOGE(TAG, "ocpp did not exit within timeout. Reboot required");
-						reboot_required = true;
-					}
-				}
-			}else{
-
-				if(!ocpp_is_running()){
-					ocpp_init();
-				}else{
-					ocpp_end_and_reconnect(true);
-				}
-			}
-
-			if(chargeController_SetStandaloneState(wanted_controller))
-			{
-				ESP_LOGW(TAG, "New 860 and session controller %d", storage_Get_session_controller());
-				doSave = true;
-
-				cloud_listener_SetMQTTKeepAliveTime(storage_Get_Standalone());
-			}
-			else
-			{
-				ESP_LOGE(TAG, "MCU standalone parameter error");
-			}
-
-			if(reboot_required)
-				esp_restart();
+			on_controller_change();
+			doSave = true;
 		}
 
 		ESP_LOGI(TAG, "Received %d parameters", nrOfParameters);
@@ -3446,6 +3432,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			}
 			else if(strstr(commandString, "OCPP"))
 			{
+				bool controller_change = false;
+
 				if(strstr(commandString, "OCPPURL:"))
 				{
 					int end = strlen(commandString);
@@ -3455,12 +3443,14 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					if(len <= CONFIG_OCPP_URL_MAX_LENGTH)
 					{
 						ESP_LOGI(TAG, "Setting OCPP URL: %s", &commandString[10]);
-					
+
 						storage_Set_url_ocpp(&commandString[10]);
 						storage_SaveConfiguration();
 
 						ocpp_task_clear_connection_delay();
 
+						controller_change = true;
+						
 						responseStatus = 200;
 					}
 					else
@@ -3480,9 +3470,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 
 					ESP_LOGW(TAG, "New:  session controller: %x", new_session_controller);
 					storage_Set_session_controller(new_session_controller);
-					MCU_UpdateUseZaptecFinishedTimeout();
 					storage_SaveConfiguration();
-					
+
+					controller_change = true;
+				}
+
+				if(controller_change){
+					on_controller_change();
 				}
 			}
 			else if(strstr(commandString, "ocpp allow lte"))
