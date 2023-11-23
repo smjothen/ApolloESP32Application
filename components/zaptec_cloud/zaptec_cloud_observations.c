@@ -281,41 +281,20 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
 	}
  */
 
+int publish_debug_telemetry_observation_capabilities_clear(){
+    cJSON *observations = create_observation_collection();
+	char * empty = "";
+    add_observation_to_collection(observations, create_observation(Capabilities, empty));
+    int ret = publish_json(observations);
+
+    return ret;
+}
+
 int publish_debug_telemetry_observation_capabilities(){
     cJSON *observations = create_observation_collection();
 
-    /*cJSON *CapabilitiesObject = cJSON_CreateObject();
-	if(CapabilitiesObject == NULL){return -10;}
-
-	cJSON_AddStringToObject(CapabilitiesObject, "DeviceType", "Go");
-	cJSON_AddStringToObject(CapabilitiesObject, "SerialNumber", i2cGetLoadedDeviceInfo().serialNumber);
-
-	uint32_t calibrationId = 0;
-	bool calibrationRead = MCU_GetMidStoredCalibrationId(&calibrationId);
-	if((calibrationRead == true) && (calibrationId != 0))
-	{
-		cJSON_AddBoolToObject(CapabilitiesObject, "MeterCalibrated", true);
-		cJSON_AddNumberToObject(CapabilitiesObject, "MeterCalibrationId", calibrationId);
-	}
-	else
-	{
-		cJSON_AddBoolToObject(CapabilitiesObject, "MeterCalibrated", false);
-	}
-
-	///Todo:
-	///cJSON_AddStringToObject(CapabilitiesObject, "HardwareVariant", "");
-
-	char *capabilityString = cJSON_PrintUnformatted(CapabilitiesObject);
-
-	ESP_LOGW(TAG, "capabilityString: %s", capabilityString);
-
-	cJSON_Delete(CapabilitiesObject);*/
-
     add_observation_to_collection(observations, create_observation(Capabilities, GetCapabilityString()));
-
     int ret = publish_json(observations);
-
-    //free(capabilityString);
 
     return ret;
 }

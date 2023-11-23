@@ -24,7 +24,8 @@
         "list.h": "c",
         "freertos.h": "c",
         "esp_websocket_client.h": "c",
-        "network.h": "c"
+        "network.h": "c",
+        "main.h": "c"
     }
 
 }

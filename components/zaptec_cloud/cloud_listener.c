@@ -1417,6 +1417,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		else
 			rollbackCmdReceived = true;
 
+		publish_debug_telemetry_observation_capabilities_clear();
+
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))
@@ -3456,7 +3458,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					
 						storage_Set_url_ocpp(&commandString[10]);
 						storage_SaveConfiguration();
-						
+
 						ocpp_task_clear_connection_delay();
 
 						responseStatus = 200;

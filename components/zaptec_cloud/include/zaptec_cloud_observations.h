@@ -33,6 +33,8 @@ struct HoldSessionStartTime *cloud_observation_GetTimeStruct();
 void cloud_observation_SetTimeStruct(char * _timeString, time_t _holdEpochSec, uint32_t _holdEpochUsec, bool _usedInRequest);
 void cloud_observation_ClearTimeStruct();
 
+int publish_debug_telemetry_observation_capabilities_clear();
+
 int publish_debug_telemetry_observation_capabilities();
 
 int publish_debug_telemetry_observation_power();
