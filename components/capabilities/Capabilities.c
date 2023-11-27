@@ -34,6 +34,14 @@ extern "C" {
 #define cJSON_Enum (1 << 17)
 #endif
 
+/**
+ * The current version of the schema that the code was generated from. It should always be used when generating capabilities in the Capabilities struct schema_version field.
+ */
+const char CapabilitiesSchemaVersionString[] = "2.0";
+
+/**
+ * Indicates which mode(s) of communication the device can use to connect to the internet
+ */
 enum CommunicationMode {
     COMMUNICATIONMODE_ETHERNET,
     COMMUNICATIONMODE_LTE,
@@ -41,6 +49,9 @@ enum CommunicationMode {
     COMMUNICATIONMODE_WI_FI,
 };
 
+/**
+ * Indicates what types of communication can be bridged.
+ */
 enum CommunicationSharingMode {
     COMMUNICATIONSHARINGMODE_PLC_WI_FI,
     COMMUNICATIONSHARINGMODE_WI_FI_PLC,
@@ -63,6 +74,13 @@ enum DeviceType {
     DEVICETYPE_PRO,
 };
 
+/**
+ * Indicates which grid types this charger is capable of supporting. Note that even if a
+ * charger supports a grid type, it doesn't mean that it is able to charge on it (e.g. a Go
+ * which supports TN_3 might be installed with only one phase. To further complicate, that
+ * charger could _also_ have phase rotation applied). Most chargers support all grid types,
+ * but some notable exceptions are: Pro T2S (no IT support), Go O-PEN (1-phase only).
+ */
 enum GridType {
     GRIDTYPE_IT_1,
     GRIDTYPE_IT_3,
@@ -88,6 +106,9 @@ enum InternalFuse {
     INTERNALFUSE_UNKNOWN,
 };
 
+/**
+ * Indicates the supported OCPP versions.
+ */
 enum OcppVersion {
     OCPPVERSION_V1_6,
     OCPPVERSION_V2_0_1,
@@ -112,15 +133,6 @@ enum RcdType {
     RCDTYPE_RDC_DD,
     RCDTYPE_TYPE_B,
     RCDTYPE_UNKNOWN,
-};
-
-/**
- * Indicates the version of JSON schema used in capabilities. This is defined as an enum,
- * and it has to be incremented if the schema changes. This is used to ensure that the
- * capabilities are compatible with the schema used by the client.
- */
-enum SchemaVersion {
-    SCHEMAVERSION_THE_200,
 };
 
 struct Capabilities {
@@ -178,11 +190,17 @@ struct Capabilities {
      */
     enum RcdType * rcd_type;
     /**
+     * Always use the version number provided in the CapabilitiesSchemaVersionString constant.
      * Indicates the version of JSON schema used in capabilities. This is defined as an enum,
      * and it has to be incremented if the schema changes. This is used to ensure that the
-     * capabilities are compatible with the schema used by the client.
+     * capabilities are compatible with the schema used by the client. This should only ever
+     * have Major and Minor version (e.g `1.7`), as the Patch version is used to indicate
+     * changes to our packages, and not the schema itself. That means that for instance that the
+     * schema version `1.7.1` is not valid, and should be `1.7`. A change to for instance
+     * `meta:enum` will not require a change to the schema version, as this will result in the
+     * Patch version being incremented, and that is handled in the package versioning later on.
      */
-    enum SchemaVersion schema_version;
+    char * schema_version;
 };
 
 enum CommunicationMode cJSON_GetCommunicationModeValue(const cJSON * j);
@@ -214,9 +232,6 @@ cJSON * cJSON_CreateProductVariant(const enum ProductVariant x);
 
 enum RcdType cJSON_GetRcdTypeValue(const cJSON * j);
 cJSON * cJSON_CreateRcdType(const enum RcdType x);
-
-enum SchemaVersion cJSON_GetSchemaVersionValue(const cJSON * j);
-cJSON * cJSON_CreateSchemaVersion(const enum SchemaVersion x);
 
 struct Capabilities * cJSON_ParseCapabilities(const char * s);
 struct Capabilities * cJSON_GetCapabilitiesValue(const cJSON * j);
@@ -428,22 +443,6 @@ cJSON * cJSON_CreateRcdType(const enum RcdType x) {
     return j;
 }
 
-enum SchemaVersion cJSON_GetSchemaVersionValue(const cJSON * j) {
-    enum SchemaVersion x = 0;
-    if (NULL != j) {
-        if (!strcmp(cJSON_GetStringValue(j), "2.0.0")) x = SCHEMAVERSION_THE_200;
-    }
-    return x;
-}
-
-cJSON * cJSON_CreateSchemaVersion(const enum SchemaVersion x) {
-    cJSON * j = NULL;
-    switch (x) {
-        case SCHEMAVERSION_THE_200: j = cJSON_CreateString("2.0.0"); break;
-    }
-    return j;
-}
-
 struct Capabilities * cJSON_ParseCapabilities(const char * s) {
     struct Capabilities * x = NULL;
     if (NULL != s) {
@@ -562,7 +561,12 @@ struct Capabilities * cJSON_GetCapabilitiesValue(const cJSON * j) {
                 }
             }
             if (cJSON_HasObjectItem(j, "SchemaVersion")) {
-                x->schema_version = cJSON_GetSchemaVersionValue(cJSON_GetObjectItemCaseSensitive(j, "SchemaVersion"));
+                x->schema_version = strdup(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(j, "SchemaVersion")));
+            }
+            else {
+                if (NULL != (x->schema_version = cJSON_malloc(sizeof(char)))) {
+                    x->schema_version[0] = '\0';
+                }
             }
         }
     }
@@ -637,7 +641,12 @@ cJSON * cJSON_CreateCapabilities(const struct Capabilities * x) {
             if (NULL != x->rcd_type) {
                 cJSON_AddItemToObject(j, "RCDType", cJSON_CreateRcdType(*x->rcd_type));
             }
-            cJSON_AddItemToObject(j, "SchemaVersion", cJSON_CreateSchemaVersion(x->schema_version));
+            if (NULL != x->schema_version) {
+                cJSON_AddStringToObject(j, "SchemaVersion", x->schema_version);
+            }
+            else {
+                cJSON_AddStringToObject(j, "SchemaVersion", "");
+            }
         }
     }
     return j;
@@ -712,6 +721,9 @@ void cJSON_DeleteCapabilities(struct Capabilities * x) {
         }
         if (NULL != x->rcd_type) {
             cJSON_free(x->rcd_type);
+        }
+        if (NULL != x->schema_version) {
+            cJSON_free(x->schema_version);
         }
         cJSON_free(x);
     }

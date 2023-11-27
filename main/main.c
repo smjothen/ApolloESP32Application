@@ -64,7 +64,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.3.0.310";
+char softwareVersion[] = "2.3.0.311";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -462,6 +462,7 @@ void MakeCapabilityString()
 
 	/// Make capabilites
 	const struct Capabilities capabilities = {
+		.schema_version			= (char*)CapabilitiesSchemaVersionString,
 		.device_type 			= &deviceType,
 		.meter_calibrated 		= &isCalibrated,
 		.ocpp_versions 			= ocppList,
@@ -475,11 +476,10 @@ void MakeCapabilityString()
 	list_release(comList);
 	list_release(ocppList);
 	cJSON_Delete(capaObject);
- 
-	/// Frees JSON object and sublists by calling list_release() on each list used
-	//cJSON_DeleteCapabilities(&capabilities);	
+	//cJSON_DeleteCapabilities(&capabilities);
 
-	ESP_LOGW(TAG_MAIN, "Capabilities4.2: %s", GetCapabilityString());
+	/// Frees JSON object and sublists by calling list_release() on each list used
+	ESP_LOGW(TAG_MAIN, "Capabilities: %s", GetCapabilityString());
 }
 
 

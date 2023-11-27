@@ -3447,10 +3447,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						storage_Set_url_ocpp(&commandString[10]);
 						storage_SaveConfiguration();
 
-						ocpp_task_clear_connection_delay();
-
 						controller_change = true;
-						
 						responseStatus = 200;
 					}
 					else

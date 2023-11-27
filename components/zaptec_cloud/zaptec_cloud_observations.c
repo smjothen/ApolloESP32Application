@@ -879,6 +879,10 @@ int publish_telemetry_observation_on_change(){
 		else
 			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
 
+		//Update Cloud with latest energy when entering paused state for display accurate value on user interfaces
+		if(chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)
+			add_observation_to_collection(observations, create_double_observation(ParamTotalChargePowerSession, chargeSession_Get().Energy));	
+
 		//ESP_LOGE(TAG, "\n ************* 4 Sending OperatingMode %d ***************\n", chargeOperatingMode);
 		previousChargeOperatingMode = chargeOperatingMode;
 		isChange = true;
