@@ -140,7 +140,10 @@ void on_send_signed_meter_value()
 
 		//If hasRemainingEnergy, but disconnected -> don't add.
 		if (chargeMode != eCAR_DISCONNECTED)
+		{
 			OCMF_CompletedSession_AddElementToOCMFLog('T', timeSec, energy);
+			chargeSession_SaveUpdatedSession();
+		}
 	}
 
 	//If this is the case, remaining energy has been sent -> clear the flag
@@ -2465,6 +2468,7 @@ void sessionHandler_ClearCarInterfaceResetConditions()
 void sessionHandler_CheckAndSendOfflineSessions()
 {
 	int nrOfOfflineSessionFiles = offlineSession_FindNrOfFiles();
+
 	offlineSession_AppendLogStringWithInt("3 NrOfFiles: ", nrOfOfflineSessionFiles);
 	int nrOfSentSessions = 0;
 	int fileNo;
@@ -2510,6 +2514,10 @@ void sessionHandler_CheckAndSendOfflineSessions()
 			offlineSession_delete_session(fileToUse);
 
 			ESP_LOGW(TAG,"Sent CompletedSession: %i/%i", nrOfSentSessions, nrOfOfflineSessionFiles);
+			
+			/// If there is an energy mismatch: OCMF ((stop-start) != session energy), the make this visible with an event
+			if(OCMP_GetEnergyFaultFlag())
+				publish_debug_message_event("Energy difference in session", cloud_event_level_warning);
 		}
 		else
 		{
@@ -3446,6 +3454,14 @@ static void sessionHandler_task()
 
 				sessionHandler_SendFPGAInfo();
 				sessionHandler_SendMIDStatus();
+
+				/// In system mode, if there is an authenticated session at boot, send the sessionId
+				/// to allow cloud to restart charging if necessary
+				if((storage_Get_Standalone() == false) && chargeSession_IsAuthenticated())
+				{
+					ESP_LOGI(TAG,"Sending user UUID at boot: %s", chargeSession_GetAuthenticationCode());
+					publish_debug_telemetry_observation_NFC_tag_id(chargeSession_GetAuthenticationCode());
+				}
 
 				if(offlineSession_FileSystemCorrected() == true)
 				{

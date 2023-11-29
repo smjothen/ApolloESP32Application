@@ -336,7 +336,7 @@ void chargeSession_Start()
 
 	}
 
-	startAcc = storage_update_accumulated_energy(0.0);
+	startAcc = storage_GetAccumulatedEnergy();
 }
 
 
@@ -523,6 +523,9 @@ esp_err_t chargeSession_SaveUpdatedSession()
 
 	char * sessionData = calloc(1000,1);
 	chargeSession_GetSessionAsString(sessionData);
+
+	ESP_LOGW(TAG, "Saving hourly session: %s", sessionData);
+
 	offlineSession_UpdateSessionOnFile(sessionData, false);
 	free(sessionData);
 

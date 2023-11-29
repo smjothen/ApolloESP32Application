@@ -60,7 +60,7 @@ bool wifiInitialized = false;
 
 /// This timer-function is called every second to control pulses to Cloud
 static uint32_t mqttUnconnectedCounter = 0;
-//static uint32_t carNotChargingCounter = 0;
+static uint32_t carNotChargingCounter = 0;
 static uint32_t carDisconnectedCounter = 0;
 static uint32_t restartTimeLimit = 3900;
 static uint32_t nrOfConnectsFailsBeforeReinit = 2;
@@ -115,22 +115,22 @@ static void OneSecondTimer()
 				restartTimeLimit = 86400;
 			}
 
-			if(mqttUnconnectedCounter % 10 == 0)
+			if((mqttUnconnectedCounter % 10 == 0) && (mqttUnconnectedCounter > 120))
 			{
-				ESP_LOGE(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter);
+				ESP_LOGW(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900 || noc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
 			}
 
 			enum ChargerOperatingMode chOpMode = sessionHandler_GetCurrentChargeOperatingMode();
 
 			/// Check how long a car has not been charging
-			/*if(chOpMode != CHARGE_OPERATION_STATE_CHARGING)
+			if(chOpMode != CHARGE_OPERATION_STATE_CHARGING)
 			{
 				carNotChargingCounter++;
 			}
 			else
 			{
 				carNotChargingCounter = 0;
-			}*/
+			}
 
 			/// Check how long a car has been disconnected
 			if(chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED)
@@ -148,10 +148,10 @@ static void OneSecondTimer()
 			if(mqttUnconnectedCounter >= restartTimeLimit)
 			{
 				/// Restart if car has been disconnected for 65 minutes(session has been saved) OR car has not charged for 65 minutes(more than energy sync interval)
-				if((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900))
+				if(((chOpMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (carDisconnectedCounter >= 3900)) || (carNotChargingCounter >= 3900))
 				{
 					char buf[100]={0};
-					snprintf(buf, sizeof(buf), "#2 mqttUncon:%" PRId32 " disc:%" PRId32 " op:%d", mqttUnconnectedCounter, carDisconnectedCounter, chOpMode);
+					snprintf(buf, sizeof(buf), "#2 mqttUncon:%" PRId32 " disc:%" PRId32 " noc:%" PRId32 " op:%d", mqttUnconnectedCounter, carDisconnectedCounter, carNotChargingCounter, chOpMode);
 					storage_Set_And_Save_DiagnosticsLog(buf);
 					ESP_LOGI(TAG, "MQTT and car unconnected -> restart");
 					esp_restart();

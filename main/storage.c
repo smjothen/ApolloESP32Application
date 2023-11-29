@@ -1899,6 +1899,24 @@ void storage_GetStats(char * stat)
 	ESP_LOGI(TAG, "%s", stat);
 }
 
+double storage_GetAccumulatedEnergy()
+{
+	nvs_handle_t handle;
+	esp_err_t open_result = nvs_open("energy", NVS_READONLY, &handle);
+	if(open_result != ESP_OK ){
+		ESP_LOGE(TAG, "Failed to open NVS energy %d", open_result);
+		return 0.0;
+	}
+	
+	double accEnergy = 0.0;
+	esp_err_t result = nvs_get_zdouble(handle, "accumulated", &accEnergy);
+	ESP_LOGW(TAG, "Reading Accumulated Energy(%d): %f", result, accEnergy);
+
+	nvs_close(handle);
+
+	return accEnergy;
+}
+
 double storage_update_accumulated_energy(float session_energy){
 	double result = -1.0;
 
