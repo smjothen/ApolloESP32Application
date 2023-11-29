@@ -1,13 +1,16 @@
 [[source]]
-name = "pypi"
 url = "https://pypi.org/simple"
 verify_ssl = true
+name = "pypi"
+
+[packages]
+ocpp = "*"
+websockets = "*"
+
+[requires]
+python_version = "3.11"
 
 [dev-packages]
 
-[packages]
-websockets = "*"
-ocpp = "*"
-
-[requires]
-python_version = "3.7"
+[scripts]
+build = "python server.py"

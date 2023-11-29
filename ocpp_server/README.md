@@ -1,2 +1,3 @@
-A simple scriptable OCPP implementation to aid development
+## ocpp_server ##
+A OCPP CS(MS) for testing CP
 
