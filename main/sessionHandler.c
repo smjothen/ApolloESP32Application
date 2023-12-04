@@ -2844,10 +2844,11 @@ static void sessionHandler_task()
 
 
 		// Handle ocpp state if session type is ocpp
-		if(storage_Get_session_controller() == eSESSION_OCPP){
+		if(storage_Get_session_controller() == eSESSION_OCPP || sessionHandler_OcppTransactionIsActive(0) == true){
 			if(ocpp_startup && ocpp_transaction_is_ready()){
 				// If this is the first loop where CP is registered, then we may have just rebooted and need to sync state with storage.
 				ocpp_startup = false;
+				isAuthorized = false;
 
 				ESP_LOGI(TAG, "Check if active transaction was on file before CS accepted boot");
 				if(ocpp_transaction_find_active_entry(1) != -1){
@@ -2911,6 +2912,12 @@ static void sessionHandler_task()
 			}else{
 				handle_state(ocpp_new_state);
 			}
+
+		}else if(ocpp_old_state != eOCPP_CP_STATUS_UNAVAILABLE){
+			ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
+
+			clear_ocpp_state_led_overwrite();
+			ocpp_startup = true;
 		}
 
 
@@ -3447,6 +3454,7 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
 				publish_debug_telemetry_observation_power();
+				publish_debug_telemetry_observation_ocpp_native_connected(ocpp_is_connected());
 
 				if(chargeController_IsScheduleActive())
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);

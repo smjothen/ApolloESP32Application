@@ -265,13 +265,23 @@ bool cloud_listener_test_reconnect()
 	return tmp;
 }
 
-void on_controller_change(){
-	enum session_controller wanted_controller = storage_Get_session_controller();
-	ESP_LOGI(TAG, "Controller changed: %d", wanted_controller);
+void on_controller_change(enum session_controller old_controller, enum session_controller new_controller){
+	ESP_LOGI(TAG, "Controller changed: %d", new_controller);
+
+	if((old_controller & eCONTROLLER_OCPP_STANDALONE) && !(new_controller & eCONTROLLER_OCPP_STANDALONE)){
+		ESP_LOGI(TAG, "Controller transitioned to OCPP. Setting default authentication required True");
+		if(storage_Get_AuthenticationRequired() != 1){
+			storage_Set_AuthenticationRequired(1);
+
+			MessageType ret = MCU_SendUint8Parameter(AuthenticationRequired, storage_Get_AuthenticationRequired());
+			if(ret != MsgWriteAck)
+				ESP_LOGE(TAG, "MCU useAuthorization parameter error when swqitching to OCPP");
+		}
+	}
 
 	MCU_UpdateUseZaptecFinishedTimeout();
 
-	if(wanted_controller & eCONTROLLER_OCPP_STANDALONE || storage_Get_url_ocpp()[0] == '\0'){
+	if(new_controller & eCONTROLLER_OCPP_STANDALONE || storage_Get_url_ocpp()[0] == '\0'){
 		if(ocpp_is_running()){
 			ocpp_end(false);
 		}
@@ -283,7 +293,7 @@ void on_controller_change(){
 		}
 	}
 
-	if(chargeController_SetStandaloneState(wanted_controller))
+	if(chargeController_SetStandaloneState(new_controller))
 	{
 		ESP_LOGW(TAG, "New 860 and session controller %d", storage_Get_session_controller());
 
@@ -326,12 +336,12 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 	if(settings != NULL)
 	{
 
+		enum session_controller old_session_controller = storage_Get_session_controller();
 		bool controller_change = false;
 
 		//Managementmode or session_controller
 		if(cJSON_HasObjectItem(settings, "860"))
 		{
-			enum session_controller old_session_controller = storage_Get_session_controller();
 			enum session_controller new_session_controller = old_session_controller;
 
 			if(cJSON_HasObjectItem(settings, "860")){
@@ -552,7 +562,7 @@ void ParseCloudSettingsFromCloud(char * message, int message_len)
 		}
 
 		if(controller_change){
-			on_controller_change();
+			on_controller_change(old_session_controller, storage_Get_session_controller());
 			doSave = true;
 		}
 
@@ -3440,6 +3450,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 			else if(strstr(commandString, "OCPP"))
 			{
 				bool controller_change = false;
+				bool old_controller = storage_Get_session_controller();
 
 				if(strstr(commandString, "OCPPURL:"))
 				{
@@ -3480,7 +3491,8 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				}
 
 				if(controller_change){
-					on_controller_change();
+					on_controller_change(old_controller, storage_Get_session_controller());
+					storage_SaveConfiguration();
 				}
 			}
 			else if(strstr(commandString, "ocpp allow lte"))

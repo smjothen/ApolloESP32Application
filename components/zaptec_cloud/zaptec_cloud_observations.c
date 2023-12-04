@@ -347,12 +347,11 @@ int publish_debug_telemetry_observation_cloud_settings()
     add_observation_to_collection(observations, create_uint32_t_observation(DiagnosticsMode, storage_Get_DiagnosticsMode()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
-	
-
     add_observation_to_collection(observations, create_int32_t_observation(SessionController, ocpp_get_session_controller_mode()));
 
     add_observation_to_collection(observations, create_observation(OcppNativeURL, storage_Get_url_ocpp()));
     add_observation_to_collection(observations, create_observation(OcppNativeCBID, storage_Get_chargebox_identity_ocpp()));
+    add_observation_to_collection(observations, create_uint32_t_observation(OcppNativeSecurityProfile, storage_Get_ocpp_security_profile()));
 
     add_observation_to_collection(observations, create_observation(OcppNativeAuthorizationKeyFromZaptec, storage_Get_authorization_key_set_from_zaptec_ocpp() ? "1" : "0"));
 
@@ -471,18 +470,7 @@ int publish_debug_telemetry_observation_tamper_cover_state(uint32_t cover_state)
     return publish_json(observations);
 }
 
-int publish_debug_telemetry_observation_ocpp_box_security_profile(uint32_t security_profile)
-{
-    ESP_LOGD(TAG, "sending OCPP info");
-
-    cJSON *observations = create_observation_collection();
-
-    add_observation_to_collection(observations, create_uint32_t_observation(OcppNativeSecurityProfile, security_profile));
-
-    return publish_json(observations);
-}
-
-int publish_debug_telemetry_observation_ocpp_box_connected(bool connected)
+int publish_debug_telemetry_observation_ocpp_native_connected(bool connected)
 {
     ESP_LOGD(TAG, "sending OCPP connected");
 

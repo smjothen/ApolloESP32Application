@@ -670,13 +670,13 @@ esp_err_t send_next_call(int * remaining_call_count_out){
 	UBaseType_t transaction_count = 0;
 	UBaseType_t generic_count = 0;
 
-	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING))
+	if(!(call_blocking_mask & eOCPP_CALL_BLOCKING) && ocpp_blocking_call_queue != NULL)
 		blocking_count = uxQueueMessagesWaiting(ocpp_blocking_call_queue);
 
 	if(!(call_blocking_mask & eOCPP_CALL_TRANSACTION_RELATED))
 		transaction_count = transaction_message_count_waiting();
 
-	if(!(call_blocking_mask & eOCPP_CALL_GENERIC))
+	if(!(call_blocking_mask & eOCPP_CALL_GENERIC) && ocpp_call_queue != NULL)
 		generic_count = uxQueueMessagesWaiting(ocpp_call_queue);
 
 	*remaining_call_count_out = blocking_count + transaction_count + generic_count;
