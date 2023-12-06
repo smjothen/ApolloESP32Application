@@ -121,4 +121,6 @@ bool MCU_IsCalibrationHandle(void);
 bool MCU_GetMidStatus(uint32_t *id);
 bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalCount);
 
+bool MCU_ClearWarning(uint32_t warning);
+
 #endif /* PROTOCOL_TASK_H */

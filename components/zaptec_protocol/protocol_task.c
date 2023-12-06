@@ -20,8 +20,95 @@
 
 const char *TAG = "MCU            ";
 
-#define RX_TIMEOUT  (2000 / (portTICK_PERIOD_MS))
-#define SEMAPHORE_TIMEOUT  (20000 / (portTICK_PERIOD_MS))
+static char mcuSwVersionString[20] = {0};
+static char mcuGridTestString[32] = {0};
+static float temperaturePowerBoardT[2]  = {0.0};
+static float temperatureEmeter[3] = {0.0};
+static float voltages[3] = {0.0};
+static float currents[3] = {0.0};
+
+static float totalChargePower = 0.0;
+static float totalChargePowerSession = -1.0;
+
+static int8_t chargeMode = eCAR_UNINITIALIZED;
+static uint8_t chargeOperationMode = 0;
+
+static uint32_t mcuDebugCounter = 0;
+static uint32_t previousMcuDebugCounter = 0;
+
+static uint32_t mcuWarnings = 0;
+static uint8_t mcuResetSource = 0;
+static uint8_t mcuMode = 0;
+
+static uint8_t mcuNetworkType = 0;
+static uint8_t mcuCableType = 0;
+static float mcuChargeCurrentUserMax = 0;
+static uint16_t mcuPilotAvg = 0;
+static uint16_t mcuProximityInst = 0;
+static float mcuChargeCurrentInstallationMaxLimit = -1.0;
+static float mcuStandAloneCurrent = -1.0;
+static float mcuInstantPilotCurrent = 0;
+
+static uint16_t espNotifications = 0;
+static uint16_t mcuNotifications = 0;
+
+int holdSetPhases = 0;
+static uint8_t finalStopActive = 0;
+
+typedef enum {
+	PERIODIC_FLOAT,
+	PERIODIC_U32,
+	PERIODIC_BYTE,
+	PERIODIC_CB,
+} PeriodicTxType;
+
+typedef void (*PeriodicCallback)(ZapMessage *m);
+
+typedef struct {
+	uint16_t id;
+	PeriodicTxType type;
+	void *var;
+} PeriodicTx;
+
+bool resetDetected = false;
+
+void MCUReset(ZapMessage *msg) {
+	if (msg->data[0]) {
+		resetDetected = true;
+	}
+}
+
+void MCUSignedMeterValue(ZapMessage *msg) {
+	// TODO: Pass MID package to MID module!
+}
+
+static const PeriodicTx periodicTx[] = {
+	{ ParamMode,                       PERIODIC_BYTE,  &mcuMode },
+	{ ParamInternalTemperatureEmeter,  PERIODIC_FLOAT, &temperatureEmeter[0] },
+	{ ParamInternalTemperatureEmeter2, PERIODIC_FLOAT, &temperatureEmeter[1] },
+	{ ParamInternalTemperatureEmeter3, PERIODIC_FLOAT, &temperatureEmeter[2] },
+	{ ParamInternalTemperatureT,       PERIODIC_FLOAT, &temperaturePowerBoardT[0] },
+	{ ParamVoltagePhase1,              PERIODIC_FLOAT, &voltages[0] },
+	{ ParamVoltagePhase2,              PERIODIC_FLOAT, &voltages[1] },
+	{ ParamVoltagePhase3,              PERIODIC_FLOAT, &voltages[2] },
+	{ ParamCurrentPhase1,              PERIODIC_FLOAT, &currents[0] },
+	{ ParamCurrentPhase2,              PERIODIC_FLOAT, &currents[1] },
+	{ ParamCurrentPhase3,              PERIODIC_FLOAT, &currents[2] },
+	{ ParamTotalChargePower,           PERIODIC_FLOAT, &totalChargePower },
+	{ ParamChargeMode,                 PERIODIC_BYTE,  &chargeMode },
+	{ ParamChargeOperationMode,        PERIODIC_BYTE,  &chargeOperationMode },
+	{ ParamWarnings,                   PERIODIC_U32,   &mcuWarnings },
+	{ ParamNetworkType,                PERIODIC_BYTE,  &mcuNetworkType },
+	{ ParamCableType,                  PERIODIC_BYTE,  &mcuCableType },
+	{ ParamChargeCurrentUserMax,       PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
+	{ MCUResetSource,                  PERIODIC_CB,    &MCUReset },
+	{ SignedMeterValue,                PERIODIC_CB,    &MCUSignedMeterValue },
+};
+
+#define PERIODIC_TX_COUNT (sizeof (periodicTx) / sizeof (periodicTx[0]))
+
+#define RX_TIMEOUT        (2000 / (portTICK_PERIOD_MS))
+#define SEMAPHORE_TIMEOUT (20000 / (portTICK_PERIOD_MS))
 
 static uint8_t MCU_ReadHwIdMCUSpeed();
 static uint8_t MCU_ReadHwIdMCUPower();
@@ -57,7 +144,6 @@ void dspic_periodic_poll_start(){
     configASSERT( sendTaskHandle );
 }
 
-
 void protocol_task_ctrl_debug(int state)
 {
 	if(state == 0)
@@ -73,7 +159,6 @@ void protocol_task_ctrl_debug(int state)
 //char junkVal[2] = {0};
 
 ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
-
     if( xSemaphoreTake( uart_write_lock, SEMAPHORE_TIMEOUT ) == pdTRUE )
     {
     	uart_flush_input(uart_num);
@@ -96,13 +181,13 @@ ZapMessage runRequest(const uint8_t *encodedTxBuf, uint length){
     }
 
         ZapMessage rxMsg = {0};
-        if( xQueueReceive( 
+        if( xQueueReceive(
 				uart_recv_message_queue,
 				&( rxMsg ),
 				RX_TIMEOUT) == pdFALSE){
 					ESP_LOGE(TAG, "timeout in response to runRequest()");
 		}
-        
+
 
         // dont release uart_write_lock, let caller use freeZapMessageReply()
         return rxMsg;
@@ -162,18 +247,18 @@ void uartRecvTask(void *pvParameters){
                 uint8_t rxByte = uart_data[i];
 
                 if(ZParseFrame(rxByte, &rxMsg))
-                {   
+                {
                     uart_flush(uart_num);
                     if(xQueueSend(
                         uart_recv_message_queue,
 
-						//rxMsg is copied, so that consumers of the queue may edit the data, 
-						// they can also be certain it will not be changed by other tasks                        
+						//rxMsg is copied, so that consumers of the queue may edit the data,
+						// they can also be certain it will not be changed by other tasks
                         ( void * ) &rxMsg,
 						// do not block the task if the queue is not ready. It will cause
 						// the queue to be unable to xQueueReset properly, since the task itself will
 						// also hold a message
-                        0 
+                        0
                     )){
 						// message sent immediately
 					}else{
@@ -183,41 +268,6 @@ void uartRecvTask(void *pvParameters){
             }
         }
 }
-
-static char mcuSwVersionString[20] = {0};
-static char mcuGridTestString[32] = {0};
-static float temperaturePowerBoardT[2]  = {0.0};
-static float temperatureEmeter[3] = {0.0};
-static float voltages[3] = {0.0};
-static float currents[3] = {0.0};
-
-static float totalChargePower = 0.0;
-static float totalChargePowerSession = -1.0;
-
-static int8_t chargeMode = eCAR_UNINITIALIZED;
-static uint8_t chargeOperationMode = 0;
-
-static uint32_t mcuDebugCounter = 0;
-static uint32_t previousMcuDebugCounter = 0;
-
-static uint32_t mcuWarnings = 0;
-static uint8_t mcuResetSource = 0;
-
-static uint8_t mcuNetworkType = 0;
-static char mcuNetworkTypeString[5] = {0};
-static uint8_t mcuCableType = 0;
-static float mcuChargeCurrentUserMax = 0;
-static uint16_t mcuPilotAvg = 0;
-static uint16_t mcuProximityInst = 0;
-static float mcuChargeCurrentInstallationMaxLimit = -1.0;
-static float mcuStandAloneCurrent = -1.0;
-static float mcuInstantPilotCurrent = 0;
-
-static uint16_t espNotifications = 0;
-static uint16_t mcuNotifications = 0;
-
-int holdSetPhases = 0;
-static uint8_t finalStopActive = 0;
 
 float GetFloat(uint8_t * input)
 {
@@ -231,7 +281,6 @@ float GetFloat(uint8_t * input)
 	memcpy(&tmp, &swap[0], 4);
 	return tmp;
 }
-
 
 float GetUint32_t(uint8_t * input)
 {
@@ -273,12 +322,16 @@ int MCUTxGetStackWatermark()
 		return -1;
 }
 
-
 void ActivateMCUWatchdog()
 {
 	//If the bootloader version does not have the very high watchdog frequency - activate the watchdog.
 	uint8_t bVersion = get_bootloader_version();
 	ESP_LOGW(TAG, "Bootloader version is: %d", bVersion);
+
+	if (bVersion == 0x86) {
+		// Go Plus
+		return;
+	}
 
 	int chargerNumber = 0;
 	if(strstr(i2cGetLoadedDeviceInfo().serialNumber, "ZAP"))
@@ -349,14 +402,12 @@ bool MCU_IsReady()
 static uint32_t offsetCount = 0;
 void MCU_PrintReadings()
 {
-	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d P:%d %.1f F: %d Timeouts: %" PRIi32 ", Off: %" PRId32 ", - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, IsChargingAllowed(), MCU_GetInstantPilotState(), finalStopActive, mcuCommunicationError, offsetCount, mcuNetworkTypeString, mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
+	ESP_LOGI(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fkWh CM: %d  COM: %d P:%d %.1f F: %d Timeouts: %" PRIi32 ", Off: %" PRId32 ", - %s, PP: %d, UC:%.1fA, MaxA:%2.1f, StaA: %2.1f, mN: 0x%X", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, IsChargingAllowed(), MCU_GetInstantPilotState(), finalStopActive, mcuCommunicationError, offsetCount, MCU_GetGridTypeString(), mcuCableType, mcuChargeCurrentUserMax, mcuChargeCurrentInstallationMaxLimit, mcuStandAloneCurrent, mcuNotifications);
 }
 
 uint32_t mcuComErrorCount = 0;
 
 void uartSendTask(void *pvParameters){
-
-
     //Provide application time to initialize before sending to MCU
     uint8_t timeout = 10;
     while((i2CDeviceInfoIsLoaded() == false) && (timeout > 0))
@@ -383,300 +434,89 @@ void uartSendTask(void *pvParameters){
     	vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-    //Send settings to MCU
-    ActivateMCUWatchdog();
-    MCU_SendMaxCurrent();
-	MCU_UpdateUseZaptecFinishedTimeout();
-
-    //Read settings from MCU
-    MCU_UpdateOverrideGridType();
-    MCU_UpdateIT3OptimizationState();
-    MCU_ReadHwIdMCUSpeed();
-    MCU_ReadHwIdMCUPower();
-	MCU_ReadResetSource();
-
     uint32_t count = 0;
     uint32_t printCount = 0;
 
-    while (true)
-    {
-    	if(mcuDebugCounter < previousMcuDebugCounter)
-    	{
-    		ActivateMCUWatchdog();
-    		MCU_SendMaxCurrent();
-			MCU_UpdateUseZaptecFinishedTimeout();
-			MCU_ReadResetSource();
-    		ESP_LOGW(TAG, "MCU restart detected");
+	// ZEncodeMessageHeader* does not check the length of the buffer!
+	// This should not be a problem for most usages, but make sure strings are within a range that fits!
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 
-    		previousMcuDebugCounter = mcuDebugCounter;
-    	}
+    while (true) {
+		const PeriodicTx *pTx = &periodicTx[count % PERIODIC_TX_COUNT];
+		printCount++;
 
-        ZapMessage txMsg;
+		ZapMessage txMsg = {0};
+		txMsg.type = MsgRead;
+		txMsg.identifier = pTx->id;
 
-        // ZEncodeMessageHeader* does not check the length of the buffer!
-        // This should not be a problem for most usages, but make sure strings are within a range that fits!
-        uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
-        uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
-        
-        printCount++;
+		uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
 
-        switch (count)
-        {
-        	case 0:
-        		txMsg.identifier = SwitchPosition;
-        		break;
-        	case 1:
-				txMsg.identifier = ParamInternalTemperatureEmeter;
-				break;
-        	case 2:
-				txMsg.identifier = ParamInternalTemperatureEmeter2;
-				break;
-        	case 3:
-                txMsg.identifier = ParamInternalTemperatureEmeter3;
-                break;
+		ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+		freeZapMessageReply();
 
-        	case 4:
-        		txMsg.identifier = ParamInternalTemperatureT;
-        		break;
-        	case 5:
-				txMsg.identifier = ParamInternalTemperatureT2;
-				break;
+		if (txMsg.identifier != rxMsg.identifier) {
+			ESP_LOGE(TAG, "**** DIFF: %d != %d ****", txMsg.identifier, rxMsg.identifier);
+			offsetCount++;
+		} else {
 
-
-
-        	case 6:
-				txMsg.identifier = ParamVoltagePhase1;
-				break;
-        	case 7:
-				txMsg.identifier = ParamVoltagePhase2;
-				break;
-        	case 8:
-				txMsg.identifier = ParamVoltagePhase3;
-				break;
-        	case 9:
-				txMsg.identifier = ParamCurrentPhase1;
-				break;
-        	case 10:
-				txMsg.identifier = ParamCurrentPhase2;
-				break;
-        	case 11:
-				txMsg.identifier = ParamCurrentPhase3;
-				break;
-
-        	case 12:
-				txMsg.identifier = ParamTotalChargePower;
-				break;
-        	case 13:
-				txMsg.identifier = ParamTotalChargePowerSession;
-				break;
-
-        	case 14:
-				txMsg.identifier = ParamChargeMode;
-				break;
-			case 15:
-				txMsg.identifier = ParamChargeOperationMode;
-				break;
-			case 16:
-				txMsg.identifier = DebugCounter;
-				break;
-			case 17:
-				txMsg.identifier = ParamInstantPilotCurrent;
-				break;
-			case 18:
-				txMsg.identifier = ParamWarnings;
-				break;
-
-			case 19:
-				txMsg.identifier = ParamNetworkType;
-				break;
-			case 20:
-				txMsg.identifier = ParamCableType;
-				break;
-			case 21:
-				txMsg.identifier = ParamChargeCurrentUserMax;
-				break;
-
-			case 22:
-				txMsg.identifier = ChargeCurrentInstallationMaxLimit;
-				break;
-			case 23:
-				txMsg.identifier = StandAloneCurrent;
-				break;
-			case 24:
-				txMsg.identifier = Notifications;
-				break;
-
-
-        	/*default:
-        		vTaskDelay(1000 / portTICK_PERIOD_MS);
-        		continue;
-        		break;*/
-        }
-
-
-
-
-        txMsg.type = MsgRead;
-
-        uint16_t encoded_length = ZEncodeMessageHeaderOnly(
-                    &txMsg, txBuf, encodedTxBuf
-                );
-
-        //ESP_LOGI(TAG, "sending zap message, %d bytes", encoded_length);
-        
-        ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
-        freeZapMessageReply();
-        //printf("frame type: %d \n\r", rxMsg.type);
-        //printf("frame identifier: %d \n\r", rxMsg.identifier);
-//        printf("frame timeId: %d \n\r", rxMsg.timeId);
-
-
-        if(txMsg.identifier != rxMsg.identifier)
-        {
-        	ESP_LOGE(TAG, "**** DIFF: %d != %d ******\n\r", txMsg.identifier, rxMsg.identifier);
-        	offsetCount++;
-        }
-
-        if(rxMsg.identifier == SwitchPosition)
-        	receivedSwitchState = rxMsg.data[0];
-        else if(rxMsg.identifier == ParamInternalTemperatureEmeter)
-			temperatureEmeter[0] = GetFloat(rxMsg.data);
-		else if(rxMsg.identifier == ParamInternalTemperatureEmeter2)
-			temperatureEmeter[1] = GetFloat(rxMsg.data);
-		else if(rxMsg.identifier == ParamInternalTemperatureEmeter3)
-			temperatureEmeter[2] = GetFloat(rxMsg.data);
-		else if(rxMsg.identifier == ParamInternalTemperatureT)
-        	temperaturePowerBoardT[0] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamInternalTemperatureT2)
-            temperaturePowerBoardT[1] = GetFloat(rxMsg.data);
-
-        else if(rxMsg.identifier == ParamVoltagePhase1)
-            voltages[0] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamVoltagePhase2)
-        	voltages[1] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamVoltagePhase3)
-        	voltages[2] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamCurrentPhase1)
-        	currents[0] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamCurrentPhase2)
-        	currents[1] = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamCurrentPhase3)
-        	currents[2] = GetFloat(rxMsg.data);
-
-        else if(rxMsg.identifier == ParamTotalChargePower)
-        	totalChargePower = GetFloat(rxMsg.data);
-        else if(rxMsg.identifier == ParamTotalChargePowerSession)
-        	totalChargePowerSession = GetFloat(rxMsg.data);
-	    else if(rxMsg.identifier == ParamChargeMode)
-	    	chargeMode = rxMsg.data[0];
-	    else if(rxMsg.identifier == ParamChargeOperationMode)
-        {
-	    	chargeOperationMode = rxMsg.data[0];
-	    	//ESP_LOGW(TAG, "T_EM: %3.2f %3.2f %3.2f  T_M: %3.2f %3.2f   V: %3.2f %3.2f %3.2f   I: %2.2f %2.2f %2.2f  %.1fW %.3fWh CM: %d  COM: %d Timeouts: %i, Off: %d", temperatureEmeter[0], temperatureEmeter[1], temperatureEmeter[2], temperaturePowerBoardT[0], temperaturePowerBoardT[1], voltages[0], voltages[1], voltages[2], currents[0], currents[1], currents[2], totalChargePower, totalChargePowerSession, chargeMode, chargeOperationMode, mcuCommunicationError, offsetCount);
-        }
-	    else if(rxMsg.identifier == HmiBrightness)
-	    {
-	    	ESP_LOGW(TAG, "**** Received HMI brightness ACK ****");
-	    }
-	    else if(rxMsg.identifier == DebugCounter)
-	    {
-	    	previousMcuDebugCounter = mcuDebugCounter;
-	    	mcuDebugCounter = GetUint32_t(rxMsg.data);
-	    }
-		else if(rxMsg.identifier == ParamInstantPilotCurrent)
-			mcuInstantPilotCurrent = GetFloat(rxMsg.data);
-		else if(rxMsg.identifier == ParamWarnings)
-			mcuWarnings = GetUint32_t(rxMsg.data);
-
-		else if(rxMsg.identifier == ParamNetworkType)
-		{
-			mcuNetworkType = rxMsg.data[0];
-			if(mcuNetworkType == 0)
-				memcpy(mcuNetworkTypeString, "Non ",4);
-			else if(mcuNetworkType == 1)
-				memcpy(mcuNetworkTypeString, "IT_1",4);
-			else if(mcuNetworkType == 2)
-				memcpy(mcuNetworkTypeString, "IT_3",4);
-			else if(mcuNetworkType == 3)
-				memcpy(mcuNetworkTypeString, "TN_1",4);
-			else if(mcuNetworkType == 4)
-				memcpy(mcuNetworkTypeString, "TN_3",4);
-		}
-		else if(rxMsg.identifier == ParamCableType)
-			mcuCableType = rxMsg.data[0];
-		else if(rxMsg.identifier == ParamChargeCurrentUserMax)
-			mcuChargeCurrentUserMax = GetFloat(rxMsg.data);
-
-		else if(rxMsg.identifier == ChargeCurrentInstallationMaxLimit)
-			mcuChargeCurrentInstallationMaxLimit =  GetFloat(rxMsg.data);
-			//mcuPilotAvg = (rxMsg.data[0] << 8) | rxMsg.data[1];
-		else if(rxMsg.identifier == StandAloneCurrent)
-		{
-			mcuStandAloneCurrent =  GetFloat(rxMsg.data);
-		}
-		else if(rxMsg.identifier == Notifications)
-		{
-			mcuNotifications = (rxMsg.data[0] << 8) | rxMsg.data[1];
-			if(isMCUReady == false)
-			{
-				MCU_PrintReadings();
+			if (pTx->var) {
+				switch(pTx->type) {
+					case PERIODIC_U32:
+						*(uint32_t *)pTx->var = GetUint32_t(rxMsg.data);
+						break;
+					case PERIODIC_BYTE:
+						*(uint8_t *)pTx->var = rxMsg.data[0];
+						break;
+					case PERIODIC_FLOAT:
+						*(float *)pTx->var = GetFloat(rxMsg.data);
+						break;
+					case PERIODIC_CB:
+						((PeriodicCallback)(pTx->var))(&rxMsg);
+						break;
+				}
+			} else {
+				ESP_LOGE(TAG, "**** UNHANDLED: %d ****", txMsg.identifier);
 			}
-			isMCUReady = true;
+
+		}
+		if (txMsg.identifier == rxMsg.identifier) {
+			count++;
+			mcuComErrorCount = 0;
+		} else {
+			mcuComErrorCount++;
+			ESP_LOGE(TAG, "mcuComErrorCount: %" PRIu32 "",mcuComErrorCount);
+			//Delay before retrying on the same parameter identifier
+			vTaskDelay(100 / portTICK_PERIOD_MS);
 		}
 
-			//mcuProximityInst = (rxMsg.data[0] << 8) | rxMsg.data[1];
+		if(printCount >= 25 * 5) {
+			MCU_PrintReadings();
+			printCount = 0;
+		}
 
+		if(count >= PERIODIC_TX_COUNT) {
+			isMCUReady = true;
+			mcuDebugCounter++;
+			vTaskDelay(1000 / portTICK_PERIOD_MS);
+			count = 0;
+			continue;
+		}
 
-
-
-        /*else if(rxMsg.type != 0)
-        {
-        	uint8_t error_code = ZDecodeUInt8(rxMsg.data);
-        	printf("frame error code: %d\n\r", error_code);
-        }*/
-
-        if (txMsg.identifier == rxMsg.identifier)
-        {
-        	count++;
-        	mcuComErrorCount = 0;
-        }
-        else
-        {
-        	mcuComErrorCount++;
-
-       		ESP_LOGE(TAG, "mcuComErrorCount: %" PRIu32 "",mcuComErrorCount);
-
-        	//Delay before retrying on the same parameter identifier
-        	vTaskDelay(100 / portTICK_PERIOD_MS);
-        }
-
-        if(printCount >= 25 * 5)//15)
-        {
-        	MCU_PrintReadings();
-        	printCount = 0;
-        }
-
-        if(count >= 25)
-        {
-        	vTaskDelay(1000 / portTICK_PERIOD_MS);
-        	count = 0;
-        	continue;
-        }
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+		vTaskDelay(10 / portTICK_PERIOD_MS);
     }
-    
 }
-
 
 uint32_t GetMCUComErrors()
 {
 	return mcuComErrorCount;
 }
 
+#define DEBUG_ZAP_PROTOCOL
 
 MessageType MCU_SendCommandId(uint16_t paramIdentifier)
 {
+
 	ZapMessage txMsg;
 	txMsg.type = MsgCommand;
 	txMsg.identifier = paramIdentifier;
@@ -686,6 +526,10 @@ MessageType MCU_SendCommandId(uint16_t paramIdentifier)
 	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
+
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
 
 	return rxMsg.type;
 }
@@ -705,6 +549,10 @@ MessageType MCU_SendCommandWithData(uint16_t paramIdentifier, const char *data, 
 
 	freeZapMessageReply();
 
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
+
 	return rxMsg.type;
 }
 
@@ -720,6 +568,10 @@ MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data)
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
 
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
+
 	return rxMsg.type;
 }
 
@@ -734,6 +586,10 @@ ZapMessage MCU_SendUint8WithReply(uint16_t paramIdentifier, uint8_t data)
 	uint16_t encoded_length = ZEncodeMessageHeaderAndOneByte(&txMsg, data, txBuf, encodedTxBuf);
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
+
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
 
 	return rxMsg;
 }
@@ -751,6 +607,10 @@ MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data)
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
 
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
+
 	return rxMsg.type;
 }
 
@@ -766,6 +626,10 @@ MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data)
 	uint16_t encoded_length = ZEncodeMessageHeaderAndOneUInt32(&txMsg, data, txBuf, encodedTxBuf);
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
+
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
 
 	return rxMsg.type;
 }
@@ -784,6 +648,10 @@ MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
 
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
+
 	return rxMsg.type;
 }
 
@@ -799,6 +667,10 @@ ZapMessage MCU_ReadParameter(uint16_t paramIdentifier)
 	uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
 	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
 	freeZapMessageReply();
+
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
 
 	return rxMsg;
 }
@@ -1138,7 +1010,7 @@ void MCU_UpdateUseZaptecFinishedTimeout()
 
 
 /*
- * Returns 100 if pilot state is 100% PWM 
+ * Returns 100 if pilot state is 100% PWM
  * Returns 0 if plot state is 0% PWM
  * Otherwise returns current value communicated to car in A.
  */
@@ -1148,7 +1020,7 @@ float MCU_GetInstantPilotState()
 }
 
 /*
- * For OCPP: If a car is connected and authorized then: 
+ * For OCPP: If a car is connected and authorized then:
  * -false indicate SuspendedEVSE state - Charger does not allow charging
  * -true indicates SuspendedEV state - Charger allows charging and is waiting on the car
  */
@@ -1212,9 +1084,18 @@ float MCU_GetMaxInstallationCurrentSwitch()
 	return maxCurrent;
 }
 
-char * MCU_GetGridTypeString()
-{
-	return mcuNetworkTypeString;
+char * MCU_GetGridTypeString() {
+	char *netString = "Non ";
+	if (mcuNetworkType == 1) {
+		netString = "IT_1";
+	} else if (mcuNetworkType == 2) {
+		netString = "IT_3";
+	} else if (mcuNetworkType == 3) {
+		netString = "TN_1";
+	} else if (mcuNetworkType == 4) {
+		netString = "TN_3";
+	}
+	return netString;
 }
 
 uint8_t MCU_GetGridType()
@@ -1447,12 +1328,12 @@ bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
 }
 
 bool MCU_GetMidStatus(uint32_t *id) {
-    ZapMessage msg = MCU_ReadParameter(ParamMidStatus);
-    if (msg.length != 4 || msg.identifier != ParamMidStatus) {
+    ZapMessage msg = MCU_ReadParameter(SignedMeterValue);
+    if (msg.length != 12 || msg.identifier != SignedMeterValue) {
         return false;
     }
 
-    *id = GetUint32_t(msg.data);
+    *id = *(uint32_t *)msg.data;
     return true;
 }
 
@@ -1513,7 +1394,7 @@ uint8_t MCU_GetRCDButtonTestStates()
 
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
 {
-	ZapMessage rxMsg = MCU_ReadParameter(ParamSmartFpgaVersionAndHash);
+	ZapMessage rxMsg = MCU_ReadParameter(ParamFpgaVersionAndHash);
 	if((rxMsg.length > 0) && (rxMsg.length < maxTotalLen))
 	{
 		strncpy(stringBuf, (char*)rxMsg.data, rxMsg.length);
@@ -1521,6 +1402,9 @@ void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
 	}
 }
 
+bool MCU_ClearWarning(uint32_t warning) {
+	return MCU_SendUint32Parameter(ParamClearWarning, warning) == MsgWriteAck;
+}
 
 void SetEspNotification(uint16_t notification)
 {
@@ -1573,7 +1457,7 @@ void configureUart(){
     ESP_ERROR_CHECK(uart_driver_install(uart_num, uart_buffer_size, \
         uart_buffer_size, 20, &uart0_events_queue, 0));
 
-    ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));    
+    ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
 
     ESP_ERROR_CHECK(uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 }
