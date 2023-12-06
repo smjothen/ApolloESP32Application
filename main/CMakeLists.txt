@@ -1,4 +1,4 @@
-idf_component_register(SRCS 
+idf_component_register(SRCS
 					"main.c"
 				   	"sessionHandler.c"
 				   	"production_test.c"
@@ -6,7 +6,7 @@ idf_component_register(SRCS
 				   	"connectivity.c"
 				   	"chargeSession.c"
 				   	"certificate.c"
-				   	"fat.c"	
+				   	"fat.c"
 				   	"diagnostics_port.c"
 				   	"OCMF.c"
 					"offline_log.c"
@@ -18,8 +18,9 @@ idf_component_register(SRCS
 					"chargeController.c"
 					"efuse.c"
 					"diagnostics_log.c"
+					"warning_handler.c"
 					EMBED_TXTFILES ${project_dir}/main/cert/zaptec_ca.cer
-					EMBED_TXTFILES ${project_dir}/main/cert/bundle8.crt 
+					EMBED_TXTFILES ${project_dir}/main/cert/bundle8.crt
 
 					INCLUDE_DIRS "./"
 					)

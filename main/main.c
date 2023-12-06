@@ -40,6 +40,7 @@
 #include "cJSON.h"
 #include "zaptec_cloud_listener.h"
 #include "sas_token.h"
+#include "pic_update.h"
 #include "offlineSession.h"
 #include "offline_log.h"
 #include "zaptec_cloud_observations.h"
@@ -54,6 +55,7 @@
 #include "ocpp_smart_charging.h"
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
+#include "warning_handler.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -300,6 +302,26 @@ void SetOnlineWatchdog()
 	onlineWatchdog = true;
 }
 
+void WarningHandlerReset(uint32_t mask, uint32_t count, uint32_t threshold) {
+	MessageType ret = MCU_SendCommandId(CommandReset);
+
+	char buf[128];
+	snprintf(buf, sizeof (buf), "WarningHandlerReset: %d Mask %" PRIX32 " Count %" PRIu32 " Threshold %" PRIu32, ret == MsgCommandAck, mask, count, threshold);
+
+	ESP_LOGI(TAG_MAIN, "%s", buf);
+	publish_debug_message_event(buf, cloud_event_level_warning);
+}
+
+void WarningHandlerClear(uint32_t mask, uint32_t count, uint32_t threshold) {
+	bool ret = MCU_ClearWarning(mask);
+
+	char buf[128];
+	snprintf(buf, sizeof (buf), "WarningHandlerClear: %d Mask %" PRIX32 " Count %" PRIu32 " Threshold %" PRIu32, ret, mask, count, threshold);
+
+	ESP_LOGI(TAG_MAIN, "%s", buf);
+	publish_debug_message_event(buf, cloud_event_level_warning);
+}
+
 void log_efuse_block(unsigned char * block, bool write_disabled, bool read_disabled)
 {
 	if(!read_disabled){
@@ -528,6 +550,11 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
+	// MCU is booted and Zap Protocol running, program FPGA if needed
+	fpga_ensure_configured();
+
+	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION, WarningHandlerReset);
+	warning_handler_install(WARNING_FPGA_UNEXPECTED_RELAY, WarningHandlerClear);
 
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
@@ -602,7 +629,7 @@ void app_main(void)
 		//If it was OFF this will effectively power it ON so it is ready for later.
 		cellularPinsOff();
 	}
-	
+
 	connectivity_init();
 
 	if(devInfo.EEPROMFormatVersion == 0xFF)
@@ -616,7 +643,7 @@ void app_main(void)
 		}
 		devInfo = i2cReadDeviceInfoFromEEPROM();
 		//new_id = true;
-		
+
 		if(devInfo.EEPROMFormatVersion == 0x0)
 		{
 			ESP_LOGE(TAG_MAIN, "Invalid EEPROM format: %d", devInfo.EEPROMFormatVersion);
@@ -681,7 +708,7 @@ void app_main(void)
 			size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
 			size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
 			size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
-			
+
 			//If available memory is critically low, to a controlled restart to avoid undefined insufficient memory states
 			if((min_dma < 2000) || (free_dma < 2000))
 			{
@@ -819,6 +846,11 @@ void app_main(void)
 			calibration_task_start();
 			calibrationMode = true;
 		}
+
+		uint32_t warnings = MCU_GetWarnings();
+
+		warning_handler_tick(warnings);
+		fpga_ensure_configured();
 
 	#ifdef useSimpleConsole
 		int i;
