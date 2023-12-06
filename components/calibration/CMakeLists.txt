@@ -1,4 +1,4 @@
-set(COMPONENT_SRCS 
+set(COMPONENT_SRCS
 	calibration.c
 
 	calibration_voffs.c
@@ -19,7 +19,7 @@ set(COMPONENT_SRCS
 	pb_decode.c
 )
 
-set(COMPONENT_REQUIRES wifi i2c)
+set(COMPONENT_REQUIRES wifi i2c mid)
 
 set(COMPONENT_ADD_INCLUDEDIRS ". include")
 

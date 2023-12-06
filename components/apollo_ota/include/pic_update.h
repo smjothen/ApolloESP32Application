@@ -7,6 +7,6 @@ uint8_t get_bootloader_version(void);
 bool is_goplus(void);
 int update_goplus(void);
 
-bool fpga_ensure_configured(void);
+bool fpga_configuration_tick(void);
 
 #endif /* PIC_UPDATE_H */

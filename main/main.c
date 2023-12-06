@@ -55,7 +55,11 @@
 #include "ocpp_smart_charging.h"
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
+
 #include "warning_handler.h"
+
+#include "mid.h"
+#include "mid_status.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -551,10 +555,10 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(3000));
 
 	// MCU is booted and Zap Protocol running, program FPGA if needed
-	fpga_ensure_configured();
+	fpga_configuration_tick();
 
-	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION, WarningHandlerReset);
-	warning_handler_install(WARNING_FPGA_UNEXPECTED_RELAY, WarningHandlerClear);
+	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION | WARNING_MID, WarningHandlerReset);
+	warning_handler_install(WARNING_EMETER_ALARM | WARNING_CHARGE_OVERCURRENT, WarningHandlerClear);
 
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
@@ -618,7 +622,7 @@ void app_main(void)
 	}
 
 	///Check for MID calibrationHandle at boot
-	bool isCalibrationHandle = MCU_IsCalibrationHandle();
+	bool isCalibrationHandle = mid_get_is_calibration_handle();
 
 	ESP_LOGI(TAG_MAIN, "MCU is ready. CalibrationHandle: %i", isCalibrationHandle);
 
@@ -849,8 +853,31 @@ void app_main(void)
 
 		uint32_t warnings = MCU_GetWarnings();
 
+		if (warnings & WARNING_MID) {
+			uint32_t mid_status = 0;
+
+			if (mid_get_status(&mid_status)) {
+				uint32_t fixableStatus = mid_status & (MID_STATUS_EMETER_ERROR |
+						MID_STATUS_INTEGRATOR_BUSY |
+						MID_STATUS_INTEGRATOR_LOST_FRAMES |
+						MID_STATUS_INTEGRATOR_OVERFLOW |
+						MID_STATUS_UPDATE_OVERFLOW |
+						MID_STATUS_WRITE_VERIFY_ERROR);
+
+				if (fixableStatus) {
+					// Try to fix with a reset
+					ESP_LOGI(TAG_MAIN, "MID Status: %08" PRIX32 " (Fixable)", mid_status);
+				} else {
+					// Any other status bit probably can't be fixed by a reset, so mask MID warning
+					ESP_LOGI(TAG_MAIN, "MID Status: %08" PRIX32 " (Masked)", mid_status);
+					warnings &= ~WARNING_MID;
+				}
+			}
+		}
+
 		warning_handler_tick(warnings);
-		fpga_ensure_configured();
+
+		fpga_configuration_tick();
 
 	#ifdef useSimpleConsole
 		int i;

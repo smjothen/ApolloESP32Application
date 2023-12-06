@@ -16,6 +16,7 @@
 #include "certificate.h"
 #include "protocol_task.h"
 #include "mqtt_client.h"
+#include "mid.h"
 
 static const char *TAG = "CONNECTIVITY   ";
 
@@ -180,7 +181,7 @@ static void connectivity_task()
 	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()) {
+	if(devInfo.factory_stage != FactoryStageFinnished || mid_get_is_calibration_handle()) {
 		staticNewInterface = eCONNECTION_WIFI;
 	}
 

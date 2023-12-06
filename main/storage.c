@@ -9,6 +9,7 @@
 #include "nvs.h"
 #include "i2cDevices.h"
 
+#include "mid.h"
 #include "calibration.h"
 #include "zaptec_protocol_serialisation.h"
 #include "DeviceInfo.h"
@@ -1787,7 +1788,7 @@ void storage_SaveWifiParameters(char *SSID, char *PSK)
 esp_err_t storage_ReadWifiParameters(char *SSID, char *PSK)
 {
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
-	if(devInfo.factory_stage != FactoryStageFinnished || MCU_IsCalibrationHandle()){
+	if(devInfo.factory_stage != FactoryStageFinnished || mid_get_is_calibration_handle()){
 		ESP_LOGW(TAG, "Using factory SSID and PSK!!");
 		// strcpy(SSID, "arntnett");
 		// strcpy(PSK, "4703c87e817842c4ce6b167d43701b7685693846db");
@@ -1862,16 +1863,16 @@ double storage_update_accumulated_energy(float session_energy){
 
 	esp_err_t session_read_result =  nvs_get_zfloat(handle, "session", &previous_session_energy);
 	esp_err_t accumulated_read_result = nvs_get_zdouble(handle, "accumulated", &previous_accumulated_energy);
-	
+
 	if(
-		   (session_read_result == ESP_ERR_NVS_NOT_FOUND) 
+		   (session_read_result == ESP_ERR_NVS_NOT_FOUND)
 		&& (accumulated_read_result == ESP_ERR_NVS_NOT_FOUND)
 	){
 		ESP_LOGI(TAG, "initing energy accumulation");
 		previous_session_energy = 0.0;
 		previous_accumulated_energy = 0.0;
 		accumulator_initialised = true;
-		
+
 	}else if ((session_read_result != ESP_OK) || (accumulated_read_result != ESP_OK)){
 		ESP_LOGE(TAG, "Very unexpected energy NVS state!!, %d and %d",session_read_result, accumulated_read_result );
 		result = -10.0;
@@ -1922,7 +1923,7 @@ double storage_update_accumulated_energy(float session_energy){
 	esp_err_t accumulated_write_result = nvs_set_zdouble(handle, "accumulated", result);
 
 	if((session_write_result!= ESP_OK) || (accumulated_write_result) != ESP_OK){
-		ESP_LOGE(TAG, "Failed to write results, skiping commit (%d, %d)", 
+		ESP_LOGE(TAG, "Failed to write results, skiping commit (%d, %d)",
 		session_write_result, accumulated_write_result );
 		goto err;
 	}

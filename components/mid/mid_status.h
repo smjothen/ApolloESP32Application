@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   MID.h
  * Author: Knut
  * MID Version: 0x01
@@ -13,10 +13,13 @@
 #ifdef	__cplusplus
 extern "C" {
 #endif
-    
+
 // This header-file itself is legally relevant, but it exposes some methods that can be
 // used by non-legally relevant code, and some methods that can only be used by legally relevant code
-    
+
+#define MID_VERSION 3
+
+
 #define MID_STATUS_OK   0
 #define MID_STATUS_NONE 0
 
@@ -26,11 +29,11 @@ extern "C" {
 
 // eMeter initialization failed
 #define MID_STATUS_EMETER_ERROR           (1L<<1)
-        
+
 // Bootloader version is not compatible with legally relevant software
 #define MID_STATUS_INVALID_BOOTLOADER     (1L<<2)
-    
-    
+
+
 /** Flash page status **/
 // Set if all MID pages are cleared (in production before calibration)
 #define MID_STATUS_ALL_PAGES_EMPTY        (1L<<3)
@@ -38,13 +41,13 @@ extern "C" {
 // No valid MID pages were found at startup (none with valid checksums)
 #define MID_STATUS_NO_VALID_PAGES         (1L<<4)
 
-// The long-term storage event log was empty
-#define MID_STATUS_LTS_EMPTY              (1L<<5)
-    
+// An error occurred when the software update event log was read and verified
+#define MID_STATUS_EVENT_LOG_ERROR        (1L<<5)
+
 /** Flash page content **/
 // Illegal version in MID header
 #define MID_STATUS_WRONG_VERSION          (1L<<6)
-    
+
 // Set if the device has not been calibrated in production
 // Operation is still allowed, but the values can not be guaranteed
 #define MID_STATUS_NOT_CALIBRATED         (1L<<7)
@@ -57,43 +60,41 @@ extern "C" {
 
 // The erase/write cycles of the flash has been exhausted
 #define MID_STATUS_FLASH_EXHAUSTED        (1L<<10)
-    
+
 // Device-specific parameters checksum failed
 #define MID_STATUS_PARAMETER_CRC_ERROR    (1L<<11)
 
-// Integrity checks of the long-term storage event log failed
-#define MID_STATUS_LTS_INTEGRITY          (1L<<12)
-    
-// The contents of the long-term storage event log were found to be invalid
-#define MID_STATUS_LTS_INVALID            (1L<<13)
-    
+
 /** Dynamic errors **/
 // The energy integrator is busy. If this flag is set, the integrator is busy processing new data, and the caller should retry the call later
 #define MID_STATUS_INTEGRATOR_BUSY        (1L<<14)
-    
+
 // eMeter energy integrator hasn't been initialized correctly
 #define MID_STATUS_INTEGRATOR_INIT        (1L<<15)
-    
+
 // eMeter energy integrator lost frames from eMeter
 #define MID_STATUS_INTEGRATOR_LOST_FRAMES (1L<<16)
-    
+
 // eMeter energy integrator calculated too much energy between frames
 #define MID_STATUS_INTEGRATOR_OVERFLOW    (1L<<17)
-    
+
 // Set if the non-volatile energy register is attempted to be updated with too much energy at once
 #define MID_STATUS_UPDATE_OVERFLOW        (1L<<18)
-    
+
 // Set if the values stored in RAM does not match what was read back after writing to flash
 #define MID_STATUS_WRITE_VERIFY_ERROR     (1L<<19)
 
 // The MIDTick method has not been called at the required interval
 #define MID_STATUS_TICK_TIMEOUT           (1L<<20)
-    
+
 // Something went wrong when initializing or updating the display
 #define MID_STATUS_DISPLAY_ERROR          (1L<<21)
-    
+
 // Calibration parameters on eMeter doesn't match the expected values
 #define MID_STATUS_INVALID_EMETER_PARAMS  (1L<<22)
+
+// Integrity checks of intermediate bits failed
+#define MID_STATUS_INVALID_INTERMEDIATE_BITS (1L<<23)
 
 
 // Even if these status bits are set, writing to the MID pages, and reading the cumulative energy register, is allowed
@@ -119,13 +120,20 @@ extern "C" {
     | MID_STATUS_WRONG_VERSION       \
     | MID_STATUS_PARAMETER_CRC_ERROR \
     | MID_STATUS_WRITE_VERIFY_ERROR  \
+    | MID_STATUS_INVALID_INTERMEDIATE_BITS \
     )
 
 // Functional relay hardware versions
 // Only the versions marked "MID Valid" is subject to MID certification.
+// The B5_0 & B3 revisions are kept only for backwards compatability.
 // If any non-MID valid version is selected, a warning is raised in MIDStatus
 
 #define FR_HW_VERSION_B5_0 0
+#define FR_HW_VERSION_B5_1 1  // MID Valid (For origin)
+#define FR_HW_VERSION_B3   2
+#define FR_HW_VERSION_CC   3  // MID Valid (For costcut)
+#define FR_HW_VERSION_CC2  4  // MID Valid (For costcut)
+
 
 #ifdef	__cplusplus
 }

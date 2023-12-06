@@ -32,6 +32,7 @@
 #include "../components/audioBuzzer/audioBuzzer.h"
 #include "fat.h"
 #include "chargeController.h"
+#include "mid.h"
 
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
@@ -3994,14 +3995,14 @@ void sessionHandler_SendFPGAInfo()
 static uint32_t calibrationId = 0;
 
 void sessionHandler_SendMIDStatus(void) {
-	if (MCU_GetMidStoredCalibrationId(&calibrationId) && calibrationId != 0) {
+	if (mid_get_calibration_id(&calibrationId) && calibrationId != 0) {
 		uint32_t midStatus = 0;
-		MCU_GetMidStatus(&midStatus);
+		if (mid_get_status(&midStatus)) {
+			char buf[64];
+			snprintf(buf, sizeof (buf), "MID Calibration ID: %" PRIu32 " Status: 0x%08" PRIX32, calibrationId, midStatus);
 
-		char buf[64];
-		snprintf(buf, sizeof (buf), "MID Calibration ID: %" PRIu32 " Status: 0x%08" PRIX32, calibrationId, midStatus);
-
-		publish_debug_telemetry_observation_Diagnostics(buf);
+			publish_debug_telemetry_observation_Diagnostics(buf);
+		}
 	}
 }
 
@@ -4023,7 +4024,7 @@ void sessionHandler_SendMIDStatusUpdate(void) {
 	static uint32_t lastMidStatus = 0;
 	uint32_t midStatus = 0;
 
-	if (MCU_GetMidStatus(&midStatus) && midStatus != lastMidStatus) {
+	if (mid_get_status(&midStatus) && midStatus != lastMidStatus) {
 		char buf[48];
 		snprintf(buf, sizeof (buf), "MID Status: 0x%08" PRIX32 " -> 0x%08" PRIX32, lastMidStatus, midStatus);
 

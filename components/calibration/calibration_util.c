@@ -13,6 +13,7 @@
 #include "protocol_task.h"
 #include "calibration.h"
 #include "calibration_emeter.h"
+#include "mid.h"
 
 static const char *TAG = "CALIBRATION    ";
 
@@ -28,7 +29,7 @@ double _test_currents[] = {
     [VerificationRunning] = 0.5,
     [VerificationDone] = 0.0,
     [WriteCalibrationParameters] = 0.0,
-    [Done] = 0.0, 
+    [Done] = 0.0,
     [CloseRelays] = 0.0,
     [ContactCleaning] = 0.0
 };
@@ -301,7 +302,7 @@ bool calibration_read_warnings(uint32_t *warnings) {
 }
 
 bool calibration_read_mid_status(uint32_t *status) {
-    return MCU_GetMidStatus(status);
+    return mid_get_status(status);
 }
 
 
@@ -351,7 +352,7 @@ bool calibration_set_lock_cable(CalibrationCtx *ctx, int lock) {
 }
 
 bool calibration_get_calibration_id(CalibrationCtx *ctx, uint32_t *id) {
-    if (!MCU_GetMidStoredCalibrationId(id)) {
+    if (!mid_get_calibration_id(id)) {
         ESP_LOGE(TAG, "Couldn't get calibration ID!");
         return false;
     }
@@ -384,7 +385,7 @@ bool calibration_write_parameter(CalibrationCtx *ctx, CalibrationType type, int 
 bool calibration_get_energy_counter(float *energy) {
     float buckets = 0.0;
     for (int i = 0; i < 5; i++) {
-        if (MCU_GetInterpolatedEnergyCounter(&buckets)) {
+        if (mid_get_energy_interpolated(&buckets)) {
             // Returns -10.0 if reading the bucket fails
             if (buckets > -5.0) {
                 *energy = buckets;

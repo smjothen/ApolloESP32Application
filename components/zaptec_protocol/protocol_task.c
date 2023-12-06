@@ -78,10 +78,6 @@ void MCUReset(ZapMessage *msg) {
 	}
 }
 
-void MCUSignedMeterValue(ZapMessage *msg) {
-	// TODO: Pass MID package to MID module!
-}
-
 static const PeriodicTx periodicTx[] = {
 	{ ParamMode,                       PERIODIC_BYTE,  &mcuMode },
 	{ ParamInternalTemperatureEmeter,  PERIODIC_FLOAT, &temperatureEmeter[0] },
@@ -102,7 +98,6 @@ static const PeriodicTx periodicTx[] = {
 	{ ParamCableType,                  PERIODIC_BYTE,  &mcuCableType },
 	{ ParamChargeCurrentUserMax,       PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
 	{ MCUResetSource,                  PERIODIC_CB,    &MCUReset },
-	{ SignedMeterValue,                PERIODIC_CB,    &MCUSignedMeterValue },
 };
 
 #define PERIODIC_TX_COUNT (sizeof (periodicTx) / sizeof (periodicTx[0]))
@@ -728,27 +723,6 @@ uint8_t MCU_GetOverrideGridType()
 }
 
 
-bool MCU_SetMIDBlinkEnabled(bool enabled) {
-    return MCU_SendUint8Parameter(ParamMIDBlinkEnabled, enabled) == MsgWriteAck;
-}
-
-bool MCU_GetInterpolatedEnergyCounter(float *energy) {
-    ZapMessage msg = MCU_ReadParameter(ParamSessionEnergyCountImportActiveInterpolated);
-    if (msg.length == 4 && msg.type == MsgReadAck && msg.identifier == ParamSessionEnergyCountImportActiveInterpolated) {
-        *energy = GetFloat(msg.data);
-        return true;
-    }
-    return false;
-}
-
-bool MCU_IsCalibrationHandle(void) {
-    ZapMessage msg = MCU_ReadParameter(ParamIsCalibrationHandle);
-    if (msg.length == 1 && msg.type == MsgReadAck && msg.identifier == ParamIsCalibrationHandle) {
-        return msg.data[0];
-    }
-    return false;
-}
-
 static uint8_t IT3OptimizationEnabled = 0;
 uint8_t MCU_UpdateIT3OptimizationState()
 {
@@ -1314,27 +1288,6 @@ float MCU_GetHWCurrentMaxLimit()
 	}
 
 	return limit;
-}
-
-
-bool MCU_GetMidStoredCalibrationId(uint32_t *id) {
-    ZapMessage msg = MCU_ReadParameter(ParamMidStoredCalibrationId);
-    if (msg.length != 4 || msg.identifier != ParamMidStoredCalibrationId) {
-        return false;
-    }
-
-    *id = GetUint32_t(msg.data);
-    return true;
-}
-
-bool MCU_GetMidStatus(uint32_t *id) {
-    ZapMessage msg = MCU_ReadParameter(SignedMeterValue);
-    if (msg.length != 12 || msg.identifier != SignedMeterValue) {
-        return false;
-    }
-
-    *id = *(uint32_t *)msg.data;
-    return true;
 }
 
 

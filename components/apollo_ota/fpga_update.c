@@ -26,7 +26,7 @@ enum ZEFPGAType {
 	iCE40 = 1,
 };
 
-bool fpga_get_type(enum ZEFPGAType *type) {
+static bool fpga_get_type(enum ZEFPGAType *type) {
 	txMsg.type = MsgRead;
 	txMsg.identifier = ParamFpgaType;
 
@@ -49,7 +49,7 @@ bool fpga_get_type(enum ZEFPGAType *type) {
 	return success;
 }
 
-bool fpga_needs_configuration(bool *needsConfig) {
+static bool fpga_needs_configuration(bool *needsConfig) {
 	txMsg.type = MsgRead;
 	txMsg.identifier = ParamFpgaNeedsConfiguration;
 
@@ -72,7 +72,7 @@ bool fpga_needs_configuration(bool *needsConfig) {
 	return success;
 }
 
-bool fpga_ensure_configured(void) {
+bool fpga_configuration_tick(void) {
 	enum ZEFPGAType type = MAX10;
 	if (!fpga_get_type(&type)) {
 		return false;

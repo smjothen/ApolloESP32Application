@@ -27,10 +27,12 @@
 #include "offlineSession.h"
 #include "offline_log.h"
 
+#include "mid.h"
+#include "mid_status.h"
+
 #include "calibration_crc.h"
 #include "calibration_util.h"
 #include "calibration_emeter.h"
-#include "calibration_mid.h"
 
 #include <calibration-message.pb.h>
 #include <calibration.h>
@@ -232,7 +234,7 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
         ctx->Flags |= CAL_FLAG_SKIP_CAL;
         ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
 
-        if (MCU_GetMidStatus(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
+        if (mid_get_status(&midStatus) && !(midStatus & MID_STATUS_NOT_VERIFIED)) {
             ESP_LOGI(TAG, "Calibration already verified (ID = %" PRIu32 ")!", ctx->Params.CalibrationId);
             ctx->Flags |= CAL_FLAG_UPLOAD_VER;
         }
@@ -708,7 +710,7 @@ void calibration_update_charger_state(CalibrationCtx *ctx) {
 
     uint32_t msSinceRefresh = pdTICKS_TO_MS(refreshTime - lastRefresh);
     uint32_t msSinceStart = pdTICKS_TO_MS(refreshTime - midModeStart);
-    
+
     if (msSinceRefresh > 3000) {
         ESP_LOGI(TAG, "%s: MID mode refresh near threshold (%" PRIu32 "ms, %" PRIu32 "ms since start)!", calibration_state_to_string(ctx), msSinceRefresh, msSinceStart);
     }
@@ -814,10 +816,10 @@ int calibration_send_state(CalibrationCtx *ctx) {
         reply.Init.HasProductionTestPassed = devInfo.factory_stage == FactoryStageFinnished;
 
         uint32_t midStatus;
-        MCU_GetMidStatus(&midStatus);
+        mid_get_status(&midStatus);
 
         uint32_t calId;
-        MCU_GetMidStoredCalibrationId(&calId);
+        mid_get_calibration_id(&calId);
 
         reply.Init.IsCalibrated = calId != 0;
         reply.Init.IsVerified = (calId != 0) && !(midStatus & MID_STATUS_NOT_VERIFIED);
@@ -967,7 +969,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
             calibration_fail(ctx, "Unexpected MID status 0x%08X", status);
         }
     }
-    
+
     uint32_t warnings;
     if (calibration_read_warnings(&warnings)) {
         warnings &= ~WARNING_PILOT_NO_PROXIMITY;
@@ -1005,7 +1007,7 @@ void calibration_handle_tick(CalibrationCtx *ctx) {
     // 2. CalibrateCurrentOffset - possibly not needed can just use HPF_COEF_I, but for verification?
     // 3. CloseRelays - ensure relays closed
     // 4. WarmingUp
-    // 5. WarmupSteadyStateTemp 
+    // 5. WarmupSteadyStateTemp
     // 6. CalibrateVoltageOffset
     // 7. CalibrateVoltageGain
     // 8. CalibrateCurrentGain
@@ -1103,7 +1105,7 @@ void calibration_handle_data(CalibrationCtx *ctx, CalibrationUdpMessage_DataMess
     if (!calibration_get_current_snapshot(ctx, localCurrents)) {
         return;
     }
-   
+
     if (ctx->Ref.OverloadIsEstimated) {
         for (int i = 0; i < 3; i++) {
             if (ctx->Ref.OverloadPhases & (1 << i)) {
@@ -1360,7 +1362,7 @@ void calibration_task(void *pvParameters) {
             continue;
         }
 
-        esp_netif_ip_info_t ip_info = {0}; 
+        esp_netif_ip_info_t ip_info = {0};
         esp_netif_t *netif = esp_netif_get_default_netif();
         if (netif) {
             esp_netif_get_ip_info(netif, &ip_info);
@@ -1368,7 +1370,7 @@ void calibration_task(void *pvParameters) {
 
         wifi_ap_record_t wifidata;
         if (esp_wifi_sta_get_ap_info(&wifidata) == 0) {
-            CALLOGTIME(&ctx, "- Connected %s BSSID %02X:%02X:%02X:%02X:%02X:%02X RSSI %d IP " IPSTR, wifidata.ssid, 
+            CALLOGTIME(&ctx, "- Connected %s BSSID %02X:%02X:%02X:%02X:%02X:%02X RSSI %d IP " IPSTR, wifidata.ssid,
                     wifidata.bssid[0],
                     wifidata.bssid[1],
                     wifidata.bssid[2],
@@ -1386,7 +1388,7 @@ void calibration_task(void *pvParameters) {
             continue;
         }
 
-                 
+
         CALLOGTIME(&ctx, "- Socket Created");
         ESP_LOGI(TAG, "UDP socket created ...");
 
@@ -1461,11 +1463,11 @@ void calibration_task(void *pvParameters) {
 
                     if (msg.has_Ack) {
                         calibration_handle_ack(&ctx, &msg.Ack);
-                    } 
+                    }
 
                     if (msg.has_Data) {
                         calibration_handle_data(&ctx, &msg.Data);
-                    } 
+                    }
 
                     if (msg.has_State) {
                         calibration_handle_state(&ctx, &msg.State);

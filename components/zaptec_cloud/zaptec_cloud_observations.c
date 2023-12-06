@@ -28,6 +28,7 @@
 #include "offlineHandler.h"
 #include "chargeController.h"
 #include "mqtt_client.h"
+#include "mid.h"
 #include <math.h>
 
 #include "../../main/IT3PCalculator.h"
@@ -291,7 +292,7 @@ int publish_debug_telemetry_observation_capabilities(){
 	cJSON_AddStringToObject(CapabilitiesObject, "SerialNumber", i2cGetLoadedDeviceInfo().serialNumber);
 
 	uint32_t calibrationId = 0;
-	bool calibrationRead = MCU_GetMidStoredCalibrationId(&calibrationId);
+	bool calibrationRead = mid_get_calibration_id(&calibrationId);
 	if((calibrationRead == true) && (calibrationId != 0))
 	{
 		cJSON_AddBoolToObject(CapabilitiesObject, "MeterCalibrated", true);
@@ -652,7 +653,7 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
 
     add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)MCU_GetCableType()));
     add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetChargeMode()));
-	
+
 	if(storage_Get_session_controller() == eSESSION_OCPP)
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_DISCONNECTED));
 	else
@@ -1405,7 +1406,7 @@ int publish_noise(void){
     cJSON_AddNumberToObject(event, "Type", (float) 5.0);
 
     char *message = cJSON_PrintUnformatted(event);
-    
+
     ESP_LOGI(TAG, "sending %d stress test events", events_to_send);
     for(int i = 0; i<events_to_send; i++){
         int publish_err = publish_iothub_event(message);
@@ -1415,7 +1416,7 @@ int publish_noise(void){
     }
 
     ESP_LOGI(TAG, "sent stress test events.");
-        
+
     cJSON_Delete(event);
     free(message);
     return 0;

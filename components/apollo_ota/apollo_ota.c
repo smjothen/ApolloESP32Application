@@ -17,6 +17,7 @@
 #include "protocol_task.h"
 #include "i2cDevices.h"
 #include "ble_interface.h"
+#include "mid.h"
 
 #define TAG "OTA"
 
@@ -295,7 +296,7 @@ static void ota_task(void *pvParameters){
 
         // For chargers that are MID calibrated, ensure that they can't be downgraded to previous non-MID firmware below 2.1.0.0
         uint32_t MIDCharger = 0;
-        MCU_GetMidStoredCalibrationId(&MIDCharger);
+        mid_get_calibration_id(&MIDCharger);
         ESP_LOGI(TAG, "MIDCharger: %" PRIu32, MIDCharger);
 
         if(MIDCharger != 0)
