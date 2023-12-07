@@ -3568,7 +3568,7 @@ static void ocpp_task(){
 		ocpp_configure_task_notification(task_ocpp_handle, TASK_EVENT_OFFSET);
 		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
 
-		connected = true;
+		connected = ocpp_is_connected();
 
 		if(ocpp_auth_init() != 0)
 			ESP_LOGE(TAG, "Unable to initialize ocpp authorization, local authorization will not work");
@@ -3824,6 +3824,8 @@ clean:
 			reset_from_cs = false;
 			connected = false;
 		}
+
+		connected = ocpp_is_connected();
 		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
 		publish_cloud_awaiting_messages();
 	}
