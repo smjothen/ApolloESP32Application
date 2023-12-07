@@ -3317,13 +3317,20 @@ cJSON * ocpp_get_diagnostics(){
 		cJSON_AddStringToObject(main_res, "stored_url", storage_Get_url_ocpp());
 		cJSON_AddStringToObject(main_res, "stored_cbid", storage_Get_chargebox_identity_ocpp());
 		cJSON_AddItemToObject(res, "main", main_res);
+
+		cJSON * configuration_key = cJSON_CreateArray();
+		if(configuration_key != NULL){
+			get_all_ocpp_configurations(configuration_key);
+		}
+
+		cJSON_AddItemToObject(main_res, "configuration", configuration_key);
 	}
 
 	cJSON_AddItemToObject(res, "task", ocpp_task_get_diagnostics());
 	cJSON_AddItemToObject(res, "listener", ocpp_listener_get_diagnostics());
 	cJSON_AddItemToObject(res, "smart", ocpp_smart_get_diagnostics());
 	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
-
+	cJSON_AddItemToObject(res, "session", sessionHandler_ocppGetDiagnostics());
 	return res;
 }
 

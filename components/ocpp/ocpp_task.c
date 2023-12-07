@@ -1352,6 +1352,10 @@ cJSON * ocpp_task_get_diagnostics(){
 	cJSON_AddStringToObject(res, "b_meter_type", boot_parameter_meter_type);
 
 	cJSON_AddBoolToObject(res, "is_connected", ocpp_is_connected());
+
+	const char * registration_status_str = ocpp_registration_status_from_id(registration_status);
+	cJSON_AddStringToObject(res, "registration_status", registration_status_str != NULL ? registration_status_str : "NULL");
+
 	cJSON_AddBoolToObject(res, "active_call", (ocpp_active_call_queue != NULL && !uxQueueSpacesAvailable(ocpp_active_call_queue)));
 	cJSON_AddNumberToObject(res, "last_call_time", last_call_timestamp);
 

@@ -27,4 +27,11 @@ enum ocpp_registration_status{
 	eOCPP_REGISTRATION_REJECTED ///< "Charge point is not accepted by Central System. This may happen when the Charge Point id is not known by Central System."
 };
 
+/**
+ * @brief converts id to registration status
+ *
+ * @param id status id
+ */
+const char * ocpp_registration_status_from_id(enum ocpp_registration_status id);
+
 #endif /*OCPP_REGISTRATION_STATUS_H*/
