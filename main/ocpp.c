@@ -18,6 +18,7 @@
 #include "apollo_ota.h"
 #include "OCMF.h"
 #include "zaptec_cloud_observations.h"
+#include "zaptec_cloud_listener.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
@@ -65,9 +66,15 @@ StackType_t task_ocpp_stack[TASK_OCPP_STACK_SIZE];
 static bool should_run = false;
 static bool should_reboot = false;
 static bool should_reconnect = false;
+static uint8_t cloud_publish_awaiting = 0;
 static bool graceful_exit = false;
 static bool connected = false;
 static bool reset_from_cs = false;
+
+enum cloud_publish_type{
+	ePUBLISH_DEVICE_TWIN = 1<<0,
+	ePUBLISH_OCPP_CONNECTED = 1 << 1,
+};
 
 static char * mnt_directory = "/files";
 static char * firmware_update_request_path = "/files/ocpp_upd.bin";
@@ -2552,6 +2559,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_u8(storage_Set_ocpp_security_profile, value, is_valid_security_profile);
 
 		if(active_security_profile != storage_Get_ocpp_security_profile()){
+			cloud_settings_changed = true;
 			ocpp_end_and_reconnect(true);
 		}
 
@@ -2593,8 +2601,10 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		storage_SaveConfiguration();
 
 		if(cloud_settings_changed){
-			if(publish_debug_telemetry_observation_cloud_settings() != 0)
+			if(publish_debug_telemetry_observation_cloud_settings() != 0){
 				ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+				cloud_publish_awaiting |= ePUBLISH_DEVICE_TWIN;
+			}
 		}
 	}else{
 		ESP_LOGW(TAG, "Unsuccessfull in configuring %s", key);
@@ -3307,14 +3317,31 @@ cJSON * ocpp_get_diagnostics(){
 		cJSON_AddStringToObject(main_res, "stored_url", storage_Get_url_ocpp());
 		cJSON_AddStringToObject(main_res, "stored_cbid", storage_Get_chargebox_identity_ocpp());
 		cJSON_AddItemToObject(res, "main", main_res);
+
+		cJSON * configuration_key = cJSON_CreateArray();
+		if(configuration_key != NULL){
+			get_all_ocpp_configurations(configuration_key);
+		}
+
+		cJSON_AddItemToObject(main_res, "configuration", configuration_key);
 	}
 
 	cJSON_AddItemToObject(res, "task", ocpp_task_get_diagnostics());
 	cJSON_AddItemToObject(res, "listener", ocpp_listener_get_diagnostics());
 	cJSON_AddItemToObject(res, "smart", ocpp_smart_get_diagnostics());
 	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
-
+	cJSON_AddItemToObject(res, "session", sessionHandler_ocppGetDiagnostics());
 	return res;
+}
+
+static void publish_cloud_awaiting_messages(){
+	if(cloud_publish_awaiting != 0 && isMqttConnected()){
+		if(cloud_publish_awaiting & ePUBLISH_DEVICE_TWIN && publish_debug_telemetry_observation_cloud_settings() == 0)
+			cloud_publish_awaiting &= !ePUBLISH_DEVICE_TWIN;
+
+		if(cloud_publish_awaiting & ePUBLISH_OCPP_CONNECTED && publish_debug_telemetry_observation_ocpp_native_connected(connected) == 0)
+			cloud_publish_awaiting &= !ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 static void transition_online(){
@@ -3327,7 +3354,10 @@ static void transition_online(){
 
 	connected = true;
 
-	publish_debug_telemetry_observation_ocpp_box_connected(connected);
+	if(publish_debug_telemetry_observation_ocpp_native_connected(connected) != 0){
+		ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 static void transition_offline(){
@@ -3342,7 +3372,10 @@ static void transition_offline(){
 
 	connected = false;
 
-	publish_debug_telemetry_observation_ocpp_box_connected(connected);
+	if(publish_debug_telemetry_observation_ocpp_native_connected(connected) != 0){
+		ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 #define MAIN_EVENT_OFFSET 0
@@ -3531,7 +3564,6 @@ static void ocpp_task(){
 				}
 			}
 		}while(err != 0);
-		publish_debug_telemetry_observation_ocpp_box_security_profile(ocpp_config.security_profile);
 
 		ocpp_configure_task_notification(task_ocpp_handle, TASK_EVENT_OFFSET);
 		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
@@ -3589,7 +3621,7 @@ static void ocpp_task(){
 				}
 			}
 		}while(err != 0);
-		publish_debug_telemetry_observation_ocpp_box_connected(connected);
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
 
 		/*
 		 * From ocpp errata
@@ -3633,6 +3665,8 @@ static void ocpp_task(){
 			}else{
 				data = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 * (OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp))));
 			}
+
+			publish_cloud_awaiting_messages();
 
 			const uint websocket_event = (data & WEBSOCKET_EVENT_MASK) >> WEBSOCKET_EVENT_OFFSET;
 			const uint task_event = (data & TASK_EVENT_MASK) >> TASK_EVENT_OFFSET;
@@ -3728,8 +3762,8 @@ static void ocpp_task(){
 				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
 					break;
 
-				if(websocket_event & eOCPP_WEBSOCKET_CLOSED)
-						ocpp_end_and_reconnect(true); // TODO: Check if eOCPP_WEBSOCKET_CLOSED is ever sent in a state where the websocket auto-reconnect is active
+				if(websocket_event & eOCPP_WEBSOCKET_CLOSED && should_run)
+					ocpp_end_and_reconnect(true);
 			}
 
 			if(task_event & eOCPP_TASK_CALL_TIMEOUT){
@@ -3771,6 +3805,7 @@ static void ocpp_task(){
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
 
+		prepare_reset(graceful_exit);
 		ocpp_auth_deinit();
 		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
@@ -3789,6 +3824,8 @@ clean:
 			reset_from_cs = false;
 			connected = false;
 		}
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+		publish_cloud_awaiting_messages();
 	}
 
 	if(should_reboot){
@@ -3853,5 +3890,6 @@ void ocpp_init(){
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	}else{
 		ESP_LOGW(TAG, "Requested to init ocpp task, but task already exists");
+		ocpp_end_and_reconnect(false);
 	}
 }

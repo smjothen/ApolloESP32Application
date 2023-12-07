@@ -2011,7 +2011,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_RESERVED:
-		ESP_LOGI(TAG, "OCPP STATE RESERVED");
+		ESP_LOGW(TAG, "OCPP STATE RESERVED");
 		set_ocpp_state_led_overwrite(eOCPP_LED_RESERVED);
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -2022,7 +2022,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_UNAVAILABLE:
-		ESP_LOGI(TAG, "OCPP STATE UNAVAILABLE");
+		ESP_LOGW(TAG, "OCPP STATE UNAVAILABLE");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -2045,7 +2045,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		}
 		break;
 	case eOCPP_CP_STATUS_FAULTED:
-		ESP_LOGI(TAG, "OCPP STATE FAULTED");
+		ESP_LOGW(TAG, "OCPP STATE FAULTED");
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_AVAILABLE:
@@ -2454,6 +2454,40 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 	}
 }
 
+void * sessionHandler_ocppGetDiagnostics(){
+	cJSON * res = cJSON_CreateObject();
+	if(res == NULL){
+		ESP_LOGE(TAG, "Unable to create ocpp diagnostics for sessionHandler");
+		return res;
+	}
+
+	cJSON_AddNumberToObject(res, "transaction_id", transaction_id != NULL ? *transaction_id : -1);
+	cJSON_AddBoolToObject(res, "transaction_id_is_valid", transaction_id_is_valid);
+	cJSON_AddNumberToObject(res, "transaction_start", transaction_start);
+	cJSON_AddNumberToObject(res, "meter_start", meter_start);
+	cJSON_AddBoolToObject(res, "pending_change_availability", pending_change_availability);
+	cJSON_AddNumberToObject(res, "preparing_started", preparing_started);
+	cJSON_AddBoolToObject(res, "reservation_info_exist", reservation_info != NULL);
+	cJSON_AddNumberToObject(res, "ocpp_min_limit", ocpp_min_limit);
+	cJSON_AddNumberToObject(res, "ocpp_max_limit", ocpp_max_limit);
+	cJSON_AddNumberToObject(res, "ocpp_active_phases", ocpp_active_phases);
+	cJSON_AddBoolToObject(res, "led_state_overwritten", led_state_overwritten);
+	cJSON_AddBoolToObject(res, "pending_ocpp_authorize", pending_ocpp_authorize);
+	cJSON_AddBoolToObject(res, "current_meter_values_exist", current_meter_values != NULL);
+	cJSON_AddBoolToObject(res, "intermittent_meter_value_exist", intermittent_meter_value != NULL);
+	cJSON_AddNumberToObject(res, "current_meter_value_length", current_meter_values_length);
+	cJSON_AddBoolToObject(res, "sample_handle_exist", sample_handle != NULL);
+	cJSON_AddNumberToObject(res, "ocpp_notified_warning", ocpp_notified_warnings);
+	cJSON_AddNumberToObject(res, "ocpp_notified_warning", ocpp_notified_warnings);
+	cJSON_AddNumberToObject(res, "last_emeter_alarm", last_emeter_alarm);
+	cJSON_AddNumberToObject(res, "ocpp_notified_emeter_alarm", ocpp_notified_emeter_alarm);
+	cJSON_AddBoolToObject(res, "weak_connection", weak_connection);
+	cJSON_AddNumberToObject(res, "weak_connection_timestamp", weak_connection_timestamp);
+	cJSON_AddStringToObject(res, "cahrgepoint_status", ocpp_cp_status_from_id(get_ocpp_state()));
+
+	return res;
+}
+
 static bool carInterfaceRestartTried = false;
 static bool hasSeenCarStateC = false;
 
@@ -2844,10 +2878,11 @@ static void sessionHandler_task()
 
 
 		// Handle ocpp state if session type is ocpp
-		if(storage_Get_session_controller() == eSESSION_OCPP){
+		if(storage_Get_session_controller() == eSESSION_OCPP || sessionHandler_OcppTransactionIsActive(0) == true){
 			if(ocpp_startup && ocpp_transaction_is_ready()){
 				// If this is the first loop where CP is registered, then we may have just rebooted and need to sync state with storage.
 				ocpp_startup = false;
+				isAuthorized = false;
 
 				ESP_LOGI(TAG, "Check if active transaction was on file before CS accepted boot");
 				if(ocpp_transaction_find_active_entry(1) != -1){
@@ -2911,6 +2946,12 @@ static void sessionHandler_task()
 			}else{
 				handle_state(ocpp_new_state);
 			}
+
+		}else if(ocpp_old_state != eOCPP_CP_STATUS_UNAVAILABLE){
+			ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
+
+			clear_ocpp_state_led_overwrite();
+			ocpp_startup = true;
 		}
 
 
@@ -3447,6 +3488,7 @@ static void sessionHandler_task()
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();
 				publish_debug_telemetry_observation_power();
+				publish_debug_telemetry_observation_ocpp_native_connected(ocpp_is_connected());
 
 				if(chargeController_IsScheduleActive())
 					publish_debug_telemetry_observation_TimeAndSchedule(0x7);

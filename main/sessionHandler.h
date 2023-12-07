@@ -76,6 +76,8 @@ void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter
 void sessionHandler_OcppSaveState();
 bool sessionHandler_OcppStateHasChanged();
 void sessionHandler_OcppSendState(bool is_trigger);
+void * sessionHandler_ocppGetDiagnostics();
+
 void ChargeModeUpdateToCloudNeeded();
 void sessionHandler_SendMCUSettings();
 void sessionHandler_SendRelayStates();
