@@ -31,6 +31,7 @@
 #include "../../components/authentication/rfidPairing.h"
 #include "../../components/authentication/authentication.h"
 #include "../../components/ocpp/include/ocpp_task.h"
+#include "../../main/ocpp.h"
 
 
 static const char *TAG = "BLE SERVICE    ";
@@ -1430,49 +1431,56 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     case CHARGER_AUTH_UUID_UUID:
 
-    	if((rfidPairing_GetState() == ePairing_Inactive) && (NFCGetTagInfo().tagIsValid == false))
-    	{
-    		char bleId[50] = {0};
-    		strcpy(bleId, "ble-");
-    		memcpy(bleId+4, param->write.value, param->write.len);
-    		ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
+		if(ocpp_is_configured() == false)
+		{
+			if((rfidPairing_GetState() == ePairing_Inactive) && (NFCGetTagInfo().tagIsValid == false))
+			{
+				char bleId[50] = {0};
+				strcpy(bleId, "ble-");
+				memcpy(bleId+4, param->write.value, param->write.len);
+				ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
 
-    		if((isMqttConnected()) && (storage_Get_Standalone() == false))
-    		{
+				if((isMqttConnected()) && (storage_Get_Standalone() == false))
+				{
 
-    			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
-				if(ret == MsgWriteAck)
-					ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+					if(ret == MsgWriteAck)
+						ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+					else
+						ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
+					ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
+					SetPendingRFIDTag(bleId);
+					publish_debug_telemetry_observation_NFC_tag_id(bleId);
+					publish_debug_telemetry_observation_ChargingStateParameters();
+				}
 				else
-					ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
-
-    			ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
-    			SetPendingRFIDTag(bleId);
-    			publish_debug_telemetry_observation_NFC_tag_id(bleId);
-    			publish_debug_telemetry_observation_ChargingStateParameters();
-    		}
-    		else
-    		{
-    			ESP_LOGW(TAG, "Local authentication, setting to chargeSession if Ok");
-    			uint8_t match = authentication_CheckBLEId(bleId);
-    			if(match == 1)
-    			{
-    				chargeSession_SetAuthenticationCode(bleId);
-    			}
-    		}
-    	}
-
-    	if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))
-    	{
-    		if(param->write.len == 36)
-			{
-    			rfidPairing_SetNewUserId(param->write.value, param->write.len);
+				{
+					ESP_LOGW(TAG, "Local authentication, setting to chargeSession if Ok");
+					uint8_t match = authentication_CheckBLEId(bleId);
+					if(match == 1)
+					{
+						chargeSession_SetAuthenticationCode(bleId);
+					}
+				}
 			}
-			else
+
+			if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))
 			{
-				ESP_LOGI(TAG, "Incorrect Auth UUID length %d", param->write.len);
+				if(param->write.len == 36)
+				{
+					rfidPairing_SetNewUserId(param->write.value, param->write.len);
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Incorrect Auth UUID length %d", param->write.len);
+				}
 			}
-    	}
+		}
+		else
+		{
+			ESP_LOGW(TAG, "OCPP is configured");
+		}
 
 		break;
 

@@ -857,6 +857,12 @@ void update_transaction_message_related_config(uint8_t ocpp_transaction_message_
 	current_config.transaction_message_retry_interval = ocpp_transaction_message_retry_interval;
 }
 
+static uint32_t active_heartbeat_interval = 0;
+uint32_t ocpp_get_active_heartbeat_interval()
+{
+	return active_heartbeat_interval;
+}
+
 void update_heartbeat_timer(uint32_t sec){
 	if(sec > CONFIG_OCPP_TIMER_MAX_SEC){
 		ESP_LOGW(TAG, "Requested heartbeat interval exceed max. limiting value to %" PRIu32, sec);
@@ -866,6 +872,8 @@ void update_heartbeat_timer(uint32_t sec){
 	if(heartbeat_handle != NULL){
 		if(sec > 0){
 			xTimerChangePeriod(heartbeat_handle, pdMS_TO_TICKS(sec * 1000), pdMS_TO_TICKS(100));
+			active_heartbeat_interval = sec;
+			ESP_LOGI(TAG, "Setting heartbeat interval %" PRIu32, sec);
 		}else{
 			stop_ocpp_heartbeat();
 		}
@@ -911,6 +919,8 @@ int start_ocpp_heartbeat(void){
 	}
 
 	ESP_LOGI(TAG, "starting heartbeat with interval %" PRIu32 " sec", heartbeat_interval);
+	
+	active_heartbeat_interval = heartbeat_interval;
 
 	heartbeat_handle = xTimerCreate("Ocpp Heartbeat", pdMS_TO_TICKS(heartbeat_interval * 1000), pdTRUE, NULL, ocpp_heartbeat);
 
@@ -935,9 +945,11 @@ void stop_ocpp_heartbeat(void){
 	heartbeat_handle = NULL;
 }
 
+
 bool ocpp_is_connected(){
 	return esp_websocket_client_is_connected(client);
 }
+
 
 esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 	ESP_LOGI(TAG, "Starting ocpp");

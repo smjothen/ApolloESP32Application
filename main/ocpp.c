@@ -3313,6 +3313,7 @@ cJSON * ocpp_get_diagnostics(){
 		cJSON_AddBoolToObject(main_res, "connected", connected);
 		cJSON_AddNumberToObject(main_res, "stack_watermark", ocpp_get_stack_watermark());
 		cJSON_AddNumberToObject(main_res, "previous mask", previous_enqueue_mask);
+		cJSON_AddNumberToObject(main_res, "active_heartbeat_interval", ocpp_get_active_heartbeat_interval());
 		cJSON_AddNumberToObject(main_res, "last_online", last_online_timestamp);
 		cJSON_AddStringToObject(main_res, "stored_url", storage_Get_url_ocpp());
 		cJSON_AddStringToObject(main_res, "stored_cbid", storage_Get_chargebox_identity_ocpp());
@@ -3332,6 +3333,15 @@ cJSON * ocpp_get_diagnostics(){
 	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
 	cJSON_AddItemToObject(res, "session", sessionHandler_ocppGetDiagnostics());
 	return res;
+}
+
+
+bool ocpp_is_configured()
+{
+	if((*storage_Get_url_ocpp() != '\0') && (storage_Get_session_controller() == eSESSION_OCPP))
+		return true;
+	else
+		return false;
 }
 
 static void publish_cloud_awaiting_messages(){

@@ -284,6 +284,11 @@ void ocpp_trigger_heartbeat();
 void stop_ocpp_heartbeat(void);
 
 /**
+ * @brief get active ocpp heartbeat interval
+ */
+uint32_t ocpp_get_active_heartbeat_interval();
+
+/**
  * @brief changes the interval between ocpp heartbeats
  *
  * @param sec Interval in seconds between each heartbeat request.

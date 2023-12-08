@@ -2483,7 +2483,7 @@ void * sessionHandler_ocppGetDiagnostics(){
 	cJSON_AddNumberToObject(res, "ocpp_notified_emeter_alarm", ocpp_notified_emeter_alarm);
 	cJSON_AddBoolToObject(res, "weak_connection", weak_connection);
 	cJSON_AddNumberToObject(res, "weak_connection_timestamp", weak_connection_timestamp);
-	cJSON_AddStringToObject(res, "cahrgepoint_status", ocpp_cp_status_from_id(get_ocpp_state()));
+	cJSON_AddStringToObject(res, "chargepoint_status", ocpp_cp_status_from_id(get_ocpp_state()));
 
 	return res;
 }
@@ -3431,7 +3431,7 @@ static void sessionHandler_task()
 
 			if (networkInterface == eCONNECTION_LTE)
 			{
-				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 "", GetCellularQuality(), dataInterval, pulseCounter, pulseInterval);
+				ESP_LOGI(TAG,"LTE: %d %%  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 " OCPP-HB: %" PRId32 "", GetCellularQuality(), dataInterval, pulseCounter, pulseInterval, ocpp_get_active_heartbeat_interval());
 			}
 			else if (networkInterface == eCONNECTION_WIFI)
 			{
@@ -3440,7 +3440,7 @@ static void sessionHandler_task()
 				else
 					rssi = 0;
 
-				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 "", rssi, dataInterval, pulseCounter, pulseInterval);
+				ESP_LOGI(TAG,"WIFI: %d dBm  DataInterval: %" PRId32 "  Pulse: %" PRId32 "/%" PRId32 " OCPP-HB: %" PRId32 "", rssi, dataInterval, pulseCounter, pulseInterval, ocpp_get_active_heartbeat_interval());
 			}
 
 			//This is to make cloud settings visible during developement

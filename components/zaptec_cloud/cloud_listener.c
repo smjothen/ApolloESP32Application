@@ -3473,14 +3473,36 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 						responseStatus = 400;
 					}
 				}
+				else if(strstr(commandString, "OCPPAUTHKEY:"))
+				{
+					int end = strlen(commandString);
+					commandString[end-2] = '\0';
+
+					int len = strlen(&commandString[14]);
+					if(len < 41)//Max ocpp_authorization_key length
+					{
+						ESP_LOGI(TAG, "Setting OCPP AUTH KEY: %s", &commandString[10]);
+
+						storage_Set_ocpp_authorization_key(&commandString[10]);
+						storage_Set_authorization_key_set_from_zaptec_ocpp(true);
+						storage_SaveConfiguration();
+
+						controller_change = true;
+						responseStatus = 200;
+					}
+					else
+					{
+						responseStatus = 400;
+					}
+				}
 				else if(strstr(commandString, "OCPPMODE:"))
 				{
 					enum session_controller new_session_controller = new_session_controller;
-					if(strstr(commandString, "OCPPMODE: 1"))
+					if(strstr(commandString, "OCPPMODE: 0"))
+						new_session_controller = eSESSION_ZAPTEC_CLOUD;
+					else if (strstr(commandString, "OCPPMODE: 1"))
 						new_session_controller = eSESSION_STANDALONE;
 					else if (strstr(commandString, "OCPPMODE: 2"))
-						new_session_controller = eSESSION_ZAPTEC_CLOUD;
-					else if (strstr(commandString, "OCPPMODE: 3"))
 						new_session_controller = eSESSION_OCPP;
 
 					ESP_LOGW(TAG, "New:  session controller: %x", new_session_controller);

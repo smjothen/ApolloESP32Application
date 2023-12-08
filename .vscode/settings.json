@@ -26,7 +26,8 @@
         "esp_websocket_client.h": "c",
         "network.h": "c",
         "main.h": "c",
-        "ocpp_charge_point_error_code.h": "c"
+        "ocpp_charge_point_error_code.h": "c",
+        "sessionhandler.h": "c"
     }
 
 }
