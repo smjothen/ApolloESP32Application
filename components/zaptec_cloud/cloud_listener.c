@@ -141,7 +141,7 @@ int publish_iothub_event_blocked(const char* payload, TickType_t xTicksToWait){
 	int message_id = esp_mqtt_client_publish(
             mqtt_client, event_topic,
             payload, 0, 1, 0
-    );	
+    );
 
 	if(message_id<0){
 		result = -2;
@@ -3418,7 +3418,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					if(len <= CONFIG_OCPP_URL_MAX_LENGTH)
 					{
 						ESP_LOGI(TAG, "Setting OCPP URL: %s", &commandString[10]);
-					
+
 						storage_Set_url_ocpp(&commandString[10]);
 						storage_SaveConfiguration();
 
@@ -3443,7 +3443,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 					storage_Set_session_controller(new_session_controller);
 					MCU_UpdateUseZaptecFinishedTimeout();
 					storage_SaveConfiguration();
-					
+
 				}
 			}
 			else if(strstr(commandString, "ocpp allow lte"))
@@ -3661,7 +3661,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 				ESP_LOGD(TAG, "Published message while a blocking message was pending");
 			}
 		}
-		
+
         break;
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");

@@ -111,6 +111,9 @@ typedef enum {
 #define SCHEDULE_SIZE 196	//(14*14) -> ((14*13) + (13 + \0)) = 196
 #define DIAGNOSTICS_STRING_SIZE 100
 
+#define MID_PUBLIC_KEY_SIZE 256
+#define MID_PRIVATE_KEY_SIZE 320
+
 #define CHARGEBOX_IDENTITY_OCPP_MAX_LENGTH 32
 #define DEFAULT_CSL_LENGTH 10 //ocpp uses Comma Seperated Lists, optionally limited by length (nr of items)
 #define DEFAULT_CSL_SIZE DEFAULT_CSL_LENGTH * 32 //list items like measurand vary between 3 char and 31 + phase
@@ -245,6 +248,8 @@ struct Configuration
 	float transmitChangeLevel;
 	uint32_t pulseInterval;
 
+	char publicKey[MID_PUBLIC_KEY_SIZE];
+	char privateKey[MID_PRIVATE_KEY_SIZE];
 
 	// Local settings
 

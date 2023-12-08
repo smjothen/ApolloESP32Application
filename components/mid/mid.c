@@ -1,9 +1,36 @@
 #include <stdio.h>
+#include <string.h>
 
-#include "mid_status.h"
-#include "mid.h"
+#include "esp_log.h"
+
+#include "mbedtls/ecdsa.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/sha256.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/error.h"
+
+#include "wpa_supplicant/base64.h"
+
+#include "storage.h"
 #include "protocol_task.h"
 #include "zaptec_protocol_serialisation.h"
+
+#include "mid_sign.h"
+#include "mid_status.h"
+#include "mid.h"
+
+static const char *TAG = "MID            ";
+/*
+
+static mbedtls_pk_context key;
+static mbedtls_entropy_context entropy;
+static mbedtls_ctr_drbg_context ctr_drbg;
+
+static unsigned char mid_public_key[MID_PUBLIC_KEY_SIZE] = {0};
+static unsigned char mid_private_key[MID_PRIVATE_KEY_SIZE] = {0};
+*/
 
 bool mid_get_package(MIDPackage *pkg) {
 	ZapMessage msg = MCU_ReadParameter(SignedMeterValue);

@@ -84,6 +84,9 @@ void storage_Set_PulseInterval(uint32_t newValue);
 void storage_Set_And_Save_DiagnosticsLog(char * newString);
 void storage_Clear_And_Save_DiagnosticsLog();
 
+void storage_Set_MIDPublicKey(char *publicKey);
+void storage_Set_MIDPrivateKey(char *privateKey);
+
 void storage_Set_Location(char * newString);
 void storage_Set_Timezone(char * newString);
 void storage_Set_TimeSchedule(char * newString);
@@ -159,6 +162,9 @@ uint8_t storage_Get_NetworkTypeOverride();
 uint32_t storage_Get_PulseInterval();
 char * storage_Get_DiagnosticsLog();
 int storage_Get_DiagnosticsLogLength();
+
+char * storage_Get_MIDPublicKey();
+char * storage_Get_MIDPrivateKey();
 
 char * storage_Get_Location();
 char * storage_Get_Timezone();

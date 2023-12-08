@@ -1,6 +1,8 @@
 #ifndef __MID_H__
 #define __MID_H__
 
+#include "mid_sign.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -10,6 +12,8 @@ typedef struct {
 	uint8_t identifiers[3];
 	uint8_t reserved; // Word-align
 } MIDPackage;
+
+int mid_init(char *prv_pem);
 
 bool mid_get_package(MIDPackage *pkg);
 bool mid_get_status(uint32_t *status);

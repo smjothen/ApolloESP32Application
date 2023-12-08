@@ -923,6 +923,27 @@ uint32_t storage_Get_PulseInterval()
 	return configurationStruct.pulseInterval;
 }
 
+char * storage_Get_MIDPublicKey() {
+	return configurationStruct.publicKey;
+}
+
+void storage_Set_MIDPublicKey(char *publicKey) {
+	size_t len = strlen(publicKey);
+	if (len < MID_PUBLIC_KEY_SIZE) {
+		strcpy(configurationStruct.publicKey, publicKey);
+	}
+}
+
+char * storage_Get_MIDPrivateKey() {
+	return configurationStruct.privateKey;
+}
+
+void storage_Set_MIDPrivateKey(char *privateKey) {
+	size_t len = strlen(privateKey);
+	if (len < MID_PRIVATE_KEY_SIZE) {
+		strcpy(configurationStruct.privateKey, privateKey);
+	}
+}
 
 char * storage_Get_DiagnosticsLog()
 {
@@ -1070,6 +1091,9 @@ esp_err_t storage_SaveConfiguration()
     	/* err += nvs_set_str(configuration_handle, "oCpoName", configurationStruct.ocpp_cpo_name); */
 	err += nvs_set_u8(configuration_handle, "oSecProfile", configurationStruct.ocpp_security_profile);
 
+	err += nvs_set_str(configuration_handle, "MIDPublicKey", configurationStruct.publicKey);
+	err += nvs_set_str(configuration_handle, "MIDPrivateKey", configurationStruct.privateKey);
+
 	//Local settings
 	err += nvs_set_u8(configuration_handle, "ComMode", configurationStruct.communicationMode);
 	err += nvs_set_zfloat(configuration_handle, "HmiBrightness", configurationStruct.hmiBrightness);
@@ -1216,6 +1240,13 @@ esp_err_t storage_ReadConfiguration()
 	/* 	configurationStruct.ocpp_cpo_name[0] = '\0'; */
 	if(nvs_get_u8(configuration_handle, "oSecProfile", &configurationStruct.ocpp_security_profile))
 		configurationStruct.ocpp_security_profile = 0;
+
+	readSize = sizeof (configurationStruct.publicKey);
+	if(nvs_get_str(configuration_handle, "MIDPublicKey", configurationStruct.publicKey, &readSize) != ESP_OK)
+		configurationStruct.publicKey[0] = '\0';
+	readSize = sizeof (configurationStruct.privateKey);
+	if(nvs_get_str(configuration_handle, "MIDPrivateKey", configurationStruct.privateKey, &readSize) != ESP_OK)
+		configurationStruct.privateKey[0] = '\0';
 
 	readSize = 128;
 

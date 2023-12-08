@@ -27,6 +27,9 @@
 #include "sessionHandler.h"
 #include "production_test.h"
 #include "EEPROM.h"
+
+#include "mid_sign.h"
+
 #include "storage.h"
 #include "diagnostics_port.h"
 #include "../components/ble/ble_interface.h"
@@ -60,6 +63,7 @@
 
 #include "mid.h"
 #include "mid_status.h"
+#include "mid_sign.h"
 
 static const char *TAG_MAIN = "MAIN           ";
 
@@ -452,6 +456,39 @@ void log_efuse_info()
 	ESP_LOGI(TAG_MAIN, "");
 }
 
+void mid_init_or_generate_keys(void) {
+	MIDSignCtx *ctx = mid_sign_ctx_get_global();
+
+	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) == 0) {
+		ESP_LOGI(TAG_MAIN, "MID key initialized and verified!");
+		return;
+	}
+
+	ESP_LOGI(TAG_MAIN, "Generating MID key pair...");
+
+	// Can't load key... try to regenerate.
+	if (mid_sign_ctx_generate_key(ctx) != 0) {
+		ESP_LOGE(TAG_MAIN, "Failed to generate MID keys!");
+		return;
+	}
+
+	// Generated, save to NVS and try verifying again
+	if (mid_sign_ctx_get_private_key(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE) != 0 ||
+			mid_sign_ctx_get_public_key(ctx, storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {
+		ESP_LOGE(TAG_MAIN, "Failed storing keys in NVS");
+		return;
+	}
+
+	ESP_LOGI(TAG_MAIN, "Persisting key: %s", storage_Get_MIDPublicKey());
+
+	storage_SaveConfiguration();
+
+	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) == 0) {
+		ESP_LOGI(TAG_MAIN, "MID key initialized and verified!");
+		return;
+	}
+}
+
 #ifdef CONFIG_HEAP_TRACING_STANDALONE
 #define TRACE_RECORD_COUNT 80
 static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
@@ -524,6 +561,8 @@ void app_main(void)
 		certificate_SetUsage(false);
 		ESP_LOGE(TAG_MAIN, "Certificates disabled");
 	}
+
+	mid_init_or_generate_keys();
 
 	log_efuse_info();
 
@@ -857,18 +896,18 @@ void app_main(void)
 			uint32_t mid_status = 0;
 
 			if (mid_get_status(&mid_status)) {
-				uint32_t fixableStatus = mid_status & (MID_STATUS_EMETER_ERROR |
+				uint32_t fixable_status = mid_status & (MID_STATUS_EMETER_ERROR |
 						MID_STATUS_INTEGRATOR_BUSY |
 						MID_STATUS_INTEGRATOR_LOST_FRAMES |
 						MID_STATUS_INTEGRATOR_OVERFLOW |
 						MID_STATUS_UPDATE_OVERFLOW |
 						MID_STATUS_WRITE_VERIFY_ERROR);
 
-				if (fixableStatus) {
+				if (fixable_status) {
 					// Try to fix with a reset
 					ESP_LOGI(TAG_MAIN, "MID Status: %08" PRIX32 " (Fixable)", mid_status);
 				} else {
-					// Any other status bit probably can't be fixed by a reset, so mask MID warning
+					// Any other status bit probably can't be fixed by a reset, so let's mask it
 					ESP_LOGI(TAG_MAIN, "MID Status: %08" PRIX32 " (Masked)", mid_status);
 					warnings &= ~WARNING_MID;
 				}
@@ -876,7 +915,6 @@ void app_main(void)
 		}
 
 		warning_handler_tick(warnings);
-
 		fpga_configuration_tick();
 
 	#ifdef useSimpleConsole
