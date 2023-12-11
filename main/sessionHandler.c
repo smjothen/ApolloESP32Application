@@ -36,6 +36,7 @@
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
 #include "ocpp_smart_charging.h"
+#include "ocpp_reservation.h"
 #include "ocpp_auth.h"
 #include "ocpp.h"
 #include "ocpp_json/ocppj_validation.h"
@@ -449,17 +450,6 @@ enum ocpp_cp_status_id ocpp_faulted_exit_state = eOCPP_CP_STATUS_UNAVAILABLE; //
 bool pending_change_availability_state;
 time_t preparing_started = 0;
 
-struct ocpp_reservation_info {
-	int connector_id;
-	time_t expiry_date;
-	char id_tag[21];
-	char parent_id_tag[21];
-	int reservation_id;
-	bool is_reservation_state;
-};
-
-struct ocpp_reservation_info * reservation_info = NULL;
-
 bool sessionHandler_OcppTransactionIsActive(uint connector_id){
 	if(connector_id == 1 || connector_id == 0){
 		return (transaction_start != 0);
@@ -607,7 +597,7 @@ void resume_if_allowed(){
 	}
 }
 
-bool led_state_overwritten = false;
+bool led_state_overwritten = true; // Set to true so OCPP state transition attempts to clear in case ESP reset while led was overwritten.
 
 enum ocpp_led_overwrite{
 	eOCPP_LED_PREPARING = LED_GREEN_CONTINUOUS, // Only used when authorization is accepted and awaiting cable connect
@@ -1071,6 +1061,7 @@ void start_transaction(){
 		return;
 	}
 
+	struct ocpp_reservation_info * reservation_info = ocpp_reservation_get_info();
 	if(ocpp_transaction_enqueue_start(1, chargeSession_Get().AuthenticationCode, meter_start,
 						(reservation_info != NULL) ? &reservation_info->reservation_id : NULL,
 						time(NULL), transaction_id) != 0){
@@ -1082,8 +1073,7 @@ void start_transaction(){
 
 	ocpp_set_transaction_is_active(true, transaction_start);
 
-	free(reservation_info);
-	reservation_info = NULL;
+	ocpp_reservation_clear_info();
 
 	if(storage_Get_ocpp_meter_value_sample_interval() > 0){
 
@@ -1229,26 +1219,14 @@ void stop_charging_on_tag_deny(const char * tag_1, const char * tag_2){
 }
 
 void reserved_on_tag_accept(const char * tag_1, const char * tag_2){
-	ESP_LOGI(TAG, "Reservation accepted for '%s' on reservation (id: %d) made by '%s'",
-		tag_1, reservation_info->reservation_id, tag_2);
+	ESP_LOGI(TAG, "Reservation accepted for '%s' on reservation made by '%s'",
+		tag_1, tag_2);
 
-	reservation_info->is_reservation_state = false;
 	start_charging_on_tag_accept(tag_1);
-
-	//If car is connected then CommandAuthorizationGranted will start charging without a
-	// CommandStartCharging. Therefore accepting a tag while reserved may transition from
-	// reserved to charging. This is not allowed in ocpp without transitioning to preparing
-	// first. We fake this transition.
-	ocpp_old_state = eOCPP_CP_STATUS_PREPARING;
-	transition_to_preparing();
-
-	ocpp_send_status_notification(eOCPP_CP_STATUS_PREPARING, OCPP_CP_ERROR_NO_ERROR, NULL, NULL, NULL, false, false);
-
 }
 
 void reserved_on_tag_deny(const char * tag_1, const char * tag_2){
-	ESP_LOGW(TAG, "Reservation denied for '%s' on reservation (id: %d) made by '%s'",
-		tag_1, reservation_info->reservation_id, tag_2);
+	ESP_LOGW(TAG, "Reservation denied for '%s' on reservation made by '%s'", tag_1, tag_2);
 
 	start_charging_on_tag_deny(tag_1);
 }
@@ -1324,13 +1302,15 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 	enum CarChargeMode charge_mode = MCU_GetChargeMode();
 	enum ChargerOperatingMode operating_mode = MCU_GetChargeOperatingMode();
 
+	struct ocpp_reservation_info * reservation_info = ocpp_reservation_get_info();
+
 	switch(operating_mode){
 	case CHARGE_OPERATION_STATE_UNINITIALIZED:
 		return eOCPP_CP_STATUS_UNAVAILABLE;
 
 	case CHARGE_OPERATION_STATE_DISCONNECTED:
 
-		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
+		if(reservation_info != NULL && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
 
 		}else if(isAuthorized || pending_ocpp_authorize){
@@ -1348,7 +1328,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_REQUESTING:
-		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
+		if(reservation_info != NULL && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
 
 		}else if(isAuthorized && sessionHandler_OcppTransactionIsActive(1)){
@@ -1365,7 +1345,7 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 		}
 
 	case CHARGE_OPERATION_STATE_ACTIVE:
-		if(reservation_info != NULL && reservation_info->is_reservation_state && !isAuthorized){
+		if(reservation_info != NULL && !isAuthorized){
 			return eOCPP_CP_STATUS_RESERVED;
 
 		}else{
@@ -1399,108 +1379,74 @@ static enum ocpp_cp_status_id get_ocpp_state(){
 static void reserve_now_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
 	ESP_LOGI(TAG, "Request to reserve now");
 
-	int connector_id = 0;
-	time_t expiry_date = 0;
-	char * id_tag = NULL;
-	char * id_parent = NULL;
-	int reservation_id = 0;
+	time_t request_time = time(NULL);
 
-	bool err = false;
-	cJSON * ocpp_error;
+	struct ocpp_reservation_info new_reservation;
 
-	if(cJSON_HasObjectItem(payload, "connectorId")){
-		cJSON * connector_id_json = cJSON_GetObjectItem(payload, "connectorId");
-		if(cJSON_IsNumber(connector_id_json)){
-			connector_id = connector_id_json->valueint;
+	char err_str[128];
 
-			if(connector_id < 0 || connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
-				err = true;
-				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "'connectorId' does not name a valid connector", NULL);
-			}
-		}else{
-			err = true;
-			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer type", NULL);
-		}
+	enum ocppj_err_t err = ocppj_get_int_field(payload, "connectorId", true, &new_reservation.connector_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'connectorId' from payload: %s", err_str);
+		goto error;
+	}
+
+	if(new_reservation.connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+		err = eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+		snprintf(err_str, sizeof(err_str), "'connectorId out of range'");
+		goto error;
+	}
+
+	char * input_str;
+	err = ocppj_get_string_field(payload, "expiryDate", true, &input_str, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'expiryDate' from payload: %s", err_str);
+		goto error;
+	}
+
+	new_reservation.expiry_date = ocpp_parse_date_time(input_str);
+	if(new_reservation.expiry_date == (time_t)-1){
+		err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+		snprintf(err_str, sizeof(err_str), "Expected 'expiryDate' to be a valid dateTime");
+		goto error;
+	}
+
+	err = ocppj_get_string_field(payload, "idTag", true, &input_str, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'idTag' from payload: %s", err_str);
+		goto error;
+	}
+
+	if(!is_ci_string_type(input_str, 20)){
+		err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+		snprintf(err_str, sizeof(err_str), "Expected 'idTag' to be a valid idToken");
+		goto error;
 	}else{
-		err = true;
-		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' field", NULL);
+		strcpy(new_reservation.id_tag, input_str);
 	}
 
-	if(!err && cJSON_HasObjectItem(payload, "expiryDate")){
-		cJSON * expiry_date_json = cJSON_GetObjectItem(payload, "expiryDate");
-		if(cJSON_IsString(expiry_date_json)){
-			expiry_date = ocpp_parse_date_time(expiry_date_json->valuestring);
-
-			if(expiry_date == 0 || expiry_date == (time_t)-1){
-				err = true;
-				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a valid dateTime type", NULL);
-			}else if(expiry_date < time(NULL)){
-				err = true;
-				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a time in the future", NULL);
-			}
-		}else{
-			err = true;
-			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'expiryDate' to be a valid dateTime type", NULL);
+	err = ocppj_get_string_field(payload, "parentIdTag", false, &input_str, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_VALUE){
+		if(err != eOCPPJ_NO_ERROR){
+			ESP_LOGW(TAG, "Unable to get 'parentIdTag' from payload: %s", err_str);
+			goto error;
 		}
+
+		if(!is_ci_string_type(input_str, 20)){
+			err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
+			snprintf(err_str, sizeof(err_str), "Expected 'idTag' to be a valid idToken");
+			goto error;
+		}
+
+		strcpy(new_reservation.parent_id_tag, input_str);
 	}else{
-		err = true;
-		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'expiryDate' field", NULL);
+		new_reservation.parent_id_tag[0] = '\0';
 	}
 
-	if(!err && cJSON_HasObjectItem(payload, "idTag")){
-		cJSON * id_tag_json = cJSON_GetObjectItem(payload, "idTag");
-		if(cJSON_IsString(id_tag_json)){
-			id_tag = id_tag_json->valuestring;
-
-			if(!is_ci_string_type(id_tag, 20)){
-				err = true;
-				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be idToken type (CiString20Type)", NULL);
-			}
-		}else{
-			err = true;
-			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'idTag' to be idToken type", NULL);
-		}
-	}else{
-		err = true;
-		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'idTag' field", NULL);
-	}
-
-	if(!err && cJSON_HasObjectItem(payload, "parentIdTag")){
-		cJSON * id_parent_json = cJSON_GetObjectItem(payload, "parentIdTag");
-		if(cJSON_IsString(id_parent_json)){
-			id_parent = id_parent_json->valuestring;
-
-			if(!is_ci_string_type(id_parent, 20)){
-				err = true;
-				ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'parentIdTag' to be idToken type (CiString20Type)", NULL);
-			}
-		}else{
-			err = true;
-			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'parentIdTag' to be idToken type", NULL);
-		}
-	}
-
-	if(!err && cJSON_HasObjectItem(payload, "reservationId")){
-		cJSON * reservation_id_json = cJSON_GetObjectItem(payload, "reservationId");
-		if(cJSON_IsNumber(reservation_id_json)){
-			reservation_id = reservation_id_json->valueint;
-		}else{
-			err = true;
-			ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'reservationId' to be integer type", NULL);
-		}
-	}else{
-		err = true;
-		ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'reservationId' field", NULL);
-	}
-
-	if(err){
-		if(ocpp_error == NULL){
-			ESP_LOGE(TAG, "Error occured during parsing of ReserveNow.req, but no error was created");
-		}else{
-			send_call_reply(ocpp_error);
-		}
-
-		return;
+	err = ocppj_get_int_field(payload, "reservationId", true, &new_reservation.reservation_id, err_str, sizeof(err_str));
+	if(err != eOCPPJ_NO_ERROR){
+		ESP_LOGW(TAG, "Unable to get 'reservationId' from payload: %s", err_str);
+		goto error;
 	}
 
 	cJSON * reply = NULL;
@@ -1514,47 +1460,58 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 		return;
 	}
 #endif
+
+	if(new_reservation.expiry_date < request_time){
+		ESP_LOGW(TAG, "Reservation already expired");
+
+		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
+		send_call_reply(reply);
+		return;
+	}
+
 	enum ocpp_cp_status_id state = get_ocpp_state();
+
+	struct ocpp_reservation_info * existing_reservation;
 
 	if(storage_Get_AuthenticationRequired()){
 		switch(state){
 		case eOCPP_CP_STATUS_AVAILABLE:
 			ESP_LOGI(TAG, "Available, accepting reservation request");
 
-			if(reservation_info == NULL)
-				reservation_info = malloc(sizeof(struct ocpp_reservation_info));
-
-			if(reservation_info == NULL){
-				ESP_LOGE(TAG, "Unable to allocate space for reservation id");
-				reply = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to allocate memory for reservation", NULL);
-
-			}else{
-				reservation_info->connector_id = connector_id;
-				reservation_info->expiry_date = expiry_date;
-				strcpy(reservation_info->id_tag, id_tag);
-				if(id_parent != NULL){
-					strcpy(reservation_info->parent_id_tag, id_parent);
-				}else{
-					reservation_info->parent_id_tag[0] = '\0';
-				}
-				reservation_info->reservation_id = reservation_id;
-				reservation_info->is_reservation_state = true;
-
-				ESP_LOGI(TAG, "Connector %d reserved by '%s'. Set to expire in %" PRId64 " seconds", connector_id, id_tag, expiry_date - time(NULL));
-				reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
+			if(ocpp_reservation_set_info(&new_reservation) != ESP_OK){
+				err = eOCPPJ_ERROR_INTERNAL;
+				snprintf(err_str, sizeof(err_str), "Unable set reservation");
+				goto error;
 			}
-			break;
 
+			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
+
+			break;
 		case eOCPP_CP_STATUS_PREPARING:
 		case eOCPP_CP_STATUS_CHARGING:
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
-		case eOCPP_CP_STATUS_RESERVED:
 			ESP_LOGI(TAG, "Occupied, denied reservation request");
 			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_OCCUPIED);
 			break;
+		case eOCPP_CP_STATUS_RESERVED:
+			existing_reservation = ocpp_reservation_get_info();
+			if(existing_reservation == NULL || existing_reservation->reservation_id == new_reservation.reservation_id){
+				ESP_LOGI(TAG, "Accept, updating existing reservation");
 
+				if(ocpp_reservation_set_info(&new_reservation) != ESP_OK){
+					err = eOCPPJ_ERROR_INTERNAL;
+					snprintf(err_str, sizeof(err_str), "Unable set reservation");
+					goto error;
+				}
+
+				reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_ACCEPTED);
+			}else{
+				ESP_LOGI(TAG, "Occupied, mismatch with new and old reservation id");
+				reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_OCCUPIED);
+			}
+			break;
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 			ESP_LOGI(TAG, "Unavailable, denied reservation request");
 			reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_UNAVAILABLE);
@@ -1567,13 +1524,30 @@ static void reserve_now_cb(const char * unique_id, const char * action, cJSON * 
 
 		default:
 			ESP_LOGE(TAG, "Unhandled state during reservation");
-			return;
+			err = eOCPPJ_ERROR_INTERNAL;
+			snprintf(err_str, sizeof(err_str), "Unexpected state when checking ReserveNow.req");
+			goto error;
 		}
 	}else{
 		reply = ocpp_create_reserve_now_confirmation(unique_id, OCPP_RESERVATION_STATUS_REJECTED);
 	}
 
 	send_call_reply(reply);
+
+	return;
+
+error:
+	if(err == eOCPPJ_NO_ERROR || err == eOCPPJ_NO_VALUE){
+		err = eOCPPJ_ERROR_INTERNAL;
+		snprintf(err_str, sizeof(err_str), "Unexpected error occured during reservation");
+	}
+
+	cJSON * ocpp_error = ocpp_create_call_error(unique_id, ocppj_error_code_from_id(err), err_str, NULL);
+	if(ocpp_error == NULL){
+		ESP_LOGE(TAG, "Unable to create call error for ReserveNow.req");
+	}else{
+		send_call_reply(ocpp_error);
+	}
 }
 
 static void cancel_reservation_cb(const char * unique_id, const char * action, cJSON * payload, void * cb_data){
@@ -1584,13 +1558,17 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 		if(cJSON_IsNumber(reservation_id_json)){
 			cJSON * response;
 
+			struct ocpp_reservation_info * reservation_info = ocpp_reservation_get_info();
 			if(reservation_info != NULL && reservation_id_json->valueint == reservation_info->reservation_id){
 				ESP_LOGI(TAG, "Reservation with id %d cancelation accepted", reservation_info->reservation_id);
-				free(reservation_info);
-				reservation_info = NULL;
-				response = ocpp_create_cancel_reservation_confirmation(unique_id, OCPP_CANCEL_RESERVATION_STATUS_ACCEPTED);
+				if(ocpp_reservation_clear_info() == ESP_OK){
+					response = ocpp_create_cancel_reservation_confirmation(unique_id, OCPP_CANCEL_RESERVATION_STATUS_ACCEPTED);
+				}else{
+					response = ocpp_create_call_error(unique_id, OCPPJ_ERROR_INTERNAL, "Unable to remove cancel", NULL);
+				}
 			}else{
-				ESP_LOGW(TAG, "Rejected attempt to cancel reservation. Requested id %d", reservation_id_json->valueint);
+				ESP_LOGW(TAG, "Rejected attempt to cancel reservation. Requested id %d, expected %d", reservation_id_json->valueint,
+						reservation_info != NULL ? reservation_info->reservation_id : -1);
 				response = ocpp_create_cancel_reservation_confirmation(unique_id, OCPP_CANCEL_RESERVATION_STATUS_REJECTED);
 			}
 
@@ -1600,7 +1578,7 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 				send_call_reply(response);
 			}
 		}else{
-			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'connectorId' to be integer and 'type' to be AvailabilityType", NULL);
+			cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION, "Expected 'reservationId' to be integer", NULL);
 			if(ocpp_error == NULL){
 				ESP_LOGE(TAG, "Unable to create call error for type constraint violation");
 			}else{
@@ -1609,7 +1587,7 @@ static void cancel_reservation_cb(const char * unique_id, const char * action, c
 			return;
 		}
 	}else{
-		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'connectorId' and 'type' fields", NULL);
+		cJSON * ocpp_error = ocpp_create_call_error(unique_id, OCPPJ_ERROR_FORMATION_VIOLATION, "Expected 'reservationId'", NULL);
 		if(ocpp_error == NULL){
 			ESP_LOGE(TAG, "Unable to create call error for formation violation");
 		}else{
@@ -1643,13 +1621,27 @@ static void remote_start_transaction_cb(const char * unique_id, const char * act
 	if(err != eOCPPJ_NO_ERROR)
 		goto error;
 
+	/*
+	 * The description of RemoteStartTransaction.req while in reserved satate is lacking espceially in how it can be compatible with AuthorizeRemoteTx false.
+	 * The approach taken here is that when AuthorizeRemoteTx is True, it will accept the RemoteStartTransaction.req and use the given idToken as if presented
+	 * locally. The token can then be accepted or rejected based on reservation token or parent id. If AuthorizeRemoteTx is false, then the given id must be
+	 * an exact match with the reservation token else the RemoteStartTransaction.req will be rejected. The parent id in the reservation will not be checked as
+	 * the RemoteStartTransaction.req does not contain parent token and would require local auth or Autorize.req to find the corresponding parent.
+	 */
 	bool accept_request;
+	struct ocpp_reservation_info * reservation_info = ocpp_reservation_get_info();
 
 	enum ocpp_cp_status_id state = get_ocpp_state();
-	//TODO: Check if intended behaviour when reserved is to accept tag and only validate against reservation when AuthorizeRemoteTxRequests
-	if(state == eOCPP_CP_STATUS_AVAILABLE || state == eOCPP_CP_STATUS_PREPARING || state == eOCPP_CP_STATUS_FINISHING || state == eOCPP_CP_STATUS_RESERVED){
+	if(state == eOCPP_CP_STATUS_AVAILABLE || state == eOCPP_CP_STATUS_PREPARING || state == eOCPP_CP_STATUS_FINISHING){
 		accept_request = true;
 
+	}else if(state == eOCPP_CP_STATUS_RESERVED){
+
+		if(storage_Get_ocpp_authorize_remote_tx_requests() || (reservation_info != NULL && strcasecmp(id_tag, reservation_info->id_tag) == 0)){
+			accept_request = true;
+		}else{
+			accept_request = false;
+		}
 	}else{
 		accept_request = false;
 	}
@@ -1996,6 +1988,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		ocpp_finishing_session = true;
 		SetAuthorized(false);
 		ocpp_start_token[0] = '\0';
+		ocpp_reservation_clear_info();
 
 		switch(old_state){
 		case eOCPP_CP_STATUS_PREPARING:
@@ -2034,10 +2027,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
-			break;
 		case eOCPP_CP_STATUS_RESERVED:
-			free(reservation_info);
-			reservation_info = NULL;
 		case eOCPP_CP_STATUS_FAULTED:
 			break;
 		default:
@@ -2054,10 +2044,7 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		case eOCPP_CP_STATUS_SUSPENDED_EV:
 		case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		case eOCPP_CP_STATUS_FINISHING:
-			break;
 		case eOCPP_CP_STATUS_RESERVED:
-			free(reservation_info);
-			reservation_info = NULL;
 		case eOCPP_CP_STATUS_UNAVAILABLE:
 			break;
 		default:
@@ -2167,12 +2154,6 @@ static void handle_preparing(){
 			SetAuthorized(false);
 			sessionHandler_InitiateResetChargeSession();
 			chargeSession_ClearAuthenticationCode();
-
-			if(reservation_info != NULL){
-				ESP_LOGW(TAG, "Connection timeout is transaction related");
-				free(reservation_info);
-				reservation_info = NULL;
-			}
 		}
 		else{
 			set_ocpp_state_led_overwrite(eOCPP_LED_PREPARING);
@@ -2202,7 +2183,9 @@ static void handle_finishing(){
 static void handle_reserved(){
 	if(!pending_ocpp_authorize && has_new_id_token()){
 
+		struct ocpp_reservation_info * reservation_info = ocpp_reservation_get_info();
 		MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+
 		if(ret == MsgWriteAck)
 			ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
 		else
@@ -2213,15 +2196,9 @@ static void handle_reserved(){
 						reserved_on_tag_accept, reserved_on_tag_deny);
 		NFCTagInfoClearValid();
 
-	}else if(time(NULL) > reservation_info->expiry_date){
-		ESP_LOGW(TAG, "Canceling reservation due to expiration");
-		free(reservation_info);
-		reservation_info = NULL;
-
 	}else if(!storage_Get_AuthenticationRequired()){
 		ESP_LOGW(TAG, "Canceling reservation due to authorization no longer required");
-		free(reservation_info);
-		reservation_info = NULL;
+		ocpp_reservation_clear_info();
 	}
 }
 
@@ -2467,7 +2444,6 @@ void * sessionHandler_ocppGetDiagnostics(){
 	cJSON_AddNumberToObject(res, "meter_start", meter_start);
 	cJSON_AddBoolToObject(res, "pending_change_availability", pending_change_availability);
 	cJSON_AddNumberToObject(res, "preparing_started", preparing_started);
-	cJSON_AddBoolToObject(res, "reservation_info_exist", reservation_info != NULL);
 	cJSON_AddNumberToObject(res, "ocpp_min_limit", ocpp_min_limit);
 	cJSON_AddNumberToObject(res, "ocpp_max_limit", ocpp_max_limit);
 	cJSON_AddNumberToObject(res, "ocpp_active_phases", ocpp_active_phases);

@@ -20,6 +20,7 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_cloud_listener.h"
 #include "ocpp_listener.h"
+#include "ocpp_reservation.h"
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
 #include "ocpp_smart_charging.h"
@@ -3332,6 +3333,7 @@ cJSON * ocpp_get_diagnostics(){
 	cJSON_AddItemToObject(res, "smart", ocpp_smart_get_diagnostics());
 	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
 	cJSON_AddItemToObject(res, "session", sessionHandler_ocppGetDiagnostics());
+	cJSON_AddItemToObject(res, "reservation", ocpp_reservation_get_diagnostics());
 	return res;
 }
 
@@ -3582,6 +3584,8 @@ static void ocpp_task(){
 
 		if(ocpp_auth_init() != 0)
 			ESP_LOGE(TAG, "Unable to initialize ocpp authorization, local authorization will not work");
+		if(ocpp_reservation_init() != ESP_OK)
+			ESP_LOGE(TAG, "Unable to initialize ocpp reservation, local reservation will not work");
 
 		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
 		ocpp_change_authorize_offline(storage_Get_ocpp_local_authorize_offline());
@@ -3817,6 +3821,7 @@ clean:
 
 		prepare_reset(graceful_exit);
 		ocpp_auth_deinit();
+		ocpp_reservation_deinit();
 		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
 		stop_ocpp();

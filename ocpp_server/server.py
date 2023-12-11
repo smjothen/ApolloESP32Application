@@ -3,6 +3,7 @@ import websockets
 import time
 import datetime
 from ocpp_tests.core_profile import test_core_profile
+from ocpp_tests.reservation_profile import test_reservation_profile
 from ocpp_tests.smart_charging_profile import test_smart_charging_profile
 import logging
 from datetime import(
@@ -22,9 +23,10 @@ from ocpp.v16.enums import (
 )
 import random
 
+charge_points = dict()
 new_exipry_date = datetime.utcnow() + timedelta(days=1)
 
-async def test_runner(cp):
+async def _test_runner(cp):
 
     i = 0
     while cp.registration_status != RegistrationStatus.accepted:
@@ -40,13 +42,34 @@ async def test_runner(cp):
 
     logging.info("Boot accepted")
 
-    core_result = await test_core_profile(cp)
-    smart_charging_result = await test_smart_charging_profile(cp)
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart: ')
+
+    core_result = None
+    reservation_result = None
+    smart_charging_result = None
+    if response == "C" or response == "A":
+        core_result = await test_core_profile(cp)
+
+    if response == "R" or response == "A":
+        reservation_result = await test_reservation_profile(cp)
+
+    if response == "S" or response == "A":
+        smart_charging_result = await test_smart_charging_profile(cp)
 
     logging.info(f'Core profile          : {core_result}')
+    logging.info(f'Reservation profile   : {reservation_result}')
     logging.info(f'Smart charging profile: {smart_charging_result}')
 
     await asyncio.sleep(10)
+
+async def test_runner(cp):
+    while True:
+        try:
+            await _test_runner(cp)
+        except Exception as e:
+            logging.error(f'Exception from test runner {e}')
+            print(e)
 
 class ChargePoint(cp):
     cp.registration_status = RegistrationStatus.rejected
@@ -111,7 +134,7 @@ class ChargePoint(cp):
     def on_status_notification(self, connector_id, error_code, status, **kwargs):
         if(error_code == ChargePointErrorCode.no_error):
             logging.info(f'CP status: {status} ({error_code})')
-            cp.connector1_status = status
+            self.connector1_status = status
         else:
             logging.error(f'CP status: {status} ({error_code})')
 
@@ -122,18 +145,40 @@ async def on_connect(websocket, path):
     and start listening for messages.
 
     """
+
+    global charge_points
+
     charge_point_id = path.strip('/')
-    cp = ChargePoint(charge_point_id, websocket)
 
-    logging.info("Starting tests")
+    if charge_point_id in charge_points:
+        logging.warning(f"Chargepoint with id {charge_point_id} reconnected")
+        charge_points[charge_point_id]._connection = websocket
 
-    await asyncio.gather(
-        test_runner(cp),
-        cp.start()
-    )
+        try:
+            await charge_points[charge_point_id].start()
+        except Exception as e:
+            logging.error(f"Chargepoint raised exception: {e}")
+        return
+    else:
+        charge_points[charge_point_id] = ChargePoint(charge_point_id, websocket)
+
+        logging.info("Starting tests")
+
+
+        test_task = asyncio.create_task(test_runner(charge_points[charge_point_id]))
+
+        try:
+            await charge_points[charge_point_id].start()
+        except Exception as e:
+            logging.error(f"Chargepoint raised exception: {e}")
+
+        await test_task
+
+    del charge_points[charge-point_id]
+    logging.info("End of on_connect")
 
 async def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)-8s %(message)s')
     logging.getLogger('root').setLevel(logging.INFO)
     logging.getLogger('ocpp').setLevel(logging.WARNING)
     ip = '0.0.0.0'
@@ -144,7 +189,7 @@ async def main():
         on_connect,
         ip,
         port,
-         subprotocols=['ocpp1.6'],
+        subprotocols=['ocpp1.6'],
     )
 
     logging.info("WebSocket Server Started")

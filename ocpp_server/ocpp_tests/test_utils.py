@@ -9,9 +9,13 @@ from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call
 
 async def ensure_configuration(cp, key_value_pairs: dict):
-    result = await cp.call(call.GetConfigurationPayload(None))
-    if(result == None):
-        logging.info("Unable to get configuration to prepare test")
+    try:
+        result = await cp.call(call.GetConfigurationPayload(None))
+        if(result == None):
+            logging.info("Unable to get configuration to prepare test")
+            return -1
+    except Exception as e:
+        logging.info(f"Could not get configuration to ensure state: {e}")
         return -1
 
     tmp = dict(key_value_pairs)

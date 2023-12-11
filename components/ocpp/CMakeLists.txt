@@ -2,6 +2,7 @@ idf_component_register(SRCS
   "ocpp_auth.c"
   "ocpp_call_with_cb.c"
   "ocpp_listener.c"
+  "ocpp_reservation.c"
   "ocpp_smart_charging.c"
   "ocpp_task.c"
   "ocpp_transaction.c"

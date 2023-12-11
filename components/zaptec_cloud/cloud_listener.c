@@ -35,6 +35,7 @@
 #include "../../main/offlineSession.h"
 #include "../../main/ocpp.h"
 #include "../ocpp/include/ocpp_transaction.h"
+#include "../ocpp/include/ocpp_reservation.h"
 #include "../../main/chargeController.h"
 #include "../../main/production_test.h"
 #ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
@@ -2753,6 +2754,13 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				ESP_LOGI(TAG, "Got request to fail ocpp transactions");
 
 				ocpp_transaction_fail_all("Cloud command");
+				responseStatus = 200;
+			}
+			// Clear ocpp reservations
+			else if(strstr(commandString, "clear ocpp reservations") != NULL){
+				ESP_LOGI(TAG, "Got request to clear ocpp reservations");
+
+				ocpp_reservation_clear_info();
 				responseStatus = 200;
 			}
 			/*else if(strstr(commandString,"StartTimer") != NULL)
