@@ -459,33 +459,15 @@ void log_efuse_info()
 void mid_init_or_generate_keys(void) {
 	MIDSignCtx *ctx = mid_sign_ctx_get_global();
 
-	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) == 0) {
-		ESP_LOGI(TAG_MAIN, "MID key initialized and verified!");
+	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE,
+				storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {
+		ESP_LOGE(TAG_MAIN, "Failed to initialize/generate MID keys!");
 		return;
 	}
 
-	ESP_LOGI(TAG_MAIN, "Generating MID key pair...");
-
-	// Can't load key... try to regenerate.
-	if (mid_sign_ctx_generate_key(ctx) != 0) {
-		ESP_LOGE(TAG_MAIN, "Failed to generate MID keys!");
-		return;
-	}
-
-	// Generated, save to NVS and try verifying again
-	if (mid_sign_ctx_get_private_key(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE) != 0 ||
-			mid_sign_ctx_get_public_key(ctx, storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {
-		ESP_LOGE(TAG_MAIN, "Failed storing keys in NVS");
-		return;
-	}
-
-	ESP_LOGI(TAG_MAIN, "Persisting key: %s", storage_Get_MIDPublicKey());
-
-	storage_SaveConfiguration();
-
-	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) == 0) {
-		ESP_LOGI(TAG_MAIN, "MID key initialized and verified!");
-		return;
+	if (ctx->flag & MID_SIGN_FLAG_GENERATED) {
+		ESP_LOGI(TAG_MAIN, "Persisting key: %s", storage_Get_MIDPublicKey());
+		storage_SaveConfiguration();
 	}
 }
 
