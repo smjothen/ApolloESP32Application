@@ -1421,8 +1421,6 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 		else
 			rollbackCmdReceived = true;
 
-		publish_debug_telemetry_observation_capabilities_clear();
-
 		responseStatus = 200;
 	}
 	else if(strstr(commandEvent->topic, "iothub/methods/POST/501/"))

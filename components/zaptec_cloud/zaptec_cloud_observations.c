@@ -281,14 +281,6 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
 	}
  */
 
-int publish_debug_telemetry_observation_capabilities_clear(){
-    cJSON *observations = create_observation_collection();
-	char * empty = "";
-    add_observation_to_collection(observations, create_observation(Capabilities, empty));
-    int ret = publish_json(observations);
-
-    return ret;
-}
 
 int publish_debug_telemetry_observation_capabilities(){
     cJSON *observations = create_observation_collection();
@@ -576,11 +568,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_uint32_t_observation(ESPResetSource,  esp_reset_reason()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamWarnings, (uint32_t)MCU_GetWarnings()));
     add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetChargeMode()));
-
-	if(storage_Get_session_controller() == eSESSION_OCPP)
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_DISCONNECTED));
-	else
-    	add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+   	add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
     //ESP_LOGE(TAG, "\n ************* 1 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
     add_observation_to_collection(observations, create_uint32_t_observation(PhaseRotation, (uint32_t)storage_Get_PhaseRotation()));
@@ -621,11 +609,7 @@ int publish_debug_telemetry_observation_ChargingStateParameters()
 
     add_observation_to_collection(observations, create_uint32_t_observation(ParamCableType, (uint32_t)MCU_GetCableType()));
     add_observation_to_collection(observations, create_int32_t_observation(ParamChargeMode, (int32_t)MCU_GetChargeMode()));
-	
-	if(storage_Get_session_controller() == eSESSION_OCPP)
-		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_DISCONNECTED));
-	else
-    	add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
+    add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)MCU_GetChargeOperatingMode()));
 
     //ESP_LOGE(TAG, "\n ************* 3 Sending OperatingMode %d ***************\n", MCU_GetChargeOperatingMode());
 
@@ -862,10 +846,7 @@ int publish_telemetry_observation_on_change(){
 			clearSessionFlag = false;
 		}*/
 
-		if(storage_Get_session_controller() == eSESSION_OCPP)
-			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, CHARGE_OPERATION_STATE_DISCONNECTED));
-		else
-			add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
+		add_observation_to_collection(observations, create_uint32_t_observation(ParamChargeOperationMode, (uint32_t)chargeOperatingMode));
 
 		//Update Cloud with latest energy when entering paused state for display accurate value on user interfaces
 		if(chargeOperatingMode == CHARGE_OPERATION_STATE_PAUSED)
