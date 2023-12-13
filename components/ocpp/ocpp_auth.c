@@ -818,13 +818,15 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 
 	}
 
-	ESP_LOGI(TAG, "Current auth file header: file version: %d, list version: %d, token count: %ul", header.file_version, header.list_version, header.token_count);
+	ESP_LOGI(TAG, "Current auth file header: file version: %d, list version: %d, token count: %zu", header.file_version, header.list_version, header.token_count);
 
 	if(header.list_version >= version && header.list_version != INT_MAX){
 		ESP_LOGW(TAG, "Requested update to old/current list version during differential update");
 		ret = eOCPP_UPDATE_STATUS_VERSION_MISMATCH;
 		goto cleanup;
 	}
+
+	header.list_version = version;
 
 	output_entry = malloc(sizeof(long) * list_length);
 	if(output_entry == NULL){
@@ -849,7 +851,7 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 	for(;read_count < header.token_count && match_count < list_length; local_entry_nr++){
 
 		if(fread(&id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
-			ESP_LOGE(TAG, "Unable to read id tag at %ul during differential update: %s", local_entry_nr, strerror(errno));
+			ESP_LOGE(TAG, "Unable to read id tag at %zu during differential update: %s", local_entry_nr, strerror(errno));
 			free(known_vacant_entries);
 			goto cleanup;
 		}
@@ -940,7 +942,7 @@ enum ocpp_update_status_id update_auth_differential(int version, struct ocpp_aut
 			header.token_count--;
 		}else{
 			if(fwrite(&auth_data[i].id_tag, sizeof(ocpp_id_token), 1, fp) != 1){
-				ESP_LOGE(TAG, "Unable to write id_tag nr %d to file during differential update", i);
+				ESP_LOGE(TAG, "Unable to write id_tag nr %zu to file during differential update", i);
 				goto cleanup;
 			}
 		}
@@ -1017,9 +1019,11 @@ enum ocpp_update_status_id ocpp_update_auth_list(int version, bool update_full, 
 
 		int current_version = ocpp_get_auth_list_version();
 		if(current_version == -1){
+			ESP_LOGE(TAG, "Update failed %s: unable to get current version", OCPP_UPDATE_STATUS_FAILED);
 			return eOCPP_UPDATE_STATUS_FAILED;
 
-		}else if(current_version <= version){
+		}else if(current_version >= version){
+			ESP_LOGW(TAG, "Update failed %s: current version %d, new version %d", OCPP_UPDATE_STATUS_VERSION_MISMATCH, current_version, version);
 			return eOCPP_UPDATE_STATUS_VERSION_MISMATCH;
 
 		}else{

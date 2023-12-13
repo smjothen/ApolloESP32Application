@@ -8,6 +8,8 @@ import time
 from ocpp.routing import on
 from ocpp.v16 import call_result, call
 from ocpp.v16.enums import (
+    AvailabilityStatus,
+    AvailabilityType,
     ConfigurationKey,
     ConfigurationStatus,
     ChargePointStatus,
@@ -341,6 +343,7 @@ async def test_boot_notification_and_non_accepted_state(cp):
             return False
         await asyncio.sleep(2)
 
+    logging.warning("Waiting for message timeout (Expect significat delay)")
     config_result = await ensure_configuration(cp, {ConfigurationKey.heartbeat_interval: 30})
     if config_result == 0:
         logging.error("Was able to incorrectly configure charger while rejected")
@@ -361,10 +364,84 @@ async def test_boot_notification_and_non_accepted_state(cp):
 async def test_get_and_set_configuration(cp):
     result = await cp.call(call.GetConfigurationPayload(None))
     if(result == None):
-        logging.info("GetConfiguration failed")
-        return -1
+        logging.info("GetConfiguration for all values failed")
+        return False
 
-    logging.info(f'Got configuration key: {result}')
+    if len(result.configuration_key) < 40 or len(result.configuration_key) > 60:
+        logging.info(f'Unexpected number of configuration keys: {len(result.configuration_key)}')
+        return False
+
+    if result.unknown_key != None and len(result.unknown_key) != 0:
+        logging.info(f'Got unknown keys when requesting all configuration keys')
+        return False
+
+    for key in result.configuration_key:
+        if ConfigurationKey.allow_offline_tx_for_unknown_id not in ConfigurationKey:
+            logging.error(f'Did not expect configuration key: {key}')
+            return False
+
+    connection_time_out_key = [x for x in result.configuration_key if x['key'] == ConfigurationKey.connection_time_out]
+    if len(connection_time_out_key) != 1:
+        logging.error(f"Expected one entry with {ConfigurationKey.connection_time_out} got: {connection_time_out_key}")
+        return False
+
+    result = await cp.call(call.ChangeConfigurationPayload(key = connection_time_out_key[0]['key'], value = "6"))
+    if(result == None or result.status != ConfigurationStatus.accepted):
+        logging.info(f"Change configuration failed: {result}")
+        return False
+
+    result = await cp.call(call.GetConfigurationPayload([connection_time_out_key[0]['key'], "nonexistentkey"]))
+    if(result == None):
+        logging.info("GetConfiguration failed for specific and non existent key")
+        return False
+
+    if len(result.configuration_key) != 1 or result.unknown_key == None or len(result.unknown_key) != 1:
+        logging.error(f"Unexpected result when getting specific and non-existent key: {result}")
+        return False
+
+    if result.configuration_key[0]['value'] != "6":
+        logging.error(f'New value after change configuration is not the expected value: {result.configuration_key}')
+        return False
+
+    result = await cp.call(call.ChangeConfigurationPayload(key = "nonexistentkey", value = "3"))
+    if(result == None or result.status != ConfigurationStatus.not_supported):
+        logging.info(f"Change configuration with non-existent key failed: {result}")
+        return False
+
+    return True
+
+async def test_change_availability(cp):
+    result = await cp.call(call.ChangeAvailabilityPayload(connector_id = 1, type = AvailabilityType.inoperative))
+    if result == None or result.status != AvailabilityStatus.accepted:
+        logging.error(f'Changing availablility to inoperative failed: {result}')
+        return False
+
+    await asyncio.sleep(3)
+    if cp.connector1_status != ChargePointStatus.unavailable:
+        logging.error(f'Changeing availability to inoperative did not change status to unavailable')
+        return False
+
+    result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
+    if result.status != RemoteStartStopStatus.rejected:
+        logging.error("Remote start transaction was not rejected while in unavailable state")
+        return False
+
+    result = await cp.call(call.ChangeAvailabilityPayload(connector_id = 1, type = AvailabilityType.operative))
+    if result == None or result.status != AvailabilityStatus.accepted:
+        logging.error(f'Changing availablility to operative failed: {result}')
+        return False
+
+    await asyncio.sleep(3)
+    if cp.connector1_status != ChargePointStatus.available:
+        logging.error(f'Changeing availability to operative did not change status to available')
+        return False
+
+    result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
+    if result.status != RemoteStartStopStatus.accepted:
+        logging.error("Remote start transaction was not accepted while in available state")
+        return False
+
+    return True
 
 async def test_core_profile(cp, include_manual_tests = True):
     logging.info('Setting up core profile test')
@@ -401,6 +478,12 @@ async def test_core_profile(cp, include_manual_tests = True):
         return False
 
     if await test_boot_notification_and_non_accepted_state(cp) != True:
+        return False
+
+    if await test_get_and_set_configuration(cp) != True:
+        return False
+
+    if await test_change_availability(cp) != True:
         return False
 
     logging.info("Core profile test complete successfully")
