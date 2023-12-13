@@ -29,6 +29,7 @@ awaiting_authorization = True
 awaiting_parent = None
 awaiting_auth_result = AuthorizationStatus.accepted
 
+tx_id = 10
 async def test_reserve_now_and_cancel(cp):
     while(cp.connector1_status != ChargePointStatus.available):
         logging.warning(f"Waiting for status available...({cp.connector1_status})")

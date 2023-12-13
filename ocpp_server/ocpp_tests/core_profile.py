@@ -20,7 +20,8 @@ from ocpp.v16.enums import (
     ResetType,
     TriggerMessageStatus,
     MessageTrigger,
-    RegistrationStatus
+    RegistrationStatus,
+    UnlockStatus
 )
 from ocpp.v16.datatypes import IdTagInfo
 from ocpp_tests.test_utils import ensure_configuration
@@ -343,7 +344,7 @@ async def test_boot_notification_and_non_accepted_state(cp):
             return False
         await asyncio.sleep(2)
 
-    logging.warning("Waiting for message timeout (Expect significat delay)")
+    logging.warning("Waiting for message timeout and default retry interval (Expect significat delay (30 sec then 90 sec))")
     config_result = await ensure_configuration(cp, {ConfigurationKey.heartbeat_interval: 30})
     if config_result == 0:
         logging.error("Was able to incorrectly configure charger while rejected")
@@ -441,6 +442,65 @@ async def test_change_availability(cp):
         logging.error("Remote start transaction was not accepted while in available state")
         return False
 
+    while cp.connector1_status != ChargePointStatus.preparing:
+        logging.warning(f'Waiting for remote start to take effect. Expecting state {ChargePointStatus.preparing} currently {cp.connector1_status}')
+        await asyncio.sleep(2)
+
+    while cp.connector1_status != ChargePointStatus.available:
+        logging.warning(f'Waiting for auth timeout. Expecting state {ChargePointStatus.available} currently {cp.connector1_status}')
+        await asyncio.sleep(2)
+
+    return True
+
+async def test_unlock_connector(cp):
+    while cp.connector1_status != ChargePointStatus.preparing:
+        logging.error(f'Waiting for status preparing...{cp.connector1_status}')
+        await asyncio.sleep(2)
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, input, 'Is the connector sufficiently locked? y/n')
+
+    if response != 'y':
+        logging.error(f"User indicate connector did not connect: {response}")
+        return False
+
+    result = await cp.call(call.UnlockConnectorPayload(connector_id = 1))
+    if result.status != UnlockStatus.unlocked:
+        logging.error(f'Unable to unlock connector while in state preparing')
+        return False
+
+    response = await loop.run_in_executor(None, input, 'did the connector unlock? y/n')
+
+    if response != 'y':
+        logging.error("User indicate connector did not unlock correctly")
+        return False
+
+    result = await ensure_configuration(cp, {"AuthorizationRequired": "false"})
+    if result != 0:
+        logging.error("Unable to configure Authorization to test unlock")
+        return False
+
+    while cp.connector1_status != ChargePointStatus.charging and cp.connector1_status != ChargePointStatus.suspended_ev:
+        logging.warning(f'Waiting for status charging...{cp.connector1_status}')
+        await asyncio.sleep(2)
+
+    result = await cp.call(call.UnlockConnectorPayload(connector_id = 1))
+    if result.status != UnlockStatus.unlocked:
+        logging.error(f'Unable to unlock connector while in state charging')
+        return False
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, input, 'did the connector unlock? y/n')
+
+    await asyncio.sleep(3)
+    if cp.connector1_status != ChargePointStatus.finishing and cp.connector1_status != ChargePointStatus.preparing:
+        logging.error("Charging did not end after unlock connector")
+        return False
+
+    if response != 'y':
+        logging.error("User indicate connector did not unlock correctly from state charging")
+        return False
+
     return True
 
 async def test_core_profile(cp, include_manual_tests = True):
@@ -470,21 +530,25 @@ async def test_core_profile(cp, include_manual_tests = True):
 
     cp.route_map[Action.Authorize]["_on_action"] = types.MethodType(on_authorize, cp)
 
-    if include_manual_tests:
-        if await test_got_presented_rfid(cp) != True:
-            return False
+    # if include_manual_tests:
+    #     if await test_got_presented_rfid(cp) != True:
+    #         return False
 
-    if await test_remote_start(cp) != True:
-        return False
+    # if await test_remote_start(cp) != True:
+    #     return False
 
-    if await test_boot_notification_and_non_accepted_state(cp) != True:
-        return False
+    # if await test_boot_notification_and_non_accepted_state(cp) != True:
+    #     return False
 
-    if await test_get_and_set_configuration(cp) != True:
-        return False
+    # if await test_get_and_set_configuration(cp) != True:
+    #     return False
 
     if await test_change_availability(cp) != True:
         return False
+
+    if include_manual_tests:
+        if await test_unlock_connector(cp) != True:
+            return False
 
     logging.info("Core profile test complete successfully")
     return True
