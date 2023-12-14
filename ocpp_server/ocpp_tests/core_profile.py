@@ -454,7 +454,7 @@ async def test_change_availability(cp):
 
 async def test_unlock_connector(cp):
     while cp.connector1_status != ChargePointStatus.preparing:
-        logging.error(f'Waiting for status preparing...{cp.connector1_status}')
+        logging.warning(f'Waiting for status preparing...{cp.connector1_status}')
         await asyncio.sleep(2)
 
     loop = asyncio.get_event_loop()
@@ -530,18 +530,18 @@ async def test_core_profile(cp, include_manual_tests = True):
 
     cp.route_map[Action.Authorize]["_on_action"] = types.MethodType(on_authorize, cp)
 
-    # if include_manual_tests:
-    #     if await test_got_presented_rfid(cp) != True:
-    #         return False
+    if include_manual_tests:
+        if await test_got_presented_rfid(cp) != True:
+            return False
 
-    # if await test_remote_start(cp) != True:
-    #     return False
+    if await test_remote_start(cp) != True:
+        return False
 
-    # if await test_boot_notification_and_non_accepted_state(cp) != True:
-    #     return False
+    if await test_boot_notification_and_non_accepted_state(cp) != True:
+        return False
 
-    # if await test_get_and_set_configuration(cp) != True:
-    #     return False
+    if await test_get_and_set_configuration(cp) != True:
+        return False
 
     if await test_change_availability(cp) != True:
         return False

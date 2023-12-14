@@ -7,6 +7,8 @@ from ocpp_tests.core_profile import test_core_profile
 from ocpp_tests.reservation_profile import test_reservation_profile
 from ocpp_tests.smart_charging_profile import test_smart_charging_profile
 from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
+from ocpp_tests.remote_trigger_profile import test_remote_trigger_profile
+
 import logging
 from datetime import(
     datetime,
@@ -18,6 +20,7 @@ from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call_result, call
 from ocpp.v16.enums import (
+    Action,
     ResetType,
     RegistrationStatus,
     ChargePointStatus,
@@ -45,12 +48,13 @@ async def _test_runner(cp):
     logging.info("Boot accepted")
 
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList: ')
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage: ')
 
     core_result = None
     reservation_result = None
     smart_charging_result = None
     local_auth_result = None
+    remote_trigger_result = None
 
     if response == "C" or response == "A":
         core_result = await test_core_profile(cp)
@@ -64,10 +68,14 @@ async def _test_runner(cp):
     if response == "L" or response == "A":
         local_auth_result = await test_local_auth_list_profile(cp)
 
+    if response == "T" or response == "A":
+        remote_trigger_result = await test_remote_trigger_profile(cp)
+
     logging.info(f'Core profile          : {core_result}')
     logging.info(f'Reservation profile   : {reservation_result}')
     logging.info(f'Smart charging profile: {smart_charging_result}')
     logging.info(f'Local auth list profile: {local_auth_result}')
+    logging.info(f'Remote trigger profile: {remote_trigger_result}')
 
     await asyncio.sleep(10)
 
@@ -148,6 +156,17 @@ class ChargePoint(cp):
             logging.error(f'CP status: {status} ({error_code})')
 
         return call_result.StatusNotificationPayload()
+
+    @on(Action.DiagnosticsStatusNotification)
+    def on_diagnostics_status_notification(self, status):
+        logging.info(f"Got diagnostics status: {status}")
+        return call_result.DiagnosticsStatusNotificationPayload()
+
+    @on(Action.FirmwareStatusNotification)
+    def on_firmware_status_notification(self, status):
+        logging.info(f"Got firmware status: {status}")
+
+        return FirmwareStatusNotificationPayload()
 
 async def on_connect(websocket, path):
     """ For every new charge point that connects, create a ChargePoint instance
