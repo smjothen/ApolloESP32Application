@@ -164,6 +164,7 @@ char * storage_Get_DiagnosticsLog();
 int storage_Get_DiagnosticsLogLength();
 
 char * storage_Get_MIDPublicKey();
+size_t storage_Get_MIDPublicKeyDER(char *buffer);
 char * storage_Get_MIDPrivateKey();
 
 char * storage_Get_Location();

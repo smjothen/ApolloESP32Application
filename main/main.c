@@ -461,12 +461,17 @@ void mid_init_or_generate_keys(void) {
 
 	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE,
 				storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {
-		ESP_LOGE(TAG_MAIN, "Failed to initialize/generate MID keys!");
+		ESP_LOGE(TAG_MAIN, "MID public key generation failed!");
 		return;
 	}
 
+	char buffer[MID_PUBLIC_KEY_SIZE];
+	if (storage_Get_MIDPublicKeyDER(buffer)) {
+		ESP_LOGI(TAG_MAIN, "MID public key: %s", buffer);
+	}
+
 	if (ctx->flag & MID_SIGN_FLAG_GENERATED) {
-		ESP_LOGI(TAG_MAIN, "Persisting key: %s", storage_Get_MIDPublicKey());
+		ESP_LOGI(TAG_MAIN, "MID public key persisted!");
 		storage_SaveConfiguration();
 	}
 }

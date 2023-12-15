@@ -927,6 +927,27 @@ char * storage_Get_MIDPublicKey() {
 	return configurationStruct.publicKey;
 }
 
+// Return only the Base64 encoded DER format, no PEM header/footer
+size_t storage_Get_MIDPublicKeyDER(char *buffer) {
+	char *pem = strdup(storage_Get_MIDPublicKey());
+	if (!pem) {
+		return 0;
+	}
+
+	char *tok = strtok(pem, "\n");
+	char *out = buffer;
+
+	while (tok) {
+		if (!strstr(tok, "PUBLIC KEY")) {
+			out += sprintf(out, "%s", tok);
+		}
+		tok = strtok(NULL, "\n");
+	}
+
+	free(pem);
+	return out - buffer;
+}
+
 void storage_Set_MIDPublicKey(char *publicKey) {
 	size_t len = strlen(publicKey);
 	if (len < MID_PUBLIC_KEY_SIZE) {
