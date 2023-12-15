@@ -166,6 +166,7 @@ enum DiagnosticsModes
 	eDISABLE_CERTIFICATE_ONCE		= 6,
 	eDISABLE_CERTIFICATE_ALWAYS		= 7,
 	eALWAYS_SEND_SESSION_DIAGNOSTICS= 8,
+	eACTIVATE_EMC_LOGGING           = 9,
 };
 
 enum session_controller

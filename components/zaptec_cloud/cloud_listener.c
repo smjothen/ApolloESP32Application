@@ -2159,6 +2159,15 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				responseStatus = 200;
 
 			}
+			else if(strstr(commandString,"ActivateEMC") != NULL)
+			{
+				esp_log_level_set("*", ESP_LOG_INFO);
+				storage_Set_DiagnosticsMode(eACTIVATE_EMC_LOGGING);
+				storage_SaveConfiguration();
+
+				ESP_LOGI(TAG, "ActivateEMCLogging");
+				responseStatus = 200;
+			}
 			else if(strstr(commandString, "set log level for") != NULL){
 #define MAX_ALLOWED_TAG_LENGTH 32
 				/*
