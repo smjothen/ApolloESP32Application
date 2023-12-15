@@ -59,6 +59,8 @@
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
 
+#include "emclog.h"
+
 #include "warning_handler.h"
 
 #include "mid.h"
@@ -698,8 +700,6 @@ void app_main(void)
 	ble_interface_init();
 
 
-    //#define DIAGNOSTICS //Enable TCP port for EMC diagnostics
-    //#ifdef DIAGNOSTICS
 	//Allow remote activation for use with lab-testsetup
 	if((storage_Get_DiagnosticsMode() == eACTIVATE_TCP_PORT) && (storage_Get_CommunicationMode() == eCONNECTION_WIFI))
 	{
@@ -707,7 +707,15 @@ void app_main(void)
 		diagnostics_port_init();
 		ESP_LOGE(TAG_MAIN, "TCP PORT ACTIVATED");
 	}
-	//#endif
+
+	EmcLogger log;
+	if((storage_Get_DiagnosticsMode() == eACTIVATE_EMC_LOGGING) && (storage_Get_CommunicationMode() == eCONNECTION_WIFI))
+	{
+		esp_log_level_set("*", ESP_LOG_INFO);
+		emclogger_init(&log);
+		emclogger_register_defaults(&log);
+		emclogger_start(&log);
+	}
 
   #ifndef BG_BRIDGE
     sessionHandler_init();
