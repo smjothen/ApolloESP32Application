@@ -37,6 +37,7 @@ static uint32_t mcuDebugCounter = 0;
 static uint32_t previousMcuDebugCounter = 0;
 
 static uint32_t mcuWarnings = 0;
+static bool mcuResetDetected = false;
 static uint8_t mcuResetSource = 0;
 static uint8_t mcuMode = 0;
 
@@ -70,11 +71,16 @@ typedef struct {
 	void *var;
 } PeriodicTx;
 
-bool resetDetected = false;
-
-void MCUReset(ZapMessage *msg) {
+void CheckReset(ZapMessage *msg) {
 	if (msg->data[0]) {
-		resetDetected = true;
+		// TODO: Reset this bool after handling resending state to MCU
+		mcuResetDetected = true;
+		mcuResetSource = msg->data[0];
+
+		previousMcuDebugCounter = mcuDebugCounter;
+		mcuDebugCounter = 0;
+	} else {
+		mcuDebugCounter++;
 	}
 }
 
@@ -97,7 +103,7 @@ static const PeriodicTx periodicTx[] = {
 	{ ParamNetworkType,                PERIODIC_BYTE,  &mcuNetworkType },
 	{ ParamCableType,                  PERIODIC_BYTE,  &mcuCableType },
 	{ ParamChargeCurrentUserMax,       PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
-	{ MCUResetSource,                  PERIODIC_CB,    &MCUReset },
+	{ MCUResetSource,                  PERIODIC_CB,    &CheckReset },
 };
 
 #define PERIODIC_TX_COUNT (sizeof (periodicTx) / sizeof (periodicTx[0]))
@@ -492,7 +498,6 @@ void uartSendTask(void *pvParameters){
 
 		if(count >= PERIODIC_TX_COUNT) {
 			isMCUReady = true;
-			mcuDebugCounter++;
 			vTaskDelay(1000 / portTICK_PERIOD_MS);
 			count = 0;
 			continue;
