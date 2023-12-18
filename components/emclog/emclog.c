@@ -488,6 +488,8 @@ void emclogger_register_defaults(EmcLogger *logger) {
 	emclogger_add_float(logger, "I1", emclogger_i1, EMC_FLAG_NONE);
 	emclogger_add_float(logger, "I2", emclogger_i2, EMC_FLAG_NONE);
 
+	emclogger_add_float(logger, "Power", MCU_GetPower, EMC_FLAG_NONE);
+
 	emclogger_add_int(logger, "ET0", emclogger_emt0, EMC_FLAG_NONE);
 	emclogger_add_int(logger, "ET1", emclogger_emt1, EMC_FLAG_NONE);
 	emclogger_add_int(logger, "ET2", emclogger_emt2, EMC_FLAG_NONE);
