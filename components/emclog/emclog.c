@@ -111,15 +111,23 @@ static bool emclogger_tick(EmcLogger *logger) {
 		// First line, write the header first
 		for (uint32_t i = 0; i < logger->log_colcount; i++) {
 			 EmcColumn *col = &logger->log_cols[i];
-			 ptr += sprintf(ptr, "%s%s", col->name, i < logger->log_colcount - 1 ? "," : "\n");
+			 ptr += sprintf(ptr, "%s,", col->name);
 		}
+		ptr += sprintf(ptr, "Note\n");
     }
 
     for (uint32_t i = 0; i < logger->log_colcount; i++) {
 		 EmcColumn *col = &logger->log_cols[i];
 		 emclogger_write_column(col, buf, sizeof (buf));
 
-		 ptr += sprintf(ptr, "%s%s", buf, i < logger->log_colcount - 1 ? "," : "");
+		 ptr += sprintf(ptr, "%s,", buf);
+	}
+
+	char *note = logger->log_note;
+	if (note) {
+		ptr += sprintf(ptr, "%s", note);
+		free(note);
+		logger->log_note = note = NULL;
 	}
 
     ESP_LOGI(TAG, "%s", logger->log_buf);
@@ -155,14 +163,16 @@ static bool emclogger_tick(EmcLogger *logger) {
 #define EMC_LOG_DELETE         2
 #define EMC_LOG_DUMP           3
 #define EMC_LOG_STAT           4
+#define EMC_LOG_NOTE           5
 
 static void emclogger_handle_socket(EmcLogger *logger) {
     const char *_sock_cmds[] = {
-        [EMC_LOG_START]  = "start",
-        [EMC_LOG_STOP]   = "stop",
+        [EMC_LOG_START ] = "start",
+        [EMC_LOG_STOP  ] = "stop",
         [EMC_LOG_DELETE] = "del",
-        [EMC_LOG_DUMP]   = "dump",
-        [EMC_LOG_STAT]   = "stat",
+        [EMC_LOG_DUMP  ] = "dump",
+        [EMC_LOG_STAT  ] = "stat",
+        [EMC_LOG_NOTE  ] = "note ",
     };
 
     while (1) {
@@ -181,9 +191,22 @@ static void emclogger_handle_socket(EmcLogger *logger) {
             char *buf = logger->sock_buf;
             buf[len] = 0;
 
+			for (int j = len - 1; j >= 0; j--) {
+				if (isspace((int)buf[j])) {
+					buf[j] = 0;
+				} else {
+					break;
+				}
+			}
+
             for (size_t i = 0; i < sizeof (_sock_cmds) / sizeof (_sock_cmds[0]); i++) {
-                if (strncmp(buf, _sock_cmds[i], strlen(_sock_cmds[i])) == 0) {
-                    xTaskNotify(logger->log_task, i, eSetValueWithOverwrite);
+				size_t cmd_len = strlen(_sock_cmds[i]);
+                if (strncmp(buf, _sock_cmds[i], cmd_len) == 0) {
+					if (i == EMC_LOG_NOTE) {
+						logger->log_note = strdup(buf + cmd_len);
+						break;
+					}
+					xTaskNotify(logger->log_task, i, eSetValueWithOverwrite);
                 }
             }
         }
@@ -387,6 +410,7 @@ void emclogger_init(EmcLogger *logger) {
     logger->log_size = 1024 * 1024;
     logger->log_flags = EMC_LOG_FLAG_INITED;
     logger->log_colcount = 0;
+	logger->log_note = NULL;
 }
 
 
@@ -447,6 +471,10 @@ uint32_t emclogger_esp_reset(void) { return (uint32_t)esp_reset_reason(); }
 uint32_t emclogger_mcu_reset(void) { return (uint32_t)MCU_GetResetSource(); }
 
 int emclogger_grid_type(void) { return (int)MCU_GetGridType(); }
+int emclogger_cable_type(void) { return (int)MCU_GetCableType(); }
+
+int emclogger_charge_mode(void) { return (int)MCU_GetChargeMode(); }
+int emclogger_charge_op_mode(void) { return (int)MCU_GetChargeOperatingMode(); }
 
 /*
  * TODO: From EU calibrated
@@ -499,6 +527,9 @@ void emclogger_register_defaults(EmcLogger *logger) {
 
 	emclogger_add_int(logger, "SHT30", emclogger_sht30, EMC_FLAG_NONE);
 	emclogger_add_int(logger, "GridType", emclogger_grid_type, EMC_FLAG_NONE);
+	emclogger_add_int(logger, "CableType", emclogger_cable_type, EMC_FLAG_NONE);
+	emclogger_add_int(logger, "ChargeMode", emclogger_charge_mode, EMC_FLAG_NONE);
+	emclogger_add_int(logger, "ChargeOpMode", emclogger_charge_op_mode, EMC_FLAG_NONE);
 
 	emclogger_add_int(logger, "WifiRSSI", emclogger_rssi, EMC_FLAG_NONE);
 	emclogger_add_int(logger, "WifiPower", emclogger_wifipower, EMC_FLAG_NONE);

@@ -54,6 +54,7 @@ typedef struct {
 } EmcColumn;
 
 #define EMC_LOG_MAX_COLUMNS 64
+#define EMC_LOG_NOTE_SIZE 128
 
 typedef struct {
     TaskHandle_t sock_task;
@@ -69,6 +70,7 @@ typedef struct {
     char *log_buf;
     FILE *log_fp;
     size_t log_size;
+	char *log_note;
 } EmcLogger;
 
 EmcColumn *emclogger_add_float(EmcLogger *logger, char *name, EmcFloatColumn fn, EmcColumnFlag flag);
