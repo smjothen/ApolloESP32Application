@@ -82,6 +82,5 @@ void emclogger_write_column(EmcColumn *col, char *buf, size_t size);
 
 void emclogger_init(EmcLogger *logger);
 void emclogger_start(EmcLogger *logger);
-void emclogger_register_defaults(EmcLogger *logger);
 
 #endif

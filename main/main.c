@@ -60,6 +60,7 @@
 #include "types/ocpp_charge_point_error_code.h"
 
 #include "emclog.h"
+#include "emclog_fields.h"
 
 #include "warning_handler.h"
 
@@ -713,7 +714,7 @@ void app_main(void)
 	{
 		esp_log_level_set("*", ESP_LOG_INFO);
 		emclogger_init(&log);
-		emclogger_register_defaults(&log);
+		emclogger_register_fields(&log);
 		emclogger_start(&log);
 	}
 
