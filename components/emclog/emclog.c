@@ -92,16 +92,11 @@ static bool emclogger_tick(EmcLogger *logger) {
     }
 
     long size = ftell(logger->log_fp);
-
     if (size >= logger->log_size) {
         // Seems to be some corruption in wear levelling component when filesystem gets near full
         ESP_LOGE(TAG, "Filesystem full, reset log!");
-        emclogger_write_socket(logger, "# filesystem full!\n");
         logger->log_flags |= EMC_LOG_FLAG_DISABLE;
         return false;
-    } else if (size >= logger->log_size - logger->log_size / 4) {
-        ESP_LOGI(TAG, "Filesystem close to full, reset log!");
-        emclogger_write_socket(logger, "# filesystem near full!\n");
     }
 
     char *ptr = logger->log_buf;
@@ -113,15 +108,17 @@ static bool emclogger_tick(EmcLogger *logger) {
 			 EmcColumn *col = &logger->log_cols[i];
 			 ptr += sprintf(ptr, "%s,", col->name);
 		}
+		ptr += sprintf(ptr, "LogSize,");
 		ptr += sprintf(ptr, "Note\n");
     }
 
     for (uint32_t i = 0; i < logger->log_colcount; i++) {
 		 EmcColumn *col = &logger->log_cols[i];
 		 emclogger_write_column(col, buf, sizeof (buf));
-
 		 ptr += sprintf(ptr, "%s,", buf);
 	}
+
+	ptr += sprintf(ptr, "%ld,", size);
 
 	char *note = logger->log_note;
 	if (note) {
@@ -139,8 +136,6 @@ static bool emclogger_tick(EmcLogger *logger) {
 
     if (!wrote) {
         ESP_LOGE(TAG, "Error logging EMC data %s", strerror(errno));
-        sprintf(buf, "# fputs() = %d; errno = %d\n", wrote, errno);
-        emclogger_write_socket(logger, buf);
     }
 
     int ret = fflush(logger->log_fp);
@@ -162,8 +157,7 @@ static bool emclogger_tick(EmcLogger *logger) {
 #define EMC_LOG_STOP           1
 #define EMC_LOG_DELETE         2
 #define EMC_LOG_DUMP           3
-#define EMC_LOG_STAT           4
-#define EMC_LOG_NOTE           5
+#define EMC_LOG_NOTE           4
 
 static void emclogger_handle_socket(EmcLogger *logger) {
     const char *_sock_cmds[] = {
@@ -171,7 +165,6 @@ static void emclogger_handle_socket(EmcLogger *logger) {
         [EMC_LOG_STOP  ] = "stop",
         [EMC_LOG_DELETE] = "del",
         [EMC_LOG_DUMP  ] = "dump",
-        [EMC_LOG_STAT  ] = "stat",
         [EMC_LOG_NOTE  ] = "note ",
     };
 
@@ -308,24 +301,15 @@ static void emclogger_log_task(void *pvParameter) {
                 logger->log_flags |= EMC_LOG_FLAG_DISABLE;
             } else if (val == EMC_LOG_DELETE) {
                 logger->log_flags |= EMC_LOG_FLAG_DISABLE;
-
                 // Tick to close file
                 emclogger_tick(logger);
-
                 int ret = remove(logger->log_filename);
-                sprintf(logger->log_buf, "# remove() = %d\n", ret);
-                emclogger_write_socket(logger, logger->log_buf);
+				ESP_LOGI(TAG, "Removing %s = %d", logger->log_filename, ret);
             } else if (val == EMC_LOG_DUMP) {
                 logger->log_flags |= EMC_LOG_FLAG_DISABLE;
-
+                // Tick to close file
                 emclogger_tick(logger);
                 emclogger_print_log(logger);
-            } else if (val == EMC_LOG_STAT) {
-                struct stat st;
-                int ret = stat(logger->log_filename, &st);
-
-                sprintf(logger->log_buf, "# stat() = %d; st_size = %ld\n", ret, st.st_size);
-                emclogger_write_socket(logger, logger->log_buf);
             }
         }
 

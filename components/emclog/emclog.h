@@ -68,9 +68,9 @@ typedef struct {
     uint32_t log_flags;
     char *log_filename;
     char *log_buf;
-    FILE *log_fp;
-    size_t log_size;
 	char *log_note;
+    size_t log_size;
+    FILE *log_fp;
 } EmcLogger;
 
 EmcColumn *emclogger_add_float(EmcLogger *logger, char *name, EmcFloatColumn fn, EmcColumnFlag flag);
