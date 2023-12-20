@@ -15,14 +15,14 @@
 
 static const char *TAG = "EMCLOG         ";
 
-static void emclogger_write_socket(EmcLogger *logger, const char *buf) {
+static void emclogger_write_socket(EmcLogger *logger, const char *buf, bool block) {
     if (logger->sock < 0) {
         return;
     }
 
     int len = strlen(buf);
     int remaining = len;
-    int retries = logger->sock_retries;
+    int retries = block ? logger->sock_retries : 0;
 
     while (remaining > 0) {
         int written = send(logger->sock, buf + (len - remaining), remaining, 0);
@@ -52,7 +52,7 @@ static void emclogger_print_log(EmcLogger *logger) {
         size_t read = fread(logger->log_buf, 1, EMC_LOG_BUF_SIZE - 1, f);
         logger->log_buf[read] = 0;
 
-        emclogger_write_socket(logger, logger->log_buf);
+        emclogger_write_socket(logger, logger->log_buf, true);
 
         if (read < EMC_LOG_BUF_SIZE - 1) {
             break;
@@ -148,7 +148,7 @@ static bool emclogger_tick(EmcLogger *logger) {
         ESP_LOGE(TAG, "Error fsync %s", strerror(errno));
     }
 
-    emclogger_write_socket(logger, logger->log_buf);
+    emclogger_write_socket(logger, logger->log_buf, false);
 
     return true;
 }
