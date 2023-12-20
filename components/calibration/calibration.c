@@ -216,7 +216,6 @@ int calibration_tick_starting_init(CalibrationCtx *ctx) {
 
     // Disable offline sessions as well, chargers should be online during calibration but just in case...
     offlineSession_disable();
-    offline_log_disable();
 
     if (!calibration_turn_led_off(ctx)) {
         return -5;

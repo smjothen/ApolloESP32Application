@@ -59,10 +59,6 @@ static const struct LogFile log64 = {
     .entry_size = sizeof (struct LogLine64),
 };
 
-void offline_log_disable(void) {
-    disabledForCalibration = true;
-}
-
 int update_header(FILE *fp, int start, int end){
     struct LogHeader new_header = {.start=start, .end=end, .crc=0};
     uint32_t crc =  crc32_normal(0, &new_header, sizeof(new_header));
@@ -71,7 +67,7 @@ int update_header(FILE *fp, int start, int end){
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     int write_result = fwrite(&new_header, 1,  sizeof(new_header), fp);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
-    ESP_LOGI(TAG, "writing header %d %d %" PRIu32 " (s:%d, res:%d)    <<<<   ", 
+    ESP_LOGI(TAG, "writing header %d %d %" PRIu32 " (s:%d, res:%d)    <<<<   ",
         new_header.start, new_header.end, new_header.crc, sizeof(new_header), write_result
     );
 
@@ -87,7 +83,7 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     fseek(fp, 0, SEEK_SET);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     int read_result = fread(&head_in_file, 1,sizeof(head_in_file),  fp);
-    ESP_LOGI(TAG, "header on disk %d %d %" PRIu32 " (s:%d, res:%d)    <<<   ", 
+    ESP_LOGI(TAG, "header on disk %d %d %" PRIu32 " (s:%d, res:%d)    <<<   ",
     head_in_file.start, head_in_file.end, head_in_file.crc, sizeof(head_in_file), read_result);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
     if (read_result < sizeof (head_in_file)) {
@@ -160,7 +156,7 @@ FILE * init_and_lock_log(const struct LogFile *file, int *start, int *end){
 
     int seek_res = fseek(
         fp,
-        log_size, 
+        log_size,
         SEEK_SET
     );
 
@@ -338,8 +334,8 @@ int _offline_log_attempt_send(const struct LogFile *file) {
         } else {
             read_result = _offline_log_read_line(fp, log_start, &start_of_line, &energy, &timestamp, &crc_on_file, &calculated_crc);
         }
- 
-        ESP_LOGI(TAG, "LogLine%d@%d>%d: E=%f, t=%lld, crc=%" PRId32 ", valid=%d, read=%d", 
+
+        ESP_LOGI(TAG, "LogLine%d@%d>%d: E=%f, t=%lld, crc=%" PRId32 ", valid=%d, read=%d",
             (file->flags & OFFLINE_LOG_FLAG_64BIT) ? 64 : 32,
             log_start, start_of_line,
             energy, timestamp,
@@ -364,7 +360,7 @@ int _offline_log_attempt_send(const struct LogFile *file) {
             ESP_LOGI(TAG, "skipped corrupt line");
         }
 
-        log_start = (log_start+1) % max_log_items;        
+        log_start = (log_start+1) % max_log_items;
     }
 
     if(log_start==log_end){
