@@ -12,6 +12,10 @@ void emclogger_datetime(char *buf, size_t size) {
     utz_datetime_format_iso(buf, size, &dt);
 }
 
+void emclogger_nfc_tag(char *buf, size_t size) {
+	snprintf(buf, size - 1, "%s", NFCGetTagInfo().idAsString);
+}
+
 int emclogger_counter(void) {
 	static int counter = 0;
 	return counter++;
@@ -86,6 +90,7 @@ void emclogger_register_fields(EmcLogger *logger) {
 
 	emclogger_add_int(logger, "WifiRSSI", emclogger_rssi, EMC_FLAG_NONE);
 	emclogger_add_int(logger, "WifiPower", emclogger_wifipower, EMC_FLAG_NONE);
+	emclogger_add_str(logger, "NFCTag", emclogger_nfc_tag, EMC_FLAG_NONE);
 
 	emclogger_add_uint32(logger, "Warnings", MCU_GetWarnings, EMC_FLAG_HEX);
 	emclogger_add_uint32(logger, "MCUResetSource", emclogger_mcu_reset, EMC_FLAG_HEX);

@@ -17,6 +17,8 @@
 #include "network.h"
 #include "protocol_task.h"
 #include "i2cDevices.h"
+#include "CLRC661.h"
+
 #include "utz.h"
 #include "zones.h"
 
