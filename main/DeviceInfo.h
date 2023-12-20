@@ -9,7 +9,13 @@
 #ifndef DEVICEINFO_H_
 #define DEVICEINFO_H_
 
-#define ZAPTEC_GO_PLUS
+#define GOPLUS
+
+#ifdef GOPLUS
+#warning "Compiling in Go Plus mode"
+#else
+#warning "Compiling in Regular Go mode"
+#endif
 
 #ifdef CONFIG_ZAPTEC_CLOUD_USE_DEVELOPMENT_URL
 #define DEVELOPEMENT_URL

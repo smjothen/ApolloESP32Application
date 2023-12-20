@@ -71,12 +71,14 @@ typedef struct {
 	void *var;
 } PeriodicTx;
 
-void CheckReset(ZapMessage *msg) {
+void HandleReset(ZapMessage *msg) {
 	if (msg->data[0]) {
 		// TODO: Reset this bool after handling resending state to MCU
 		mcuResetDetected = true;
 		mcuResetSource = msg->data[0];
 
+		// Simulate debug counter on ESP for Go Plus for now, based on whether or not
+		// a new reset value gets delivered.
 		previousMcuDebugCounter = mcuDebugCounter;
 		mcuDebugCounter = 0;
 	} else {
@@ -84,26 +86,41 @@ void CheckReset(ZapMessage *msg) {
 	}
 }
 
+void HandleDebug(ZapMessage *msg) {
+	previousMcuDebugCounter = mcuDebugCounter;
+	mcuDebugCounter = GetUint32_t(msg->data);
+}
+
 static const PeriodicTx periodicTx[] = {
-	{ ParamMode,                       PERIODIC_BYTE,  &mcuMode },
-	{ ParamInternalTemperatureEmeter,  PERIODIC_FLOAT, &temperatureEmeter[0] },
-	{ ParamInternalTemperatureEmeter2, PERIODIC_FLOAT, &temperatureEmeter[1] },
-	{ ParamInternalTemperatureEmeter3, PERIODIC_FLOAT, &temperatureEmeter[2] },
-	{ ParamInternalTemperatureT,       PERIODIC_FLOAT, &temperaturePowerBoardT[0] },
-	{ ParamVoltagePhase1,              PERIODIC_FLOAT, &voltages[0] },
-	{ ParamVoltagePhase2,              PERIODIC_FLOAT, &voltages[1] },
-	{ ParamVoltagePhase3,              PERIODIC_FLOAT, &voltages[2] },
-	{ ParamCurrentPhase1,              PERIODIC_FLOAT, &currents[0] },
-	{ ParamCurrentPhase2,              PERIODIC_FLOAT, &currents[1] },
-	{ ParamCurrentPhase3,              PERIODIC_FLOAT, &currents[2] },
-	{ ParamTotalChargePower,           PERIODIC_FLOAT, &totalChargePower },
-	{ ParamChargeMode,                 PERIODIC_BYTE,  &chargeMode },
-	{ ParamChargeOperationMode,        PERIODIC_BYTE,  &chargeOperationMode },
-	{ ParamWarnings,                   PERIODIC_U32,   &mcuWarnings },
-	{ ParamNetworkType,                PERIODIC_BYTE,  &mcuNetworkType },
-	{ ParamCableType,                  PERIODIC_BYTE,  &mcuCableType },
-	{ ParamChargeCurrentUserMax,       PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
-	{ MCUResetSource,                  PERIODIC_CB,    &CheckReset },
+#ifdef GOPLUS
+	// TODO: Add ParamMode to Go?
+	{ ParamMode,                         PERIODIC_BYTE,  &mcuMode },
+	{ MCUResetSource,                    PERIODIC_CB,    &HandleReset },
+#else
+	{ SwitchPosition,                    PERIODIC_BYTE,  &receivedSwitchState },
+	{ ParamInternalTemperatureT2,        PERIODIC_FLOAT, &temperaturePowerBoardT[1] },
+	{ ParamTotalChargePowerSession,      PERIODIC_FLOAT, &totalChargePowerSession },
+	{ ChargeCurrentInstallationMaxLimit, PERIODIC_FLOAT, &mcuChargeCurrentInstallationMaxLimit },
+	{ StandAloneCurrent,                 PERIODIC_FLOAT, &mcuStandAloneCurrent },
+	{ DebugCounter,                      PERIODIC_CB,    &HandleDebug },
+#endif
+	{ ParamInternalTemperatureEmeter,    PERIODIC_FLOAT, &temperatureEmeter[0] },
+	{ ParamInternalTemperatureEmeter2,   PERIODIC_FLOAT, &temperatureEmeter[1] },
+	{ ParamInternalTemperatureEmeter3,   PERIODIC_FLOAT, &temperatureEmeter[2] },
+	{ ParamInternalTemperatureT,         PERIODIC_FLOAT, &temperaturePowerBoardT[0] },
+	{ ParamVoltagePhase1,                PERIODIC_FLOAT, &voltages[0] },
+	{ ParamVoltagePhase2,                PERIODIC_FLOAT, &voltages[1] },
+	{ ParamVoltagePhase3,                PERIODIC_FLOAT, &voltages[2] },
+	{ ParamCurrentPhase1,                PERIODIC_FLOAT, &currents[0] },
+	{ ParamCurrentPhase2,                PERIODIC_FLOAT, &currents[1] },
+	{ ParamCurrentPhase3,                PERIODIC_FLOAT, &currents[2] },
+	{ ParamTotalChargePower,             PERIODIC_FLOAT, &totalChargePower },
+	{ ParamChargeMode,                   PERIODIC_BYTE,  &chargeMode },
+	{ ParamChargeOperationMode,          PERIODIC_BYTE,  &chargeOperationMode },
+	{ ParamWarnings,                     PERIODIC_U32,   &mcuWarnings },
+	{ ParamNetworkType,                  PERIODIC_BYTE,  &mcuNetworkType },
+	{ ParamCableType,                    PERIODIC_BYTE,  &mcuCableType },
+	{ ParamChargeCurrentUserMax,         PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
 };
 
 #define PERIODIC_TX_COUNT (sizeof (periodicTx) / sizeof (periodicTx[0]))
@@ -479,8 +496,8 @@ void uartSendTask(void *pvParameters){
 			} else {
 				ESP_LOGE(TAG, "**** UNHANDLED: %d ****", txMsg.identifier);
 			}
-
 		}
+
 		if (txMsg.identifier == rxMsg.identifier) {
 			count++;
 			mcuComErrorCount = 0;
