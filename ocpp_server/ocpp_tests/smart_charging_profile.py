@@ -102,7 +102,7 @@ async def test_tx_profile_outside_transaction(cp):
         return False
 
 async def test_tx_profile_within_transaction(cp):
-    while(cp.connector1_status != ChargePointStatus.charging):
+    while(cp.connector1_status != ChargePointStatus.charging and cp.connector1_status != ChargePointStatus.suspended_ev):
         logging.warning(f"Waiting for status charging...({cp.connector1_status})")
         await asyncio.sleep(3)
 
@@ -114,7 +114,7 @@ async def test_tx_profile_within_transaction(cp):
         return False
 
 async def test_tx_profile_applied_16A_0A(cp):
-    while(cp.connector1_status != ChargePointStatus.charging):
+    while(cp.connector1_status != ChargePointStatus.charging and cp.connector1_status != ChargePointStatus.suspended_ev):
         logging.warning(f"Waiting for status charging...({cp.connector1_status})")
         await asyncio.sleep(3)
 

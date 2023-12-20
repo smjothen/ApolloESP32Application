@@ -32,7 +32,7 @@ static bool filesystem_is_ready(){
 }
 
 static esp_err_t clear_info(){
-	ESP_LOGE(TAG, "******** CLEARING RESERVATION *********");
+	ESP_LOGI(TAG, "Clearing reservation info");
 	free(current_reservation);
 	current_reservation = NULL;
 

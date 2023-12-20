@@ -1,10 +1,12 @@
 import asyncio
+import traceback
 import websockets
 import time
 import datetime
 from ocpp_tests.core_profile import test_core_profile
 from ocpp_tests.reservation_profile import test_reservation_profile
 from ocpp_tests.smart_charging_profile import test_smart_charging_profile
+from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
 import logging
 from datetime import(
     datetime,
@@ -43,11 +45,13 @@ async def _test_runner(cp):
     logging.info("Boot accepted")
 
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart: ')
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList: ')
 
     core_result = None
     reservation_result = None
     smart_charging_result = None
+    local_auth_result = None
+
     if response == "C" or response == "A":
         core_result = await test_core_profile(cp)
 
@@ -57,9 +61,13 @@ async def _test_runner(cp):
     if response == "S" or response == "A":
         smart_charging_result = await test_smart_charging_profile(cp)
 
+    if response == "L" or response == "A":
+        local_auth_result = await test_local_auth_list_profile(cp)
+
     logging.info(f'Core profile          : {core_result}')
     logging.info(f'Reservation profile   : {reservation_result}')
     logging.info(f'Smart charging profile: {smart_charging_result}')
+    logging.info(f'Local auth list profile: {local_auth_result}')
 
     await asyncio.sleep(10)
 
@@ -69,6 +77,7 @@ async def test_runner(cp):
             await _test_runner(cp)
         except Exception as e:
             logging.error(f'Exception from test runner {e}')
+            traceback.print_exc()
             print(e)
 
 class ChargePoint(cp):
