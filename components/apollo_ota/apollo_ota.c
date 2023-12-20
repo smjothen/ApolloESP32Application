@@ -354,15 +354,11 @@ void validate_booted_image(void){
     const esp_partition_t * partition = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Checking if VALID on partition %s ", partition->label);
 
-    int dspic_update_success = 0;
-
-    if (is_goplus()) {
-            ESP_LOGI(TAG, "Go Plus!");
-            dspic_update_success = update_goplus();
-    } else {
-            ESP_LOGI(TAG, "Go!");
-            dspic_update_success = update_dspic();
-    }
+#ifdef GOPLUS
+	int dspic_update_success = update_goplus();
+#else
+	int dspic_update_success = update_dspic();
+#endif
 
     if(dspic_update_success<0){
             ESP_LOGE(TAG, "FAILED to update dsPIC, restarting now...");
