@@ -3508,7 +3508,7 @@ static void ocpp_task(){
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			ESP_LOGI(TAG, "Waiting for WIFI connection...");
+			ESP_LOGI(TAG, "Waiting for network connection...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 		}
 

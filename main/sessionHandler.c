@@ -3459,7 +3459,6 @@ static void sessionHandler_task()
 					publish_debug_telemetry_observation_LteParameters();
 				}
 
-				publish_debug_telemetry_observation_capabilities();
 				publish_debug_telemetry_observation_StartUpParameters();
 				publish_debug_telemetry_observation_all(rssi);
 				publish_debug_telemetry_observation_local_settings();

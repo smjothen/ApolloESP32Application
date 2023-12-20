@@ -271,8 +271,16 @@ void storage_Set_chargebox_identity_ocpp(const char * newValue)
 
 void storage_Set_session_controller(enum session_controller newValue)
 {
+	ESP_LOGW(TAG, "storage_Set_session_controller %i", newValue);
+
 	configurationStruct.session_controller = newValue;
-	configurationStruct.standalone = (newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0;
+
+	///Only let SessionController affect standalone when OCPP-controlled. 
+	///Otherwise let Zaptec Cloud set standalone mode.
+	if(newValue == eSESSION_OCPP)
+	{
+		configurationStruct.standalone = (newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0;
+	}
 }
 
 void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue)

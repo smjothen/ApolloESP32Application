@@ -27,7 +27,8 @@
         "network.h": "c",
         "main.h": "c",
         "ocpp_charge_point_error_code.h": "c",
-        "sessionhandler.h": "c"
+        "sessionhandler.h": "c",
+        "esp_system.h": "c"
     }
 
 }

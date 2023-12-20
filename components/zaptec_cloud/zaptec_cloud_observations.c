@@ -253,39 +253,15 @@ int add_observation_to_collection(cJSON *collection, cJSON *observation){
     return 0;
 }
 
-/*int publish_debug_telemetry_observation(
-    double temperature_5, double temperature_emeter, double rssi
-){
-    ESP_LOGD(TAG, "sending charging telemetry");
-
-    cJSON *observations = create_observation_collection();
-
-    //add_observation_to_collection(observations, create_observation(808, "debugstring1"));
-
-    add_observation_to_collection(observations, create_double_observation(201, temperature_5));
-    add_observation_to_collection(observations, create_double_observation(809, rssi));
-    //add_observation_to_collection(observations, create_double_observation(202, temperature_emeter));
-
-    return publish_json(observations);
-}*/
-
-
-/* Pro capabilities
-	{
-	  "DeviceType": "Pro",
-	  "MeterCalibrated": true,
-	  "MeterCalibrationId": 137101,
-	  "MIDCertified": true,
-	  "HardwareVariant": "Costcut",
-	  "ConnectorType": "ITT_Socket"
-	}
- */
-
 
 int publish_debug_telemetry_observation_capabilities(){
     cJSON *observations = create_observation_collection();
 
     add_observation_to_collection(observations, create_observation(Capabilities, GetCapabilityString()));
+
+	/// Always send firmare version in same message bundle as capability so it can be used on Cloud to handle 
+	/// rollback to old firmwares without capabilities.
+	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     int ret = publish_json(observations);
 
     return ret;
@@ -349,6 +325,8 @@ int publish_debug_telemetry_observation_cloud_settings()
 
     return publish_json(observations);
 }
+
+
 
 
 int publish_debug_telemetry_observation_local_settings()
@@ -549,6 +527,7 @@ int publish_debug_telemetry_observation_StartUpParameters()
 
     cJSON *observations = create_observation_collection();
 
+	add_observation_to_collection(observations, create_observation(Capabilities, GetCapabilityString()));
     add_observation_to_collection(observations, create_double_observation(ParamChargeCurrentUserMax, MCU_GetChargeCurrentUserMax()));
     add_observation_to_collection(observations, create_uint32_t_observation(ParamSetPhases, (uint32_t)HOLD_GetSetPhases()));
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
@@ -944,6 +923,10 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	uint8_t isStandalone = storage_Get_Standalone();
+	//Avoid double transmission if these are changed as localSettings
+	if(LocalSettingsAreUpdated() == true)
+		previousIsStandalone = isStandalone;
+
 	if((previousIsStandalone != isStandalone) && (isStandalone != 0xff))
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)isStandalone));
@@ -952,6 +935,10 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float standaloneCurrent = MCU_StandAloneCurrent();//storage_Get_StandaloneCurrent();
+	//Avoid double transmission if these are changed as localSettings
+	if(LocalSettingsAreUpdated() == true)
+		previousStandaloneCurrent = standaloneCurrent;
+
 	if((previousStandaloneCurrent != standaloneCurrent))
 	{
 		add_observation_to_collection(observations, create_double_observation(StandAloneCurrent, standaloneCurrent));
@@ -990,6 +977,10 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	uint8_t permanentLock = storage_Get_PermanentLock();
+	//Avoid double transmission if these are changed as localSettings
+	if(LocalSettingsAreUpdated() == true)
+		previousPermanentLock = permanentLock;
+
 	if(previousPermanentLock != permanentLock)
 	{
 		add_observation_to_collection(observations, create_uint32_t_observation(PermanentCableLock, (uint32_t)permanentLock));
@@ -1163,6 +1154,10 @@ int publish_telemetry_observation_on_change(){
 	}
 
 	float offlineCurrent = storage_Get_DefaultOfflineCurrent();
+	//Avoid double transmission if these are changed as localSettings
+	if(LocalSettingsAreUpdated() == true)
+		previousOfflineCurrent = offlineCurrent;
+
 	if((previousOfflineCurrent != offlineCurrent))
 	{
 		add_observation_to_collection(observations, create_double_observation(ChargerOfflineCurrent, offlineCurrent));
