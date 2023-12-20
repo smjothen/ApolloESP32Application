@@ -283,7 +283,7 @@ float GetFloat(uint8_t * input)
 	return tmp;
 }
 
-float GetUint32_t(uint8_t * input)
+uint32_t GetUint32_t(uint8_t * input)
 {
 	uint32_t tmp = 0;
 

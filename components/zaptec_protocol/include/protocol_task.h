@@ -6,7 +6,7 @@
 #include "../../main/DeviceInfo.h"
 
 float GetFloat(uint8_t * input);
-float GetUint32_t(uint8_t * input);
+uint32_t GetUint32_t(uint8_t * input);
 uint16_t GetUInt16(uint8_t * input);
 
 void zaptecProtocolStart();
