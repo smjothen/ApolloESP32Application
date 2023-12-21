@@ -52,6 +52,7 @@ static float mcuInstantPilotCurrent = 0;
 
 static uint16_t espNotifications = 0;
 static uint16_t mcuNotifications = 0;
+static uint8_t receivedSwitchState = 0xFF;
 
 int holdSetPhases = 0;
 static uint8_t finalStopActive = 0;
@@ -140,7 +141,6 @@ SemaphoreHandle_t uart_write_lock;
 QueueHandle_t uart_recv_message_queue;
 QueueHandle_t uart0_events_queue;
 uint32_t mcuCommunicationError = 0;
-uint8_t receivedSwitchState = 0xFF;
 
 static TaskHandle_t uartRecvTaskHandle = NULL;
 static TaskHandle_t sendTaskHandle = NULL;
