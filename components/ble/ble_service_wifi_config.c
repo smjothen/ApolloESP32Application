@@ -1691,6 +1691,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	if((standalone == 0) || (standalone == 1))
 		{
+			ESP_LOGI(TAG, "Setting Standalone=%i", standalone);
 			storage_Set_Standalone(standalone);
     		if(chargeController_SetStandaloneState(standalone == 1 ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD))
     		{
