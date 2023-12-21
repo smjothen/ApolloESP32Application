@@ -4,6 +4,6 @@ set(COMPONENT_REQUIRES )
 
 set(COMPONENT_SRCS "zntp.c")
 
-set(COMPONENT_ADD_INCLUDEDIRS "")
+set(COMPONENT_ADD_INCLUDEDIRS ".")
 
 register_component()

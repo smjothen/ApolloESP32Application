@@ -3,9 +3,11 @@
 #define TAG "OFFLINE_SESSION"
 
 #include "esp_log.h"
-#include "errno.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
+#include "esp_crc.h"
+
+#include "errno.h"
 #include "ff.h"
 #include "base64.h"
 #include "fat.h"
@@ -14,8 +16,8 @@
 #include "zaptec_cloud_observations.h"
 #include "zaptec_protocol_serialisation.h"
 #include "chargeSession.h"
-#include "../components/ntp/zntp.h"
-#include "../components/i2c/include/i2cDevices.h"
+#include "zntp.h"
+#include "i2cDevices.h"
 #include "offline_log.h"
 
 static char tmp_path[] = "/files";
@@ -767,7 +769,7 @@ int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	size_t wr1 = fwrite(base64SessionData, base64SessionDataLen, 1, sessionFile);
 
 	///Write CRC at the end of the block
-	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
+	uint32_t crcCalc = esp_crc32_le(0, (uint8_t *)base64SessionData, base64SessionDataLen);
 	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
 	size_t wr2 = fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
 
@@ -830,7 +832,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	int readLen = strlen(base64SessionData);
 	uint32_t crcCalc = 0;
 	if(readLen <= 996)
-		crcCalc = crc32_normal(0, base64SessionData, readLen);
+		crcCalc = esp_crc32_le(0, (uint8_t *)base64SessionData, readLen);
 
 	ESP_LOGW(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
@@ -926,7 +928,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 			uint32_t packetCrc = OCMFElement.crc;
 			OCMFElement.crc = 0;
 
-			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
+			uint32_t crcCalc = esp_crc32_le(0, (uint8_t *)&OCMFElement, sizeof(struct LogOCMFData));
 
 			ESP_LOGW(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 		}
@@ -986,7 +988,7 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 
 	int base64SessionDataLen = strlen(base64SessionData);
 
-	uint32_t crcCalc = crc32_normal(0, base64SessionData, base64SessionDataLen);
+	uint32_t crcCalc = esp_crc32_le(0, (uint8_t *)base64SessionData, base64SessionDataLen);
 
 	ESP_LOGI(TAG,"Session CRC read control: 0x%" PRIX32 " vs 0x%" PRIX32 ": %s", crcRead, crcCalc, (crcRead == crcCalc) ? "MATCH" : "FAIL");
 
@@ -1128,7 +1130,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 			uint32_t packetCrc = OCMFElement.crc;
 			OCMFElement.crc = 0;
 
-			uint32_t crcCalc = crc32_normal(0, &OCMFElement, sizeof(struct LogOCMFData));
+			uint32_t crcCalc = esp_crc32_le(0, (uint8_t *)&OCMFElement, sizeof(struct LogOCMFData));
 
 			ESP_LOGI(TAG, "OCMF read %i addr: %i : %c %" PRIu64 " %f 0x%" PRIX32 " %s", i, newElementPosition, OCMFElement.label, timestamp, OCMFElement.energy, packetCrc, (crcCalc == packetCrc) ? "MATCH" : "FAIL");
 
@@ -1301,7 +1303,7 @@ void offlineSession_append_energy(char label, time_t timestamp, double energy)
 
 		uint64_t timestamp = offlineSession_ReadTimestamp(&line, fileVersion);
 
-		uint32_t crc = crc32_normal(0, &line, sizeof(struct LogOCMFData));
+		uint32_t crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(struct LogOCMFData));
 		line.crc = crc;
 
 		//ESP_LOGW(TAG, "FileNo %d: writing to OFFS-file with crc=%u", activeFileNumber, line.crc);

@@ -2,10 +2,12 @@
 
 #define TAG "OFFLINE_LOG    "
 
+#include "esp_crc.h"
 #include "esp_log.h"
-#include "errno.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
+
+#include "errno.h"
 
 #include "OCMF.h"
 #include "zaptec_cloud_observations.h"
@@ -61,7 +63,7 @@ static const struct LogFile log64 = {
 
 int update_header(FILE *fp, int start, int end){
     struct LogHeader new_header = {.start=start, .end=end, .crc=0};
-    uint32_t crc =  crc32_normal(0, &new_header, sizeof(new_header));
+    uint32_t crc =  esp_crc32_le(0, (uint8_t *)&new_header, sizeof(new_header));
     new_header.crc = crc;
     fseek(fp, 0, SEEK_SET);
     ESP_LOGI(TAG, "file error %d eof %d", ferror(fp), feof(fp));
@@ -92,7 +94,7 @@ int ensure_valid_header(FILE *fp, int *start_out, int *end_out){
     uint32_t crc_in_file = head_in_file.crc;
     head_in_file.crc = 0;
 
-    uint32_t calculated_crc = crc32_normal(0, &head_in_file, sizeof(head_in_file));
+    uint32_t calculated_crc = esp_crc32_le(0, (uint8_t *)&head_in_file, sizeof(head_in_file));
 
     if(crc_in_file == calculated_crc){
         ESP_LOGI(TAG, "Found valid header");
@@ -213,7 +215,7 @@ void offline_log_append_energy_legacy(time_t timestamp, double energy){
 
     struct LogLine line = {.energy = energy, .timestamp = timestamp, .crc = 0};
 
-    uint32_t crc = crc32_normal(0, &line, sizeof(line));
+    uint32_t crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
     line.crc = crc;
 
     ESP_LOGI(TAG, "writing to file with crc=%" PRIu32 "", line.crc);
@@ -254,7 +256,7 @@ void offline_log_append_energy(time_t timestamp, double energy){
 
     struct LogLine64 line = {.energy = energy, .timestamp = timestamp, .crc = 0};
 
-    uint32_t crc = crc32_normal(0, &line, sizeof(line));
+    uint32_t crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
     line.crc = crc;
 
     ESP_LOGI(TAG, "writing to file with crc=%" PRIu32 "", line.crc);
@@ -285,7 +287,7 @@ int _offline_log_read_line(FILE *fp, int index, int *line_start, double *line_en
     *line_crc = line.crc;
 
     line.crc = 0;
-    *calc_crc = crc32_normal(0, &line, sizeof(line));
+    *calc_crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
 
     return res;
 }
@@ -304,7 +306,7 @@ int _offline_log_read_line64(FILE *fp, int index, int *line_start, double *line_
     *line_crc = line.crc;
 
     line.crc = 0;
-    *calc_crc = crc32_normal(0, &line, sizeof(line));
+    *calc_crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
 
     return res;
 }
