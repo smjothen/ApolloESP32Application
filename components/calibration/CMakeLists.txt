@@ -1,26 +1,5 @@
-set(COMPONENT_SRCS
-	calibration.c
-
-	calibration_voffs.c
-	calibration_vgain.c
-	calibration_ioffs.c
-	calibration_igain.c
-
-	calibration_verify.c
-
-	calibration_crc.c
-	calibration_util.c
-	calibration_emeter.c
-	calibration_https.c
-
-	calibration-message.pb.c
-	pb_common.c
-	pb_encode.c
-	pb_decode.c
+idf_component_register(
+	SRCS calibration.c calibration_voffs.c calibration_vgain.c calibration_ioffs.c calibration_igain.c calibration_verify.c calibration_crc.c calibration_util.c calibration_emeter.c calibration_https.c calibration-message.pb.c
+	REQUIRES wifi i2c mid nanopb
+	INCLUDE_DIRS . include
 )
-
-set(COMPONENT_REQUIRES wifi i2c mid)
-
-set(COMPONENT_ADD_INCLUDEDIRS ". include")
-
-register_component()
