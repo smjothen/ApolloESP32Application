@@ -1072,11 +1072,13 @@ void ParseLocalSettingsFromCloud(char * message, int message_len)
 				{
 					//MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, standalone);
 					//if(ret == MsgWriteAck)
+
+					/// Need to do storage_Set_Standalone() first before proceeding to chargeController_SetStandaloneState()
+					if(storage_Get_session_controller() != eSESSION_OCPP)
+						storage_Set_Standalone(standalone);
+
 					if(chargeController_SetStandaloneState(standalone == 1 ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD))
 					{
-						if(storage_Get_session_controller() != eSESSION_OCPP)
-							storage_Set_Standalone(standalone);
-
 						esp_err_t err = storage_SaveConfiguration();
 						ESP_LOGI(TAG, "Saved Standalone=%d, %s=%d\n", standalone, (err == 0 ? "OK" : "FAIL"), err);
 

@@ -825,10 +825,25 @@ bool chargeController_SendStartCommandToMCU(enum ChargeSource source)
 bool chargeController_SetStandaloneState(enum session_controller controller)
 {
 	enum session_controller wanted_controller;
-	if(controller & eCONTROLLER_MCU_STANDALONE && enforceScheduleAndDelay){
-		wanted_controller = eSESSION_ZAPTEC_CLOUD;
-	}else{
-		wanted_controller = controller;
+	if(controller == eSESSION_OCPP)
+	{
+		if(controller & eCONTROLLER_MCU_STANDALONE && enforceScheduleAndDelay){
+			wanted_controller = eSESSION_ZAPTEC_CLOUD;
+		}else{
+			wanted_controller = controller;
+		}
+	}
+	else
+	{
+		///When non-ocpp sessionController is synced, use the standalone value to determine states, since 
+		/// sessionController value in device is not updated with latest user-configured standalone mode.
+		if((storage_Get_Standalone() == 1) && enforceScheduleAndDelay){
+			wanted_controller = eSESSION_ZAPTEC_CLOUD;
+		}else if(storage_Get_Standalone() == 0){
+			wanted_controller = eSESSION_ZAPTEC_CLOUD;
+		}else{
+			wanted_controller = eSESSION_STANDALONE;
+		}
 	}
 
 	MessageType ret = MCU_SendUint8Parameter(ParamIsStandalone, (wanted_controller & eCONTROLLER_MCU_STANDALONE) ? 1 : 0); 	//MCU must be controlled by ESP due to schedule function
