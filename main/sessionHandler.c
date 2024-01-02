@@ -491,6 +491,9 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 	float new_max_limit = ocpp_max_limit;
 	uint8_t new_active_phases = ocpp_active_phases;
 
+	if(min_charging_limit < 6.0f) // Ensure limit is valid for IEC 61851-1 when checking if charging should be paused.
+		min_charging_limit = 6.0f;
+
 	if(ocpp_min_limit != min_charging_limit){
  		ESP_LOGI(TAG, "Changing minimum current: %f -> %f", ocpp_min_limit, min_charging_limit);
 		MessageType ret = MCU_SendFloatParameter(ParamCurrentInMinimum, min_charging_limit);

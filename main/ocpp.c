@@ -217,7 +217,6 @@ error:
 }
 
 float current_offered_from_pilot_state(float pilot_state){
-	ESP_LOGE(TAG, "Pilot state: %f", pilot_state);
 	if(pilot_state == 100)
 		return 0;
 
@@ -275,7 +274,6 @@ static int populate_sample_current_offered(enum ocpp_reading_context_id context,
 	};
 
 	sprintf(new_value.value, "%.1f", current_offered_from_pilot_state(MCU_GetInstantPilotState()));
-	ESP_LOGE(TAG, "Current offered: %s", new_value.value);
 	if(ocpp_sampled_list_add(value_list_out, new_value) == NULL)
 		return 0;
 
