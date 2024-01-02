@@ -2,8 +2,8 @@
 #include <string.h>
 
 #if defined(__aarch64__)
-#define ESP_LOGE(tag, fmt, ...) printf(fmt "\n", __VA_ARGS__)
-#define ESP_LOGI(tag, fmt, ...) printf(fmt "\n", __VA_ARGS__)
+#define ESP_LOGE(tag, fmt, ...) printf(fmt "\n", ## __VA_ARGS__)
+#define ESP_LOGI(tag, fmt, ...) printf(fmt "\n", ## __VA_ARGS__)
 #include <assert.h>
 #else
 #include "esp_log.h"
