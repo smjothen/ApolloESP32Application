@@ -20,24 +20,24 @@ typedef struct {
 	uint32_t warning_threshold;
 	uint32_t warning_base;
 	uint32_t warning_events;
-	WarningCallback warning_callback;
-} WarningState;
+	warning_callback_t warning_callback;
+} warning_state_t;
 
 #define WARNING_MAX_HANDLERS 32
 
-static WarningState handlers[WARNING_MAX_HANDLERS];
+static warning_state_t handlers[WARNING_MAX_HANDLERS];
 static int handler_count = 0;
 
 // Default reset after this amount of ticks (~seconds)
 #define WARNING_THRESHOLD_DEFAULT 30
 #define WARNING_THRESHOLD_MAX 86400
 
-bool warning_handler_install(uint32_t mask, WarningCallback cb) {
+bool warning_handler_install(uint32_t mask, warning_callback_t cb) {
 	if (handler_count >= WARNING_MAX_HANDLERS) {
 		return false;
 	}
 
-	WarningState *handler = &handlers[handler_count++];
+	warning_state_t *handler = &handlers[handler_count++];
 	handler->warning_mask = mask;
 	handler->warning_count = 0;
 	handler->warning_events = 0;
@@ -50,7 +50,7 @@ bool warning_handler_install(uint32_t mask, WarningCallback cb) {
 
 void warning_handler_reset(void) {
 	for (int i = 0; i < handler_count; i++) {
-		WarningState *w = &handlers[i];
+		warning_state_t *w = &handlers[i];
 		w->warning_count = 0;
 		w->warning_events = 0;
 		w->warning_threshold = WARNING_THRESHOLD_DEFAULT;
@@ -59,7 +59,7 @@ void warning_handler_reset(void) {
 
 // 30 * 3^e gives handling of warning at 30s, 1.5m, 4.5m, 13.5m, 40.5m, 2.025h, 6.075h, 18.225h, 54.675h
 // 30 * 2^e gives handling of warning at 30s, 1m, 2m, 4m, 8m, 16m, 32m, 1.06h, 2.13h, 4.26h, 8.53h, 17.06h, 34.13h
-static uint32_t warning_handler_get_backoff(WarningState *w) {
+static uint32_t warning_handler_get_backoff(warning_state_t *w) {
 	uint32_t backoff = WARNING_THRESHOLD_DEFAULT;
 
 	for (uint32_t i = 0; i < w->warning_events; i++) {
@@ -77,7 +77,7 @@ bool warning_handler_tick(uint32_t warnings) {
 	bool handled = false;
 
 	for (size_t i = 0; i < handler_count; i++) {
-		WarningState *w = &handlers[i];
+		warning_state_t *w = &handlers[i];
 
 		if (w->warning_mask & warnings) {
 			ESP_LOGI(TAG, "Warning  %08" PRIX32 ": %" PRIu32 " / %" PRIu32 " / %" PRIu32, w->warning_mask, w->warning_count, w->warning_threshold, w->warning_events);
