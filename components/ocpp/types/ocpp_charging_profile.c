@@ -51,8 +51,8 @@ enum ocppj_err_t charging_schedule_period_from_json(cJSON * chargingSchedulePeri
 	if(ocppj_error != eOCPPJ_NO_ERROR)
 		return ocppj_error;
 
-	if(limit < 0 || limit > 32){
-		snprintf(error_description_out, error_description_length, "'limit' out of range. Expected 0-32");
+	if(limit < 0 || limit > 80){
+		snprintf(error_description_out, error_description_length, "'limit' out of range. IEC 61851-1 Expects 0-80");
 		return eOCPPJ_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
 	}
 

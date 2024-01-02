@@ -159,6 +159,75 @@ async def test_tx_profile_applied_16A_0A(cp):
         logging.info('Transition from 16 - 0 worked as expected')
         return True
 
+async def test_tx_profile_applied_current_at_iec_61851_limits(cp):
+    while(cp.connector1_status != ChargePointStatus.charging and cp.connector1_status != ChargePointStatus.suspended_ev and cp.connector1_status != ChargePointStatus.suspended_evse):
+        logging.warning(f"Waiting for status charging...({cp.connector1_status})")
+        await asyncio.sleep(3)
+
+    result = await cp.call(call.SetChargingProfilePayload(connector_id = 1, cs_charging_profiles = create_charging_profile(transaction_id = tx_id, limit=6)))
+    if result is None or result.status != ChargingProfileStatus.accepted:
+        logging.info('Unable to set charging profile with limit 6')
+        return False
+
+    global awaiting_value
+    awaiting_value= 6
+    global awaiting_meter_value
+    awaiting_meter_value= True
+
+    i = 0
+    while(awaiting_meter_value):
+        await asyncio.sleep(1)
+        if i > 60:
+            logging.error('Did not get expected meter value (6A) within timeout')
+            return False
+        i+=1
+
+    result = await cp.call(call.SetChargingProfilePayload(connector_id = 1, cs_charging_profiles = create_charging_profile(transaction_id = tx_id, limit=5)))
+    if result is None or result.status != ChargingProfileStatus.accepted:
+        logging.error('Unable to set charging profile with limit 5A')
+        return False
+
+    awaiting_value= 0
+    awaiting_meter_value= True
+
+    i = 0
+    while(awaiting_meter_value):
+        await asyncio.sleep(1)
+        if i > 60:
+            logging.error('Did not get expected meter value (0A when set to 5A) within timeout')
+            return False
+        i+=1
+
+    if cp.connector1_status != ChargePointStatus.suspended_evse:
+        logging.error('Got expected meter values, but not expected chargepoint state')
+        return False
+
+    result = await cp.call(call.SetChargingProfilePayload(connector_id = 1, cs_charging_profiles = create_charging_profile(transaction_id = tx_id, limit=80)))
+    if result is None or result.status != ChargingProfileStatus.accepted:
+        logging.error('Unable to set charging profile with limit 80A')
+        return False
+
+    awaiting_value= 32 # Expecting highest value allowed by Go. TODO: make this part of the test more robust as other limits may apply
+    awaiting_meter_value= True
+
+    i = 0
+    while(awaiting_meter_value):
+        await asyncio.sleep(1)
+        if i > 60:
+            logging.error('Did not get expected meter value (32A when set to 80A) within timeout')
+            return False
+        i+=1
+
+    result = await cp.call(call.SetChargingProfilePayload(connector_id = 1, cs_charging_profiles = create_charging_profile(transaction_id = tx_id, limit=81)))
+    if result is None:
+        logging.info('Unable to set charging profile with limit 81A')
+        return True
+    else:
+        logging.error(f'Unexpected result: {result}')
+        return False
+
+    return False
+
 async def test_smart_charging_profile(cp, include_manual_tests = True):
     logging.info('Setting up smart charging profile test')
     preconfig_res = await ensure_configuration(cp, {ConfigurationKey.local_pre_authorize: "false",
@@ -195,7 +264,7 @@ async def test_smart_charging_profile(cp, include_manual_tests = True):
                 for sample in m_value['sampled_value']:
                     if sample['measurand'] == Measurand.current_offered:
                         if int(float(sample['value'])) == awaiting_value:
-                            logging.info('Got awaiting meter value')
+                            logging.info(f'Got awaiting meter value {awaiting_value}A')
                             awaiting_meter_value = False
                             return call_result.MeterValuesPayload()
                         else:
@@ -214,6 +283,9 @@ async def test_smart_charging_profile(cp, include_manual_tests = True):
             return False
 
         if await test_tx_profile_applied_16A_0A(cp) != True:
+            return False
+
+        if await test_tx_profile_applied_current_at_iec_61851_limits(cp) != True:
             return False
 
     logging.info("Smart charging test complete successfully")
