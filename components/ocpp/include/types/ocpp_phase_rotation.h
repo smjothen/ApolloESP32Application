@@ -1,6 +1,10 @@
 #ifndef OCPP_PHASE_ROTATION_H_
 #define OCPP_PHASE_ROTATION_H_
 
+/** @file
+* @brief Contains the ConnectorPhaseRotation alternative values. OCPP does not define these as types, but use them as such.
+*/
+
 /** @name Phase rotation
 * @brief "Phase rotation as used in ConnectorPhaseRotation configuration key"
 *
