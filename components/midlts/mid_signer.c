@@ -25,7 +25,7 @@ int main(void) {
 	char pub[512];
 	char prv[512];
 
-	MIDSignCtx ctx = {0};
+	mid_sign_ctx_t ctx = {0};
 
 	int ret;
 	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
@@ -38,7 +38,7 @@ int main(void) {
 	// Should be initialized + generated + verified
 	assert(ctx.flag == 7);
 
-	MIDSignCtx ctx2 = {0};
+	mid_sign_ctx_t ctx2 = {0};
 
 	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
 		ESP_LOGI(TAG, "Init failure: %d", ret);
@@ -53,7 +53,7 @@ int main(void) {
 	// Test mangled input
 	prv[128] = 0xca;
 
-	MIDSignCtx ctx3 = {0};
+	mid_sign_ctx_t ctx3 = {0};
 
 	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
 		ESP_LOGI(TAG, "Init failure: %d", ret);
