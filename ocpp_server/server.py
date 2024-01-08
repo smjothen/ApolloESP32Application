@@ -122,10 +122,6 @@ class ChargePoint(cp):
             dict(expiry_date = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         )
 
-    @on('MeterValues')
-    def on_meter_value_request(self, **kwargs):
-        logging.info('meter value')
-
     @on('StartTransaction')
     def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
         logging.info('Replying to start transaction')
@@ -136,8 +132,8 @@ class ChargePoint(cp):
         )
 
     @on('MeterValues')
-    def on_meter_value(self, connector_id, meter_value, transaction_id, **kwargs):
-        logging.info(f'Meter value: {kwargs}')
+    def on_meter_value(self, connector_id, meter_value, **kwargs):
+        logging.info(f'Meter value: {meter_value}')
         return call_result.MeterValuesPayload()
 
     @on('StopTransaction')

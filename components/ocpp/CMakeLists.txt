@@ -18,6 +18,7 @@ idf_component_register(SRCS
   "types/ocpp_id_tag_info.c"
   "types/ocpp_key_value.c"
   "types/ocpp_meter_value.c"
+  "types/ocpp_phase_rotation.c"
   "types/ocpp_reason.c"
   "types/ocpp_registration_status.c"
   "types/ocpp_update_status.c"

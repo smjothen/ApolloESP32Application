@@ -68,7 +68,7 @@ config OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH # 9.1.8
        int "ConnectorPhaseRotationMaxLength"
        help
 	Maximum number of items in a ConnectorPhaseRotation Configuration Key.
-       default 1
+       default 2
 
 config OCPP_GET_CONFIGURATION_MAX_KEYS # 9.1.9
        int "GetConfigurationMaxKeys"
@@ -130,7 +130,7 @@ config OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH # 9.1.30
        int "SupportedFeatureProfilesMaxLength"
        help
 	Maximum number of items in a SupportedFeatureProfiles Configuration Key.
-       default 6
+       default 8
 endmenu
 
 menu "Firmware Management"

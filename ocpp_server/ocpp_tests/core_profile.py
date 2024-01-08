@@ -21,13 +21,18 @@ from ocpp.v16.enums import (
     TriggerMessageStatus,
     MessageTrigger,
     RegistrationStatus,
-    UnlockStatus
+    UnlockStatus,
+    Measurand,
+    Phase
 )
 from ocpp.v16.datatypes import IdTagInfo
 from ocpp_tests.test_utils import ensure_configuration
 expecting_new_rfid = False
 new_rfid = ''
 authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted))
+
+awaiting_meter_connectors = []
+new_meter_values = dict()
 
 async def test_got_presented_rfid(cp):
     while(cp.connector1_status != ChargePointStatus.available):
@@ -232,6 +237,193 @@ async def test_remote_start(cp):
 
     if i < 8:
         logging.error(f'longer connection timout was not long')
+        return False
+
+    return True
+
+async def test_meter_values(cp):
+    result = await cp.call(call.GetConfigurationPayload([ConfigurationKey.connector_phase_rotation]))
+    if result == None or result.configuration_key == None or len(result.configuration_key) != 1:
+        logging.error("Unable to get phase rotation configuration")
+        return False
+
+    if "value" not in result.configuration_key[0] or "Unknown" in result.configuration_key[0]["value"]:
+        logging.error("Configured phase rotation value does not indicate single or three phase")
+        return False
+
+    is_single_phase = "NotApplicable" in result.configuration_key[0]["value"]
+
+    accept_measurand = [Measurand.current_import, Measurand.current_offered, Measurand.energy_active_import_register,
+                        Measurand.energy_active_import_interval, Measurand.power_active_import, Measurand.temperature, Measurand.voltage]
+
+    reject_measurands = [measurand for measurand in list(Measurand) if measurand not in accept_measurand]
+
+    for measurand in accept_measurand:
+        change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_aligned_data, measurand))
+        if(result == None or change_res.status != ConfigurationStatus.accepted):
+            logging.error(f"Unable to configure aligned data to {measurand}")
+            return False
+
+        change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_sampled_data, measurand))
+        if(result == None or change_res.status != ConfigurationStatus.accepted):
+            logging.error(f"Unable to configure sampled data to {measurand}")
+            return False
+
+    for measurand in reject_measurands:
+        change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_aligned_data, measurand))
+        if(result == None or change_res.status != ConfigurationStatus.rejected):
+            logging.error(f"Unexpected result when configure aligned data with not supported {measurand}")
+            return False
+
+        change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_sampled_data, measurand))
+        if(result == None or change_res.status != ConfigurationStatus.rejected):
+            logging.error(f"Unexpected result when configure sampled data with not supported {measurand}")
+            return False
+
+    complete_measurand = ','.join(accept_measurand)
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_aligned_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to configure aligned data to {complete_measurand}")
+        return False
+
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_sampled_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to configure sampled data to {complete_measurand}")
+        return False
+
+    for interval_type in [ConfigurationKey.clock_aligned_data_interval, ConfigurationKey.meter_value_sample_interval]:
+        res = await cp.call(call.ChangeConfigurationPayload(interval_type, "3"))
+        if(result == None or change_res.status != ConfigurationStatus.accepted):
+            logging.error(f"Unable to configure {interval_type} with {complete_measurand}")
+            return False
+
+        wanted_state = [ChargePointStatus.available, ChargePointStatus.preparing] if interval_type is ConfigurationKey.clock_aligned_data_interval else [ChargePointStatus.charging, ChargePointStatus.suspended_evse, ChargePointStatus.suspended_ev]
+        while(cp.connector1_status not in wanted_state):
+            logging.warning(f"Waiting for status {wanted_state}...({cp.connector1_status})")
+            await asyncio.sleep(3)
+
+        global awaiting_meter_connectors
+        connectors_to_check = [0,1] if interval_type is ConfigurationKey.clock_aligned_data_interval else [1]
+        awaiting_meter_connectors = connectors_to_check.copy()
+
+        i = 0
+        while len(awaiting_meter_connectors) > 0:
+            logging.warning(f"Awaiting new meter values for connector {awaiting_meter_connectors}")
+
+            if i > 3:
+                logging.error("Did not get expected meter values within timeout")
+                return False
+
+            await asyncio.sleep(3)
+
+        res = await cp.call(call.ChangeConfigurationPayload(interval_type, "0"))
+        if(result == None or change_res.status != ConfigurationStatus.accepted):
+            logging.error(f"Unable to turn of clock aligned interval")
+            return False
+
+        gotten_phases = set()
+        for connector in connectors_to_check:
+            got_measurands = set()
+            for value in new_meter_values[connector]:
+                logging.info(f"value: {value}")
+                for sample in value['sampled_value']:
+                    got_measurands.add(sample['measurand'])
+
+                    if "phase" in sample:
+                        gotten_phases.add(sample["phase"])
+
+        if is_single_phase and (Phase.l1 not in gotten_phases or Phase.l2 in gotten_phases or Phase.l3 in gotten_phases):
+            logging.error("Single phase charger defaulted to report non L1 phase meter value")
+            return False
+
+        if not is_single_phase and len(gotten_phases) != 3:
+            logging.error("three phase charger did not default to report all phases")
+            return False
+
+        got_all_values = True
+        for measurand in accept_measurand:
+            if measurand not in got_measurands:
+                logging.error(f'Did not get measurand {measurand} for connector {connector}')
+                got_all_values = False
+
+        if not got_all_values:
+            return False
+
+    for i in range(len(accept_measurand)):
+        accept_measurand[i] = accept_measurand[i] + ".L" + str(1 + i % 3)
+
+    complete_measurand = ','.join(accept_measurand)
+
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_aligned_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.rejected):
+        logging.error(f"Should not be able to specify phase on unsupported measurand but clock aligned config accepts: {complete_measurand}")
+        return False
+
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_sampled_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.rejected):
+        logging.error(f"Should not be able to specify phase on unsupported measurand but sampled config accepts: {complete_measurand}")
+        return False
+
+    complete_measurand = ','.join([Measurand.current_import + "." + Phase.l1, Measurand.temperature + "." + Phase.l2, Measurand.voltage + "." + Phase.l3])
+
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_sampled_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to request specific phase for sampled meter value with: {complete_measurand}")
+        return False
+
+    change_res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.meter_values_aligned_data, complete_measurand))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to request specific phase for aligned meter value with: {complete_measurand}")
+        return False
+
+    res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.clock_aligned_data_interval, "3"))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to configure clock aligned interval")
+        return False
+
+    while(cp.connector1_status != ChargePointStatus.available and cp.connector1_status != ChargePointStatus.preparing):
+        logging.warning(f"Waiting for status available...({cp.connector1_status})")
+        await asyncio.sleep(3)
+
+    connectors_to_check = [0,1]
+    awaiting_meter_connectors = connectors_to_check.copy()
+
+    i = 0
+    while len(awaiting_meter_connectors) > 0:
+        logging.warning(f"Awaiting new meter values for connector {awaiting_meter_connectors}")
+
+        if i > 3:
+            logging.error("Did not get expected meter values within timeout")
+            return False
+
+        await asyncio.sleep(3)
+
+    for connector in [0,1]:
+        got_measurands = set()
+        for value in new_meter_values[connector]:
+            logging.info(f"value: {value}")
+            for sample in value['sampled_value']:
+                if ((sample['measurand'] == Measurand.current_import and 'phase' in sample and sample['phase'] == Phase.l1)
+                    or (sample['measurand'] == Measurand.temperature and 'phase' in sample and sample['phase'] == Phase.l2)
+                    or (sample['measurand'] == Measurand.voltage and 'phase' in sample and sample['phase'] == Phase.l3)):
+                        got_measurands.add(sample['measurand'])
+                else:
+                    logging.error(f"Got Unexpected measurand and phase combination in {sample}")
+                    return False
+
+        if connector == 0: # Some phases are only reported on connector 1
+            if Measurand.temperature in got_measurands:
+                logging.error(f"Did not expect phase related temperature value on connector 0")
+                return False
+            got_measurands.add(Measurand.temperature)
+
+        if len(got_measurands) != 3:
+            logging.error(f"Did not get the three expected measurands. Got {got_measurands} ({len(got_measurands)})")
+            return False
+
+    res = await cp.call(call.ChangeConfigurationPayload(ConfigurationKey.clock_aligned_data_interval, "0"))
+    if(result == None or change_res.status != ConfigurationStatus.accepted):
+        logging.error(f"Unable to disable clock aligned interval after test")
         return False
 
     return True
@@ -528,13 +720,30 @@ async def test_core_profile(cp, include_manual_tests = True):
 
         return authorize_response
 
+    def on_meter_value(self, connector_id, meter_value, **kwargs):
+        global awaiting_meter_connectors
+
+        if connector_id in awaiting_meter_connectors:
+            logging.info(f'Test got awaited meter value')
+            global new_meter_value
+            new_meter_values[connector_id] = meter_value
+            awaiting_meter_connectors.remove(connector_id)
+        else:
+            logging.info(f'Test got meter value')
+
+        return call_result.MeterValuesPayload()
+
     cp.route_map[Action.Authorize]["_on_action"] = types.MethodType(on_authorize, cp)
+    cp.route_map[Action.MeterValues]["_on_action"] = types.MethodType(on_meter_value, cp)
 
     if include_manual_tests:
         if await test_got_presented_rfid(cp) != True:
             return False
 
     if await test_remote_start(cp) != True:
+       return False
+
+    if await test_meter_values(cp) != True:
         return False
 
     if await test_boot_notification_and_non_accepted_state(cp) != True:

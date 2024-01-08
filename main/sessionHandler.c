@@ -918,7 +918,7 @@ void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter
 		current_meter_values_length--;
 	}
 
-	ESP_LOGI(TAG, "Current meter values length: %d (MAX: %d)", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
+	ESP_LOGI(TAG, "Current meter values length: %zu (MAX: %d)", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
 	return;
 error:
 	ocpp_meter_list_delete(values);

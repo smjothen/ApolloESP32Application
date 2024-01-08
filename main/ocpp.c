@@ -46,6 +46,7 @@
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_data_transfer_status.h"
+#include "types/ocpp_phase_rotation.h"
 #include "types/ocpp_reason.h"
 #include "types/ocpp_message_trigger.h"
 #include "types/ocpp_trigger_message_status.h"
@@ -356,7 +357,7 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		.unit = eOCPP_UNIT_CELSIUS
 	};
 
-	if(connector_id == 0){
+	if(connector_id == 0 && phase == NULL){
 		// Body
 		sprintf(new_value.value, "%.1f", MCU_GetTemperaturePowerBoard(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
@@ -373,6 +374,9 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		new_value.location = eOCPP_LOCATION_OUTLET;
 
 		size_t new_values_count = 0;
+
+		if(phase == NULL && (MCU_GetGridType() == NETWORK_1P3W || MCU_GetGridType() == NETWORK_1P4W))
+			phase = OCPP_PHASE_L1;
 
 		if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 			//phase 1
@@ -400,7 +404,6 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 
 		return new_values_count;
 	}else{
-		ESP_LOGE(TAG, "Unexpected connector id");
 		return 0;
 	}
 }
@@ -412,13 +415,13 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 		.measurand = eOCPP_MEASURAND_VOLTAGE,
 		.phase = eOCPP_PHASE_L1,
 		.location = eOCPP_LOCATION_OUTLET,
-		.unit = eOCPP_UNIT_A
+		.unit = eOCPP_UNIT_V
 	};
 
 	size_t new_values_count = 0;
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 		//Phase 1
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(0));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -426,7 +429,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
 		//Phase 2
 		new_value.phase = eOCPP_PHASE_L2;
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(1));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(1));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -434,7 +437,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
 		//Phase 3
 		new_value.phase = eOCPP_PHASE_L3;
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(2));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(2));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -505,9 +508,11 @@ void save_interval_measurands(enum ocpp_reading_context_id context){
 int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connector_id, enum ocpp_reading_context_id context,
 		struct ocpp_sampled_value_list * value_list_out){
 
-	if(phase == NULL){
-		uint8_t rotation = storage_Get_PhaseRotation();
-		if((rotation > 0 && rotation < 4) || (rotation > 9 && rotation < 13))
+	/*
+	* Default to only report on active phases on measurands that are only reported on phases
+	*/
+	if(phase == NULL && measurand != eOCPP_MEASURAND_TEMPERATURE){
+		if(MCU_GetGridType() == NETWORK_1P3W || MCU_GetGridType() == NETWORK_1P4W)
 			phase = OCPP_PHASE_L1;
 	}
 
@@ -533,7 +538,6 @@ int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connect
 }
 
 char * csl_token_get_phase_index(const char * csl_token){
-
 	char * phase_index = rindex(csl_token, '.');
 	if(phase_index == NULL){
 		return NULL;
@@ -548,8 +552,6 @@ char * csl_token_get_phase_index(const char * csl_token){
 	}
 }
 
-//TODO: "All "per-period" data [...] should be [...] transmitted [...] at the end of each interval, bearing the interval start time timestamp"
-//TODO: Optionally add ISO8601 duration to meter value timestamp
 int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
 					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
 
@@ -750,15 +752,30 @@ static void clock_aligned_meter_values_on_aligned_start(){
 	ESP_LOGI(TAG, "Aligned for meter values, sending values and starting repeating timer");
 
 	clock_aligned_meter_values();
-	clock_aligned_handle = xTimerCreate("Ocpp clock aligned",
-					pdMS_TO_TICKS(storage_Get_ocpp_clock_aligned_data_interval() * 1000),
-					pdTRUE, NULL, clock_aligned_meter_values);
 
+	if(clock_aligned_handle != NULL){
+		if(xTimerDelete(clock_aligned_handle, 0) != pdPASS){
+			ESP_LOGE(TAG, "on_aligned_start was unable to delete its own timer");
+			return;
+		}
+		clock_aligned_handle = NULL;
+	}
+
+	TickType_t new_period = pdMS_TO_TICKS(storage_Get_ocpp_clock_aligned_data_interval() * 1000);
+	if(new_period == 0){
+		ESP_LOGW(TAG, "Clock aligned interval seems to have changed after on_aligned_start");
+		return;
+	}
+
+	clock_aligned_handle = xTimerCreate("Ocpp clock aligned", new_period, pdTRUE, NULL, clock_aligned_meter_values);
 	if(clock_aligned_handle == NULL){
 		ESP_LOGE(TAG, "Unable to create repeating clock aligned meter values timer");
 
 	}else{
-		xTimerStart(clock_aligned_handle, 0);
+		if(xTimerStart(clock_aligned_handle, 0) != pdPASS){
+			ESP_LOGE(TAG, "on_aligned_start was unable to start clock aligned timer");
+			return;
+		}
 		init_interval_measurands(eOCPP_CONTEXT_SAMPLE_CLOCK);
 	}
 }
@@ -767,7 +784,10 @@ static void restart_clock_aligned_meter_values(){
 	ESP_LOGI(TAG, "Restarting clock aligned meter value timer");
 
 	if(clock_aligned_handle != NULL){
-		xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(200));
+		if(xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(200)) != pdPASS){
+			ESP_LOGE(TAG, "Unable to delete timer to reset clock aligned meter values");
+			return;
+		}
 		clock_aligned_handle = NULL;
 	}
 
@@ -848,87 +868,82 @@ static int write_configuration_bool(bool value, char * value_out){
 	}
 }
 
-static char * convert_to_ocpp_phase(uint8_t phase_rotation){
-	switch(phase_rotation){ //TODO: Check if understood correctly and handling of 1,2,3 and 1,11,12 is correct
+static const char * convert_to_ocpp_phase(uint8_t phase_rotation){
+	switch(phase_rotation){
 	case 1:
 	case 2:
 	case 3:
-		return "NotApplicable";
+		return OCPP_PHASE_ROTATION_NOT_APPLICABLE;
 	case 4:
-		return "RST";
+		return OCPP_PHASE_ROTATION_RST;
 	case 5:
-		return "STR";
+		return OCPP_PHASE_ROTATION_STR;
 	case 6:
-		return "TRS";
+		return OCPP_PHASE_ROTATION_TRS;
 	case 7:
-		return "RTS";
+		return OCPP_PHASE_ROTATION_RTS;
 	case 8:
-		return "SRT";
+		return OCPP_PHASE_ROTATION_SRT;
 	case 9:
-		return "TSR";
+		return OCPP_PHASE_ROTATION_TSR;
 	case 10:
 	case 11:
 	case 12:
-		return "NotApplicable";
+		return OCPP_PHASE_ROTATION_NOT_APPLICABLE;
 	case 13:
-		return "RST";
+		return OCPP_PHASE_ROTATION_RST;
 	case 14:
-		return "STR";
+		return OCPP_PHASE_ROTATION_STR;
 	case 15:
-		return "TRS";
+		return OCPP_PHASE_ROTATION_TRS;
 	case 16:
-		return "RTS";
+		return OCPP_PHASE_ROTATION_RTS;
 	case 17:
-		return "SRT";
+		return OCPP_PHASE_ROTATION_SRT;
 	case 18:
-		return "TSR";
+		return OCPP_PHASE_ROTATION_TSR;
 	default:
 		return "Unknown";
 	}
 }
 
 // Returns 0 if it can not be determined
-static uint8_t convert_from_ocpp_phase(char L1, char L2, char L3, bool is_it){
-	char phase_rotation[4];
-	phase_rotation[0] = L1;
-	phase_rotation[1] = L2;
-	phase_rotation[2] = L3;
-	phase_rotation[3] = '\0';
+static uint8_t convert_from_ocpp_phase(enum ocpp_phase_rotation_id phase_rotation_id, bool is_it){
 
 	if(!is_it){
-		if(strcmp(phase_rotation, "RST") == 0){
+		switch(phase_rotation_id){
+		case eOCPP_PHASE_ROTATION_RST:
 			return 4;
-		}else if(strcmp(phase_rotation, "STR") == 0){
+		case eOCPP_PHASE_ROTATION_STR:
 			return 5;
-		}else if(strcmp(phase_rotation, "TRS") == 0){
+		case eOCPP_PHASE_ROTATION_TRS:
 			return 6;
-		}else if(strcmp(phase_rotation, "RTS") == 0){
+		case eOCPP_PHASE_ROTATION_RTS:
 			return 7;
-		}else if(strcmp(phase_rotation, "SRT") == 0){
+		case eOCPP_PHASE_ROTATION_SRT:
 			return 8;
-		}else if(strcmp(phase_rotation, "TSR") == 0){
+		case eOCPP_PHASE_ROTATION_TSR:
 			return 9;
-		}else{
+		default:
 			return 0;
 		}
-	}
-	else{
-		if(strcmp(phase_rotation, "RST") == 0){
+	}else{
+		switch(phase_rotation_id){
+		case eOCPP_PHASE_ROTATION_RST:
 			return 13;
-		}else if(strcmp(phase_rotation, "STR") == 0){
+		case eOCPP_PHASE_ROTATION_STR:
 			return 14;
-		}else if(strcmp(phase_rotation, "TRS") == 0){
+		case eOCPP_PHASE_ROTATION_TRS:
 			return 15;
-		}else if(strcmp(phase_rotation, "RTS") == 0){
+		case eOCPP_PHASE_ROTATION_RTS:
 			return 16;
-		}else if(strcmp(phase_rotation, "SRT") == 0){
+		case eOCPP_PHASE_ROTATION_SRT:
 			return 17;
-		}else if(strcmp(phase_rotation, "TSR") == 0){
+		case eOCPP_PHASE_ROTATION_TSR:
 			return 18;
-		}else{
+		default:
 			return 0;
 		}
-
 	}
 }
 
@@ -1022,11 +1037,11 @@ esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
 
 	size_t offset = 0;
 
-	for(size_t i = 0; i < CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
+	for(size_t i = 0; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 		if(i > 0)
 			phase_rotation_str[offset++] = ',';
 
-		sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
+		offset += sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
 	}
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION, false, phase_rotation_str);
@@ -1312,7 +1327,7 @@ esp_err_t add_configuration_ocpp_stop_txn_aligned_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_list){
-	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, true, value_buffer);
@@ -1340,7 +1355,7 @@ esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_sampled_data_max_length(cJSON * key_list){
-	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, true, value_buffer);
@@ -2149,7 +2164,7 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 	}
 
 	if(item_count > max_items){
-		ESP_LOGW(TAG, "CSL item count exceed maximum number of values: %d/%d", item_count, max_items);
+		ESP_LOGW(TAG, "CSL item count exceed maximum number of values: %zu/%" PRIu8, item_count, max_items);
 		goto error;
 	}
 
@@ -2289,114 +2304,111 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
 		/*
-		 * The go represent connector phase rotation via wire index.
-		 * OCPP uses three letters representing L1, L2, L3 optionally
-		 * prefixed by the connector. As the Go only has one connecrot,
-		 * it has been decided that it will reject a request to set
-		 * connector 0 to a different value than connector 1, and
-		 * setting either will be reported as both values updated.
+		 * The go represent connector phase rotation via wire index. OCPP uses three letters (R,S and T) representing L1, L2, L3 optionally
+		 * prefixed by the connector. Since the Go only has one connector, it has been decided that it will reject a request to set
+		 * connector 0 to a different value than connector 1, and setting either will be reported as both values updated.
 		 */
+		_Static_assert(CONFIG_OCPP_NUMBER_OF_CONNECTORS == 1, "Logic for ocpp connector phase rotation configuration is only valid with 1 connector");
 
-		bool is_valid = true;
-		size_t value_count = 1;
-		uint current_connector_id = 0;
+		size_t value_count = 0; // Number of items in the CSL type (number of seperate connectors configured)
 
-		char L1 = '\0';
-		char L2 = '\0';
-		char L3 = '\0';
+		enum ocpp_phase_rotation_id phase_rotation_id = -1;
+		uint8_t grid_type = MCU_GetGridType();
+		size_t offset = 0;
+		uint8_t configured_connector_mask = 0;
 
-		size_t current_item_phase_count = 0;
+		char phase_rotation_buffer[16];
 
+		err = 0;
 		size_t data_length = strlen(value);
-		for(size_t i = 0; i < data_length; i++){
-			if(isspace((unsigned char)value[i])){
-				// skip space;
-			}else if(isdigit((unsigned char)value[i])){ // connector id
-				if(current_item_phase_count == 0){ // if not expecting phase value
-					current_connector_id = value[i] - '0';
-					if(current_connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
-						is_valid = false;
-						break;
-					}
-				}else{
-					is_valid = false;
-					break;
-				}
-			}else if(isupper((unsigned char)value[i])){ // phase value
-				if(value[i] == 'R' || value[i] == 'S' || value[i] == 'T'){
-					switch(++current_item_phase_count){
-					case 1:
-						if(L1 == '\0'){
-							L1 = value[i];
-						}else{
-							is_valid = (L1 == value[i]);
-						}
-						break;
-					case 2:
-						if(L2 == '\0'){
-							L2 = value[i];
-						}else{
-							is_valid = (L2 == value[i]);
-						}
-						break;
-					case 3:
-						if(L3 == '\0'){
-							L3 = value[i];
-						}else{
-							is_valid = (L3 == value[i]);
-						}
-						break;
-					default: // not expecting more phase values
-						is_valid = false;
-					}
+		while(data_length > 0 && isspace((unsigned char)value[data_length]))
+			data_length--;
 
-					if(is_valid == false)
-						break;
-				}else{ // invalid phase value
-					is_valid = false;
-					break;
-				}
-			}else if(ispunct((unsigned char)value[i])){
-				switch(value[i]){
-				case '.':
-					if(current_item_phase_count != 0)
-						is_valid = false;
-					break;
-				case ',':
-					if(current_item_phase_count == 3){ // Phase rotation item complete
-						current_item_phase_count = 0;
-						if(++value_count > CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH){
-							is_valid = false;
-						}
-					}else{
-						is_valid = false;
-					}
-					break;
-				default:
-					is_valid = false;
-				}
-
-				if(is_valid == false){
-					break;
-				}
-			}else if(value[i] == '\0'){
+		while(offset < data_length){
+			if(++value_count > CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH){
+				ESP_LOGW(TAG, "Number of CSL value in new connector phase rotation exceed max");
+				err = -1;
 				break;
-			}else{
-				is_valid = false;
+			}
+
+			if(value_count > 1){
+				if(value[offset] == ','){
+					offset++;
+				}else{
+					ESP_LOGW(TAG, "Expected ',' separated list");
+				}
+			}
+
+			while(isspace((unsigned char)value[offset]))
+				offset++;
+
+			if(isdigit((unsigned char)value[offset])){
+				int connector = atoi(&value[offset]);
+				if(value[offset+1] == '.' && ((configured_connector_mask & 1 << connector) == 0) && connector <= CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+					configured_connector_mask = configured_connector_mask | 1 << connector;
+				}else{
+					ESP_LOGW(TAG, "Invalid use of connector prefix in connector phase rotation");
+					err = -1;
+					break;
+				}
+
+				offset += 2; //skip past connector id and the . seperating it from its rotation
+			}
+
+			size_t i = 0;
+			for(; i < sizeof(phase_rotation_buffer); i++){
+				if(isalpha((unsigned char)value[offset])){
+					phase_rotation_buffer[i] = value[offset];
+					offset++;
+				}else{
+					break;
+				}
+			}
+
+			phase_rotation_buffer[i] = '\0';
+			enum ocpp_phase_rotation_id new_phase_rotation_id = ocpp_phase_rotation_to_id(phase_rotation_buffer);
+
+			if(phase_rotation_id == -1){
+				if(new_phase_rotation_id == -1){
+					ESP_LOGE(TAG, "Got invalid phase rotation: %s", phase_rotation_buffer);
+					err = -1;
+					break;
+
+				}else{
+					if(grid_type == NETWORK_NONE){
+						ESP_LOGE(TAG, "Requested to set phase rotation, but no grid type was detected. Unable to validate or set rotation");
+						err = -1;
+						break;
+
+					}else if((grid_type == NETWORK_1P3W || grid_type == NETWORK_1P4W) && (new_phase_rotation_id != eOCPP_PHASE_ROTATION_NOT_APPLICABLE && new_phase_rotation_id != eOCPP_PHASE_ROTATION_UNKNOWN)){
+						ESP_LOGE(TAG, "Got phase rotation not supported with detected single phase grid"); // All attempts to change rotation away from NotApplicable on UK OPEN should hit this
+						err = -1;
+						break;
+
+					}else if((grid_type == NETWORK_3P3W || grid_type == NETWORK_3P4W) && new_phase_rotation_id == eOCPP_PHASE_ROTATION_NOT_APPLICABLE){
+						ESP_LOGE(TAG, "Got NotApplicable phase rotation (for single phase or DC charge point) when grid indicate three phase");
+						err = -1;
+						break;
+					}
+				}
+
+				phase_rotation_id = new_phase_rotation_id;
+
+			}else if(phase_rotation_id != new_phase_rotation_id){
+				ESP_LOGE(TAG, "The connectors phase rotations do not match: %d != %d", phase_rotation_id, new_phase_rotation_id);
+				err = -1;
 				break;
 			}
 		}
 
-		//TODO: find better way to check if it should be TN or IT connector wiring
-		uint8_t wire_index = convert_from_ocpp_phase(L1, L2, L3, storage_Get_PhaseRotation() > 9);
-
-		if(!is_valid || current_item_phase_count != 3 || wire_index == 0){
-			err = -1;
-		}else{
-
+		if(err == 0){
+			uint8_t wire_index = convert_from_ocpp_phase(phase_rotation_id, grid_type == NETWORK_1P3W || grid_type == NETWORK_3P3W);
+			ESP_LOGI(TAG, "New phase rotation wire index is %d", wire_index);
 			storage_Set_PhaseRotation(wire_index);
-			err = 0;
+		}else{
+			ESP_LOGE(TAG, "Unable to configure phase rotation");
 		}
+
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, is_valid_interval);
 		if(err == 0)
