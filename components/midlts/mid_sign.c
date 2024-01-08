@@ -22,13 +22,13 @@
 
 static const char *TAG = "MID            ";
 
-static MIDSignCtx ctx;
+static mid_sign_ctx_t ctx;
 
-MIDSignCtx *mid_sign_ctx_get_global(void) {
+mid_sign_ctx_t *mid_sign_ctx_get_global(void) {
 	return &ctx;
 }
 
-int mid_sign_ctx_init(MIDSignCtx *ctx, char *prv_buf, size_t prv_size, char *pub_buf, size_t pub_size) {
+int mid_sign_ctx_init(mid_sign_ctx_t *ctx, char *prv_buf, size_t prv_size, char *pub_buf, size_t pub_size) {
 	mbedtls_ctr_drbg_init(&ctx->ctr_drbg);
 	mbedtls_entropy_init(&ctx->entropy);
 	mbedtls_pk_init(&ctx->key);
@@ -104,7 +104,7 @@ error:
 }
 
 /*
-int mid_sign_ctx_get_private_key(MIDSignCtx *ctx, char *buf, size_t buf_size) {
+int mid_sign_ctx_get_private_key(mid_sign_ctx_t *ctx, char *buf, size_t buf_size) {
 	int ret;
 	if ((ret = mbedtls_pk_write_key_pem(&ctx->key, (unsigned char *)buf, buf_size)) != 0) {
 		ESP_LOGE(TAG, "mbedtls_pk_write_key_pem returned -0x%04x", (unsigned int) -ret);
@@ -115,7 +115,7 @@ int mid_sign_ctx_get_private_key(MIDSignCtx *ctx, char *buf, size_t buf_size) {
 }
 */
 
-int mid_sign_ctx_get_public_key(MIDSignCtx *ctx, char *buf, size_t buf_size) {
+int mid_sign_ctx_get_public_key(mid_sign_ctx_t *ctx, char *buf, size_t buf_size) {
 	int ret;
 	if ((ret = mbedtls_pk_write_pubkey_pem(&ctx->key, (unsigned char *)buf, buf_size)) != 0) {
 		ESP_LOGE(TAG, "mbedtls_pk_write_pubkey_pem returned -0x%04x", (unsigned int) -ret);
@@ -126,7 +126,7 @@ int mid_sign_ctx_get_public_key(MIDSignCtx *ctx, char *buf, size_t buf_size) {
 }
 
 // Signs and returns signature in base64 encoded buffer
-int mid_sign_ctx_sign(MIDSignCtx *ctx, char *str, size_t str_len, char *sig64, size_t *sig64_len) {
+int mid_sign_ctx_sign(mid_sign_ctx_t *ctx, char *str, size_t str_len, char *sig64, size_t *sig64_len) {
 	int ret;
 
 	unsigned char sig[MBEDTLS_ECDSA_MAX_LEN];
@@ -156,7 +156,7 @@ int mid_sign_ctx_sign(MIDSignCtx *ctx, char *str, size_t str_len, char *sig64, s
 	return 0;
 }
 
-int mid_sign_ctx_verify(MIDSignCtx *ctx, char *str, size_t str_len, char *sig64, size_t sig64_len) {
+int mid_sign_ctx_verify(mid_sign_ctx_t *ctx, char *str, size_t str_len, char *sig64, size_t sig64_len) {
 	int ret;
 
 	unsigned char hash[32];

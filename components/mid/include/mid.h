@@ -1,8 +1,6 @@
 #ifndef __MID_H__
 #define __MID_H__
 
-#include "mid_sign.h"
-
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -11,11 +9,11 @@ typedef struct {
 	uint32_t wattHours;
 	uint8_t identifiers[3];
 	uint8_t reserved; // Word-align
-} MIDPackage;
+} mid_package_t;
 
 int mid_init(char *prv_pem);
 
-bool mid_get_package(MIDPackage *pkg);
+bool mid_get_package(mid_package_t *pkg);
 bool mid_get_status(uint32_t *status);
 bool mid_get_watt_hours(uint32_t *watt_hours);
 bool mid_get_software_identifiers(uint8_t identifiers[3]);

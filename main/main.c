@@ -28,8 +28,6 @@
 #include "production_test.h"
 #include "EEPROM.h"
 
-#include "mid_sign.h"
-
 #include "storage.h"
 #include "diagnostics_port.h"
 #include "../components/ble/ble_interface.h"
@@ -460,7 +458,7 @@ void log_efuse_info()
 }
 
 void mid_init_or_generate_keys(void) {
-	MIDSignCtx *ctx = mid_sign_ctx_get_global();
+	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
 
 	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE,
 				storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {

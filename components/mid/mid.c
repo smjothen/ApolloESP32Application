@@ -11,39 +11,26 @@
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
 
-#include "wpa_supplicant/base64.h"
-
-#include "storage.h"
 #include "protocol_task.h"
 #include "zaptec_protocol_serialisation.h"
 
-#include "mid_sign.h"
 #include "mid_status.h"
 #include "mid.h"
 
 static const char *TAG = "MID            ";
-/*
 
-static mbedtls_pk_context key;
-static mbedtls_entropy_context entropy;
-static mbedtls_ctr_drbg_context ctr_drbg;
-
-static unsigned char mid_public_key[MID_PUBLIC_KEY_SIZE] = {0};
-static unsigned char mid_private_key[MID_PRIVATE_KEY_SIZE] = {0};
-*/
-
-bool mid_get_package(MIDPackage *pkg) {
+bool mid_get_package(mid_package_t *pkg) {
 	ZapMessage msg = MCU_ReadParameter(SignedMeterValue);
-	if (msg.length != sizeof (MIDPackage) || msg.identifier != SignedMeterValue) {
+	if (msg.length != sizeof (mid_package_t) || msg.identifier != SignedMeterValue) {
 		return false;
 	}
 
-	*pkg = *(MIDPackage *)msg.data;
+	*pkg = *(mid_package_t *)msg.data;
 	return true;
 }
 
 bool mid_get_status(uint32_t *status) {
-	MIDPackage pkg;
+	mid_package_t pkg;
 	if (mid_get_package(&pkg)) {
 		*status = pkg.status;
 		return true;
@@ -52,7 +39,7 @@ bool mid_get_status(uint32_t *status) {
 }
 
 bool mid_get_watt_hours(uint32_t *watt_hours) {
-	MIDPackage pkg;
+	mid_package_t pkg;
 	if (mid_get_package(&pkg)) {
 		*watt_hours = pkg.wattHours;
 		return true;
@@ -61,7 +48,7 @@ bool mid_get_watt_hours(uint32_t *watt_hours) {
 }
 
 bool mid_get_software_identifiers(uint8_t identifiers[3]) {
-	MIDPackage pkg;
+	mid_package_t pkg;
 	if (mid_get_package(&pkg)) {
 		identifiers[0] = pkg.identifiers[0];
 		identifiers[1] = pkg.identifiers[1];
