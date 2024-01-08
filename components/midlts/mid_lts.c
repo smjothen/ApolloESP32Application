@@ -87,7 +87,18 @@ midlts_err_t mid_session_write(midlts_ctx_t *ctx, midlts_id_t id) {
 	char buf[64];
 	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, id);
 
-	FILE *fp = fopen(buf, "w");
+	// NOTE: Must use r+ if file exists, then overwrite data to avoid losing
+	// data if crash happens between fopen and fwrite to flash (and sync data
+	// to flash)
+	//
+	FILE *fp;
+	struct stat st;
+	if (stat(buf, &st) == 0) {
+		fp = fopen(buf, "r+");
+	} else {
+		fp = fopen(buf, "w");
+	}
+
 	if (!fp) {
 		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't open %s!", id, buf);
 		return LTS_FS;
