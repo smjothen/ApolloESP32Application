@@ -27,6 +27,8 @@ from ocpp.v16.enums import (
 )
 from ocpp.v16.datatypes import IdTagInfo
 from ocpp_tests.test_utils import ensure_configuration
+expecting_boot_notification = False
+boot_notification_payload = None
 expecting_new_rfid = False
 new_rfid = ''
 authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted))
@@ -429,6 +431,7 @@ async def test_meter_values(cp):
     return True
 
 async def test_boot_notification_and_non_accepted_state(cp):
+    global boot_notification_payload
     boot_notification_payload = call_result.BootNotificationPayload(
             current_time=datetime.utcnow().isoformat(),
             interval=15,
@@ -436,15 +439,6 @@ async def test_boot_notification_and_non_accepted_state(cp):
         )
     global expecting_boot_notification
     expecting_boot_notification = True
-
-    def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
-        logging.info("Test got boot msg")
-        global expecting_boot_notification
-        expecting_boot_notification = False
-
-        return boot_notification_payload
-
-    cp.route_map[Action.BootNotification]["_on_action"] = types.MethodType(on_boot_notitication, cp)
 
     cp.connector1_status = ChargePointStatus.unavailable
     result = await cp.call(call.ResetPayload(type=ResetType.soft))
@@ -455,12 +449,12 @@ async def test_boot_notification_and_non_accepted_state(cp):
     i = 0
     while expecting_boot_notification:
         i += 1
-        if i > 10:
+        if i > 15:
             logging.error("Did not get boot within expected delay")
             return False
 
         logging.warning("Awaiting new boot notification...")
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
 
     # Attempt boot trigger as it should not be allowed while accepted
     result = await cp.call(call.TriggerMessagePayload(requested_message = MessageTrigger.boot_notification))
@@ -601,6 +595,103 @@ async def test_get_and_set_configuration(cp):
         logging.info(f"Change configuration with non-existent key failed: {result}")
         return False
 
+    result_before = await cp.call(call.GetConfigurationPayload(None))
+    if(result_before == None):
+        logging.info("GetConfiguration for all values failed before reset hard")
+        return False
+
+    global boot_notification_payload
+    boot_notification_payload = call_result.BootNotificationPayload(
+            current_time=datetime.utcnow().isoformat(),
+            interval=0,
+            status=RegistrationStatus.accepted
+        )
+
+    global expecting_boot_notification
+
+    expecting_boot_notification = True
+    cp.connector1_status = ChargePointStatus.unavailable
+
+    result = await cp.call(call.ResetPayload(type=ResetType.hard))
+    if result.status != ResetStatus.accepted:
+        logging.error("Unable to reset charger to test configuration persistence")
+        return False
+
+    i = 0
+    while expecting_boot_notification:
+        i += 1
+        if i > 15:
+            logging.error("Did not get boot within expected delay")
+            return False
+
+        logging.warning("Awaiting new boot notification...")
+        await asyncio.sleep(3)
+
+    result_after = await cp.call(call.GetConfigurationPayload(None))
+    if(result_after == None):
+        logging.info("GetConfiguration for all values failed after reset hard")
+        return False
+
+    if result_after != result_before:
+        logging.error(f"Configuration did not presist hard reset \n\n Before: {result_before} \n\n {result_after}")
+        return False
+
+    old_authorize = "Non"
+    for entry in result_after.configuration_key:
+        if entry["key"] == "AuthorizationRequired":
+            if entry["value"].lower() == "false" or entry["value"].lower() == "true":
+                old_authorize = entry["value"].lower()
+            else:
+                logging.error(f'value of AuthorizationRequired does not convert to bool: {entry}')
+                return False
+
+    new_authorize = "false" if old_authorize == "true" else "false"
+    result = await cp.call(call.ChangeConfigurationPayload(key = "AuthorizationRequired", value = new_authorize))
+    if(result == None or result.status != ConfigurationStatus.accepted):
+        logging.info(f"Unable to change AuthorizationRequired to test persisntence")
+        return False
+
+    expecting_boot_notification = True
+    cp.connector1_status = ChargePointStatus.unavailable
+
+    result = await cp.call(call.ResetPayload(type=ResetType.hard))
+    if result.status != ResetStatus.accepted:
+        logging.error("Unable to reset charger to test configuration persistence")
+        return False
+
+    i = 0
+    while expecting_boot_notification:
+        i += 1
+        if i > 15:
+            logging.error("Did not get boot within expected delay")
+            return False
+
+        logging.warning("Awaiting new boot notification...")
+        await asyncio.sleep(2)
+
+    result_update = await cp.call(call.GetConfigurationPayload(None))
+    if(result == None):
+        logging.info("GetConfiguration for all values failed after reset hard")
+        return False
+
+    update_success = False
+    for i in range(len(result_update.configuration_key)):
+        if result_update.configuration_key[i] != result_after.configuration_key[i]:
+            if result_update.configuration_key[i]["key"] == "AuthorizationRequired" and result_update.configuration_key[i]["value"] == new_authorize:
+                update_success = True
+            else:
+                logging.error(f'Configuration key mismatch after hard reset and change of AuthorizationRequired: {result_update.configuration_key[i]} and {result_after.configuration_key[i]}')
+                return False
+
+    if not update_success:
+        logging.error(f'AuthorizationRequired did not persist after hard reset')
+        return False
+
+    result = await cp.call(call.ChangeConfigurationPayload(key = "AuthorizationRequired", value = old_authorize))
+    if(result == None or result.status != ConfigurationStatus.accepted):
+        logging.info(f"Unable to change AuthorizationRequired back after test")
+        return False
+
     return True
 
 async def test_change_availability(cp):
@@ -732,6 +823,15 @@ async def test_core_profile(cp, include_manual_tests = True):
             logging.info(f'Test got meter value')
 
         return call_result.MeterValuesPayload()
+
+    def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
+        logging.info("Test got boot msg")
+        global expecting_boot_notification
+        expecting_boot_notification = False
+
+        return boot_notification_payload
+
+    cp.route_map[Action.BootNotification]["_on_action"] = types.MethodType(on_boot_notitication, cp)
 
     cp.route_map[Action.Authorize]["_on_action"] = types.MethodType(on_authorize, cp)
     cp.route_map[Action.MeterValues]["_on_action"] = types.MethodType(on_meter_value, cp)
