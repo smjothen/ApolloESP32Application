@@ -8,8 +8,17 @@ cmake_minimum_required(VERSION 3.16)
 #
 # TODO: Fix above so we can have access to all components
 #
-set(EXTRA_COMPONENT_DIRS "../components/midlts/" "../components/utz/" "$ENV{IDF_PATH}/tools/unit-test-app/components")
-set(TEST_COMPONENTS "midlts" CACHE STRING "List of components to test")
+set(EXTRA_COMPONENT_DIRS
+	"../components/midlts/"
+	"../components/utz/"
+	"$ENV{IDF_PATH}/tools/unit-test-app/components"
+)
+
+set(TEST_COMPONENTS
+	"midlts"
+	"utz"
+	CACHE STRING "List of components to test"
+)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(ApolloUnitTest)
