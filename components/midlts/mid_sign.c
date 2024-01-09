@@ -22,7 +22,7 @@
 
 static const char *TAG = "MID            ";
 
-static mid_sign_ctx_t ctx;
+static mid_sign_ctx_t ctx = {0};
 
 mid_sign_ctx_t *mid_sign_ctx_get_global(void) {
 	return &ctx;
@@ -101,6 +101,16 @@ error:
 	mbedtls_pk_free(&ctx->key);
 	mbedtls_ecdsa_free(&ctx->ecdsa);
 	return -1;
+}
+
+int mid_sign_ctx_free(mid_sign_ctx_t *ctx) {
+	mbedtls_ctr_drbg_free(&ctx->ctr_drbg);
+	mbedtls_entropy_free(&ctx->entropy);
+	mbedtls_pk_free(&ctx->key);
+	mbedtls_ecdsa_free(&ctx->ecdsa);
+	memset(ctx, 0, sizeof (*ctx));
+
+	return 0;
 }
 
 /*

@@ -24,6 +24,7 @@ typedef struct {
 mid_sign_ctx_t *mid_sign_ctx_get_global(void);
 
 int mid_sign_ctx_init(mid_sign_ctx_t *ctx, char *prv_buf, size_t prv_size, char *pub_buf, size_t pub_size);
+int mid_sign_ctx_free(mid_sign_ctx_t *ctx);
 int mid_sign_ctx_get_public_key(mid_sign_ctx_t *ctx, char *buf, size_t buf_size);
 
 int mid_sign_ctx_sign(mid_sign_ctx_t *ctx, char *str, size_t str_len, char *sig64, size_t *sig64_len);

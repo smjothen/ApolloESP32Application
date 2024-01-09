@@ -1,5 +1,5 @@
 idf_component_register(
 	SRC_DIRS "."
 	INCLUDE_DIRS "."
-	REQUIRES cmock midlts
+	REQUIRES cmock midlts test_utils
 )

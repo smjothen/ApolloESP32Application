@@ -24,7 +24,6 @@ void setUp(void) {
 	heap_trace_start(HEAP_TRACE_LEAKS);
 #endif
 
-	unity_utils_set_leak_level(0);
 	unity_utils_record_free_mem();
 }
 
@@ -52,8 +51,15 @@ void app_main(void) {
 	// just leave this here.
 	printf("%s", "");
 
+	// All tests that may leak (due to mbedtls)
+	unity_utils_set_leak_level(2048);
 	UNITY_BEGIN();
-	unity_run_all_tests();
+	unity_run_tests_by_tag("[allowleak]", false);
+	UNITY_END();
+
+	unity_utils_set_leak_level(0);
+	UNITY_BEGIN();
+	unity_run_tests_by_tag("[allowleak]", true);
 	UNITY_END();
 
 	unity_run_menu();

@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.16)
 set(EXTRA_COMPONENT_DIRS
 	"../components/midlts/"
 	"../components/utz/"
-	"$ENV{IDF_PATH}/tools/unit-test-app/components"
+	"$ENV{IDF_PATH}/tools/unit-test-app/components/test_utils/"
 )
 
 set(TEST_COMPONENTS
