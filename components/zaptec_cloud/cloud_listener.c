@@ -290,7 +290,7 @@ void on_controller_change(enum session_controller old_controller, enum session_c
 		if(!ocpp_is_running()){
 			ocpp_init();
 		}else{
-			ocpp_end_and_reconnect(true);
+			ocpp_end_and_reconnect(false);
 		}
 	}
 

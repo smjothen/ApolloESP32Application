@@ -2025,6 +2025,13 @@ static bool is_valid_security_profile(uint8_t security_profile){
 	return false;
 }
 
+static bool is_valid_message_timeout(uint16_t message_timeout){
+	if(message_timeout < CONFIG_OCPP_MESSAGE_TIMEOUT_MINIMUM)
+		return false;
+
+	return true;
+}
+
 static long validate_u(const char * value, uint32_t upper_bounds){
 	char * endptr;
 
@@ -2060,10 +2067,13 @@ static int set_config_u8(void (*config_function)(uint8_t), const char * value, b
 	return 0;
 }
 
-static int set_config_u16(void (*config_function)(uint16_t), const char * value){
+static int set_config_u16(void (*config_function)(uint16_t), const char * value, bool (*additional_validation)(uint16_t)){
 	long value_long = validate_u(value, UINT16_MAX);
 
 	if(value_long == -1)
+		return -1;
+
+	if(additional_validation != NULL && additional_validation((uint32_t)value_long) == false)
 		return -1;
 
 	config_function((uint16_t)value_long);
@@ -2449,7 +2459,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
-		err = set_config_u16(storage_Set_ocpp_message_timeout, value);
+		err = set_config_u16(storage_Set_ocpp_message_timeout, value, is_valid_message_timeout);
 		if(err == 0)
 			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 
@@ -2528,7 +2538,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
-		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value);
+		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value, NULL);
 		if(err == 0)
 			update_transaction_message_related_config(
 				storage_Get_ocpp_transaction_message_attempts(),
@@ -3417,7 +3427,7 @@ static esp_err_t prepare_reset(){
 
 	ESP_LOGI(TAG, "Checking for ongoing transactions.");
 	for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
-		ESP_LOGI(TAG, "Checking connector %d", i);
+		ESP_LOGI(TAG, "Checking connector %zu", i);
 		if(sessionHandler_OcppTransactionIsActive(i)){
 			ESP_LOGI(TAG, "Active transaction. Will attempt to stop");
 			if(should_reboot && reset_from_cs){
@@ -3711,35 +3721,48 @@ static void ocpp_task(){
 				ESP_LOGI(TAG, "Handling main event");
 
 				if(main_event & eOCPP_QUIT){
-					esp_err_t reset_result = prepare_reset(graceful_exit);
-					if(reset_result != ESP_OK && graceful_exit){
-						ESP_LOGE(TAG, "Failed to restart attempting to continue with ocpp");
-						if(reset_from_cs){
-							switch(reset_result){
-							case ESP_ERR_TIMEOUT:
+					ESP_LOGW(TAG, "Event quit. Preparing OCPP exit");
+
+					esp_err_t reset_result = ESP_FAIL;
+					if(reset_from_cs && graceful_exit){
+						for(size_t i = 0; i <= storage_Get_ocpp_reset_retries(); i++){
+							reset_result = prepare_reset(graceful_exit);
+
+							if(reset_result == ESP_ERR_TIMEOUT){
+								ESP_LOGE(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req timed out", i+1, storage_Get_ocpp_reset_retries()+1);
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Transaction related Timeout while prepare reset",
-											NULL, NULL, true, false);
+															"Transaction related Timeout while prepare reset",
+															NULL, NULL, true, false);
+							}else if(reset_result == ESP_OK){
+								ESP_LOGI(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req succeeded", i+1, storage_Get_ocpp_reset_retries()+1);
 								break;
-							default:
+							}else{
+								ESP_LOGE(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req failed", i+1, storage_Get_ocpp_reset_retries()+1);
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Unable to prepare for reset",
-											NULL, NULL, true, false);
+															"Unable to prepare for reset",
+															NULL, NULL, true, false);
 							}
-						}else{
-							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");
 						}
+					}else{
+						reset_result = prepare_reset(graceful_exit);
+					}
+
+					if(reset_result != ESP_OK && graceful_exit){
+						ESP_LOGE(TAG, "Failed graceful reset. Attempting to continue with ocpp");
+
+						if(!reset_from_cs)
+							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");
 
 						should_run = true;
 						should_reboot = false;
 						should_reconnect = false;
 						graceful_exit = false;
 						reset_from_cs = false;
+
 					}else{
 						ESP_LOGW(TAG, "Quitting ocpp loop");
 						break;
 					}
-
 				}
 				if(data & eOCPP_FIRMWARE_UPDATE){
 					ESP_LOGI(TAG, "Attempting to start firmware update from ocpp");

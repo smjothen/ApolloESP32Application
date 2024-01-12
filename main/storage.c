@@ -93,7 +93,7 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_heartbeat_interval = 86400;
 	configurationStruct.ocpp_local_authorize_offline = true;
 	configurationStruct.ocpp_local_pre_authorize = true;
-	configurationStruct.ocpp_message_timeout = 10;
+	configurationStruct.ocpp_message_timeout = CONFIG_OCPP_MESSAGE_TIMEOUT_DEFAULT;
 	strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
 	strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
 	configurationStruct.ocpp_meter_value_sample_interval = 0;
@@ -1228,7 +1228,7 @@ esp_err_t storage_ReadConfiguration()
 	//if(nvs_get_u32(configuration_handle, "oEnergyOnInv_m", &configurationStruct.ocpp_max_energy_on_invalid_id) != 0)
 	//
 	if(nvs_get_u16(configuration_handle, "oMessageTimeOut", &configurationStruct.ocpp_message_timeout) != 0)
-		configurationStruct.ocpp_message_timeout = 10;
+		configurationStruct.ocpp_message_timeout = CONFIG_OCPP_MESSAGE_TIMEOUT_DEFAULT;
 	readSize = DEFAULT_CSL_SIZE;
 	if(nvs_get_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data, &readSize) != 0)
 		strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");

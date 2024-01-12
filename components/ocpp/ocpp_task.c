@@ -1021,7 +1021,7 @@ esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 		goto error;
 	}
 
-	for(int i = 0; i < 5; i++){
+	for(int i = 0; i < ocpp_call_timeout +1; i++){
 		if(ocpp_is_connected()){
 			ocpp_call_queue = xQueueCreate(5, sizeof(struct ocpp_call_with_cb *));
 			ocpp_blocking_call_queue = xQueueCreate(1, sizeof(struct ocpp_call_with_cb *));
@@ -1055,12 +1055,10 @@ esp_err_t start_ocpp(struct ocpp_client_config * ocpp_config){
 			return 0;
 		}
 
-		if(i+1 == 5){
-			ESP_LOGE(TAG, "Websocket did not connect");
-			goto error;
-		}
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
+
+	ESP_LOGE(TAG, "Websocket did not connect");
 
 error:
 	stop_ocpp();

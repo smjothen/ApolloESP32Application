@@ -8,6 +8,7 @@ from ocpp_tests.reservation_profile import test_reservation_profile
 from ocpp_tests.smart_charging_profile import test_smart_charging_profile
 from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
 from ocpp_tests.remote_trigger_profile import test_remote_trigger_profile
+from ocpp_tests.endurance_tests import endurance_tests
 
 import logging
 from datetime import(
@@ -48,7 +49,7 @@ async def _test_runner(cp):
     logging.info("Boot accepted")
 
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage: ')
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage/[E]ndurance Test: ')
 
     core_result = None
     reservation_result = None
@@ -70,6 +71,9 @@ async def _test_runner(cp):
 
     if response == "T" or response == "A":
         remote_trigger_result = await test_remote_trigger_profile(cp)
+
+    if response == "E":
+        await endurance_tests(cp)
 
     logging.info(f'Core profile          : {core_result}')
     logging.info(f'Reservation profile   : {reservation_result}')
@@ -145,11 +149,17 @@ class ChargePoint(cp):
 
     @on('StatusNotification')
     def on_status_notification(self, connector_id, error_code, status, **kwargs):
-        if(error_code == ChargePointErrorCode.no_error):
-            logging.info(f'CP status: {status} ({error_code})')
+        if connector_id == 0:
+            self.connector0_status = status
+        elif connector_id == 1:
             self.connector1_status = status
         else:
-            logging.error(f'CP status: {status} ({error_code})')
+            logging.error(f'Unexpected connector {connector_id}')
+
+        if error_code == ChargePointErrorCode.no_error:
+            logging.info(f'Connector {connector_id} status: {status} ({error_code})')
+        else:
+            logging.error(f'Connector {connector_id} status: {status} ({error_code})')
 
         return call_result.StatusNotificationPayload()
 

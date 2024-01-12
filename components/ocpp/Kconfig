@@ -76,6 +76,22 @@ config OCPP_GET_CONFIGURATION_MAX_KEYS # 9.1.9
 	Maximum number of requested configuration keys in a GetConfiguration.req PDU.
        default 62
 
+# For message timeout described in errata v4.0 as 9.1.15
+config OCPP_MESSAGE_TIMEOUT_DEFAULT
+       int "MessageTimeout"
+       help
+	Defines the OCPP Message timeout default value in seconds.
+	If the Charge Point has not received a response to a request within this timeout, the Charge Point SHALL consider the request
+	timed out.
+       default 10
+
+config OCPP_MESSAGE_TIMEOUT_MINIMUM
+       int "MessageTimeout minimum"
+       help
+	Minimum value CS(MS) can configure message timeout too. This timeout is used during all ocpp messages including boot.
+	If the value is too low then it may be impossible to complete the boot procedure.
+       default 10
+
 config OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH # 9.1.16
        int "MeterValuesAlignedDataMaxLength"
        help
