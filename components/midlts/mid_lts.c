@@ -487,6 +487,79 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_vers
 	return ret;
 }
 
+midlts_err_t mid_session_get_record(midlts_pos_t *pos, mid_session_record_t *out) {
+	midlts_err_t ret = LTS_OK;
+
+	pb_byte_t databuf[MID_SESSION_RECORD_SIZE] = {0};
+
+	char buf[64];
+	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, pos->id);
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_EOF;
+	}
+
+	struct stat st;
+	if (fstat(fileno(fp), &st)) {
+		ret = LTS_STAT;
+		goto close;
+	}
+
+	size_t file_size = st.st_size;
+
+	if (file_size == 0) {
+		ret = LTS_EOF;
+		goto close;
+	}
+
+	if (fseek(fp, pos->off, SEEK_SET) < 0) {
+		ret = LTS_SEEK;
+		goto close;
+	}
+
+	size_t read = fread(&databuf, 1, MID_SESSION_RECORD_SIZE, fp);
+	if (read <= 0) {
+		ret = LTS_READ;
+		goto close;
+	}
+
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+	pb_istream_t stream = pb_istream_from_buffer(databuf, read);
+
+	if (!pb_decode_delimited(&stream, MID_SESSION_RECORD_FIELDS, &rec)) {
+		ESP_LOGE(TAG, "Error decoding protobuf: %s", PB_GET_ERROR(&stream));
+		ret = LTS_PROTO_DECODE;
+		goto close;
+	} else {
+		uint32_t crc = rec.rec_crc;
+		rec.rec_crc = 0xFFFFFFFF;
+		uint32_t crc2 = esp_crc32_le(0, (uint8_t *)&rec, sizeof (rec));
+
+		if (crc != crc2) {
+			ret = LTS_BAD_CRC;
+			goto close;
+		}
+
+		size_t record_size = read - stream.bytes_left;
+
+		pos->off += record_size;
+		if (pos->off >= file_size) {
+			pos->id++;
+			pos->off = 0;
+		}
+
+		*out = rec;
+	}
+
+close:
+	if (fclose(fp)) {
+		ret = LTS_CLOSE;
+	}
+
+	return ret;
+}
+
 #ifdef HOST
 
 #define TEST

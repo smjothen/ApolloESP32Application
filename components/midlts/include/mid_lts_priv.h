@@ -13,7 +13,7 @@
 typedef uint32_t midlts_id_t;
 typedef uint32_t midlts_msg_id_t;
 
-typedef enum _midlts_flag_t { 
+typedef enum _midlts_flag_t {
 	LTS_FLAG_NONE = 0,
 	LTS_FLAG_SESSION_OPEN = 1,
 	LTS_FLAG_REPLAY_PRINT = 2,
@@ -76,6 +76,8 @@ typedef struct _midlts_ctx_t {
 	X(LTS_FLUSH) \
 	X(LTS_SYNC) \
 	X(LTS_TELL) \
+	X(LTS_SEEK) \
+	X(LTS_EOF) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
 	X(LTS_PROTO_ENCODE) \
@@ -109,5 +111,5 @@ void mid_session_format_bytes_uuid(char *buf, uint8_t *bytes, size_t len);
 void mid_session_format_bytes(char *buf, uint8_t *bytes, size_t len);
 
 void mid_session_print_record(mid_session_record_t *rec);
-	
+
 #endif
