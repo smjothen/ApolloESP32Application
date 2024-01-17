@@ -49,6 +49,7 @@ __attribute__((unused)) static uint32_t esp_random(void) {
 
 #endif
 
+#include "mid_lts_priv.h"
 #include "mid_session.pb.h"
 
 typedef struct _midlts_ctx_t midlts_ctx_t;

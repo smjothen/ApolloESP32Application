@@ -11,6 +11,8 @@ cmake_minimum_required(VERSION 3.16)
 set(EXTRA_COMPONENT_DIRS
 	"../components/midlts/"
 	"../components/utz/"
+	"../components/nanopb/"
+	"../managed_components/joltwallet__littlefs/"
 	"$ENV{IDF_PATH}/tools/unit-test-app/components/test_utils/"
 )
 

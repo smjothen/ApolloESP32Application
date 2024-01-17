@@ -13,7 +13,7 @@
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
 
-const char *TAG = "MIDLTS         ";
+static const char *TAG = "MIDLTS         ";
 
 static void mid_session_record_update_stats(midlts_ctx_t *ctx, mid_session_record_t *rec) {
 	ctx->last_message = rec->rec_id;

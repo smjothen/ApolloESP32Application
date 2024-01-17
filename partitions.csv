@@ -10,3 +10,5 @@ ota_0,    app,  ota_0,   ,        0x450000,
 ota_1,    app,  ota_1,   ,        0x450000,
 disk,     data, fat,     ,        0x90000, encrypted,
 files,     data, fat,    ,        0x190000, encrypted,
+mid,     data, spiffs,    ,        0xc0000, encrypted,
+coredump, data, coredump,,        0x10000, encrypted
