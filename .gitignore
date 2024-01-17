@@ -19,3 +19,5 @@ compile_commands.json
 managed_components
 .vim
 build.clang
+
+*.o

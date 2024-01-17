@@ -1,294 +1,415 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <sys/errno.h>
-#include <stdbool.h>
-#include <inttypes.h>
+#include <errno.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
+#include <inttypes.h>
 
-#include "mid_session.h"
+#include "pb.h"
+#include "pb_encode.h"
+#include "pb_decode.h"
+
+#include "mid_session.pb.h"
 #include "mid_lts.h"
-
-// Limit age to <= 31 days (1 month), should be enough time to store the max amount of
-// session files below!
-#define MIDLTS_MAX_AGE 31
-// TODO: Increase this limit with littlefs? Very few chargers do have > 100 sessions in a month
-#define MIDLTS_MAX_FILES 100
-#define MIDLTS_SIZE(len) (sizeof (midsess_t) + (len) * sizeof (midsess_meter_val_t))
-
-#define MIDLTS_SCN "%" SCNx32 ".ms%n"
-#define MIDLTS_PRI "%" PRIx32 ".ms"
+#include "mid_lts_priv.h"
 
 const char *TAG = "MIDLTS         ";
 
-typedef int32_t midlts_id_t;
+static void mid_session_record_update_stats(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+	ctx->last_message = rec->rec_id;
+	ctx->stats.message_count++;
 
-typedef struct _midlts_ctx_t {
-	midsess_ver_app_t app;
-	size_t session_count;
-	midlts_id_t active_id;
-	size_t active_capacity;
-	midsess_t *active;
-} midlts_ctx_t;
-
-
-typedef enum _midlts_err_t {
-	LTS_OK = 0,
-	LTS_FS = 1,
-	LTS_CRC = 2,
-	LTS_MEM = 3,
-	LTS_INVALID = 4,
-} midlts_err_t;
-
-static uint32_t mid_session_calc_crc(midsess_t *sess) {
-	uint32_t tmp = sess->sess_crc;
-	sess->sess_crc = 0;
-	uint32_t crc = esp_crc32_le(0, (uint8_t *)sess, MIDLTS_SIZE (sess->sess_count));
-	sess->sess_crc = tmp;
-	return crc;
-}
-
-static midlts_err_t mid_session_buf_init(midlts_ctx_t *ctx) {
-	ctx->active_capacity = 32;
-	ctx->active = calloc(1, MIDLTS_SIZE (ctx->active_capacity));
-	if (!ctx->active) {
-		ESP_LOGE(TAG, "Memory allocation failed!");
-		return LTS_MEM;
+	if (rec->has_meter_value) {
+		uint32_t flag = rec->meter_value.flag;
+		if (flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
+			ctx->stats.start_count++;
+		} else if (flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
+			ctx->stats.end_count++;
+		} else {
+			ctx->stats.tariff_count++;
+		}
 	}
-	return LTS_OK;
 }
 
-static midlts_err_t mid_session_buf_grow_bytes(midlts_ctx_t *ctx, size_t bytes) {
-	while (bytes > MIDLTS_SIZE (ctx->active_capacity)) {
-		ctx->active_capacity *= 2;
+static void mid_session_record_add_version(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+	if (strcmp(ctx->fw_version, ctx->current_file.fw_version.code)) {
+		strlcpy(ctx->current_file.fw_version.code, ctx->fw_version, sizeof (rec->fw_version.code));
+		rec->has_fw_version = true;
+		rec->fw_version = ctx->current_file.fw_version;
 	}
-	ctx->active = realloc(ctx->active, MIDLTS_SIZE (ctx->active_capacity));
-	if (!ctx->active) {
-		ESP_LOGE(TAG, "Memory allocation failed (%zu bytes)!", bytes);
-		return LTS_MEM;
+
+	if (strcmp(ctx->lr_version, ctx->current_file.lr_version.code)) {
+		strlcpy(ctx->current_file.lr_version.code, ctx->lr_version, sizeof (rec->lr_version.code));
+		rec->has_lr_version = true;
+		rec->lr_version = ctx->current_file.lr_version;
 	}
-	return LTS_OK;
 }
 
-static midlts_err_t mid_session_buf_grow(midlts_ctx_t *ctx, size_t entries) {
-	return mid_session_buf_grow_bytes(ctx, MIDLTS_SIZE (entries));
-}
-
-static midlts_err_t mid_session_buf_clear(midlts_ctx_t *ctx) {
-	memset(ctx->active, 0, MIDLTS_SIZE (ctx->active_capacity));
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_write(midlts_ctx_t *ctx, midlts_id_t id) {
+static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
 	midlts_err_t ret = LTS_OK;
 
+	pb_byte_t databuf[MID_SESSION_RECORD_SIZE];
+	pb_ostream_t stream = pb_ostream_from_buffer(databuf, sizeof (databuf));
+
+	// Ensure each file has version information for future meter value
+	mid_session_record_add_version(ctx, rec);
+
+	rec->rec_crc = 0xFFFFFFFF;
+	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
+
+	mid_session_print_record(rec);
+
+	if (!pb_encode_delimited(&stream, MID_SESSION_RECORD_FIELDS, rec)) {
+		ESP_LOGE(TAG, "Error encoding protobuf: %s", PB_GET_ERROR(&stream));
+		return LTS_PROTO_ENCODE;
+	}
+
 	char buf[64];
-	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, id);
+	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, ctx->log_id);
 
-	// NOTE: Must use r+ if file exists, then overwrite data to avoid losing
-	// data if crash happens between fopen and fwrite to flash (and sync data
-	// to flash)
-	//
-	FILE *fp;
-	struct stat st;
-	if (stat(buf, &st) == 0) {
-		fp = fopen(buf, "r+");
-	} else {
-		fp = fopen(buf, "w");
-	}
-
+	FILE *fp = fopen(buf, "a");
 	if (!fp) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't open %s!", id, buf);
-		return LTS_FS;
+		return LTS_OPEN;
 	}
 
-	// Renew checksums
-	midsess_t *sess = ctx->active;
-	sess->sess_crc = mid_session_calc_crc(sess);
+	long size = ftell(fp);
+	if (size < 0) {
+		ret = LTS_TELL;
+		goto close;
+	}
 
-	if (fwrite(sess, MIDLTS_SIZE (sess->sess_count), 1, fp) != 1) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Fail to read file %s", id, buf);
-		ret = LTS_FS;
+	if (size + stream.bytes_written > MIDLTS_LOG_MAX_SIZE) {
+		ret = LTS_LOG_FILE_FULL;
+		goto close;
+	}
+
+	if (fwrite(databuf, stream.bytes_written, 1, fp) != 1) {
+		ret = LTS_WRITE;
 		goto close;
 	}
 
 	if (fflush(fp)) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Fail to flush %s", id, buf);
-		ret = LTS_FS;
+		ret = LTS_FLUSH;
 		goto close;
 	}
 
 	if (fsync(fileno(fp))) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Fail to sync %s", id, buf);
-		ret = LTS_FS;
+		ret = LTS_SYNC;
 		goto close;
 	}
 
 close:
 	if (fclose(fp)) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Fail to close %s", id, buf);
-		ret = LTS_FS;
+		return LTS_CLOSE;
+	}
+
+	if (ret == LTS_OK) {
+		mid_session_record_update_stats(ctx, rec);
+
+		pos->id = ctx->log_id;
+		pos->off = size;
+
+		//ESP_LOGI(TAG, "MID Session Pos     - %" PRId16 "-%" PRId16, pos->id, pos->off);
 	}
 
 	return ret;
 }
 
-midlts_err_t mid_session_read(midlts_ctx_t *ctx, midlts_id_t id) {
-	midlts_err_t ret = LTS_OK;
+static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool initial);
+static midlts_err_t mid_session_count_files(uint32_t *count, midlts_id_t *min, midlts_id_t *max);
 
+midlts_err_t mid_session_purge(midlts_pos_t *pos, time_t now) {
 	char buf[64];
-	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, id);
 
-	FILE *fp = fopen(buf, "r");
-	if (!fp) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't open %s!", id, buf);
-		return LTS_FS;
+	uint32_t count;
+	midlts_id_t min_id, max_id;
+	midlts_err_t err = mid_session_count_files(&count, &min_id, &max_id);
+	if (err != LTS_OK) {
+		return err;
 	}
 
-	struct stat st;
-	if (fstat(fileno(fp), &st) < 0) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't stat %s", id, buf);
-		ret = LTS_FS;
-		goto close;
-	}
+	// Try to purge if we have > 16 files in total
+	if (count > 16) {
+		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " Storage %" PRIu32, min_id, pos->id);
 
-	if (mid_session_buf_grow_bytes(ctx, st.st_size) != LTS_OK) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't grow buffer %s", id, buf);
-		ret = LTS_FS;
-		goto close;
-	}
+		// Check if first file can be purged
+		midlts_ctx_t ctx_purge = {0};
+		ctx_purge.stats.latest = -1;
 
-	if (fread(ctx->active, st.st_size, 1, fp) != 1) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Can't read session file %s", id, buf);
-		ret = LTS_FS;
-		goto close;
-	}
+		if ((err = mid_session_log_replay(&ctx_purge, min_id, true)) != LTS_OK) {
+			return err;
+		}
 
-	midsess_t *sess = ctx->active;
+		time_t latest = ctx_purge.stats.latest;
 
-	if (st.st_size != MIDLTS_SIZE(sess->sess_count)) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Session file incorrect length %s", id, buf);
-		ret = LTS_FS;
-		goto close;
-	}
+		// TODO: Check `now' is accurate (NTP sync recently?)
+		if (latest > 0 && latest < now - MIDLTS_LOG_MAX_AGE && min_id < pos->id) {
+			ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - Latest %" PRId64 " < Now %" PRId64 " - Limit %" PRId64,
+					min_id, latest, now, MIDLTS_LOG_MAX_AGE);
 
-	if (sess->sess_crc != mid_session_calc_crc(sess)) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Session %s header checksums don't match!", id, buf);
-		ret = LTS_CRC;
-		goto close;
-	}
+			sprintf(buf, MIDLTS_DIR MIDLTS_PRI, min_id);
 
-close:
-	if (fclose(fp)) {
-		ESP_LOGE(TAG, "MID Session %" PRIx32 ": Fail to close %s", id, buf);
-		ret = LTS_FS;
-	}
-
-	if (ret != LTS_OK) {
-		mid_session_buf_clear(ctx);
-	}
-
-	return ret;
-}
-
-midlts_err_t mid_session_sync(midlts_ctx_t *ctx, midlts_id_t id) {
-	midsess_t *sess = ctx->active;
-	if (mid_session_calc_crc(sess) == sess->sess_crc) {
-		return LTS_OK;
-	}
-	midlts_err_t ret;
-	if ((ret = mid_session_write(ctx, id) != LTS_OK)) {
-		return ret;
-	}
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_purge(midlts_ctx_t *ctx, midlts_id_t id) {
-	char buf[64];
-	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, id);
-
-	if (remove(buf)) {
-		return LTS_FS;
-	}
-
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_dump(midlts_ctx_t *ctx) {
-	midsess_t *sess = ctx->active;
-
-	ESP_LOGI(TAG, "MID Session %" PRIx32 ":", ctx->active_id);
-	ESP_LOGI(TAG, " -   CRC: %08" PRIX32, sess->sess_crc);
-	ESP_LOGI(TAG, " -    ID: %s", sess->sess_id);
-	ESP_LOGI(TAG, " -  Auth: %s", sess->sess_auth);
-	ESP_LOGI(TAG, " -  Flag: %08" PRIX32, sess->sess_flag);
-	ESP_LOGI(TAG, " - Count: %08" PRIX32, sess->sess_count);
-
-	for (uint16_t i = 0; i < sess->sess_count; i++) {
-		midsess_meter_val_t *val = &sess->sess_values[i];
-		midsess_ver_mid_t mid = val->meter_vmid;
-		midsess_ver_app_t app = val->meter_vapp;
-		ESP_LOGI(TAG, " -   Value: %08" PRIX64 " / %08" PRIX32 " / %08" PRIX32 " / v%d.%d.%d / v%d.%d.%d.%d",
-				val->meter_time, val->meter_value, val->meter_flag, mid.v1, mid.v2, mid.v3, app.v1, app.v2, app.v3, app.v4);
-	}
-
-	return LTS_OK;
-}
-
-bool mid_session_is_complete(midlts_ctx_t *ctx) {
-	// Check if complete (has end meter reading)
-	midsess_t *active = ctx->active;
-	uint16_t count = active->sess_count;
-	midsess_meter_val_t *values = active->sess_values;
-
-	for (uint16_t i = 0; i < count; i++) {
-		if (values[i].meter_flag & MV_FLAG_READING_END) {
-			return true;
+			if (remove(buf) != 0) {
+				return LTS_REMOVE;
+			}
 		}
 	}
 
-	return false;
+	return LTS_OK;
 }
 
-bool mid_session_is_incomplete(midlts_ctx_t *ctx) {
-	return !mid_session_is_complete(ctx);
-}
+static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
+	uint32_t count;
+	midlts_id_t min_id, max_id;
+	midlts_err_t err;
 
-midlts_err_t mid_session_write_active(midlts_ctx_t *ctx) {
-	return mid_session_write(ctx, ctx->active_id);
-}
+	rec->rec_id = ctx->msg_id;
 
-midlts_err_t mid_session_read_active(midlts_ctx_t *ctx) {
-	return mid_session_read(ctx, ctx->active_id);
-}
+	if ((err = mid_session_log_record_internal(ctx, pos, rec)) == LTS_LOG_FILE_FULL) {
+		// Clear file specific context
+		memset(&ctx->current_file, 0, sizeof (ctx->current_file));
 
-midlts_err_t mid_session_sync_active(midlts_ctx_t *ctx) {
-	return mid_session_sync(ctx, ctx->active_id);
-}
+		// Try purging earliest file if possible!
+		err = mid_session_purge(&ctx->min_purgeable, now);
+		if (err != LTS_OK) {
+			return err;
+		}
+		err = mid_session_count_files(&count, &min_id, &max_id);
+		if (err != LTS_OK) {
+			return err;
+		}
+		if (count + 1 > MIDLTS_LOG_MAX_FILES) {
+			return LTS_FS_FULL;
+		}
 
-midlts_err_t mid_session_init(midlts_ctx_t *ctx, midsess_ver_app_t vapp) {
-	midlts_err_t ret = LTS_OK;
-
-	memset(ctx, 0, sizeof (*ctx));
-
-	DIR *dir = opendir(MIDLTS_DIR);
-	if (!dir) {
-		ESP_LOGE(TAG, "Failure to open dir %s", MIDLTS_DIR);
-		return LTS_FS;
+		// Roll over to next log file
+		ctx->log_id++;
+		err = mid_session_log_record_internal(ctx, pos, rec);
 	}
 
-	if (mid_session_buf_init(ctx) != LTS_OK) {
-		ESP_LOGE(TAG, "Failure to allocate buffer");
-		ret = LTS_MEM;
+	if (err == LTS_OK) {
+		ctx->msg_id++;
+	}
+
+	return err;
+}
+
+static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool initial) {
+	midlts_err_t ret = LTS_OK;
+
+	static pb_byte_t databuf[MIDLTS_LOG_MAX_SIZE];
+
+	char buf[64];
+	sprintf(buf, MIDLTS_DIR MIDLTS_PRI, logid);
+
+	struct stat st;
+	if (stat(buf, &st)) {
+		return LTS_STAT;
+	}
+
+	if (st.st_size > sizeof (databuf)) {
+		return LTS_STAT;
+	}
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_OPEN;
+	}
+
+	if (fread(databuf, 1, st.st_size, fp) != st.st_size) {
+		ret = LTS_READ;
 		goto close;
 	}
 
-	ctx->app = vapp;
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
 
-	ctx->session_count = 0;
-	ctx->active_id = -1;
+	pb_istream_t stream = pb_istream_from_buffer(databuf, st.st_size);
+	bool first_record = true;
+
+	while (stream.bytes_left > 0) {
+		if (!pb_decode_delimited(&stream, MID_SESSION_RECORD_FIELDS, &rec)) {
+			ESP_LOGE(TAG, "Error decoding protobuf: %s", PB_GET_ERROR(&stream));
+			ret = LTS_PROTO_DECODE;
+			goto close;
+		}
+
+		uint32_t crc = rec.rec_crc;
+		rec.rec_crc = 0xFFFFFFFF;
+		uint32_t crc2 = esp_crc32_le(0, (uint8_t *)&rec, sizeof (rec));
+		rec.rec_crc = crc;
+
+		if (crc != crc2) {
+			ret = LTS_BAD_CRC;
+			goto close;
+		}
+
+		if (ctx->flags & LTS_FLAG_REPLAY_PRINT) {
+			mid_session_print_record(&rec);
+		}
+
+		if (initial && first_record) {
+			ctx->msg_id = rec.rec_id;
+		}
+
+		// Ensure no messages go missing
+		if (rec.rec_id != ctx->msg_id) {
+			ret = LTS_MSG_OUT_OF_ORDER;
+			goto close;
+		} else {
+			ctx->msg_id++;
+		}
+
+		if (rec.has_fw_version) {
+			ctx->current_file.fw_version = rec.fw_version;
+		}
+
+		if (rec.has_lr_version) {
+			ctx->current_file.lr_version = rec.lr_version;
+		}
+
+		if (rec.has_meter_value) {
+			uint32_t flag = rec.meter_value.flag;
+			time_t time = rec.meter_value.time;
+
+			if (time > ctx->stats.latest) {
+				ctx->stats.latest = time;
+			}
+
+			if (flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
+				if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
+					ret = LTS_SESSION_ALREADY_OPEN;
+					goto close;
+				} else {
+					ctx->flags |= LTS_FLAG_SESSION_OPEN;
+				}
+			}
+
+			// First file may contain tail of previous session (no session start, but session end)
+			// which we allow, but only in the first (initial) file!
+			if (flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
+				if (!initial && !(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
+					ret = LTS_SESSION_NOT_OPEN;
+					goto close;
+				} else {
+					ctx->flags &= ~LTS_FLAG_SESSION_OPEN;
+				}
+			}
+		}
+
+		mid_session_record_update_stats(ctx, &rec);
+
+		first_record = false;
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	return ret;
+}
+
+midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16], mid_session_meter_value_flag_t flag, uint32_t meter) {
+	if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
+		return LTS_SESSION_ALREADY_OPEN;
+	}
+
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+	rec.has_id = true;
+	memcpy(rec.id.uuid, uuid, sizeof (rec.id.uuid));
+	rec.has_meter_value = true;
+	rec.meter_value.time = now;
+	rec.meter_value.flag = flag | MID_SESSION_METER_VALUE_READING_FLAG_START;
+	rec.meter_value.meter = meter;
+
+	midlts_err_t err;
+	if ((err = mid_session_log_record(ctx, pos, now, &rec)) == LTS_OK) {
+		ctx->flags |= LTS_FLAG_SESSION_OPEN;
+		ctx->stats.start_count++;
+	}
+
+	return err;
+}
+
+midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+	rec.has_meter_value = true;
+	rec.meter_value.time = now;
+	rec.meter_value.flag = flag | MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	rec.meter_value.meter = meter;
+
+	midlts_err_t err;
+	if ((err = mid_session_log_record(ctx, pos, now, &rec)) == LTS_OK) {
+		ctx->stats.tariff_count++;
+	}
+
+	return err;
+}
+
+midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
+		return LTS_SESSION_NOT_OPEN;
+	}
+
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+	rec.has_meter_value = true;
+	rec.meter_value.time = now;
+	rec.meter_value.flag = flag | MID_SESSION_METER_VALUE_READING_FLAG_END;
+	rec.meter_value.meter = meter;
+
+	midlts_err_t err;
+	if ((err = mid_session_log_record(ctx, pos, now, &rec)) == LTS_OK) {
+		ctx->flags &= ~LTS_FLAG_SESSION_OPEN;
+	}
+
+	return err;
+}
+
+midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16]) {
+	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
+		return LTS_SESSION_NOT_OPEN;
+	}
+
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+	rec.has_id = true;
+	memcpy(rec.id.uuid, uuid, sizeof (rec.id.uuid));
+	return mid_session_log_record(ctx, pos, now, &rec);
+}
+
+midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
+	mid_session_record_t rec = MID_SESSION_RECORD_INIT_DEFAULT;
+
+	if (data_size > sizeof (rec.auth.tag.bytes)) {
+		return LTS_BAD_ARG;
+	}
+
+	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
+		return LTS_SESSION_NOT_OPEN;
+	}
+
+	rec.has_auth = true;
+	rec.auth.type = type;
+	rec.auth.tag.size = data_size;
+	memcpy(rec.auth.tag.bytes, data, data_size);
+	return mid_session_log_record(ctx, pos, now, &rec);
+}
+
+midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
+	// TODO: Validate file exists?
+	ctx->min_purgeable = *pos;
+	return LTS_OK;
+}
+
+static midlts_err_t mid_session_count_files(uint32_t *count, midlts_id_t *min, midlts_id_t *max) {
+	*count = 0;
+	*min = 0xFFFFFFFF;
+	*max = 0;
+
+	DIR *dir = opendir(MIDLTS_DIR);
+	if (!dir) {
+		ESP_LOGI(TAG, "Failure to open dir %s", MIDLTS_DIR);
+		return LTS_OPENDIR;
+	}
 
 	struct dirent *dp = NULL;
 	while ((dp = readdir(dir)) != NULL) {
@@ -299,145 +420,225 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, midsess_ver_app_t vapp) {
 		int len = strlen(dp->d_name);
 
 		if (scan == 1 && len == ch && dp->d_type == DT_REG) {
-			if (id > ctx->active_id) {
-				ctx->active_id = id;
+			(*count)++;
+
+			if (id > *max) {
+				*max = id;
 			}
-			ctx->session_count++;
+
+			if (id < *min) {
+				*min = id;
+			}
 		}
 	}
 
-	mid_session_buf_clear(ctx);
-
-	if (ctx->active_id >= 0) {
-		midlts_err_t err = mid_session_read_active(ctx);
-		if (err == LTS_OK) {
-			if (mid_session_is_complete(ctx)) {
-				// Last session is complete, write next entry to a new file
-				ESP_LOGI(TAG, "MID LTS: Last session is complete");
-				mid_session_buf_clear(ctx);
-				ctx->active_id++;
-			} else {
-				// Last session is incomplete, continue this session
-				ESP_LOGI(TAG, "MID LTS: Last session is incomplete");
-			}
-		} else {
-			ESP_LOGE(TAG, "MID LTS: Last session is corrupt");
-		}
-	} else {
-		ctx->active_id = 0;
-		ESP_LOGI(TAG, "MID LTS: No sessions found");
-	}
-
-close:
 	closedir(dir);
-	return ret;
-}
-
-midlts_err_t mid_session_set_id(midlts_ctx_t *ctx, const char *id) {
-	midsess_t *sess = ctx->active;
-	strlcpy(sess->sess_id, id, sizeof (sess->sess_id));
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_set_auth(midlts_ctx_t *ctx, const char *auth) {
-	midsess_t *sess = ctx->active;
-	strlcpy(sess->sess_auth, auth, sizeof (sess->sess_auth));
-	return LTS_OK;
-}
+midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_version, const char *lr_version) {
+	memset(ctx, 0, sizeof (*ctx));
 
-// These two functions might not be needed if we can just use the start/end meter reading times
-// but for now, I think this has to the same as the 'observedat' time of the first requesting observation
-// sent to the cloud?
-//
-// TODO: Look into above ^
-midlts_err_t mid_session_set_start_time(midlts_ctx_t *ctx, uint64_t tm_sec, uint32_t tm_usec) {
-	midsess_t *sess = ctx->active;
-	sess->sess_time_start.time_sec = tm_sec;
-	sess->sess_time_start.time_usec = tm_usec;
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_set_end_time(midlts_ctx_t *ctx, uint64_t tm_sec, uint32_t tm_usec) {
-	midsess_t *sess = ctx->active;
-	sess->sess_time_end.time_sec = tm_sec;
-	sess->sess_time_end.time_usec = tm_usec;
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_set_flag(midlts_ctx_t *ctx, midsess_flag_t flag) {
-	midsess_t *sess = ctx->active;
-	sess->sess_flag |= flag;
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_add_reading(midlts_ctx_t *ctx, midsess_meter_flag_t flag) {
-	// TODO: Get real meter value
-	// TODO: Get real time (update utz to store usecs)
-	midsess_t *sess = ctx->active;
-
-	// TODO: Check for double start/end just in case?
-	if (mid_session_buf_grow(ctx, sess->sess_count + 1) != LTS_OK) {
-		return LTS_MEM;
+	uint32_t count = 0;
+	midlts_id_t min_id, max_id;
+	midlts_err_t ret = mid_session_count_files(&count, &min_id, &max_id);
+	if (ret != LTS_OK) {
+		return ret;
 	}
 
-	midsess_meter_val_t *val = &sess->sess_values[sess->sess_count++];
-	val->meter_time = esp_random();
-	val->meter_value = esp_random();
-	val->meter_flag = flag;
-	val->meter_vmid = (midsess_ver_mid_t) { 1, 2, 3 };
-	val->meter_vapp = ctx->app;
-	return LTS_OK;
+	ctx->min_purgeable = MIDLTS_POS_MAX;
+
+	ctx->lr_version = lr_version;
+	ctx->fw_version = fw_version;
+
+	ctx->msg_id = 0;
+	ctx->log_id = 0;
+
+	if (!count) {
+		return LTS_OK;
+	}
+
+	struct stat st;
+	char buf[64];
+
+	for (midlts_id_t id = min_id; id <= max_id; id++) {
+		// If a file goes missing that is a problem, don't allow initialization
+		sprintf(buf, MIDLTS_DIR MIDLTS_PRI, id);
+		if (stat(buf, &st)) {
+			return LTS_STAT;
+		}
+
+		ESP_LOGI(TAG, "MID Session Replay  - %" PRId32, id);
+
+		// Clear file specific context
+		memset(&ctx->current_file, 0, sizeof (ctx->current_file));
+
+		if ((ret = mid_session_log_replay(ctx, id, id == min_id)) != LTS_OK) {
+			return ret;
+		}
+
+		MIDLTS_YIELD;
+	}
+
+	ctx->log_id = max_id;
+
+	ESP_LOGI(TAG, "MID Session Restore - Log %" PRId32 " Message %" PRIx32 " Flags %" PRIx32, ctx->log_id, ctx->msg_id, ctx->flags);
+	ESP_LOGI(TAG, "MID Session Restore - Total %" PRId32 " Start %" PRId32 " End %" PRId32 " Tariff %" PRId32,
+			ctx->stats.message_count, ctx->stats.start_count, ctx->stats.end_count, ctx->stats.tariff_count);
+
+	return ret;
 }
 
 #ifdef HOST
 
-int main(int argc, char **argv) {
-	midsess_ver_app_t app = { 9, 9, 9, 9 };
+#define TEST
 
+uint8_t *fill_rand_bytes(uint8_t *out, size_t size) {
+	for (size_t i = 0; i < size; i++) {
+		out[i] = esp_random();
+	}
+	return out;
+}
+
+int main(int argc, char **argv) {
 	midlts_ctx_t ctx;
-	midlts_err_t ret = mid_session_init(&ctx, app);
-	if (ret) {
-		ESP_LOGE(TAG, "Failed to init MID sessions");
+	midlts_err_t err;
+	time_t time = 0;
+
+	if ((err = mid_session_init(&ctx, time, "2.0.0.406", "v1.2.8")) != LTS_OK) {
+		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return -1;
 	}
 
+	uint8_t buf[64] = {0};
+
+	mid_session_meter_value_flag_t flags[] = {
+		MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN,
+		MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE,
+		MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED,
+		MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE,
+		MID_SESSION_METER_VALUE_FLAG_METER_ERROR,
+	};
+
+	mid_session_auth_type_t types[] = {
+		MID_SESSION_AUTH_TYPE_CLOUD,
+		MID_SESSION_AUTH_TYPE_RFID,
+		MID_SESSION_AUTH_TYPE_BLE,
+		MID_SESSION_AUTH_TYPE_ISO15118,
+		MID_SESSION_AUTH_TYPE_NEXTGEN,
+	};
+
+
+#ifdef TEST
 	char c;
-	while ((c = getopt(argc, argv, "dwsr:i:a:t:")) != -1) {
+	while ((c = getopt (argc, argv, "i")) != -1) {
 		switch (c) {
-			case 'd':
-				ret = mid_session_dump(&ctx);
-				break;
-			case 'r':
-				ret = mid_session_read(&ctx, atoi(optarg));
-				break;
-			case 'w':
-				ret = mid_session_write(&ctx, atoi(optarg));
-				break;
-			case 's':
-				ret = mid_session_sync_active(&ctx);
-				break;
 			case 'i':
-				ret = mid_session_set_id(&ctx, optarg);
-				break;
-			case 'a':
-				ret = mid_session_set_auth(&ctx, optarg);
-				break;
-			case 't':
-				if (optarg[0] == 's') {
-					ret = mid_session_add_reading(&ctx, MV_FLAG_READING_START);
-				} else if (optarg[0] == 'e') {
-					ret = mid_session_add_reading(&ctx, MV_FLAG_READING_END);
-				} else {
-					ret = mid_session_add_reading(&ctx, MV_FLAG_READING_TARIFF);
+				// Init only
+				return 0;
+		}
+	}
+
+	midlts_pos_t pos;
+
+	for (int i = 0; i < 128; i++) {
+		uint32_t flag = esp_random() % 5;
+		switch (flag) {
+			case 0: {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_open(&ctx, &pos, time, fill_rand_bytes(buf, 16), bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending session open : %s", mid_session_err_to_string(err));
 				}
 				break;
+			}
+			case 1: {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_close(&ctx, &pos, time, bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending session close : %s", mid_session_err_to_string(err));
+				}
+				break;
+			}
+			case 2: {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_tariff(&ctx, &pos, time, bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending tariff : %s", mid_session_err_to_string(err));
+				}
+				break;
+			}
+			case 3: {
+				uint32_t size = esp_random() % 16;
+				if (!size) {
+					size = 1;
+				}
+				if ((err = mid_session_add_auth(&ctx, &pos, time, types[esp_random() % 5], fill_rand_bytes(buf, size), size)) != LTS_OK) {
+					ESP_LOGE(TAG, "Couldn't log session auth : %s", mid_session_err_to_string(err));
+				}
+				break;
+			}
+			case 4: {
+				uint32_t size = 16;
+				if ((err = mid_session_add_id(&ctx, &pos, time, fill_rand_bytes(buf, size))) != LTS_OK) {
+					ESP_LOGE(TAG, "Couldn't log session id : %s", mid_session_err_to_string(err));
+				}
+				break;
+			}
+			default:
+				break;
+		}
+	}
+#else
+	char c;
+	while ((c = getopt (argc, argv, "octai")) != -1) {
+		switch (c) {
+			case 'o': {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_open(&ctx, &pos, fill_rand_bytes(buf, 16), time(NULL), bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending session open : %s", mid_session_err_to_string(err));
+					return -1;
+				}
+				break;
+			}
+			case 'c': {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_close(&ctx, &pos, time(NULL), bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending session close : %s", mid_session_err_to_string(err));
+					return -1;
+				}
+				break;
+			}
+			case 't': {
+				uint32_t bit = flags[esp_random() % 5];
+				if ((err = mid_session_add_tariff(&ctx, &pos, time(NULL), bit, esp_random() % 4096)) != LTS_OK) {
+					ESP_LOGE(TAG, "Error appending tariff : %s", mid_session_err_to_string(err));
+					return -1;
+				}
+				break;
+			}
+			case 'a': {
+				uint32_t size = esp_random() % 16;
+				if (!size) {
+					size = 1;
+				}
+				if ((err = mid_session_add_auth(&ctx, &pos, types[esp_random() % 5], fill_rand_bytes(buf, size), size)) != LTS_OK) {
+					ESP_LOGE(TAG, "Couldn't log session auth : %s", mid_session_err_to_string(err));
+					return -1;
+				}
+				break;
+			}
+			case 'i': {
+				uint32_t size = 16;
+				if ((err = mid_session_add_id(&ctx, &pos, fill_rand_bytes(buf, size))) != LTS_OK) {
+					ESP_LOGE(TAG, "Couldn't log session id : %s", mid_session_err_to_string(err));
+					return -1;
+				}
+				break;
+			}
 			case '?':
 			default:
 				break;
 		}
 	}
-
-	ESP_LOGI(TAG, "Ret -> %d", ret);
+#endif
 
 	return 0;
 }

@@ -1,10 +1,15 @@
-CFLAGS=-Iinclude -I/opt/homebrew/include/
-BINS=mid_lts mid_signer
+CFLAGS=-I../nanopb/ -Iinclude -I. -Wall -fsanitize=address #-pedantic
+LDFLAGS=-I../nanopb/ -Iinclude -I. -fsanitize=address
+NANOPB=nanopb_generator.py
 
-all: $(BINS)
+all: mid_lts
 
-mid_lts: mid_lts.o
-mid_signer: /opt/homebrew/lib/libmbedtls.a /opt/homebrew/lib/libmbedcrypto.a mid_sign.o
+mid_session.pb.c: mid_session.proto mid_session.options
+	$(NANOPB) -L quote -C mid_session.proto
+
+mid_lts.o: mid_session.pb.o
+
+mid_lts: mid_lts.o mid_lts_format.o mid_session.pb.o ../nanopb/pb_common.o ../nanopb/pb_encode.o ../nanopb/pb_decode.o
 
 clean:
-	rm -f $(BINS)
+	rm -f mid_lts *.o *.pb.h *.pb.c ../nanopb/*.o *.ms

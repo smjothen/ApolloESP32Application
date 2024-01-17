@@ -1,5 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  joltwallet/littlefs: "==1.13.0"
   espressif/esp_websocket_client: "*"
   ## Required IDF version
   idf:

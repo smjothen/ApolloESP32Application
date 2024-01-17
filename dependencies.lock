@@ -1,15 +1,21 @@
 dependencies:
   espressif/esp_websocket_client:
-    component_hash: 3f3b04c060ca52c8a06b96b39f22f50086f2bb41d9e9a2411e809cf6b7edfa60
+    component_hash: af69df6a85b26a1e129814ba033fd0c704cdf925b114d9bf90f885db1bb3f8a9
     source:
       service_url: https://api.components.espressif.com/
       type: service
-    version: 1.1.0
+    version: 1.2.1
   idf:
     component_hash: null
     source:
       type: idf
     version: 5.1.1
-manifest_hash: 8a7328d1fa849b022846d9f2c1651d8780b542c3c4782737c21613be08ff7951
+  joltwallet/littlefs:
+    component_hash: f7813d2c2ddde8bc74cd9d044f063d758672f8504ca56132f518ff1438c9a051
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.13.0
+manifest_hash: fdc17d7f514c451932c874bffae346858f95419260b71896babfa7468a53cd10
 target: esp32
 version: 1.0.0

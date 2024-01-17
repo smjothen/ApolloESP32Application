@@ -1,7 +1,3 @@
-idf_component_register(
-	SRCS mid_sign.c mid_lts.c mid_log.c mid_ocmf.c
-	# NOTE: Don't add dependencies unless they are modular or from the ESP-IDF
-	# so we can unit test this module.
-	REQUIRES json mbedtls vfs fatfs utz
-	INCLUDE_DIRS include
-)
+idf_component_register(SRCS "mid_lts.c" "mid_lts_stress.c" "mid_lts_format.c" "mid_session.pb.c" "mid_sign.c" "mid_ocmf.c"
+                       INCLUDE_DIRS "include" "."
+					   REQUIRES littlefs nanopb utz mbedtls json)
