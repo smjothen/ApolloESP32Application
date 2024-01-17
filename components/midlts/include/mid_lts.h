@@ -46,7 +46,6 @@ __attribute__((unused)) static uint32_t esp_random(void) {
 
 #define MIDLTS_DIR "/mid/"
 
-
 #endif
 
 #include "mid_lts_priv.h"

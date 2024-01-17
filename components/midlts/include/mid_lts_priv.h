@@ -37,6 +37,7 @@ typedef struct _midlts_pos_t {
 	uint16_t off;
 } midlts_pos_t;
 
+#define MIDLTS_POS_MIN ((midlts_pos_t){ .id = 0x00000000, .off = 0x0000 })
 #define MIDLTS_POS_MAX ((midlts_pos_t){ .id = 0xFFFFFFFF, .off = 0xFFFF })
 
 typedef struct _midlts_ctx_t {
