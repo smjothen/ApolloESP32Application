@@ -475,6 +475,7 @@ time_t sessionHandler_OcppTransactionStartTime(){
 float ocpp_min_limit = -1.0f;
 float ocpp_max_limit = -1.0f;
 uint8_t ocpp_active_phases = 0;
+time_t ocpp_last_charging_variable_change = 0;
 
 void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max_charging_limit, uint8_t number_phases){
 	ESP_LOGI(TAG, "Got new charging variables: minimum: %f -> %f, maximum: %f -> %f, phases %d -> %d",
@@ -520,6 +521,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 	if((new_max_limit < 0.1f || new_min_limit > new_max_limit) && !(ocpp_max_limit < 0.1f || ocpp_min_limit > ocpp_max_limit)){
 		ESP_LOGI(TAG, "OCPP charging variable set to 0. Attempting to pausing charging");
 
+		ocpp_last_charging_variable_change = time(NULL);
 		MessageType ret = MCU_SendCommandId(CommandStopChargingFinal);
 		if(ret == MsgCommandAck)
 		{
@@ -535,6 +537,7 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 	}else if((new_max_limit > 0.1f && new_min_limit <= new_max_limit) && !(ocpp_max_limit > 0.1f && ocpp_min_limit <= ocpp_max_limit)){
 		ESP_LOGI(TAG, "OCPP charging variable no longer set to 0. Attempting to resume charging");
 
+		ocpp_last_charging_variable_change = time(NULL);
 		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
 		if(ret == MsgCommandAck)
 		{
@@ -2175,6 +2178,42 @@ static void handle_charging(){
 	}
 }
 
+static void handle_suspended_ev(){
+	handle_charging();
+}
+
+static void handle_suspended_evse(){
+
+	// In case sessionHandler_OcppSetChargingVariables was unable to resume charging due to state STOPPING (instead of STOPPED) on dsPic side
+	if(ocpp_max_limit > ocpp_min_limit && time(NULL) > ocpp_last_charging_variable_change + 3){
+		ESP_LOGW(TAG, "Delayed attempt to resume charging");
+		ocpp_last_charging_variable_change = time(NULL);
+
+		MessageType ret = MCU_SendCommandId(CommandResumeChargingMCU);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU CommandResumeChargingMCU command OK during ocpp suspended EVSE");
+			SetFinalStopActiveStatus(0);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU CommandResumeChargingMCU command FAILED during during ocpp suspended EVSE");
+		}
+
+		ret = MCU_SendCommandId(CommandStartCharging);
+		if(ret == MsgCommandAck)
+		{
+			ESP_LOGI(TAG, "MCU CommandStartCharging OK during ocpp suspended EVSE");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "MCU CommandStartCharging FAILED during ocpp suspended EVSE");
+		}
+	}
+
+	handle_charging();
+}
+
 static void handle_finishing(){
 	if(!pending_ocpp_authorize && has_new_id_token()){
 		authorize(NFCGetTagInfo(), start_charging_on_tag_accept, start_charging_on_tag_deny);
@@ -2243,9 +2282,13 @@ static void handle_state(enum ocpp_cp_status_id state){
 		handle_preparing();
 		break;
 	case eOCPP_CP_STATUS_CHARGING:
-	case eOCPP_CP_STATUS_SUSPENDED_EV:
-	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
 		handle_charging();
+		break;
+	case eOCPP_CP_STATUS_SUSPENDED_EV:
+		handle_suspended_ev();
+		break;
+	case eOCPP_CP_STATUS_SUSPENDED_EVSE:
+		handle_suspended_evse();
 		break;
 	case eOCPP_CP_STATUS_FINISHING:
 		handle_finishing();

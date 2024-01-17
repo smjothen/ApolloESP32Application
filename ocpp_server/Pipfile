@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 ocpp = "*"
 websockets = "*"
+dateutils = "*"
 
 [requires]
 python_version = "3.11"

@@ -159,7 +159,7 @@ class ChargePoint(cp):
         if error_code == ChargePointErrorCode.no_error:
             logging.info(f'Connector {connector_id} status: {status} ({error_code})')
         else:
-            logging.error(f'Connector {connector_id} status: {status} ({error_code})')
+            logging.error(f'Connector {connector_id} status: {status} ({error_code}) {kwargs}')
 
         return call_result.StatusNotificationPayload()
 
