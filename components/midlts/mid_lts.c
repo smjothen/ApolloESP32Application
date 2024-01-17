@@ -25,7 +25,7 @@ static void mid_session_record_update_stats(midlts_ctx_t *ctx, mid_session_recor
 			ctx->stats.start_count++;
 		} else if (flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
 			ctx->stats.end_count++;
-		} else {
+		} else if (flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
 			ctx->stats.tariff_count++;
 		}
 	}
@@ -325,7 +325,6 @@ midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t n
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) == LTS_OK) {
 		ctx->flags |= LTS_FLAG_SESSION_OPEN;
-		ctx->stats.start_count++;
 	}
 
 	return err;
@@ -340,7 +339,6 @@ midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t
 
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) == LTS_OK) {
-		ctx->stats.tariff_count++;
 	}
 
 	return err;
