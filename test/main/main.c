@@ -8,6 +8,7 @@
 #include "unity_test_runner.h"
 #include "unity_test_utils_memory.h"
 #include "esp_log.h"
+#include "esp_littlefs.h"
 #ifdef CONFIG_HEAP_TRACING
 #include "memory_checks.h"
 #include "esp_heap_trace.h"
@@ -46,6 +47,16 @@ void app_main(void) {
 	};
 
 	TEST_ESP_OK(esp_vfs_fat_spiflash_mount_rw_wl(TEST_PARTITION, NULL, &mount_config, &s_wl_handle));
+
+	esp_vfs_littlefs_conf_t conf = {
+		.base_path = "/mid",
+		.partition_label = "mid",
+		.format_if_mount_failed = true,
+		.dont_mount = false,
+	};
+
+	esp_err_t ret = esp_vfs_littlefs_register(&conf);
+	TEST_ESP_OK(ret);
 
 	// NB: ESP-IDF first printf does some allocations, so to not cause false positives in tests
 	// just leave this here.
