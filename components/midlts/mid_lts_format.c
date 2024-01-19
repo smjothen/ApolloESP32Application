@@ -4,11 +4,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-#include "pb.h"
-#include "pb_encode.h"
-#include "pb_decode.h"
-
-#include "mid_session.pb.h"
+#include "mid_session.h"
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
 
@@ -53,7 +49,7 @@ void mid_session_format_record_id(mid_session_id_t *id, char *buf, size_t buf_si
 
 void mid_session_format_record_auth(mid_session_auth_t *auth, char *buf, size_t buf_size) {
 	char rfid_buf[64] = {0};
-	mid_session_format_bytes(rfid_buf, auth->tag.bytes, auth->tag.size);
+	mid_session_format_bytes(rfid_buf, auth->tag, auth->length);
 	const char *type = mid_session_get_auth_type_name(auth->type);
 	snprintf(buf, buf_size, "%s %s", type, rfid_buf);
 }
@@ -62,10 +58,10 @@ void mid_session_format_record_meter_value(mid_session_meter_value_t *mv, char *
 	char type[16] = {0};
 	if (mv->flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
 		strlcat(type, "S", sizeof (type));
-	}
+	} 
 	if (mv->flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
 		strlcat(type, "E", sizeof (type));
-	}
+	} 
 	if (mv->flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
 		strlcat(type, "T", sizeof (type));
 	}
@@ -90,22 +86,29 @@ void mid_session_format_record_meter_value(mid_session_meter_value_t *mv, char *
 void mid_session_print_record(mid_session_record_t *rec) {
 	char buf[128];
 
-	if (rec->has_id) {
-		mid_session_format_record_id(&rec->id, buf, sizeof (buf));
-		ESP_LOGI(TAG, "MID Session Record  - SessionId  - #%08" PRIx32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
-	}
-	if (rec->has_auth) {
-		mid_session_format_record_auth(&rec->auth, buf, sizeof (buf));
-		ESP_LOGI(TAG, "MID Session Record  - Auth       - #%08" PRIx32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
-	}
-	if (rec->has_lr_version) {
-		ESP_LOGI(TAG, "MID Session Record  - LR Version - #%08" PRIx32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, rec->lr_version.code);
-	}
-	if (rec->has_fw_version) {
-		ESP_LOGI(TAG, "MID Session Record  - FW Version - #%08" PRIx32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, rec->fw_version.code);
-	}
-	if (rec->has_meter_value) {
-		mid_session_format_record_meter_value(&rec->meter_value, buf, sizeof (buf));
-		ESP_LOGI(TAG, "MID Session Record  - MeterValue - #%08" PRIx32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+	switch(rec->rec_type) {
+		case MID_SESSION_RECORD_TYPE_ID: {
+			mid_session_format_record_id(&rec->id, buf, sizeof (buf));
+			ESP_LOGI(TAG, "MID Session Record  - SessionId  - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			break;
+		}
+		case MID_SESSION_RECORD_TYPE_AUTH: {
+			mid_session_format_record_auth(&rec->auth, buf, sizeof (buf));
+			ESP_LOGI(TAG, "MID Session Record  - Auth       - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			break;
+		}
+		case MID_SESSION_RECORD_TYPE_LR_VERSION: {
+			ESP_LOGI(TAG, "MID Session Record  - LR Version - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, rec->lr_version.code);
+			break;
+		}
+		case MID_SESSION_RECORD_TYPE_FW_VERSION: {
+			ESP_LOGI(TAG, "MID Session Record  - FW Version - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, rec->fw_version.code);
+			break;
+		}
+		case MID_SESSION_RECORD_TYPE_METER_VALUE: {
+			mid_session_format_record_meter_value(&rec->meter_value, buf, sizeof (buf));
+			ESP_LOGI(TAG, "MID Session Record  - MeterValue - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			break;
+		}
 	}
 }

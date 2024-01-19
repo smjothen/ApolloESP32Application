@@ -6,11 +6,7 @@
 #include <inttypes.h>
 #include <limits.h>
 
-#include "pb.h"
-#include "pb_encode.h"
-#include "pb_decode.h"
-
-#include "mid_session.pb.h"
+#include "mid_session.h"
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
 
@@ -23,7 +19,17 @@ static uint8_t *midlts_gen_rand(uint8_t *out, size_t size) {
 	return out;
 }
 
-midlts_err_t midlts_stress_test(void) {
+midlts_err_t midlts_replay(void) {
+	midlts_ctx_t ctx;
+	midlts_err_t err;
+	if ((err = mid_session_init(&ctx, 0, "2.0.0.406", "v1.2.8")) != LTS_OK) {
+		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
+		return err;
+	}
+	return LTS_OK;
+}
+
+midlts_err_t midlts_stress_test(int n) {
 	midlts_ctx_t ctx;
 	midlts_err_t err;
 
@@ -69,6 +75,7 @@ midlts_err_t midlts_stress_test(void) {
 	uint32_t auth_time = 0;
 	uint32_t id_time = 0;
 	uint32_t tariff_interval = 100;
+	uint32_t nsess = 0;
 
 	while (true) {
 
@@ -104,6 +111,11 @@ midlts_err_t midlts_stress_test(void) {
 				ESP_LOGE(TAG, "Session close : %s", mid_session_err_to_string(err));
 				return err;
 			}
+
+			nsess++;
+			if (nsess == n) {
+				return 0;
+			}
 	
 		} else {
 			// ~2% chance of starting a session
@@ -137,3 +149,35 @@ midlts_err_t midlts_stress_test(void) {
 		time++;
 	}
 }
+
+#ifdef HOST
+
+int main(int argc, char **argv) {
+
+	midlts_err_t err;
+
+	char c;
+	while ((c = getopt (argc, argv, "rx:")) != -1) {
+		switch (c) {
+			case 'r':
+				err = midlts_replay();
+				break;
+			case 'x':
+				err = midlts_stress_test(atoi(optarg));
+				break;
+			case '?':
+			default:
+				break;
+		}
+	}
+
+	if (err != LTS_OK) {
+		ESP_LOGE(TAG, "Error: %s", mid_session_err_to_string(err));
+		return -1;
+	}
+
+	return 0;
+}
+
+#endif
+

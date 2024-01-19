@@ -1,4 +1,0 @@
-*                      packed_struct:true
-MIDSessionId.uuid      max_size:16, fixed_length:true
-MIDSessionAuth.tag     max_size:32
-MIDSessionVersion.code max_size:32
