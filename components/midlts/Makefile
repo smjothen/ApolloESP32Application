@@ -1,5 +1,5 @@
-CFLAGS=-Ipb -Wall -fsanitize=address #-pedantic
-LDFLAGS=-Ipb -fsanitize=address
+CFLAGS=-Iinclude -Wall -fsanitize=address #-pedantic
+LDFLAGS=-Iinclude -fsanitize=address
 
 all: mid_lts mid_lts
 

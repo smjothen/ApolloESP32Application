@@ -1,72 +1,74 @@
 #ifndef __MID_SESSION_H__
 #define __MID_SESSION_H__
 
-#include <stddef.h>
 #include <stdint.h>
-#include <inttypes.h>
+
+#define PACK __attribute__((packed))
 
 typedef enum {
-	MS_FLAG_NONE            = 0x0,
-	MS_FLAG_STOPPED_BY_RFID = 0x1,
-	MS_FLAG_PUBLISHED       = 0x2, // Mark as sent to cloud (for CompletedSession)
-	MS_FLAG_COMPLETE        = 0x4,
-} midsess_flag_t;
+    MID_SESSION_AUTH_TYPE_CLOUD = 0,
+    MID_SESSION_AUTH_TYPE_RFID = 1,
+    MID_SESSION_AUTH_TYPE_BLE = 2,
+    MID_SESSION_AUTH_TYPE_ISO15118 = 3,
+    MID_SESSION_AUTH_TYPE_NEXTGEN = 4
+} mid_session_auth_type_t;
 
-#define MID_SESS_SIZE_ID 37
-#define MID_SESS_SIZE_AUTH 41
+/* Struct definitions */
+typedef struct {
+    uint8_t uuid[16];
+} PACK mid_session_id_t;
 
 typedef struct {
-	uint64_t time_sec;
-	uint32_t time_usec;
-} midsess_time_t;
+    mid_session_auth_type_t type : 8;
+    uint8_t length;
+    uint8_t tag[21];
+} PACK mid_session_auth_t;
 
 typedef struct {
-	uint8_t v1;
-	uint8_t v2;
-	uint8_t v3;
-} midsess_ver_mid_t;
-
-typedef struct {
-	uint16_t v1 : 10; // Up to 1023.1023.1023.1023 should be good?
-	uint16_t v2 : 10;
-	uint16_t v3 : 10;
-	uint16_t v4 : 10;
-} midsess_ver_app_t;
+    char code[23];
+} PACK mid_session_version_t;
 
 typedef enum {
-	MV_FLAG_NONE              =   0x0,
-	MV_FLAG_READING_START     =   0x1,
-	MV_FLAG_READING_TARIFF    =   0x2,
-	MV_FLAG_READING_END       =   0x4,
-	MV_FLAG_TIME_UNKNOWN      =   0x8,
-	MV_FLAG_TIME_INFORMATIVE  =  0x10,
-	MV_FLAG_TIME_SYNCHRONIZED =  0x20,
-	MV_FLAG_TIME_RELATIVE     =  0x40,
-	MV_FLAG_METER_ERROR       =  0x80,
-	MV_FLAG_PUBLISHED         = 0x100, // Mark as sent to cloud (for SignedMeterValue)
-} midsess_meter_flag_t;
+    MID_SESSION_METER_VALUE_READING_FLAG_START = 1,
+    MID_SESSION_METER_VALUE_READING_FLAG_TARIFF = 2,
+    MID_SESSION_METER_VALUE_READING_FLAG_END = 4,
+} mid_session_meter_value_reading_flag_t;
+
+typedef enum {
+    MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN = 8,
+    MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE = 16,
+    MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED = 32,
+    MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE = 64,
+    MID_SESSION_METER_VALUE_FLAG_METER_ERROR = 128,
+} mid_session_meter_value_flag_t;
 
 typedef struct {
-	uint64_t meter_time;
-	uint32_t meter_value;
-	// Versions are stored alongside meter value so we can store tariff changes
-	midsess_ver_app_t meter_vapp;
-	midsess_ver_mid_t meter_vmid;
-	uint32_t meter_flag;
-} midsess_meter_val_t;
+    uint64_t time;
+    uint32_t flag;
+    uint32_t meter;
+} PACK mid_session_meter_value_t;
+
+typedef enum {
+    MID_SESSION_RECORD_TYPE_ID = 0,
+    MID_SESSION_RECORD_TYPE_AUTH = 1,
+    MID_SESSION_RECORD_TYPE_METER_VALUE = 2,
+    MID_SESSION_RECORD_TYPE_LR_VERSION = 3,
+    MID_SESSION_RECORD_TYPE_FW_VERSION = 4
+} mid_session_record_type_t;
 
 typedef struct {
-	// CRC is over whole session package, including meter values
-	uint32_t sess_crc;
-	char sess_id[MID_SESS_SIZE_ID];
-	char sess_auth[MID_SESS_SIZE_AUTH];
-	midsess_time_t sess_time_start;
-	midsess_time_t sess_time_end;
-	uint32_t sess_flag;
-	uint32_t sess_count;
-	midsess_meter_val_t sess_values[0];
-} midsess_t;
+    uint32_t rec_id;
+    uint32_t rec_crc;
+    mid_session_record_type_t rec_type : 8;
+    union {
+        mid_session_id_t id;
+        mid_session_auth_t auth;
+        mid_session_meter_value_t meter_value;
+        mid_session_version_t lr_version;
+        mid_session_version_t fw_version;
+    };
+} PACK mid_session_record_t;
 
-_Static_assert(offsetof(midsess_t, sess_values[0]) == sizeof (midsess_t), "Zero-sized array must be final element!");
+_Static_assert(sizeof (mid_session_record_t) == 32, "Size of record must remain 32 bytes!");
 
 #endif

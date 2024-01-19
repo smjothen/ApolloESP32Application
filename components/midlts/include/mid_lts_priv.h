@@ -1,14 +1,9 @@
 #ifndef __MID_LTS_PRIV_H__
 #define __MID_LTS_PRIV_H__
 
-#include "mid_session.pb.h"
+#include "mid_session.h"
 
 #define MIDLTS_LOG_MAX_AGE ((uint64_t)(31 * 24 * 60 * 60))
-#define MIDLTS_LOG_MAX_FILES 96
-#define MIDLTS_LOG_MAX_SIZE 4096
-
-#define MIDLTS_SCN "%" SCNx32 ".ms%n"
-#define MIDLTS_PRI "%" PRIx32 ".ms"
 
 typedef uint32_t midlts_id_t;
 typedef uint32_t midlts_msg_id_t;
@@ -19,47 +14,28 @@ typedef enum _midlts_flag_t {
 	LTS_FLAG_REPLAY_PRINT = 2,
 } midlts_flag_t;
 
-typedef struct {
-	mid_session_version_t fw_version;
-	mid_session_version_t lr_version;
-} midlts_file_ctx_t;
-
-typedef struct {
-	uint32_t message_count;
-	uint32_t tariff_count;
-	uint32_t start_count;
-	uint32_t end_count;
-	time_t latest;
-} midlts_stats_t;
-
 typedef struct _midlts_pos_t {
 	midlts_id_t id;
 	uint16_t off;
 } midlts_pos_t;
 
-#define MIDLTS_POS_MIN ((midlts_pos_t){ .id = 0x00000000, .off = 0x0000 })
 #define MIDLTS_POS_MAX ((midlts_pos_t){ .id = 0xFFFFFFFF, .off = 0xFFFF })
 
 typedef struct _midlts_ctx_t {
+	const void *partition;
+	size_t num_pages;
+
 	const char *fw_version;
 	const char *lr_version;
 
-	midlts_stats_t stats;
-
 	uint32_t flags;
-	midlts_file_ctx_t current_file;
 
-	midlts_id_t log_id;
+	midlts_msg_id_t msg_addr;
 	midlts_msg_id_t msg_id;
 
 	// Minimum id of stored item in auxiliary storage (offline session/log), anything prior
 	// to this can be purged (if older than the max age as well)
 	midlts_pos_t min_purgeable;
-
-	// TODO
-	mid_session_meter_value_t last_meter;
-	mid_session_meter_value_t last_tariff;
-	midlts_msg_id_t last_message;
 } midlts_ctx_t;
 
 #define MID_SESSION_IS_OPEN(ctx) (!!((ctx)->flags & LTS_FLAG_SESSION_OPEN))
@@ -77,10 +53,10 @@ typedef struct _midlts_ctx_t {
 	X(LTS_FLUSH) \
 	X(LTS_SYNC) \
 	X(LTS_TELL) \
-	X(LTS_SEEK) \
-	X(LTS_EOF) \
+	X(LTS_AGAIN) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
+	X(LTS_CORRUPT) \
 	X(LTS_PROTO_ENCODE) \
 	X(LTS_PROTO_DECODE) \
 	X(LTS_LOG_FILE_FULL) \

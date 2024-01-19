@@ -188,11 +188,10 @@ midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_version, const char *lr_version) {
+static midlts_err_t mid_session_init_partition(midlts_ctx_t *ctx, const esp_partition_t *partition, size_t flash_size, time_t now, const char *fw_version, const char *lr_version) {
 	midlts_err_t ret = LTS_OK;
 
-	const esp_partition_t *partition;
-	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
+	if (flash_size % FLASH_PAGE_SIZE != 0) {
 		return LTS_READ;
 	}
 
@@ -205,6 +204,7 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_vers
 	memset(ctx, 0, sizeof (*ctx));
 
 	ctx->partition = partition;
+	ctx->num_pages = flash_size / FLASH_PAGE_SIZE;
 
 	ctx->fw_version = fw_version;
 	ctx->lr_version = lr_version;
@@ -321,7 +321,7 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_vers
 			}
 		}
 
-		// TODO: If bad CRC is detected, we could allow it if it's the last 
+		// TODO: If bad CRC is detected, we could allow it if it's the last
 		err = esp_partition_read_raw(ctx->partition, active_page * FLASH_PAGE_SIZE + i, page, FLASH_PAGE_SIZE - i);
 		if (err != LTS_OK) {
 			return LTS_READ;
@@ -356,4 +356,37 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_vers
 	}
 
 	return ret;
+}
+
+midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_version, const char *lr_version) {
+	const esp_partition_t *partition;
+	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
+		return LTS_READ;
+	}
+	return mid_session_init_partition(ctx, partition, partition->size, now, fw_version, lr_version);
+}
+
+// Allows setting a smaller flash size for testing
+midlts_err_t mid_session_init_test(midlts_ctx_t *ctx, size_t flash_size, time_t now, const char *fw_version, const char *lr_version) {
+	const esp_partition_t *partition;
+	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
+		return LTS_READ;
+	}
+	assert(flash_size > 0 && flash_size < partition->size);
+	midlts_err_t err;
+	if ((err = mid_session_init_partition(ctx, partition, flash_size, now, fw_version, lr_version)) != LTS_OK) {
+		return err;
+	}
+}
+
+midlts_err_t mid_session_reset_test(size_t flash_size) {
+	const esp_partition_t *partition;
+	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
+		return LTS_READ;
+	}
+	esp_err_t err = esp_partition_erase_range(partition, 0, flash_size);
+	if (err != ESP_OK) {
+		return LTS_REMOVE;
+	}
+	return LTS_OK;
 }

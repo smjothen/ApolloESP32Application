@@ -2,12 +2,12 @@
 #include <limits.h>
 #include "unity.h"
 #include "esp_log.h"
-#include "esp_littlefs.h"
 #include "mid_lts.h"
 
 static const char *TAG = "MIDTEST";
 
-#define FORMAT TEST_ASSERT(esp_littlefs_format("mid") == ESP_OK)
+//#define FORMAT TEST_ASSERT(esp_littlefs_format("mid") == ESP_OK)
+#define FORMAT
 
 TEST_CASE("Test no leakages", "[mid]") {
 	FORMAT;
