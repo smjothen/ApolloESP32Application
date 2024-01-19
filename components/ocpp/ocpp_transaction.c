@@ -78,24 +78,28 @@ struct timestamp_queue{
 	time_t timestamps[CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE];
 	int front;
 	int back;
+	bool emptying;
 };
 
 static struct timestamp_queue txn_enqueue_timestamps = {
 	.front = -1,
 	.back = -1,
+	.emptying = true
 };
 
 static void set_txn_enqueue_timestamp(time_t timestamp){
+	txn_enqueue_timestamps.emptying = false;
 	txn_enqueue_timestamps.back++;
-	if(txn_enqueue_timestamps.back == CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
+	if(txn_enqueue_timestamps.back >= CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
 		txn_enqueue_timestamps.back = 0;
 
 	txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.back] = timestamp;
 }
 
 static time_t get_txn_enqueue_timestamp(){
+	txn_enqueue_timestamps.emptying = true;
 	txn_enqueue_timestamps.front++;
-	if(txn_enqueue_timestamps.front == CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
+	if(txn_enqueue_timestamps.front >= CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
 		txn_enqueue_timestamps.front = 0;
 
 	return txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.front];
@@ -129,7 +133,7 @@ BaseType_t ocpp_transaction_queue_send(struct ocpp_call_with_cb ** message, Tick
 }
 
 static time_t peek_txn_enqueue_timestamp(){
-	if(txn_enqueue_timestamps.front == txn_enqueue_timestamps.back) // No data to peek or get/set missused
+	if(txn_enqueue_timestamps.front == txn_enqueue_timestamps.back && txn_enqueue_timestamps.emptying == true) // No data to peek or get/set missused
 		return LONG_MAX;
 
 	int position = txn_enqueue_timestamps.front +1;
@@ -407,7 +411,7 @@ bool count_messages(FILE * fp, const char * file_path, int entry, void * buffer)
 		struct transaction_header header;
 
 		if(read_header(fp, &header) == ESP_OK){
-			ESP_LOGI(TAG, "file message count: %ul", header.awaiting_message_count);
+			ESP_LOGI(TAG, "file message count: %zu", header.awaiting_message_count);
 			*count += header.awaiting_message_count;
 		}else{
 			ESP_LOGE(TAG, "Unable to read header to get transaction message count");
@@ -518,7 +522,7 @@ esp_err_t read_meter_value_string(FILE * fp, unsigned char ** meter_data, size_t
 	}
 
 	if(*meter_data_length > MAX_METER_VALUE_LENGTH){
-		ESP_LOGE(TAG, "Meter value on file exceed max length: %d > %d", *meter_data_length, MAX_METER_VALUE_LENGTH);
+		ESP_LOGE(TAG, "Meter value on file exceed max length: %zu > %d", *meter_data_length, MAX_METER_VALUE_LENGTH);
 		return ESP_FAIL;
 	}
 
@@ -717,12 +721,12 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
 esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp, bool stop_related){
 
 	if(meter_data_length > MAX_METER_VALUE_LENGTH){
-		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %u > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
+		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %zu > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
 		return ESP_ERR_INVALID_SIZE;
 	}
 
 	if(meter_data_length <= 0){
-		ESP_LOGE(TAG, "Rejecting write of meter data with no or invalid length: %u <= 0", meter_data_length);
+		ESP_LOGE(TAG, "Rejecting write of meter data with no or invalid length: %zu <= 0", meter_data_length);
 		return ESP_ERR_INVALID_SIZE;
 	}
 
@@ -1181,7 +1185,7 @@ esp_err_t load_next_transaction_message(){
 
 	struct stat st;
 	if(loaded_transaction_entry == -1 || stat(file_path, &st) != 0){ // If no loaded transaction or loaded file has been deleted
-	        esp_err_t err = find_oldest_transaction_file(&loaded_transaction_entry, &loaded_transaction_header.start_timestamp);
+		esp_err_t err = find_oldest_transaction_file(&loaded_transaction_entry, &loaded_transaction_header.start_timestamp);
 		if(err != ESP_OK){
 			if(err == ESP_ERR_NOT_FOUND){
 				ESP_LOGI(TAG, "No transaction file for loading message");
