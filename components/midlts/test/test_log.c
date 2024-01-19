@@ -113,7 +113,6 @@ TEST_CASE("Test persistence", "[mid]") {
 	TEST_ASSERT(memcmp(&ctx, &ctx2, sizeof (ctx)) == 0);
 }
 
-/*
 TEST_CASE("Test latest version persists", "[mid]") {
 	RESET;
 
@@ -132,19 +131,20 @@ TEST_CASE("Test latest version persists", "[mid]") {
 
 	TEST_ASSERT(mid_session_init(&ctx3, 0, "2.0.4.2", "v1.2.4") == LTS_OK);
 
-	TEST_ASSERT(strcmp(ctx3.current_file.fw_version.code, "2.0.4.2") == 0);
-	TEST_ASSERT(strcmp(ctx3.current_file.lr_version.code, "v1.2.4") == 0);
+	TEST_ASSERT(strcmp(ctx3.latest_fw, "2.0.4.2") == 0);
+	TEST_ASSERT(strcmp(ctx3.latest_lr, "v1.2.4") == 0);
 }
 
-TEST_CASE("Test reading of records", "[mid]") {
-	FORMAT;
+/*
+TEST_CASE("Test persistence over multiple pages", "[mid]") {
+	RESET;
 
 	midlts_ctx_t ctx;
-	midlts_pos_t pos[3];
 
 	uint8_t uuid[16] = {0};
 
 	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+
 	TEST_ASSERT(mid_session_add_open(&ctx, &pos[0], 0, uuid, 0, 0) == LTS_OK);
 	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[1], 0, 0, 0) == LTS_OK);
 	TEST_ASSERT(mid_session_add_close(&ctx, &pos[2], 0, 0, 0) == LTS_OK);

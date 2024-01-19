@@ -146,10 +146,10 @@ midlts_err_t midlts_stress_test(int n) {
 			}
 
 			if (lrversion) {
-				snprintf(lr_buf, sizeof (lr_buf), "%d.%d.%d", esp_random() % 255, esp_random() % 255, esp_random() % 255);
+				snprintf(lr_buf, sizeof (lr_buf), "%d.%d.%d", (int)(esp_random() % 255), (int)(esp_random() % 255), (int)(esp_random() % 255));
 			}
 			if (fwversion) {
-				snprintf(fw_buf, sizeof (fw_buf), "%d.%d.%d.%d", esp_random() % 255, esp_random() % 255, esp_random() % 255, esp_random() % 255);
+				snprintf(fw_buf, sizeof (fw_buf), "%d.%d.%d.%d", (int)(esp_random() % 255), (int)(esp_random() % 255), (int)(esp_random() % 255), (int)(esp_random() % 255));
 			}
 
 		}

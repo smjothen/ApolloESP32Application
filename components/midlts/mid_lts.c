@@ -107,9 +107,7 @@ static midlts_err_t mid_session_log_both_versions(midlts_ctx_t *ctx) {
 }
 
 static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
-
 	midlts_err_t ret;
-	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
 
 	// Log versions as first records in page
 	if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
