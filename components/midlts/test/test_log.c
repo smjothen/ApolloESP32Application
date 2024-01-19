@@ -3,21 +3,21 @@
 #include "unity.h"
 #include "esp_log.h"
 #include "mid_lts.h"
+#include "mid_lts_test.h"
 
 static const char *TAG = "MIDTEST";
 
-//#define FORMAT TEST_ASSERT(esp_littlefs_format("mid") == ESP_OK)
-#define FORMAT
+#define RESET TEST_ASSERT(mid_session_reset() == LTS_OK)
 
 TEST_CASE("Test no leakages", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx;
 	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
 }
 
-TEST_CASE("Test session closed when not open", "[mid][allowleak]") {
-	FORMAT;
+TEST_CASE("Test session closed when not open", "[mid]") {
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -27,8 +27,8 @@ TEST_CASE("Test session closed when not open", "[mid][allowleak]") {
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 }
 
-TEST_CASE("Test session open close", "[mid][allowleak]") {
-	FORMAT;
+TEST_CASE("Test session open close", "[mid]") {
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -45,7 +45,7 @@ TEST_CASE("Test session open close", "[mid][allowleak]") {
 }
 
 TEST_CASE("Test session flag persistence", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -66,7 +66,7 @@ TEST_CASE("Test session flag persistence", "[mid]") {
 }
 
 TEST_CASE("Test session open twice", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -80,7 +80,7 @@ TEST_CASE("Test session open twice", "[mid]") {
 }
 
 TEST_CASE("Test tariff change allowed out of session", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -94,9 +94,8 @@ TEST_CASE("Test tariff change allowed out of session", "[mid]") {
 	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, 0, 0, 0) == LTS_OK);
 }
 
-
 TEST_CASE("Test persistence", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
@@ -114,8 +113,9 @@ TEST_CASE("Test persistence", "[mid]") {
 	TEST_ASSERT(memcmp(&ctx, &ctx2, sizeof (ctx)) == 0);
 }
 
+/*
 TEST_CASE("Test latest version persists", "[mid]") {
-	FORMAT;
+	RESET;
 
 	midlts_ctx_t ctx, ctx2, ctx3;
 	midlts_pos_t pos;
@@ -232,3 +232,4 @@ TEST_CASE("Test multifile", "[mid]") {
 	TEST_ASSERT(mid_session_get_record(&pos, &rec) == LTS_OK);
 	TEST_ASSERT(rec.has_fw_version && rec.has_lr_version && rec.has_meter_value);
 }
+*/

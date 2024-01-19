@@ -5,9 +5,7 @@
 #define HOST
 #endif
 
-#define FLASH_PAGES 4
 #define FLASH_PAGE_SIZE 4096
-#define FLASH_TOTAL_SIZE (FLASH_PAGES * FLASH_PAGE_SIZE)
 
 #ifdef HOST
 #include "mid_lts_host.h"
@@ -19,6 +17,7 @@
 #include "esp_partition.h"
 #endif
 
+#include "mid_lts_priv.h"
 #include "mid_session.h"
 
 typedef struct _midlts_ctx_t midlts_ctx_t;

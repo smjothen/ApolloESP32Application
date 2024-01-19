@@ -10,7 +10,7 @@
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
 
-const char *TAG = "MIDLTS         ";
+static const char *TAG = "MIDLTS         ";
 
 static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_record_t *rec) {
 	if (rec->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
@@ -33,6 +33,8 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 }
 
 static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
+	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
+
 	rec->rec_id = ctx->msg_id;
 	rec->rec_crc = 0xFFFFFFFF;
 	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
@@ -51,7 +53,7 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 		return LTS_WRITE;
 	}
 
-	ctx->msg_addr = (ctx->msg_addr + sizeof (*rec)) % FLASH_TOTAL_SIZE;
+	ctx->msg_addr = (ctx->msg_addr + sizeof (*rec)) % flash_size;
 	ctx->msg_id++;
 
 	return LTS_OK;
@@ -215,7 +217,9 @@ static midlts_err_t mid_session_init_partition(midlts_ctx_t *ctx, const esp_part
 	uint8_t data[sizeof (mid_session_record_t)];
 	static uint8_t page[FLASH_PAGE_SIZE];
 
-	for (uint16_t i = 0; i < FLASH_PAGES; i++) {
+	size_t flash_pages = partition->size / FLASH_PAGE_SIZE;
+
+	for (uint16_t i = 0; i < flash_pages; i++) {
 		esp_err_t err = esp_partition_read_raw(ctx->partition, i * FLASH_PAGE_SIZE, page, sizeof (page));
 		if (err != LTS_OK) {
 			return LTS_READ;
@@ -352,7 +356,7 @@ static midlts_err_t mid_session_init_partition(midlts_ctx_t *ctx, const esp_part
 			break;
 		}
 
-		active_page = (active_page + 1) % FLASH_PAGES;
+		active_page = (active_page + 1) % flash_pages;
 	}
 
 	return ret;
@@ -366,25 +370,12 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_vers
 	return mid_session_init_partition(ctx, partition, partition->size, now, fw_version, lr_version);
 }
 
-// Allows setting a smaller flash size for testing
-midlts_err_t mid_session_init_test(midlts_ctx_t *ctx, size_t flash_size, time_t now, const char *fw_version, const char *lr_version) {
+midlts_err_t mid_session_reset(void) {
 	const esp_partition_t *partition;
 	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
 		return LTS_READ;
 	}
-	assert(flash_size > 0 && flash_size < partition->size);
-	midlts_err_t err;
-	if ((err = mid_session_init_partition(ctx, partition, flash_size, now, fw_version, lr_version)) != LTS_OK) {
-		return err;
-	}
-}
-
-midlts_err_t mid_session_reset_test(size_t flash_size) {
-	const esp_partition_t *partition;
-	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
-		return LTS_READ;
-	}
-	esp_err_t err = esp_partition_erase_range(partition, 0, flash_size);
+	esp_err_t err = esp_partition_erase_range(partition, 0, partition->size);
 	if (err != ESP_OK) {
 		return LTS_REMOVE;
 	}
