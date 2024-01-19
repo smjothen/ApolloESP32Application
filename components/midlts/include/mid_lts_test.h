@@ -5,5 +5,6 @@
 #include "mid_lts_priv.h"
 
 midlts_err_t mid_session_reset(void);
+midlts_err_t mid_session_reset_page(size_t addr);
 
 #endif

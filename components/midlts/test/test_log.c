@@ -8,6 +8,7 @@
 static const char *TAG = "MIDTEST";
 
 #define RESET TEST_ASSERT(mid_session_reset() == LTS_OK)
+#define RESETPAGE(n) TEST_ASSERT(mid_session_reset_page((n)) == LTS_OK)
 
 TEST_CASE("Test no leakages", "[mid]") {
 	RESET;
@@ -135,49 +136,35 @@ TEST_CASE("Test latest version persists", "[mid]") {
 	TEST_ASSERT(strcmp(ctx3.latest_lr, "v1.2.4") == 0);
 }
 
-/*
 TEST_CASE("Test persistence over multiple pages", "[mid]") {
 	RESET;
 
 	midlts_ctx_t ctx;
+	midlts_pos_t pos;
 
 	uint8_t uuid[16] = {0};
-
 	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
 
-	TEST_ASSERT(mid_session_add_open(&ctx, &pos[0], 0, uuid, 0, 0) == LTS_OK);
-	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[1], 0, 0, 0) == LTS_OK);
-	TEST_ASSERT(mid_session_add_close(&ctx, &pos[2], 0, 0, 0) == LTS_OK);
-
-	mid_session_record_t rec;
-	midlts_pos_t iter = pos[0];
-
-	TEST_ASSERT(mid_session_get_record(&iter, &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_fw_version && rec.has_lr_version && rec.has_id && rec.has_meter_value && (rec.meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_START));
-
-	TEST_ASSERT(mid_session_get_record(&iter, &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_meter_value);
-
-	TEST_ASSERT(mid_session_get_record(&iter, &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_meter_value);
-
-	TEST_ASSERT(mid_session_get_record(&iter, &rec) == LTS_EOF);
-
-	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.2", "v1.2.3") == LTS_OK);
-	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[0], 0, 0, 0) == LTS_OK);
-
-	TEST_ASSERT(mid_session_get_record(&pos[0], &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_meter_value && rec.has_fw_version && !rec.has_lr_version && strcmp(rec.fw_version.code, "2.0.4.2") == 0);
+	// The 2 first records are LR/FW version records, so this leaves 1
+	// spot left to program
+	for (size_t i = 0; i < 128 - 3; i++) {
+		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, 0, 0, 0) == LTS_OK);
+	}
 
 	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.2", "v1.2.4") == LTS_OK);
-	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[0], 0, 0, 0) == LTS_OK);
+	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, 0, 0, 0) == LTS_OK);
 
-	TEST_ASSERT(mid_session_get_record(&pos[0], &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_meter_value && !rec.has_fw_version && rec.has_lr_version && strcmp(rec.lr_version.code, "v1.2.4") == 0);
+	RESETPAGE(0);
+
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.2", "v1.2.4") == LTS_OK);
+
+	TEST_ASSERT(strcmp(ctx.latest_lr, "v1.2.4") == 0);
+	TEST_ASSERT(strcmp(ctx.latest_fw, "2.0.4.2") == 0);
 }
 
-TEST_CASE("Test multifile", "[mid]") {
-	FORMAT;
+TEST_CASE("Test wraparound", "[mid]") {
+	RESET;
+
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
@@ -189,47 +176,22 @@ TEST_CASE("Test multifile", "[mid]") {
 
 	uint32_t count = 0;
 
-	while (true) {
+	for (int i = 0; i < 128 * 4; i++) {
 		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, time++, flag, meter) == LTS_OK);
 		meter += 100;
 		count++;
-		if (pos.id > 0) {
-			break;
-		}
 	}
 
-	TEST_ASSERT(pos.id == 1);
-	TEST_ASSERT(pos.off == 0);
+	// Should be around a bit over a wraparound
 
-	mid_session_record_t rec;
-	TEST_ASSERT(mid_session_get_record(&pos, &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_fw_version && rec.has_lr_version && rec.has_meter_value);
+	midlts_ctx_t ctx0;
+	TEST_ASSERT(mid_session_init(&ctx0, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 
-	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, time++, flag, meter) == LTS_OK);
-	count++;
+	RESETPAGE(1);
+	RESETPAGE(2);
+	RESETPAGE(3);
 
-	TEST_ASSERT(pos.id == 1);
-	TEST_ASSERT(pos.off > 0);
-
-	TEST_ASSERT(mid_session_get_record(&pos, &rec) == LTS_OK);
-	TEST_ASSERT(!rec.has_fw_version && !rec.has_lr_version && rec.has_meter_value);
-
-	pos = MIDLTS_POS_MIN;
-
-	uint32_t count2 = 0;
-	midlts_err_t err;
-	while ((err = mid_session_get_record(&pos, &rec)) == LTS_OK) {
-		count2++;
-	}
-	ESP_LOGI(TAG, "%" PRIu32 " %" PRIu32, count, count2);
-
-	TEST_ASSERT(err == LTS_EOF);
-	TEST_ASSERT(count == count2);
-
-	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.5", "v1.2.4") == LTS_OK);
-
-	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, time++, flag, meter) == LTS_OK);
-	TEST_ASSERT(mid_session_get_record(&pos, &rec) == LTS_OK);
-	TEST_ASSERT(rec.has_fw_version && rec.has_lr_version && rec.has_meter_value);
+	TEST_ASSERT(mid_session_init(&ctx0, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 }
-*/

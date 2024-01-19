@@ -9,9 +9,12 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
+#define ESP_PARTITION_TYPE_ANY 0
+#define ESP_PARTITION_SUBTYPE_ANY 1
+
 typedef struct {
-	size_t size;
 	bool init;
+	size_t size;
 	uint8_t *flash;
 	uint8_t *erase_bit;
 } esp_partition_t;
@@ -21,51 +24,40 @@ typedef enum {
    ESP_ERR
 } esp_err_t;
 
-static esp_partition_t part = {.size = FLASH_PAGE_SIZE * 4, .init = false, .flash = NULL};
-static const esp_partition_t *partition = &part;
-
-#define ESP_PARTITION_TYPE_ANY 0
-#define ESP_PARTITION_SUBTYPE_ANY 1
-
 static inline const esp_partition_t *esp_partition_find_first(int type, int subtype, const char *label) {
-   (void)type;
-   (void)subtype;
-   (void)label;
-   return partition;
+	(void)type;
+	(void)subtype;
+	(void)label;
+	static esp_partition_t part = {.size = FLASH_PAGE_SIZE * 4, .init = false, .flash = NULL, .erase_bit = NULL};
+	return &part;
+}
+
+static inline uint8_t *mmap_file(esp_partition_t *partition, const char *name, uint8_t fill) {
+	int fd = open(name, O_RDONLY);
+	if (fd < 0) {
+		FILE *fp = fopen(name, "w");
+		assert(fp);
+		size_t todo = partition->size;
+		while (todo-- > 0) {
+			size_t w = fwrite(&fill, 1, sizeof (fill), fp);
+			assert(w == 1);
+		}
+		fclose(fp);
+	}
+	fd = open(name, O_RDWR);
+	assert(fd >= 0);
+	uint8_t *mmap0 = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	assert(mmap0 != MAP_FAILED);
+	return mmap0;
 }
 
 static inline void esp_partition_init(esp_partition_t *partition) {
    if (!partition->init) {
-      int fd = open("/tmp/flash", O_RDONLY);
-      if (fd < 0) {
-         FILE *fp = fopen("/tmp/flash", "w");
-         size_t todo = partition->size;
-         while (todo > 0) {
-            uint8_t c = 0xff;
-            fwrite(&c, 1, sizeof (c), fp);
-            todo--;
-         }
-         fclose(fp);
-      }
-      fd = open("/tmp/erasebit", O_RDONLY);
-      if (fd < 0) {
-         FILE *fp = fopen("/tmp/erasebit", "w");
-         size_t todo = partition->size;
-         while (todo > 0) {
-            uint8_t c = 1;
-            fwrite(&c, 1, sizeof (c), fp);
-            todo--;
-         }
-         fclose(fp);
-      }
-
-      fd = open("/tmp/flash", O_RDWR);
-      partition->init = true;
-      partition->flash = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      fd = open("/tmp/erasebit", O_RDWR);
-      partition->erase_bit = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      assert(partition->flash != MAP_FAILED);
-      assert(partition->erase_bit != MAP_FAILED);
+	   partition->flash = mmap_file(partition, "/tmp/flash", 0xff);
+	   assert(partition->flash);
+	   partition->erase_bit = mmap_file(partition, "/tmp/erase", 0x0);
+	   assert(partition->erase_bit);
+	   partition->init = 1;
    }
 }
 

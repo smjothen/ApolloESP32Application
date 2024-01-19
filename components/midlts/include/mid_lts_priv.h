@@ -15,21 +15,24 @@ typedef enum _midlts_flag_t {
 } midlts_flag_t;
 
 typedef struct _midlts_pos_t {
-	midlts_id_t id;
-	uint16_t off;
+	// Offset in flash
+	uint32_t loc;
+	// CRC of original record
+	uint32_t id;
 } midlts_pos_t;
 
-#define MIDLTS_POS_MAX ((midlts_pos_t){ .id = 0xFFFFFFFF, .off = 0xFFFF })
+#define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
+#define MIDLTS_VERSION_SIZE sizeof (mid_session_version_t)
 
 typedef struct _midlts_ctx_t {
-	const void *partition;
+	const esp_partition_t *partition;
 	size_t num_pages;
 
 	const char *fw_version;
 	const char *lr_version;
 
-	char latest_fw[sizeof (mid_session_version_t)];
-	char latest_lr[sizeof (mid_session_version_t)];
+	char latest_fw[MIDLTS_VERSION_SIZE];
+	char latest_lr[MIDLTS_VERSION_SIZE];
 
 	uint32_t flags;
 
@@ -46,25 +49,13 @@ typedef struct _midlts_ctx_t {
 
 #define MIDLTS_ERROR_LIST \
 	X(LTS_OK) \
-	X(LTS_OPENDIR) \
-	X(LTS_OPEN) \
-	X(LTS_CLOSE) \
-	X(LTS_STAT) \
-	X(LTS_REMOVE) \
+	X(LTS_ERASE) \
 	X(LTS_WRITE) \
 	X(LTS_READ) \
-	X(LTS_FLUSH) \
-	X(LTS_SYNC) \
-	X(LTS_TELL) \
-	X(LTS_AGAIN) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
 	X(LTS_CORRUPT) \
-	X(LTS_PROTO_ENCODE) \
-	X(LTS_PROTO_DECODE) \
-	X(LTS_LOG_FILE_FULL) \
 	X(LTS_MSG_OUT_OF_ORDER) \
-	X(LTS_FS_FULL) \
 	X(LTS_SESSION_NOT_OPEN) \
 	X(LTS_SESSION_ALREADY_OPEN) \
 

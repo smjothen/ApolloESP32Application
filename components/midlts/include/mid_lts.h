@@ -1,13 +1,10 @@
 #ifndef __MID_LTS_H__
 #define __MID_LTS_H__
 
-#if defined(__aarch64__) || defined(__x86_64__)
-#define HOST
-#endif
-
 #define FLASH_PAGE_SIZE 4096
 
-#ifdef HOST
+#if defined(__aarch64__) || defined(__x86_64__)
+#define HOST
 #include "mid_lts_host.h"
 #else
 #include <string.h>
@@ -32,5 +29,7 @@ midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t
 midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter);
 midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16]);
 midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size);
+
+midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec);
 
 #endif

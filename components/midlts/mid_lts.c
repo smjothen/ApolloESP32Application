@@ -42,7 +42,7 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
 	esp_err_t err;
 	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
 
@@ -52,13 +52,18 @@ static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, mid_session_record_
 		// TODO: Verify data is old enough
 		err = esp_partition_erase_range(ctx->partition, ctx->msg_addr, FLASH_PAGE_SIZE);
 		if (err != ESP_OK) {
-			return LTS_REMOVE;
+			return LTS_ERASE;
 		}
 	}
 
 	err = esp_partition_write(ctx->partition, ctx->msg_addr, rec, sizeof (*rec));
 	if (err != ESP_OK) {
 		return LTS_WRITE;
+	}
+
+	if (pos) {
+		pos->loc = ctx->msg_addr;
+		pos->id = rec->rec_id;
 	}
 
 	ctx->msg_addr = (ctx->msg_addr + sizeof (*rec)) % flash_size;
@@ -80,7 +85,7 @@ static midlts_err_t mid_session_log_version(midlts_ctx_t *ctx, mid_session_recor
 	ver.rec_crc = esp_crc32_le(0, (uint8_t *)&ver, sizeof (ver));
 
 	midlts_err_t err;
-	if ((err = mid_session_log_erase(ctx, &ver)) != LTS_OK) {
+	if ((err = mid_session_log_erase(ctx, NULL, &ver)) != LTS_OK) {
 		return err;
 	}
 
@@ -121,11 +126,21 @@ static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos,
 		if ((ret = mid_session_log_lr_version(ctx)) != LTS_OK) {
 			return ret;
 		}
+		if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
+			if ((ret = mid_session_log_both_versions(ctx)) != LTS_OK) {
+				return ret;
+			}
+		}
 	}
 
 	if (strcmp(ctx->fw_version, ctx->latest_fw) != 0) {
 		if ((ret = mid_session_log_fw_version(ctx)) != LTS_OK) {
 			return ret;
+		}
+		if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
+			if ((ret = mid_session_log_both_versions(ctx)) != LTS_OK) {
+				return ret;
+			}
 		}
 	}
 
@@ -133,7 +148,7 @@ static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos,
 	rec->rec_crc = 0xFFFFFFFF;
 	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
 
-	if ((ret = mid_session_log_erase(ctx, rec)) != LTS_OK) {
+	if ((ret = mid_session_log_erase(ctx, pos, rec)) != LTS_OK) {
 		return ret;
 	}
 
@@ -347,6 +362,7 @@ static midlts_err_t mid_session_init_partition(midlts_ctx_t *ctx, const esp_part
 			rec.rec_crc = crc;
 
 			if (crc != crc2) {
+				//ESP_LOGE(TAG, "MID Session Recovery - Id %" PRIx32 " CRC %" PRIx32 " Expected %" PRIx32, rec.rec_id, crc, crc2);
 				ret = LTS_BAD_CRC;
 				break;
 			}
@@ -422,7 +438,48 @@ midlts_err_t mid_session_reset(void) {
 	}
 	esp_err_t err = esp_partition_erase_range(partition, 0, partition->size);
 	if (err != ESP_OK) {
-		return LTS_REMOVE;
+		return LTS_ERASE;
 	}
+	return LTS_OK;
+}
+
+midlts_err_t mid_session_reset_page(size_t addr) {
+	const esp_partition_t *partition;
+	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
+		return LTS_READ;
+	}
+	esp_err_t err = esp_partition_erase_range(partition, addr * 4096, 4096);
+	if (err != ESP_OK) {
+		return LTS_ERASE;
+	}
+	return LTS_OK;
+}
+
+midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
+	if (pos->loc > ctx->partition->size) {
+		return LTS_READ;
+	}
+
+	uint8_t data[sizeof (mid_session_record_t)];
+
+	if (esp_partition_read(ctx->partition, pos->loc, data, sizeof (data)) != ESP_OK) {
+		return LTS_READ;
+	}
+
+	*rec = *(mid_session_record_t *)data;
+
+	uint32_t crc = rec->rec_crc;
+	rec->rec_crc = 0xFFFFFFFF;
+	uint32_t crc2 = esp_crc32_le(0, (uint8_t *)&rec, sizeof (rec));
+	rec->rec_crc = crc;
+
+	if (crc != crc2) {
+		return LTS_BAD_CRC;
+	}
+
+	if (rec->rec_id != pos->id) {
+		return LTS_BAD_ARG;
+	}
+
 	return LTS_OK;
 }
