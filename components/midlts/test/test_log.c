@@ -195,3 +195,34 @@ TEST_CASE("Test wraparound", "[mid]") {
 	TEST_ASSERT(mid_session_init(&ctx0, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
 	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 }
+
+TEST_CASE("Test reading records", "[mid]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+
+	uint32_t time = 0;
+	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	uint32_t meter = 0;
+	uint32_t count = 0;
+
+	midlts_pos_t pos[8];
+
+	for (int i = 0; i < 8; i++) {
+		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[i], time++, flag, meter) == LTS_OK);
+		meter += 100;
+		count++;
+	}
+
+	// Test bad read
+	mid_session_record_t rec;
+	TEST_ASSERT(mid_session_read_record(&ctx, &(midlts_pos_t) { .loc = 1, .id = 0 }, &rec) != LTS_OK);
+
+	for (int i = 0; i < 8; i++) {
+		// Test good read
+		midlts_err_t e = mid_session_read_record(&ctx, &pos[i], &rec);
+		TEST_ASSERT(e == LTS_OK);
+		TEST_ASSERT(rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE);
+	}
+}

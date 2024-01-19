@@ -470,7 +470,7 @@ midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_s
 
 	uint32_t crc = rec->rec_crc;
 	rec->rec_crc = 0xFFFFFFFF;
-	uint32_t crc2 = esp_crc32_le(0, (uint8_t *)&rec, sizeof (rec));
+	uint32_t crc2 = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
 	rec->rec_crc = crc;
 
 	if (crc != crc2) {
