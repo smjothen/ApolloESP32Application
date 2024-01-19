@@ -10,8 +10,9 @@
 #include <sys/mman.h>
 
 typedef struct {
-   bool init;
-   uint8_t *flash;
+	size_t size;
+	bool init;
+	uint8_t *flash;
 } esp_partition_t;
 
 typedef enum {
@@ -19,7 +20,7 @@ typedef enum {
    ESP_ERR
 } esp_err_t;
 
-static esp_partition_t part = {.init = false, .flash = NULL};
+static esp_partition_t part = {.size = FLASH_PAGE_SIZE * 4, .init = false, .flash = NULL};
 static const esp_partition_t *partition = &part;
 
 #define ESP_PARTITION_TYPE_ANY 0
@@ -37,7 +38,7 @@ static inline void esp_partition_init(esp_partition_t *partition) {
       int fd = open("/tmp/flash", O_RDONLY);
       if (fd < 0) {
          FILE *fp = fopen("/tmp/flash", "w");
-         size_t todo = FLASH_TOTAL_SIZE;
+         size_t todo = partition->size;
          while (todo > 0) {
             uint8_t c = 0xff;
             fwrite(&c, 1, sizeof (c), fp);
@@ -47,14 +48,14 @@ static inline void esp_partition_init(esp_partition_t *partition) {
       }
       fd = open("/tmp/flash", O_RDWR);
       partition->init = true;
-      partition->flash = mmap(0, FLASH_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      partition->flash = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       assert(partition->flash != MAP_FAILED);
    }
 }
 
 static inline esp_err_t esp_partition_read(const esp_partition_t *partition, size_t src_offset, void *dst, size_t size) {
    assert(partition);
-   assert(src_offset + size <= FLASH_TOTAL_SIZE);
+   assert(src_offset + size <= partition->size);
    assert(size % 16 == 0);
    esp_partition_init((esp_partition_t *)partition);
    for (size_t i = src_offset; i < src_offset + size; i++) {
@@ -71,7 +72,7 @@ static inline esp_err_t esp_partition_write(const esp_partition_t *partition, si
    assert(partition);
    assert(dst_offset % 16 == 0);
    assert(size % 16 == 0);
-   assert(dst_offset + size <= FLASH_TOTAL_SIZE);
+   assert(dst_offset + size <= partition->size);
    esp_partition_init((esp_partition_t *)partition);
    for (size_t i = dst_offset; i < dst_offset + size; i++) {
       ((esp_partition_t *)partition)->flash[i] = ((uint8_t *)src)[i - dst_offset];
@@ -83,7 +84,7 @@ static inline esp_err_t esp_partition_erase_range(const esp_partition_t *partiti
    assert(partition);
    assert(offset % 16 == 0);
    assert(size % 16 == 0);
-   assert(offset + size <= FLASH_TOTAL_SIZE);
+   assert(offset + size <= partition->size);
    esp_partition_init((esp_partition_t *)partition);
    memset((void*)(partition->flash + offset), 0xff, size);
    return ESP_OK;
