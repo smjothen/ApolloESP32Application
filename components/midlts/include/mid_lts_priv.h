@@ -28,6 +28,9 @@ typedef struct _midlts_ctx_t {
 	const char *fw_version;
 	const char *lr_version;
 
+	char latest_fw[sizeof (mid_session_version_t)];
+	char latest_lr[sizeof (mid_session_version_t)];
+
 	uint32_t flags;
 
 	midlts_msg_id_t msg_addr;

@@ -35,7 +35,13 @@ midlts_err_t midlts_stress_test(int n) {
 
 	time_t time = 0;
 
-	if ((err = mid_session_init(&ctx, time, "2.0.0.406", "v1.2.8")) != LTS_OK) {
+	char lr_buf[32];
+	strlcpy(lr_buf, "v1.2.3", sizeof (lr_buf));
+	char fw_buf[32];
+	strlcpy(fw_buf, "2.0.0.4", sizeof (fw_buf));
+
+
+	if ((err = mid_session_init(&ctx, time, fw_buf, lr_buf)) != LTS_OK) {
 		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return err;
 	}
@@ -43,7 +49,7 @@ midlts_err_t midlts_stress_test(int n) {
 	uint8_t buf[64] = {0};
 
 	/*
-	mid_session_meter_value_flag_t flags[] = { 
+	mid_session_meter_value_flag_t flags[] = {
 		MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN,
 		MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE,
 		MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED,
@@ -116,10 +122,12 @@ midlts_err_t midlts_stress_test(int n) {
 			if (nsess == n) {
 				return 0;
 			}
-	
+
 		} else {
 			// ~2% chance of starting a session
 			bool start = (esp_random() % 100) < 2;
+			bool lrversion = (esp_random() % 100) == 0;
+			bool fwversion = (esp_random() % 100) == 1;
 
 			if (start) {
 				if ((err = mid_session_add_open(&ctx, &pos, time, midlts_gen_rand(buf, 16), MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
@@ -136,6 +144,14 @@ midlts_err_t midlts_stress_test(int n) {
 					id_time = 0;
 				}
 			}
+
+			if (lrversion) {
+				snprintf(lr_buf, sizeof (lr_buf), "%d.%d.%d", esp_random() % 255, esp_random() % 255, esp_random() % 255);
+			}
+			if (fwversion) {
+				snprintf(fw_buf, sizeof (fw_buf), "%d.%d.%d.%d", esp_random() % 255, esp_random() % 255, esp_random() % 255, esp_random() % 255);
+			}
+
 		}
 
 		// TODO: Only if meter changed since last meter value?

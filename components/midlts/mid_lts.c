@@ -13,6 +13,16 @@
 static const char *TAG = "MIDLTS         ";
 
 static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+	if (rec->rec_type == MID_SESSION_RECORD_TYPE_FW_VERSION) {
+		strlcpy(ctx->latest_fw, rec->fw_version.code, sizeof (rec->fw_version.code));
+		return LTS_OK;
+	}
+
+	if (rec->rec_type == MID_SESSION_RECORD_TYPE_LR_VERSION) {
+		strlcpy(ctx->latest_lr, rec->lr_version.code, sizeof (rec->lr_version.code));
+		return LTS_OK;
+	}
+
 	if (rec->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
 		return LTS_OK;
 	}
@@ -32,23 +42,21 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
+static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+	esp_err_t err;
 	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
-
-	rec->rec_id = ctx->msg_id;
-	rec->rec_crc = 0xFFFFFFFF;
-	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
 
 	mid_session_print_record(rec);
 
-	// Should never happen because we double check in public functions that sessions aren't
-	// already open if we wan't to open, etc.
-	midlts_err_t ret;
-	if ((ret = mid_session_log_update_state(ctx, rec)) != LTS_OK) {
-		return ret;
+	if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
+		// TODO: Verify data is old enough
+		err = esp_partition_erase_range(ctx->partition, ctx->msg_addr, FLASH_PAGE_SIZE);
+		if (err != ESP_OK) {
+			return LTS_REMOVE;
+		}
 	}
 
-	esp_err_t err = esp_partition_write(ctx->partition, ctx->msg_addr, rec, sizeof (*rec));
+	err = esp_partition_write(ctx->partition, ctx->msg_addr, rec, sizeof (*rec));
 	if (err != ESP_OK) {
 		return LTS_WRITE;
 	}
@@ -56,39 +64,78 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 	ctx->msg_addr = (ctx->msg_addr + sizeof (*rec)) % flash_size;
 	ctx->msg_id++;
 
+	midlts_err_t ret;
+	// Should never happen because we double check in public functions that sessions aren't
+	// already open if we wan't to open, etc.
+	if ((ret = mid_session_log_update_state(ctx, rec)) != LTS_OK) {
+		return ret;
+	}
+
+	return LTS_OK;
+}
+
+static midlts_err_t mid_session_log_version(midlts_ctx_t *ctx, mid_session_record_type_t type, const char *code) {
+	mid_session_record_t ver = {.rec_type = type, .rec_id = ctx->msg_id, .rec_crc = 0xFFFFFFFF};
+	strlcpy(ver.lr_version.code, code, sizeof (ver.lr_version.code));
+	ver.rec_crc = esp_crc32_le(0, (uint8_t *)&ver, sizeof (ver));
+
+	midlts_err_t err;
+	if ((err = mid_session_log_erase(ctx, &ver)) != LTS_OK) {
+		return err;
+	}
+
+	return LTS_OK;
+}
+
+static midlts_err_t mid_session_log_lr_version(midlts_ctx_t *ctx) {
+	return mid_session_log_version(ctx, MID_SESSION_RECORD_TYPE_LR_VERSION, ctx->lr_version);
+}
+
+static midlts_err_t mid_session_log_fw_version(midlts_ctx_t *ctx) {
+	return mid_session_log_version(ctx, MID_SESSION_RECORD_TYPE_FW_VERSION, ctx->fw_version);
+}
+
+static midlts_err_t mid_session_log_both_versions(midlts_ctx_t *ctx) {
+	midlts_err_t err;
+	if ((err = mid_session_log_fw_version(ctx)) != LTS_OK) {
+		return err;
+	}
+	if ((err = mid_session_log_lr_version(ctx)) != LTS_OK) {
+		return err;
+	}
 	return LTS_OK;
 }
 
 static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
+
 	midlts_err_t ret;
+	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
 
+	// Log versions as first records in page
 	if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
-		// TODO: Verify data is old enough
-		// First write to page, need to erase
-		//ESP_LOGI(TAG, "MID Session Erase - Erase %" PRId32, ctx->msg_addr);
-		esp_err_t err = esp_partition_erase_range(ctx->partition, ctx->msg_addr, FLASH_PAGE_SIZE);
-		if (err != ESP_OK) {
-			return LTS_REMOVE;
-		}
-
-		mid_session_record_t lr = {0};
-		lr.rec_type = MID_SESSION_RECORD_TYPE_LR_VERSION;
-		strlcpy(lr.lr_version.code, ctx->lr_version, sizeof (lr.lr_version.code));
-
-		if ((ret = mid_session_log_record_internal(ctx, pos, &lr)) != LTS_OK) {
-			return ret;
-		}
-
-		mid_session_record_t fw = {0};
-		fw.rec_type = MID_SESSION_RECORD_TYPE_FW_VERSION;
-		strlcpy(fw.fw_version.code, ctx->fw_version, sizeof (fw.fw_version.code));
-
-		if ((ret = mid_session_log_record_internal(ctx, pos, &fw)) != LTS_OK) {
+		if ((ret = mid_session_log_both_versions(ctx)) != LTS_OK) {
 			return ret;
 		}
 	}
 
-	if ((ret = mid_session_log_record_internal(ctx, pos, rec)) != LTS_OK) {
+	// ... or if they change
+	if (strcmp(ctx->lr_version, ctx->latest_lr) != 0) {
+		if ((ret = mid_session_log_lr_version(ctx)) != LTS_OK) {
+			return ret;
+		}
+	}
+
+	if (strcmp(ctx->fw_version, ctx->latest_fw) != 0) {
+		if ((ret = mid_session_log_fw_version(ctx)) != LTS_OK) {
+			return ret;
+		}
+	}
+
+	rec->rec_id = ctx->msg_id;
+	rec->rec_crc = 0xFFFFFFFF;
+	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
+
+	if ((ret = mid_session_log_erase(ctx, rec)) != LTS_OK) {
 		return ret;
 	}
 

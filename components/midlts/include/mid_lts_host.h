@@ -13,6 +13,7 @@ typedef struct {
 	size_t size;
 	bool init;
 	uint8_t *flash;
+	uint8_t *erase_bit;
 } esp_partition_t;
 
 typedef enum {
@@ -46,10 +47,25 @@ static inline void esp_partition_init(esp_partition_t *partition) {
          }
          fclose(fp);
       }
+      fd = open("/tmp/erasebit", O_RDONLY);
+      if (fd < 0) {
+         FILE *fp = fopen("/tmp/erasebit", "w");
+         size_t todo = partition->size;
+         while (todo > 0) {
+            uint8_t c = 1;
+            fwrite(&c, 1, sizeof (c), fp);
+            todo--;
+         }
+         fclose(fp);
+      }
+
       fd = open("/tmp/flash", O_RDWR);
       partition->init = true;
       partition->flash = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      fd = open("/tmp/erasebit", O_RDWR);
+      partition->erase_bit = mmap(0, partition->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       assert(partition->flash != MAP_FAILED);
+      assert(partition->erase_bit != MAP_FAILED);
    }
 }
 
@@ -75,7 +91,9 @@ static inline esp_err_t esp_partition_write(const esp_partition_t *partition, si
    assert(dst_offset + size <= partition->size);
    esp_partition_init((esp_partition_t *)partition);
    for (size_t i = dst_offset; i < dst_offset + size; i++) {
+      assert(((esp_partition_t *)partition)->erase_bit[i] == 1);
       ((esp_partition_t *)partition)->flash[i] = ((uint8_t *)src)[i - dst_offset];
+      ((esp_partition_t *)partition)->erase_bit[i] = 0;
    }
    return ESP_OK;
 }
@@ -87,6 +105,7 @@ static inline esp_err_t esp_partition_erase_range(const esp_partition_t *partiti
    assert(offset + size <= partition->size);
    esp_partition_init((esp_partition_t *)partition);
    memset((void*)(partition->flash + offset), 0xff, size);
+   memset((void*)(partition->erase_bit + offset), 0x1, size);
    return ESP_OK;
 }
 
