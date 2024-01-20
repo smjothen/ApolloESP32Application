@@ -226,3 +226,77 @@ TEST_CASE("Test reading records", "[mid]") {
 		TEST_ASSERT(rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE);
 	}
 }
+
+TEST_CASE("Test bad CRC returns an error", "[mid]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+
+	uint32_t time = 0;
+	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	uint32_t meter = 0;
+	uint32_t count = 0;
+
+	midlts_pos_t pos[8];
+
+	for (int i = 0; i < 8; i++) {
+		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[i], time++, flag, meter) == LTS_OK);
+		meter += 100;
+		count++;
+	}
+
+	// Corrupt first record
+	uint8_t rec[sizeof (mid_session_record_t)];
+	TEST_ASSERT(esp_partition_read(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
+
+	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
+	for (size_t i = 0; i < sizeof (mid_session_record_t); i++) {
+		if (rec[i] != 0) {
+			rec[i] = 0;
+			break;
+		}
+	}
+	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
+
+	TEST_ASSERT(esp_partition_write(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") != LTS_OK);
+}
+
+TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") == LTS_OK);
+
+	uint32_t time = 0;
+	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	uint32_t meter = 0;
+	uint32_t count = 0;
+
+	midlts_pos_t pos[8];
+
+	for (int i = 0; i < 8; i++) {
+		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[i], time++, flag, meter) == LTS_OK);
+		meter += 100;
+		count++;
+	}
+
+	// Corrupt last (2 + 8) == 10th record
+	uint8_t rec[sizeof (mid_session_record_t)];
+	TEST_ASSERT(esp_partition_read(ctx.partition, 9 * 32, rec, sizeof (rec)) == ESP_OK);
+
+	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
+	for (size_t i = 0; i < sizeof (mid_session_record_t); i++) {
+		if (rec[i] != 0) {
+			rec[i] = 0;
+			break;
+		}
+	}
+	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
+
+	TEST_ASSERT(esp_partition_write(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
+	TEST_ASSERT(mid_session_init(&ctx, 0, "2.0.4.1", "v1.2.3") != LTS_OK);
+}
+
+

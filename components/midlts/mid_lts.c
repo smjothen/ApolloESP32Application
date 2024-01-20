@@ -61,6 +61,17 @@ static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, midlts_pos_t *pos, 
 		return LTS_WRITE;
 	}
 
+	// Could just turn verification of SPI writes on in the IDF config but ...
+	uint8_t buf[sizeof (*rec)];
+	err = esp_partition_read(ctx->partition, ctx->msg_addr, buf, sizeof (buf));
+	if (err != ESP_OK) {
+		return LTS_READ;
+	}
+
+	if (memcmp(buf, rec, sizeof (buf)) != 0) {
+		return LTS_BAD_CRC;
+	}
+
 	if (pos) {
 		pos->loc = ctx->msg_addr;
 		pos->id = rec->rec_id;
