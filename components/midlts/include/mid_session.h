@@ -21,11 +21,11 @@ typedef struct {
 typedef struct {
     mid_session_auth_type_t type : 8;
     uint8_t length;
-    uint8_t tag[21];
+    uint8_t tag[20];
 } PACK mid_session_auth_t;
 
 typedef struct {
-    char code[23];
+    char code[22];
 } PACK mid_session_version_t;
 
 typedef enum {
@@ -67,7 +67,12 @@ typedef struct {
         mid_session_version_t lr_version;
         mid_session_version_t fw_version;
     };
+	uint8_t rec_status;
 } PACK mid_session_record_t;
+
+#define MID_SESSION_STATUS_DEFAULT 0xFF
+#define MID_SESSION_STATUS_ERASING 0x0F
+#define MID_SESSION_STATUS_ERASED 0x00
 
 _Static_assert(sizeof (mid_session_record_t) == 32, "Size of record must remain 32 bytes!");
 

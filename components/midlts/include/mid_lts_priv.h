@@ -21,18 +21,22 @@ typedef struct _midlts_pos_t {
 	uint32_t id;
 } midlts_pos_t;
 
-#define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
+#define MIDLTS_PAGE_EMPTY 0
+#define MIDLTS_PAGE_VALID 1
+#define MIDLTS_PAGE_INVALID 2
+#define MIDLTS_PAGE_MAX 128
+
 #define MIDLTS_VERSION_SIZE sizeof (mid_session_version_t)
 
 typedef struct _midlts_ctx_t {
 	const esp_partition_t *partition;
-	size_t num_pages;
+	uint8_t status[MIDLTS_PAGE_MAX];
 
 	const char *fw_version;
-	const char *lr_version;
+	char fw_latest[MIDLTS_VERSION_SIZE];
 
-	char latest_fw[MIDLTS_VERSION_SIZE];
-	char latest_lr[MIDLTS_VERSION_SIZE];
+	const char *lr_version;
+	char lr_latest[MIDLTS_VERSION_SIZE];
 
 	uint32_t flags;
 
@@ -54,6 +58,8 @@ typedef struct _midlts_ctx_t {
 	X(LTS_READ) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
+	X(LTS_BAD_STATUS) \
+	X(LTS_INVALID_SIZE) \
 	X(LTS_CORRUPT) \
 	X(LTS_MSG_OUT_OF_ORDER) \
 	X(LTS_SESSION_NOT_OPEN) \
