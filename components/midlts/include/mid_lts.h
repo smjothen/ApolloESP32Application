@@ -12,6 +12,8 @@
 #include "esp_random.h"
 #include "esp_log.h"
 #include "esp_partition.h"
+
+#define MIDLTS_DIR "/mid/"
 #endif
 
 #include "mid_lts_priv.h"

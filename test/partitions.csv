@@ -7,5 +7,5 @@ nvs_key,  data, nvs_keys,,        0x4000, encrypted,
 nvs_sec,  data, nvs,     ,     	  0x4000,
 factory,  app,  factory, ,        0x100000,
 files,     data, fat,    ,        0x100000, encrypted,
-mid,     data, spiffs,    ,        0x4000, encrypted,
+mid,     data, spiffs,    ,        0xc0000, encrypted,
 coredump, data, coredump,,        0x10000, encrypted

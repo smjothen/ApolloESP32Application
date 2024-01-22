@@ -145,7 +145,7 @@ static midlts_err_t mid_session_log_read_first_record(midlts_ctx_t *ctx, midlts_
 		return LTS_STAT;
 	}
 
-	if (st.st_size < sizeof (*rec) != 0) {
+	if (st.st_size < sizeof (*rec)) {
 		return LTS_STAT;
 	}
 
@@ -418,13 +418,17 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version
 	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
 }
 
-midlts_err_t mid_session_reset(void) {
+midlts_err_t mid_session_reset_page(midlts_id_t id) {
 	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, id);
+	remove(buf);
+	return LTS_OK;
+}
+
+midlts_err_t mid_session_reset(void) {
 	for (midlts_id_t i = 0; i < MIDLTS_LOG_MAX_FILES; i++) {
-		snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, i);
-		if (remove(buf) != 0) {
-			return LTS_ERASE;
-		}
+		ESP_LOGI(TAG, "RESET %" PRIu32, i);
+		mid_session_reset_page(i);
 	}
 	return LTS_OK;
 }

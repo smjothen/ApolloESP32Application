@@ -9,8 +9,8 @@
 // This should be set to around 3/4 of the partition size to account
 // for metadata storage, etc of LittleFS!
 //
-// This is 3/4 of 0xc0000 = 0x90000
-#define MIDLTS_LOG_MAX_FILES 0x90000
+// This is 3/4 of 0xc0000 = 0x90000 = 144 files
+#define MIDLTS_LOG_MAX_FILES 144
 
 #define MIDLTS_SCN "%" SCNx32 ".ms%n"
 #define MIDLTS_PRI "%" PRIx32 ".ms"
