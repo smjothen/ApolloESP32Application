@@ -24,19 +24,15 @@ typedef enum _midlts_flag_t {
 } midlts_flag_t;
 
 typedef struct _midlts_pos_t {
-	// Offset in flash
-	uint32_t loc;
-	// CRC of original record
-	uint32_t id;
+	// Log id
+	uint16_t id;
+	// Offset in log
+	uint16_t offset;
+	// CRC of record
+	uint32_t crc;
 } midlts_pos_t;
 
 #define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
-
-#define MIDLTS_PAGE_EMPTY 0
-#define MIDLTS_PAGE_VALID 1
-#define MIDLTS_PAGE_INVALID 2
-
-#define MIDLTS_PAGE_MAX 128
 
 typedef struct _midlts_ctx_t {
 	mid_session_version_fw_t fw_version;
@@ -63,14 +59,13 @@ typedef struct _midlts_ctx_t {
 	X(LTS_READ) \
 	X(LTS_FLUSH) \
 	X(LTS_TELL) \
+	X(LTS_SEEK) \
 	X(LTS_SYNC) \
 	X(LTS_STAT) \
 	X(LTS_CLOSE) \
 	X(LTS_OPEN) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
-	X(LTS_CORRUPT) \
-	X(LTS_PARSE_VERSION) \
 	X(LTS_MSG_OUT_OF_ORDER) \
 	X(LTS_LOG_FILE_FULL) \
 	X(LTS_SESSION_NOT_OPEN) \
@@ -99,7 +94,5 @@ void mid_session_format_bytes_uuid(char *buf, uint8_t *bytes, size_t len);
 void mid_session_format_bytes(char *buf, uint8_t *bytes, size_t len);
 
 void mid_session_print_record(mid_session_record_t *rec);
-
-midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version);
 
 #endif

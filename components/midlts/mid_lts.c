@@ -109,6 +109,10 @@ close:
 
 		mid_session_print_record(rec);
 
+		pos->id = ctx->msg_page;
+		pos->offset = size;
+		pos->crc = rec->rec_crc;
+
 		// TODO: Update state (open/close session state, etc) and set position
 		ctx->msg_id++;
 	}
@@ -134,7 +138,7 @@ static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos,
 	return err;
 }
 
-static midlts_err_t mid_session_log_read_first_record(midlts_ctx_t *ctx, midlts_id_t logid, mid_session_record_t *rec) {
+static midlts_err_t mid_session_log_read_record(midlts_ctx_t *ctx, midlts_id_t logid, size_t offset, mid_session_record_t *rec) {
 	midlts_err_t ret = LTS_OK;
 
 	char buf[64];
@@ -145,13 +149,17 @@ static midlts_err_t mid_session_log_read_first_record(midlts_ctx_t *ctx, midlts_
 		return LTS_STAT;
 	}
 
-	if (st.st_size < sizeof (*rec)) {
+	if (offset + sizeof (*rec) > st.st_size) {
 		return LTS_STAT;
 	}
 
 	FILE *fp = fopen(buf, "r");
 	if (!fp) {
 		return LTS_OPEN;
+	}
+
+	if (fseek(fp, offset, SEEK_SET)) {
+		return LTS_SEEK;
 	}
 
 	if (fread(rec, 1, sizeof (*rec), fp) != sizeof (*rec)) {
@@ -360,7 +368,7 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time
 		}
 
 		mid_session_record_t rec;
-		if ((ret = mid_session_log_read_first_record(ctx, id, &rec)) != LTS_OK) {
+		if ((ret = mid_session_log_read_record(ctx, id, 0, &rec)) != LTS_OK) {
 			return ret;
 		}
 
@@ -414,6 +422,18 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time
 	return ret;
 }
 
+midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
+	midlts_err_t err = mid_session_log_read_record(ctx, pos->id, pos->offset, rec);
+	if (err != LTS_OK) {
+		return err;
+	}
+	if (pos->crc != rec->rec_crc) {
+		return LTS_BAD_CRC;
+	}
+	return LTS_OK;
+}
+
+// Functions below only for testing purposes
 midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
 }
@@ -427,13 +447,9 @@ midlts_err_t mid_session_reset_page(midlts_id_t id) {
 
 midlts_err_t mid_session_reset(void) {
 	for (midlts_id_t i = 0; i < MIDLTS_LOG_MAX_FILES; i++) {
-		ESP_LOGI(TAG, "RESET %" PRIu32, i);
 		mid_session_reset_page(i);
 	}
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
-	// TODO
-	return LTS_OK;
-}
+

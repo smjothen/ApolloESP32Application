@@ -7,8 +7,10 @@
 #include <limits.h>
 
 #include "mid_session.h"
+
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
+#include "mid_lts_test.h"
 
 static const char *TAG = "MIDSTRESS       ";
 
