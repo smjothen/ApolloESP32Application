@@ -144,12 +144,12 @@ TEST_CASE("Test wraparound", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
+	// Max 4 pages
+	TEST_ASSERT(mid_session_init_internal(&ctx, 4, 0, default_fw, default_lr) == LTS_OK);
 
-	uint32_t time = 0;
+	uint32_t time = MID_EPOCH;
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
-
 	uint32_t count = 0;
 
 	for (int i = 0; i < 128 * 4 + 1; i++) {
@@ -158,18 +158,17 @@ TEST_CASE("Test wraparound", "[mid]") {
 		count++;
 	}
 
-	// Should be around a bit over a wraparound
 
 	midlts_ctx_t ctx0;
-	TEST_ASSERT(mid_session_init(&ctx0, 0, default_fw, default_lr) == LTS_OK);
+	TEST_ASSERT_EQUAL_INT(mid_session_init_internal(&ctx0, 4, 0, default_fw, default_lr), LTS_OK);
 	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 
-	TEST_ASSERT(remove("/mid/0.ms") == 0);
+	// Should be around a bit over a wraparound for 4 files so 0 should be enough
 	TEST_ASSERT(remove("/mid/1.ms") == 0);
 	TEST_ASSERT(remove("/mid/2.ms") == 0);
 	TEST_ASSERT(remove("/mid/3.ms") == 0);
 
-	TEST_ASSERT(mid_session_init(&ctx0, 0, default_fw, default_lr) == LTS_OK);
+	TEST_ASSERT(mid_session_init_internal(&ctx0, 4, 0, default_fw, default_lr) == LTS_OK);
 	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 }
 
@@ -179,7 +178,7 @@ TEST_CASE("Test reading records", "[mid]") {
 	midlts_ctx_t ctx;
 	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
 
-	uint32_t time = 0;
+	uint32_t time = MID_EPOCH;
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
@@ -192,9 +191,18 @@ TEST_CASE("Test reading records", "[mid]") {
 		count++;
 	}
 
-	// Test bad read
 	mid_session_record_t rec;
-	//TEST_ASSERT(mid_session_read_record(&ctx, &(midlts_pos_t) { .loc = 1, .id = 0 }, &rec) != LTS_OK);
+
+	// Test bad reads
+	midlts_pos_t badpos = pos[0];
+	badpos.id++;
+	TEST_ASSERT(mid_session_read_record(&ctx, &badpos, &rec) != LTS_OK);
+	badpos = pos[0];
+	badpos.offset = 8 * 32;
+	TEST_ASSERT(mid_session_read_record(&ctx, &badpos, &rec) != LTS_OK);
+	badpos = pos[0];
+	badpos.crc = 0xffffffff;
+	TEST_ASSERT(mid_session_read_record(&ctx, &badpos, &rec) != LTS_OK);
 
 	for (int i = 0; i < 8; i++) {
 		// Test good read
@@ -258,4 +266,29 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	TEST_ASSERT(!fclose(fp));
 
 	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_BAD_CRC);
+}
+
+TEST_CASE("Test position and reading", "[mid]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
+
+	uint32_t time = MID_EPOCH;
+	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	uint32_t meter = 0;
+	uint32_t count = 0;
+
+	midlts_pos_t pos[8];
+
+	for (int i = 0; i < 8; i++) {
+		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos[i], time++, flag, meter) == LTS_OK);
+		meter += 100;
+		count++;
+	}
+
+	for (int i = 0; i < 8; i++) {
+		mid_session_record_t rec;
+		TEST_ASSERT(mid_session_read_record(&ctx, &pos[i], &rec) == LTS_OK);
+	}
 }
