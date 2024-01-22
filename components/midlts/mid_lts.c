@@ -87,6 +87,7 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 		goto close;
 	}
 
+	/*
 	if (fflush(fp)) {
 		ret = LTS_FLUSH;
 		goto close;
@@ -96,6 +97,7 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 		ret = LTS_SYNC;
 		goto close;
 	}
+	*/
 
 close:
 	if (fclose(fp)) {
@@ -235,7 +237,9 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 			ctx->msg_id++;
 		}
 
-		mid_session_log_update_state(ctx, &rec);
+		if ((ret = mid_session_log_update_state(ctx, &rec)) != LTS_OK) {
+			return ret;
+		}
 
 		first_record = false;
 	}
@@ -363,7 +367,8 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time
 		char buf[64];
 		snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, id);
 
-		if (access(buf, R_OK) != 0) {
+		struct stat st;
+		if (stat(buf, &st)) {
 			continue;
 		}
 

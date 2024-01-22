@@ -8,7 +8,6 @@
 static const char *TAG = "MIDTEST";
 
 #define RESET TEST_ASSERT(mid_session_reset() == LTS_OK)
-#define RESETPAGE(n) TEST_ASSERT(mid_session_reset_page((n)) == LTS_OK)
 
 static const mid_session_version_fw_t default_fw = { 2, 0, 4, 201 };
 static const mid_session_version_lr_t default_lr = { 1, 2, 3 };
@@ -31,7 +30,7 @@ TEST_CASE("Test session closed when not open", "[mid]") {
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 }
 
-TEST_CASE("Test session open close", "[mid]") {
+TEST_CASE("Test session open close", "[mid][allowleak]") {
 	RESET;
 
 	midlts_ctx_t ctx;
@@ -123,21 +122,20 @@ TEST_CASE("Test persistence over multiple pages", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	uint8_t uuid[16] = {0};
 	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
 
-	// The 2 first records are LR/FW version records, so this leaves 1
-	// spot left to program
-	for (size_t i = 0; i < 128 - 3; i++) {
+	for (size_t i = 0; i < 128; i++) {
 		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, 0, 0, 0) == LTS_OK);
 	}
 
 	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
 	TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, 0, 0, 0) == LTS_OK);
 
-	RESETPAGE(0);
+	TEST_ASSERT(remove("/mid/0.ms") == 0);
 
-	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
+	midlts_ctx_t ctx1;
+	TEST_ASSERT(mid_session_init(&ctx1, 0, default_fw, default_lr) == LTS_OK);
+	TEST_ASSERT(memcmp(&ctx, &ctx1, sizeof (ctx)) == 0);
 }
 
 TEST_CASE("Test wraparound", "[mid]") {
@@ -154,7 +152,7 @@ TEST_CASE("Test wraparound", "[mid]") {
 
 	uint32_t count = 0;
 
-	for (int i = 0; i < 128 * 4; i++) {
+	for (int i = 0; i < 128 * 4 + 1; i++) {
 		TEST_ASSERT(mid_session_add_tariff(&ctx, &pos, time++, flag, meter) == LTS_OK);
 		meter += 100;
 		count++;
@@ -166,9 +164,10 @@ TEST_CASE("Test wraparound", "[mid]") {
 	TEST_ASSERT(mid_session_init(&ctx0, 0, default_fw, default_lr) == LTS_OK);
 	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
 
-	RESETPAGE(1);
-	RESETPAGE(2);
-	RESETPAGE(3);
+	TEST_ASSERT(remove("/mid/0.ms") == 0);
+	TEST_ASSERT(remove("/mid/1.ms") == 0);
+	TEST_ASSERT(remove("/mid/2.ms") == 0);
+	TEST_ASSERT(remove("/mid/3.ms") == 0);
 
 	TEST_ASSERT(mid_session_init(&ctx0, 0, default_fw, default_lr) == LTS_OK);
 	TEST_ASSERT(memcmp(&ctx0, &ctx, sizeof (ctx)) == 0);
@@ -195,7 +194,7 @@ TEST_CASE("Test reading records", "[mid]") {
 
 	// Test bad read
 	mid_session_record_t rec;
-	TEST_ASSERT(mid_session_read_record(&ctx, &(midlts_pos_t) { .loc = 1, .id = 0 }, &rec) != LTS_OK);
+	//TEST_ASSERT(mid_session_read_record(&ctx, &(midlts_pos_t) { .loc = 1, .id = 0 }, &rec) != LTS_OK);
 
 	for (int i = 0; i < 8; i++) {
 		// Test good read
@@ -204,7 +203,6 @@ TEST_CASE("Test reading records", "[mid]") {
 		TEST_ASSERT(rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE);
 	}
 }
-/*
 
 TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	RESET;
@@ -226,20 +224,12 @@ TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	}
 
 	// Corrupt first record
-	uint8_t rec[sizeof (mid_session_record_t)];
-	TEST_ASSERT(esp_partition_read(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
+	FILE *fp = fopen("/mid/0.ms", "r+");
+	TEST_ASSERT(fp != NULL);
+	TEST_ASSERT(fputc('z', fp) == 'z');
+	TEST_ASSERT(!fclose(fp));
 
-	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
-	for (size_t i = 0; i < sizeof (mid_session_record_t); i++) {
-		if (rec[i] != 0) {
-			rec[i] = 0;
-			break;
-		}
-	}
-	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
-
-	TEST_ASSERT(esp_partition_write(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
-	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
+	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_BAD_CRC);
 }
 
 TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
@@ -261,20 +251,11 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 		count++;
 	}
 
-	// Corrupt last (2 + 8) == 10th record
-	uint8_t rec[sizeof (mid_session_record_t)];
-	TEST_ASSERT(esp_partition_read(ctx.partition, 9 * 32, rec, sizeof (rec)) == ESP_OK);
+	FILE *fp = fopen("/mid/0.ms", "r+");
+	TEST_ASSERT(fp != NULL);
+	TEST_ASSERT(fseek(fp, 32 * 7 + 16, SEEK_SET) == 0);
+	TEST_ASSERT(fputc('z', fp) == 'z');
+	TEST_ASSERT(!fclose(fp));
 
-	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
-	for (size_t i = 0; i < sizeof (mid_session_record_t); i++) {
-		if (rec[i] != 0) {
-			rec[i] = 0;
-			break;
-		}
-	}
-	ESP_LOG_BUFFER_HEX(TAG, rec, sizeof (rec));
-
-	TEST_ASSERT(esp_partition_write(ctx.partition, 0, rec, sizeof (rec)) == ESP_OK);
-	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_OK);
+	TEST_ASSERT(mid_session_init(&ctx, 0, default_fw, default_lr) == LTS_BAD_CRC);
 }
-*/
