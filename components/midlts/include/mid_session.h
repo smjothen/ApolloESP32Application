@@ -74,8 +74,7 @@ typedef enum {
 } mid_session_record_type_t;
 
 typedef struct {
-    uint8_t rec_status : 4;
-    mid_session_record_type_t rec_type : 4;
+    mid_session_record_type_t rec_type : 8;
     uint32_t rec_id;
     uint32_t rec_crc;
     union {

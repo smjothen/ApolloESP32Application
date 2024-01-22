@@ -19,21 +19,21 @@ static uint8_t *midlts_gen_rand(uint8_t *out, size_t size) {
 	return out;
 }
 
-midlts_err_t midlts_replay(void) {
+midlts_err_t midlts_replay(size_t maxpages) {
 	midlts_ctx_t ctx;
 	midlts_err_t err;
 
 	mid_session_version_fw_t fw = { 2, 0, 4, 201 };
 	mid_session_version_lr_t lr = { 1, 2, 3 };
 
-	if ((err = mid_session_init(&ctx, 0, fw, lr)) != LTS_OK) {
+	if ((err = mid_session_init_internal(&ctx, maxpages, 0, fw, lr)) != LTS_OK) {
 		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return err;
 	}
 	return LTS_OK;
 }
 
-midlts_err_t midlts_stress_test(int n) {
+midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 	midlts_ctx_t ctx;
 	midlts_err_t err;
 
@@ -42,22 +42,14 @@ midlts_err_t midlts_stress_test(int n) {
 	mid_session_version_fw_t fw = { 2, 0, 4, 201 };
 	mid_session_version_lr_t lr = { 1, 2, 3 };
 
-	if ((err = mid_session_init(&ctx, time, fw, lr)) != LTS_OK) {
+	ESP_LOGI(TAG, "Initializing with %zu max pages!", maxpages);
+
+	if ((err = mid_session_init_internal(&ctx, maxpages, time, fw, lr)) != LTS_OK) {
 		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return err;
 	}
 
 	uint8_t buf[64] = {0};
-
-	/*
-	mid_session_meter_value_flag_t flags[] = {
-		MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN,
-		MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE,
-		MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED,
-		MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE,
-		MID_SESSION_METER_VALUE_FLAG_METER_ERROR,
-	};
-	*/
 
 	mid_session_auth_type_t types[] = {
 		MID_SESSION_AUTH_TYPE_CLOUD,
@@ -163,14 +155,19 @@ int main(int argc, char **argv) {
 
 	midlts_err_t err;
 
+	size_t maxpages = 4;
 	char c;
-	while ((c = getopt (argc, argv, "rx:")) != -1) {
+
+	while ((c = getopt (argc, argv, "p:rx:")) != -1) {
 		switch (c) {
+			case 'p':
+				maxpages = atoi(optarg);
+				break;
 			case 'r':
-				err = midlts_replay();
+				err = midlts_replay(maxpages);
 				break;
 			case 'x':
-				err = midlts_stress_test(atoi(optarg));
+				err = midlts_stress_test(maxpages, atoi(optarg));
 				break;
 			case '?':
 			default:

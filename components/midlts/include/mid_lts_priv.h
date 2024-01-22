@@ -4,9 +4,18 @@
 #include "mid_session.h"
 
 #define MIDLTS_LOG_MAX_AGE ((uint64_t)(31 * 24 * 60 * 60))
+#define MIDLTS_LOG_MAX_SIZE 4096
+
+// This should be set to around 3/4 of the partition size to account
+// for metadata storage, etc of LittleFS!
+//
+// This is 3/4 of 0xc0000 = 0x90000
+#define MIDLTS_LOG_MAX_FILES 0x90000
+
+#define MIDLTS_SCN "%" SCNx32 ".ms%n"
+#define MIDLTS_PRI "%" PRIx32 ".ms"
 
 typedef uint32_t midlts_id_t;
-typedef uint32_t midlts_msg_id_t;
 
 typedef enum _midlts_flag_t {
 	LTS_FLAG_NONE = 0,
@@ -30,16 +39,14 @@ typedef struct _midlts_pos_t {
 #define MIDLTS_PAGE_MAX 128
 
 typedef struct _midlts_ctx_t {
-	const esp_partition_t *partition;
-
 	mid_session_version_fw_t fw_version;
 	mid_session_version_lr_t lr_version;
 
 	uint32_t flags;
-	uint8_t status[MIDLTS_PAGE_MAX];
+	size_t max_pages;
 
-	midlts_msg_id_t msg_addr;
-	midlts_msg_id_t msg_id;
+	midlts_id_t msg_page;
+	midlts_id_t msg_id;
 
 	// Minimum id of stored item in auxiliary storage (offline session/log), anything prior
 	// to this can be purged (if older than the max age as well)
@@ -54,11 +61,18 @@ typedef struct _midlts_ctx_t {
 	X(LTS_ERASE) \
 	X(LTS_WRITE) \
 	X(LTS_READ) \
+	X(LTS_FLUSH) \
+	X(LTS_TELL) \
+	X(LTS_SYNC) \
+	X(LTS_STAT) \
+	X(LTS_CLOSE) \
+	X(LTS_OPEN) \
 	X(LTS_BAD_ARG) \
 	X(LTS_BAD_CRC) \
 	X(LTS_CORRUPT) \
 	X(LTS_PARSE_VERSION) \
 	X(LTS_MSG_OUT_OF_ORDER) \
+	X(LTS_LOG_FILE_FULL) \
 	X(LTS_SESSION_NOT_OPEN) \
 	X(LTS_SESSION_ALREADY_OPEN) \
 
@@ -85,5 +99,7 @@ void mid_session_format_bytes_uuid(char *buf, uint8_t *bytes, size_t len);
 void mid_session_format_bytes(char *buf, uint8_t *bytes, size_t len);
 
 void mid_session_print_record(mid_session_record_t *rec);
+
+midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version);
 
 #endif

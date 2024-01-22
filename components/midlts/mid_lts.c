@@ -15,7 +15,6 @@ static const char *TAG = "MIDLTS         ";
 static uint32_t mid_session_calc_crc(mid_session_record_t *r) {
 	mid_session_record_t rec = *r;
 	rec.rec_crc = 0xFFFFFFFF;
-	rec.rec_status = 0xF;
 	return esp_crc32_le(0, (uint8_t *)&rec, sizeof (rec));
 }
 
@@ -43,67 +42,202 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_erase(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
-	esp_err_t err;
-	size_t flash_size = ((esp_partition_t *)ctx->partition)->size;
+static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx) {
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, ctx->msg_page);
 
-	mid_session_print_record(rec);
+	// TODO: Full log, for now just purge!
 
-	if (ctx->msg_addr % FLASH_PAGE_SIZE == 0) {
-		// TODO: Verify data is old enough
-		err = esp_partition_erase_range(ctx->partition, ctx->msg_addr, FLASH_PAGE_SIZE);
-		if (err != ESP_OK) {
-			return LTS_ERASE;
-		}
-	}
-
-	err = esp_partition_write(ctx->partition, ctx->msg_addr, rec, sizeof (*rec));
-	if (err != ESP_OK) {
-		return LTS_WRITE;
-	}
-
-	// Could just turn verification of SPI writes on in the IDF config but ...
-	uint8_t buf[sizeof (*rec)];
-	err = esp_partition_read(ctx->partition, ctx->msg_addr, buf, sizeof (buf));
-	if (err != ESP_OK) {
-		return LTS_READ;
-	}
-
-	if (memcmp(buf, rec, sizeof (buf)) != 0) {
-		return LTS_BAD_CRC;
-	}
-
-	if (pos) {
-		pos->loc = ctx->msg_addr;
-		pos->id = rec->rec_id;
-	}
-
-	ctx->msg_addr = (ctx->msg_addr + sizeof (*rec)) % flash_size;
-	ctx->msg_id++;
-
-	midlts_err_t ret;
-	// Should never happen because we double check in public functions that sessions aren't
-	// already open if we wan't to open, etc.
-	if ((ret = mid_session_log_update_state(ctx, rec)) != LTS_OK) {
-		return ret;
+	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32, ctx->msg_page);
+	if (remove(buf) != 0) {
+		return LTS_ERASE;
 	}
 
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
-	midlts_err_t ret;
+static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
+	midlts_err_t ret = LTS_OK;
 
-	rec->rec_status = 0xF;
 	rec->rec_id = ctx->msg_id;
 	rec->rec_crc = 0xFFFFFFFF;
 	rec->rec_crc = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
 
-	if ((ret = mid_session_log_erase(ctx, pos, rec)) != LTS_OK) {
-		return ret;
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, ctx->msg_page);
+
+	FILE *fp = fopen(buf, "a");
+	if (!fp) {
+		return LTS_OPEN;
 	}
 
-	return LTS_OK;
+	long size = ftell(fp);
+	if (size < 0) {
+		ret = LTS_TELL;
+		goto close;
+	}
+
+	if (size + sizeof (*rec) > MIDLTS_LOG_MAX_SIZE) {
+		ret = LTS_LOG_FILE_FULL;
+		goto close;
+	}
+
+	if (fwrite(rec, sizeof (*rec), 1, fp) != 1) {
+		ret = LTS_WRITE;
+		goto close;
+	}
+
+	if (fflush(fp)) {
+		ret = LTS_FLUSH;
+		goto close;
+	}
+
+	if (fsync(fileno(fp))) {
+		ret = LTS_SYNC;
+		goto close;
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	if (ret == LTS_OK) {
+		if ((ret = mid_session_log_update_state(ctx, rec)) != LTS_OK) {
+			return ret;
+		}
+
+		mid_session_print_record(rec);
+
+		// TODO: Update state (open/close session state, etc) and set position
+		ctx->msg_id++;
+	}
+
+	return ret;
+}
+
+static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
+	midlts_err_t err = mid_session_log_record_internal(ctx, pos, rec);
+
+	if (err == LTS_LOG_FILE_FULL) {
+		ctx->msg_page = (ctx->msg_page + 1) % ctx->max_pages;
+		err = mid_session_log_record_internal(ctx, pos, rec);
+		if (err == LTS_LOG_FILE_FULL) {
+			err = mid_session_log_purge(ctx);
+			if (err != LTS_OK) {
+				return err;
+			}
+			err = mid_session_log_record_internal(ctx, pos, rec);
+		}
+	}
+
+	return err;
+}
+
+static midlts_err_t mid_session_log_read_first_record(midlts_ctx_t *ctx, midlts_id_t logid, mid_session_record_t *rec) {
+	midlts_err_t ret = LTS_OK;
+
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
+
+	struct stat st;
+	if (stat(buf, &st)) {
+		return LTS_STAT;
+	}
+
+	if (st.st_size < sizeof (*rec) != 0) {
+		return LTS_STAT;
+	}
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_OPEN;
+	}
+
+	if (fread(rec, 1, sizeof (*rec), fp) != sizeof (*rec)) {
+		ret = LTS_READ;
+		goto close;
+	}
+
+	if (!mid_session_check_crc(rec)) {
+		ret = LTS_BAD_CRC;
+		goto close;
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	return ret;
+}
+
+static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool initial) {
+	midlts_err_t ret = LTS_OK;
+
+	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
+
+	struct stat st;
+	if (stat(buf, &st)) {
+		return LTS_STAT;
+	}
+
+	if (st.st_size > sizeof (databuf)) {
+		return LTS_STAT;
+	}
+
+	if (st.st_size % sizeof (mid_session_record_t) != 0) {
+		return LTS_STAT;
+	}
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_OPEN;
+	}
+
+	if (fread(databuf, 1, st.st_size, fp) != st.st_size) {
+		ret = LTS_READ;
+		goto close;
+	}
+
+	bool first_record = true;
+
+	for (size_t i = 0; i < st.st_size; i += sizeof (mid_session_record_t)) {
+		mid_session_record_t rec = *(mid_session_record_t *)&databuf[i];
+
+		if (!mid_session_check_crc(&rec)) {
+			ret = LTS_BAD_CRC;
+			goto close;
+		}
+
+		mid_session_print_record(&rec);
+
+		if (initial && first_record) {
+			ctx->msg_id = rec.rec_id;
+		}
+
+		// Ensure no messages go missing
+		if (rec.rec_id != ctx->msg_id) {
+			ret = LTS_MSG_OUT_OF_ORDER;
+			goto close;
+		} else {
+			ctx->msg_id++;
+		}
+
+		mid_session_log_update_state(ctx, &rec);
+
+		first_record = false;
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	return ret;
 }
 
 static void mid_session_fill_meter_value(midlts_ctx_t *ctx, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter, mid_session_record_t *rec) {
@@ -202,238 +336,100 @@ midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 	return LTS_OK;
 }
 
-/*
-static midlts_err_t mid_session_parse_version(mid_session_version_fw_t *fw, const char *version) {
-	uint16_t a, b, c, d;
-	if (sscanf(version, "%hu.%hu.%hu.%hu", &a, &b, &c, &d) == 4) {
-		if (a < 1024 && b < 1024 && c < 1024 && d < 1024) {
-			fw->major = a;
-			fw->minor = b;
-			fw->patch = c;
-			fw->extra = d;
-			return LTS_OK;
-		}
-	}
-	return LTS_PARSE_VERSION;
-}
-*/
-
-static midlts_err_t mid_session_init_partition(midlts_ctx_t *ctx, const esp_partition_t *partition, size_t flash_size, time_t now,
-		mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	midlts_err_t ret = LTS_OK;
-
-	if (flash_size % FLASH_PAGE_SIZE != 0) {
-		return LTS_READ;
-	}
-
-	if (flash_size / FLASH_PAGE_SIZE > sizeof (ctx->status)) {
-		return LTS_READ;
-	}
-
-	uint16_t minp = 0xFFFF;
-	uint16_t maxp = 0xFFFF;
-	midlts_id_t minid = 0;
-	midlts_id_t maxid = 0;
 
 	memset(ctx, 0, sizeof (*ctx));
 
-	ctx->partition = partition;
 	ctx->lr_version = lr_version;
 	ctx->fw_version = fw_version;
 
-	static uint8_t page[FLASH_PAGE_SIZE];
-	static uint8_t raw[FLASH_PAGE_SIZE];
+	ctx->max_pages = max_pages;
 
-	size_t npages = partition->size / FLASH_PAGE_SIZE;
+	midlts_id_t min_page = 0xFFFFFFFF;
+	midlts_id_t max_page = 0xFFFFFFFF;
+	midlts_id_t min_id = 0;
+	midlts_id_t max_id = 0;
 
-	// First find status of pages
-	char desc[sizeof (ctx->status)+1] = {0};
-	bool allempty = true;
+	for (midlts_id_t id = 0; id < ctx->max_pages; id++) {
+		char buf[64];
+		snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, id);
 
-	for (size_t i = 0; i < npages; i++) {
-		esp_err_t err = esp_partition_read_raw(ctx->partition, i * FLASH_PAGE_SIZE, raw, sizeof (raw));
-		if (err != LTS_OK) {
-			return LTS_READ;
-		}
-
-		bool empty = true;
-		for (size_t j = 0; j < sizeof (raw); j++) {
-			if (raw[j] != 0xff) {
-				empty = false;
-				break;
-			}
-		}
-
-		if (empty) {
-			desc[i] = 'E';
-			ctx->status[i] = MIDLTS_PAGE_EMPTY;
+		if (access(buf, R_OK) != 0) {
 			continue;
 		}
 
-		allempty = false;
-
-		// Not empty, check if valid or not (no raw, want decryption if enabled!)
-		err = esp_partition_read(ctx->partition, i * FLASH_PAGE_SIZE, page, sizeof (page));
-		if (err != LTS_OK) {
-			return LTS_READ;
+		mid_session_record_t rec;
+		if ((ret = mid_session_log_read_first_record(ctx, id, &rec)) != LTS_OK) {
+			return ret;
 		}
 
-		size_t j = 0;
-		for (j = 0; j < sizeof (page); j += sizeof (mid_session_record_t)) {
-			mid_session_record_t rec = *(mid_session_record_t *)&page[j];
+		ESP_LOGI(TAG, "MID Session Replay  - %" PRIu32 " / First %" PRIu32, id, rec.rec_id);
 
-			if (!mid_session_check_crc(&rec)) {
-				break;
-			}
-
-			if (minp == 0xFFFF) {
-				minp = maxp = i;
-				minid = maxid = rec.rec_id;
-			}
-
-			if (rec.rec_id > maxid) {
-				maxid = rec.rec_id;
-				maxp = i;
-			}
-
-			if (rec.rec_id < minid) {
-				minid = rec.rec_id;
-				minp = i;
-			}
+		if (min_page == 0xFFFFFFFF) {
+			min_page = max_page = id;
+			min_id = max_id = rec.rec_id;
 		}
 
-		bool valid = true;
-		for (size_t k = j; k < sizeof (page); k++) {
-			if (raw[k] != 0xFF) {
-				valid = false;
-				break;
-			}
+		if (rec.rec_id < min_id) {
+			min_id = rec.rec_id;
+			min_page = id;
 		}
 
-		if (valid) {
-			desc[i] = 'V';
-			ctx->status[i] = MIDLTS_PAGE_VALID;
-		} else {
-			desc[i] = 'I';
-			ctx->status[i] = MIDLTS_PAGE_INVALID;
+		if (rec.rec_id > max_id) {
+			max_id = rec.rec_id;
+			max_page = id;
 		}
 	}
 
-	ESP_LOGI(TAG, "MID Session Recovery - %s", desc);
+	if (min_page == 0xFFFFFFFF) {
+		min_page = 0;
+		max_page = 0;
 
-	if (minp != 0xFFFF) {
-		ESP_LOGI(TAG, "MID Session Recovery - Min %u/%u Max %u/%u", minp, minid, maxp, maxid);
-	}
+		ESP_LOGI(TAG, "MID Session Replay  - Empty");
 
-	if (allempty) {
 		return LTS_OK;
 	}
 
-	// Check continuity of records from head to tail
-	midlts_id_t curpage = minp;
-	midlts_id_t id = 0;
-	midlts_id_t offset = 0;
+	ESP_LOGI(TAG, "MID Session Replay  - Min %" PRIu32 " / Max %" PRIu32, min_page, max_page);
+
+	midlts_id_t page = min_page;
 
 	while (true) {
-		esp_err_t err = esp_partition_read(ctx->partition, curpage * FLASH_PAGE_SIZE, page, sizeof (page));
-		if (err != LTS_OK) {
-			return LTS_READ;
+		ESP_LOGI(TAG, "MID Session Replay  - %" PRIu32, page);
+
+		if ((ret = mid_session_log_replay(ctx, page, page == min_page)) != LTS_OK) {
+			return ret;
 		}
 
-		err = esp_partition_read_raw(ctx->partition, curpage * FLASH_PAGE_SIZE, raw, sizeof (raw));
-		if (err != LTS_OK) {
-			return LTS_READ;
-		}
-
-		for (offset = 0; offset < sizeof (page); offset += sizeof (mid_session_record_t)) {
-			mid_session_record_t rec = *(mid_session_record_t *)&page[offset];
-			if (!mid_session_check_crc(&rec)) {
-				break;
-			}
-
-			mid_session_print_record(&rec);
-
-			if (curpage == minp && offset == 0) {
-				id = rec.rec_id;
-			} else if (rec.rec_id != (id + 1)) {
-				return LTS_MSG_OUT_OF_ORDER;
-			} else {
-				id++;
-			}
-		}
-
-		if (curpage == maxp) {
+		if (page == max_page) {
 			break;
 		}
 
-		curpage = (curpage + 1) % npages;
+		page = (page + 1) % ctx->max_pages;
 	}
 
-	ESP_LOGI(TAG, "MID Session Recovery - Current %" PRIu32 " / Page %" PRIu32 " / Offset %" PRIu32, id, curpage, offset);
-
-	ctx->msg_addr = curpage * FLASH_PAGE_SIZE + offset;
-	ctx->msg_id = id;
+	ctx->msg_page = max_page;
 
 	return ret;
 }
 
 midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
-	const esp_partition_t *partition;
-	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
-		return LTS_READ;
-	}
-	return mid_session_init_partition(ctx, partition, partition->size, now, fw_version, lr_version);
+	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
 }
 
 midlts_err_t mid_session_reset(void) {
-	const esp_partition_t *partition;
-	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
-		return LTS_READ;
-	}
-	esp_err_t err = esp_partition_erase_range(partition, 0, partition->size);
-	if (err != ESP_OK) {
-		return LTS_ERASE;
-	}
-	return LTS_OK;
-}
-
-midlts_err_t mid_session_reset_page(size_t addr) {
-	const esp_partition_t *partition;
-	if ((partition = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "mid")) == NULL) {
-		return LTS_READ;
-	}
-	esp_err_t err = esp_partition_erase_range(partition, addr * 4096, 4096);
-	if (err != ESP_OK) {
-		return LTS_ERASE;
+	char buf[64];
+	for (midlts_id_t i = 0; i < MIDLTS_LOG_MAX_FILES; i++) {
+		snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, i);
+		if (remove(buf) != 0) {
+			return LTS_ERASE;
+		}
 	}
 	return LTS_OK;
 }
 
 midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
-	if (pos->loc > ctx->partition->size) {
-		return LTS_READ;
-	}
-
-	uint8_t data[sizeof (mid_session_record_t)];
-
-	if (esp_partition_read(ctx->partition, pos->loc, data, sizeof (data)) != ESP_OK) {
-		return LTS_READ;
-	}
-
-	*rec = *(mid_session_record_t *)data;
-
-	uint32_t crc = rec->rec_crc;
-	rec->rec_crc = 0xFFFFFFFF;
-	uint32_t crc2 = esp_crc32_le(0, (uint8_t *)rec, sizeof (*rec));
-	rec->rec_crc = crc;
-
-	if (crc != crc2) {
-		return LTS_BAD_CRC;
-	}
-
-	if (rec->rec_id != pos->id) {
-		return LTS_BAD_ARG;
-	}
-
+	// TODO
 	return LTS_OK;
 }
