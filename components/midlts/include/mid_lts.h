@@ -21,7 +21,7 @@ typedef struct _midlts_ctx_t midlts_ctx_t;
 typedef struct _midlts_pos_t midlts_pos_t;
 typedef enum _midlts_err_t midlts_err_t;
 
-midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, const char *fw_version, const char *lr_version);
+midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version);
 midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos);
 
 midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16], mid_session_meter_value_flag_t flag, uint32_t meter);

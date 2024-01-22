@@ -24,10 +24,6 @@ typedef struct {
     uint8_t tag[21];
 } PACK mid_session_auth_t;
 
-typedef struct {
-    char code[23];
-} PACK mid_session_version_t;
-
 typedef enum {
     MID_SESSION_METER_VALUE_READING_FLAG_START = 1,
     MID_SESSION_METER_VALUE_READING_FLAG_TARIFF = 2,
@@ -43,7 +39,30 @@ typedef enum {
 } mid_session_meter_value_flag_t;
 
 typedef struct {
-    uint64_t time;
+	uint8_t major;
+	uint8_t minor;
+	uint8_t patch;
+} PACK mid_session_version_lr_t;
+
+// Up to 1023.1023.1023.1023 should be enough?
+typedef struct {
+	uint16_t major : 10;
+	uint16_t minor : 10;
+	uint16_t patch : 10;
+	uint16_t extra : 10;
+} PACK mid_session_version_fw_t;
+
+// Set recent epoch so we can save 4 bytes:
+//
+// Jan 1 2020 00:00 GMT
+#define MID_EPOCH 1577836800
+#define MID_TIME_PACK(time) ((time) < MID_EPOCH ? 0 : ((time) - MID_EPOCH))
+#define MID_TIME_UNPACK(time) ((time_t)((time) + MID_EPOCH))
+
+typedef struct {
+	mid_session_version_lr_t lr;
+	mid_session_version_fw_t fw;
+    uint32_t time;
     uint32_t flag;
     uint32_t meter;
 } PACK mid_session_meter_value_t;
@@ -52,20 +71,17 @@ typedef enum {
     MID_SESSION_RECORD_TYPE_ID = 0,
     MID_SESSION_RECORD_TYPE_AUTH = 1,
     MID_SESSION_RECORD_TYPE_METER_VALUE = 2,
-    MID_SESSION_RECORD_TYPE_LR_VERSION = 3,
-    MID_SESSION_RECORD_TYPE_FW_VERSION = 4
 } mid_session_record_type_t;
 
 typedef struct {
+    uint8_t rec_status : 4;
+    mid_session_record_type_t rec_type : 4;
     uint32_t rec_id;
     uint32_t rec_crc;
-    mid_session_record_type_t rec_type : 8;
     union {
         mid_session_id_t id;
         mid_session_auth_t auth;
         mid_session_meter_value_t meter_value;
-        mid_session_version_t lr_version;
-        mid_session_version_t fw_version;
     };
 } PACK mid_session_record_t;
 
