@@ -3,7 +3,6 @@
 
 #include "mid_session.h"
 
-#define MIDLTS_LOG_MAX_AGE ((uint64_t)(31 * 24 * 60 * 60))
 #define MIDLTS_LOG_MAX_SIZE 4096
 
 // This should be set to around 3/4 of the partition size to account
@@ -47,6 +46,8 @@ typedef struct _midlts_ctx_t {
 	// Minimum id of stored item in auxiliary storage (offline session/log), anything prior
 	// to this can be purged (if older than the max age as well)
 	midlts_pos_t min_purgeable;
+
+	mid_session_record_t last_record;
 } midlts_ctx_t;
 
 #define MID_SESSION_IS_OPEN(ctx) (!!((ctx)->flags & LTS_FLAG_SESSION_OPEN))

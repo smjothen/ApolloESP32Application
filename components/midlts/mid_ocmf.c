@@ -1,51 +1,100 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "utz.h"
-#include "cJSON.h"
+#include "esp_log.h"
 
-// TODO: Pass a struct with all the information to create the message
-//
-int midocmf_create_fiscal_message(char *msg_buf, size_t msg_size,
-		const char *serial, const char *app_version, const char *mid_version, time_t time, uint32_t mid_status, uint32_t energyWh) {
-	cJSON *OCMFObject = cJSON_CreateObject();
-	if (!OCMFObject) {
+#include "mid_ocmf.h"
+
+static const char *TAG = "MIDOCMF        ";
+
+static int midocmf_format_time(char *buf, size_t size, mid_session_meter_value_t *value) {
+	udatetime_t dt;
+	utz_unix_to_datetime(MID_TIME_UNPACK(value->time), &dt);
+	utz_datetime_format_iso_ocmf(buf, size, &dt);
+	return 0;
+}
+
+static int midocmf_format_fw_version(char *buf, size_t size, mid_session_meter_value_t *value) {
+	mid_session_version_fw_t fw = value->fw;
+	snprintf(buf, size, "%d.%d.%d.%d", fw.major, fw.minor, fw.patch, fw.extra);
+	return 0;
+}
+
+static int midocmf_format_lr_version(char *buf, size_t size, mid_session_meter_value_t *value) {
+	mid_session_version_lr_t lr = value->lr;
+	snprintf(buf, size, "v%d.%d.%d", lr.major, lr.minor, lr.patch);
+	return 0;
+}
+
+int midocmf_create_fiscal_message(char *outbuf, size_t size, const char *serial, mid_session_record_t *rec) {
+	if (!rec || rec->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
+		ESP_LOGI(TAG, "Not a meter value!");
 		return -1;
 	}
 
-	char dtbuf[64];
-	udatetime_t dt;
+	mid_session_meter_value_t *value = &rec->meter_value;
 
-	utz_unix_to_datetime(time, &dt);
-	utz_datetime_format_iso_utc(dtbuf, sizeof (dtbuf), &dt);
+	if (!(value->flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF)) {
+		ESP_LOGI(TAG, "Not a tariff meter value!");
+		return -1;
+	}
 
-	double energykWh = energyWh / 1000.0;
+	cJSON *obj = cJSON_CreateObject();
+	if (!obj) {
+		ESP_LOGI(TAG, "Couldn't allocate JSON struct!");
+		return -1;
+	}
 
-	cJSON_AddStringToObject(OCMFObject, "FV", "1.0"); //FormatVersion
-	cJSON_AddStringToObject(OCMFObject, "GI", "Zaptec Go Plus"); //GatewayIdentification
-	cJSON_AddStringToObject(OCMFObject, "GS", serial); //GatewaySerial
-	cJSON_AddStringToObject(OCMFObject, "GV", app_version); //GatewayVersion
-	cJSON_AddStringToObject(OCMFObject, "MF", mid_version); //GatewayVersion
-	cJSON_AddStringToObject(OCMFObject, "PG", "F1"); //Pagination(class)
+	char buf[64];
+
+	cJSON_AddStringToObject(obj, "FV", "1.0");
+	cJSON_AddStringToObject(obj, "GI", "Zaptec Go Plus");
+	cJSON_AddStringToObject(obj, "GS", serial);
+
+	midocmf_format_fw_version(buf, sizeof (buf), value);
+	cJSON_AddStringToObject(obj, "GV", buf);
+
+	midocmf_format_lr_version(buf, sizeof (buf), value);
+	cJSON_AddStringToObject(obj, "MF", buf);
+
+	cJSON_AddStringToObject(obj, "PG", "F1");
 
 	cJSON *readerArray = cJSON_CreateArray();
 	cJSON *readerObject = cJSON_CreateObject();
 
-	cJSON_AddStringToObject(readerObject, "TM", dtbuf); //TimeAndSyncState
-	cJSON_AddNumberToObject(readerObject, "RV", energykWh); //ReadingValue
-	cJSON_AddStringToObject(readerObject, "RI", "1-0:1.8.0"); //ReadingIdentification(OBIS-code)
-	cJSON_AddStringToObject(readerObject, "RU", "kWh"); //ReadingUnit
-	cJSON_AddStringToObject(readerObject, "RT", "AC"); //ReadingCurrentType
+
+	midocmf_format_time(buf, sizeof (buf), value);
+
+	const char *time_state = " U";
+	if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED) {
+		time_state = " S";
+	} else if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE) {
+		time_state = " I";
+	} else if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE) {
+		time_state = " R";
+	}
+
+	strlcat(buf, time_state, sizeof (buf));
+
+	cJSON_AddStringToObject(readerObject, "TM", buf);
+
+	cJSON_AddNumberToObject(readerObject, "RV", value->meter / 1000.0);
+	cJSON_AddStringToObject(readerObject, "RI", "1-0:1.8.0");
+	cJSON_AddStringToObject(readerObject, "RU", "kWh");
+	cJSON_AddStringToObject(readerObject, "RT", "AC");
+
 	// TODO: Do we send entries with meter errors to the cloud?
-	cJSON_AddStringToObject(readerObject, "ST", "G"); //MeterState
+	cJSON_AddStringToObject(readerObject, "ST", "G");
 
 	cJSON_AddItemToArray(readerArray, readerObject);
-	cJSON_AddItemToObject(OCMFObject, "RD", readerArray);
+	cJSON_AddItemToObject(obj, "RD", readerArray);
 
-	char *buf = cJSON_PrintUnformatted(OCMFObject);
-	snprintf(msg_buf, msg_size, "OCMF|%s", buf);
+	char *json = cJSON_PrintUnformatted(obj);
+	snprintf(outbuf, size, "OCMF|%s", json);
 
-	cJSON_Delete(OCMFObject);
-	free(buf);
+	cJSON_Delete(obj);
+	free(json);
 
 	return 0;
 }

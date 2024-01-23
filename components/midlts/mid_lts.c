@@ -42,18 +42,50 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 	return LTS_OK;
 }
 
+static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, midlts_id_t logid, bool *found_meter, mid_session_record_t *meter);
+
 static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx) {
 	char buf[64];
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, ctx->msg_page);
 
-	// TODO: Full log, for now just purge!
+	ESP_LOGI(TAG, "MID Session Delete  - %" PRIu32, ctx->msg_page);
 
-	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32, ctx->msg_page);
 	if (remove(buf) != 0) {
 		return LTS_ERASE;
 	}
-
 	return LTS_OK;
+}
+
+static midlts_err_t mid_session_log_try_purge(midlts_ctx_t *ctx, time_t now_unix) {
+	bool found = false;
+	mid_session_record_t meter = {0};
+
+	midlts_err_t err = mid_session_log_get_latest_meter_value(ctx, ctx->msg_page, &found, &meter);
+	if (err != LTS_OK) {
+		return err;
+	}
+
+	if (!found) {
+		// Shouldn't really happen, there should always be at least 1 meter value in a log
+		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - No Meter Values", ctx->msg_page);
+		mid_session_print_record(&meter);
+
+		return mid_session_log_purge(ctx);
+	}
+
+	int32_t age = MID_TIME_PACK(now_unix) - meter.meter_value.time;
+
+	if (age > MID_TIME_MAX_AGE) {
+		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days > Threshold", ctx->msg_page, (double)age / (24 * 60 * 60));
+		mid_session_print_record(&meter);
+
+		return mid_session_log_purge(ctx);
+	}
+
+	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days < Threshold", ctx->msg_page, (double)age / (24 * 60 * 60));
+	mid_session_print_record(&meter);
+
+	return LTS_LOG_FILE_FULL;
 }
 
 static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
@@ -87,7 +119,6 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 		goto close;
 	}
 
-	/*
 	if (fflush(fp)) {
 		ret = LTS_FLUSH;
 		goto close;
@@ -97,7 +128,6 @@ static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_po
 		ret = LTS_SYNC;
 		goto close;
 	}
-	*/
 
 close:
 	if (fclose(fp)) {
@@ -111,11 +141,12 @@ close:
 
 		mid_session_print_record(rec);
 
-		pos->id = ctx->msg_page;
-		pos->offset = size;
-		pos->crc = rec->rec_crc;
+		if (pos) {
+			pos->id = ctx->msg_page;
+			pos->offset = size;
+			pos->crc = rec->rec_crc;
+		}
 
-		// TODO: Update state (open/close session state, etc) and set position
 		ctx->msg_id++;
 	}
 
@@ -129,7 +160,7 @@ static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos,
 		ctx->msg_page = (ctx->msg_page + 1) % ctx->max_pages;
 		err = mid_session_log_record_internal(ctx, pos, rec);
 		if (err == LTS_LOG_FILE_FULL) {
-			err = mid_session_log_purge(ctx);
+			err = mid_session_log_try_purge(ctx, now);
 			if (err != LTS_OK) {
 				return err;
 			}
@@ -182,6 +213,50 @@ close:
 	return ret;
 }
 
+static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, midlts_id_t logid, bool *found_meter, mid_session_record_t *meter) {
+	midlts_err_t ret = LTS_OK;
+
+	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
+
+	struct stat st;
+	if (stat(buf, &st) || st.st_size > sizeof (databuf)
+			|| st.st_size % sizeof (mid_session_record_t) != 0) {
+		return LTS_STAT;
+	}
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_OPEN;
+	}
+
+	if (fread(databuf, 1, st.st_size, fp) != st.st_size) {
+		ret = LTS_READ;
+		goto close;
+	}
+
+	for (size_t i = 0; i < st.st_size; i += sizeof (mid_session_record_t)) {
+		mid_session_record_t rec = *(mid_session_record_t *)&databuf[i];
+		if (!mid_session_check_crc(&rec)) {
+			ret = LTS_BAD_CRC;
+			goto close;
+		}
+		if (rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE) {
+			*found_meter = true;
+			*meter = rec;
+		}
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	return ret;
+}
+
 static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool initial) {
 	midlts_err_t ret = LTS_OK;
 
@@ -191,15 +266,8 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
 
 	struct stat st;
-	if (stat(buf, &st)) {
-		return LTS_STAT;
-	}
-
-	if (st.st_size > sizeof (databuf)) {
-		return LTS_STAT;
-	}
-
-	if (st.st_size % sizeof (mid_session_record_t) != 0) {
+	if (stat(buf, &st) || st.st_size > sizeof (databuf)
+			|| st.st_size % sizeof (mid_session_record_t) != 0) {
 		return LTS_STAT;
 	}
 
@@ -261,11 +329,7 @@ static void mid_session_fill_meter_value(midlts_ctx_t *ctx, time_t now, mid_sess
 	rec->meter_value.meter = meter;
 }
 
-midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16], mid_session_meter_value_flag_t flag, uint32_t meter) {
-	mid_session_record_t id_rec = {0};
-	id_rec.rec_type = MID_SESSION_RECORD_TYPE_ID;
-	memcpy(id_rec.id.uuid, uuid, sizeof (id_rec.id.uuid));
-
+midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	mid_session_record_t rec = {0};
 	mid_session_fill_meter_value(ctx, now, flag | MID_SESSION_METER_VALUE_READING_FLAG_START, meter, &rec);
 
@@ -278,14 +342,13 @@ midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t n
 		return err;
 	}
 
-	if ((err = mid_session_log_record(ctx, pos, now, &id_rec)) != LTS_OK) {
-		return err;
+	if (out) {
+		*out = rec;
 	}
-
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	mid_session_record_t rec = {0};
 	mid_session_fill_meter_value(ctx, now, flag | MID_SESSION_METER_VALUE_READING_FLAG_TARIFF, meter, &rec);
 
@@ -294,10 +357,14 @@ midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t
 		return err;
 	}
 
+	if (out) {
+		*out = rec;
+	}
+
 	return err;
 }
 
-midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
 		return LTS_SESSION_NOT_OPEN;
 	}
@@ -310,10 +377,14 @@ midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t 
 		return err;
 	}
 
+	if (out) {
+		*out = rec;
+	}
 	return err;
 }
 
-midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, uint8_t uuid[16]) {
+// These two following functions can only add data to an open session
+midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, uint8_t uuid[16]) {
 	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
 		return LTS_SESSION_NOT_OPEN;
 	}
@@ -321,10 +392,19 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now
 	mid_session_record_t rec = {0};
 	rec.rec_type = MID_SESSION_RECORD_TYPE_ID;
 	memcpy(rec.id.uuid, uuid, sizeof (rec.id.uuid));
-	return mid_session_log_record(ctx, pos, now, &rec);
+
+	midlts_err_t err;
+	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
+		return err;
+	}
+
+	if (out) {
+		*out = rec;
+	}
+	return LTS_OK;
 }
 
-midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
+midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
 	mid_session_record_t rec = {0};
 
 	if (data_size > sizeof (rec.auth.tag)) {
@@ -339,7 +419,16 @@ midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t n
 	rec.auth.type = type;
 	rec.auth.length = data_size;
 	memcpy(rec.auth.tag, data, data_size);
-	return mid_session_log_record(ctx, pos, now, &rec);
+
+	midlts_err_t err;
+	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
+		return err;
+	}
+
+	if (out) {
+		*out = rec;
+	}
+	return LTS_OK;
 }
 
 midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {

@@ -63,7 +63,10 @@ void app_main(void) {
 	// just leave this here.
 	printf("%s", "");
 
+	unity_run_menu();
+
 	// All tests that may leak (due to mbedtls)
+	/*
 	unity_utils_set_leak_level(2048);
 	UNITY_BEGIN();
 	unity_run_tests_by_tag("[allowleak]", false);
@@ -73,8 +76,7 @@ void app_main(void) {
 	UNITY_BEGIN();
 	unity_run_tests_by_tag("[allowleak]", true);
 	UNITY_END();
-
-	unity_run_menu();
+	*/
 
 	TEST_ESP_OK(esp_vfs_fat_spiflash_unmount_rw_wl(TEST_PARTITION, s_wl_handle));
 }

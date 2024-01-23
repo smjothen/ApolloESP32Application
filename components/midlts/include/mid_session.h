@@ -52,17 +52,20 @@ typedef struct {
 	uint16_t extra : 10;
 } PACK mid_session_version_fw_t;
 
-// Set recent epoch so we can save 4 bytes:
+// Set recent epoch so we can save 4 bytes, this allows us to store times
+// between ~1952 and 2088.
 //
 // Jan 1 2020 00:00 GMT
 #define MID_EPOCH 1577836800
-#define MID_TIME_PACK(time) ((time) < MID_EPOCH ? 0 : ((time) - MID_EPOCH))
+#define MID_TIME_PACK(time) ((int32_t)((time) - MID_EPOCH))
 #define MID_TIME_UNPACK(time) ((time_t)((time) + MID_EPOCH))
+// Minimum storage period => 31 days
+#define MID_TIME_MAX_AGE 2678400
 
 typedef struct {
 	mid_session_version_lr_t lr;
 	mid_session_version_fw_t fw;
-    uint32_t time;
+    int32_t time;
     uint32_t flag;
     uint32_t meter;
 } PACK mid_session_meter_value_t;
