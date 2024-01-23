@@ -37,6 +37,8 @@ typedef enum {
 
 	AuthenticationRequired = 120,
 
+	ParamLinuxStatus = 125,
+
 	ParamStartCalibrations = 130,
 	ParamRunCalibration = 131,
 	ParamCalibrationSamples = 132,
