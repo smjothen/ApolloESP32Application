@@ -909,7 +909,10 @@ void app_main(void)
 		}
 
 		warning_handler_tick(warnings);
-		fpga_configuration_tick();
+
+		if (onTimeCounter % 10 == 0) {
+			fpga_configuration_tick();
+		}
 
 	#ifdef useSimpleConsole
 		int i;

@@ -21,6 +21,7 @@ MessageType MCU_SendUint8Parameter(uint16_t paramIdentifier, uint8_t data);
 MessageType MCU_SendUint16Parameter(uint16_t paramIdentifier, uint16_t data);
 MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data);
 MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data);
+ZapMessage MCU_SendUint32WithReply(uint16_t paramIdentifier, uint32_t data);
 
 MessageType MCU_ReadFloatParameter(uint16_t paramIdentifier);
 ZapMessage MCU_ReadParameter(uint16_t paramIdentifier);

@@ -49,7 +49,10 @@ typedef enum {
 	ParamMidStoredCalibrationId = 137,
 	ParamContinueCalibration = 138,
 	ParamCalibrationReadParameter = 139,
-	ParamMidStatus = 140,
+	ParamMidEventLog = 140,
+
+	// TODO: On Go, 140 is MidStatus
+	// ParamMidStatus = 140
 
 	// Local settings
 

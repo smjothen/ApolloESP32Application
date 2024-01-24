@@ -88,3 +88,25 @@ bool mid_get_is_calibration_handle(void) {
 	}
 	return false;
 }
+
+typedef enum {
+	MID_EVENT_LOG_TYPE_INIT,
+	MID_EVENT_LOG_TYPE_ERASE,
+	MID_EVENT_LOG_TYPE_START,
+	MID_EVENT_LOG_TYPE_SUCCESS,
+	MID_EVENT_LOG_TYPE_FAIL,
+} mid_event_log_type_t;
+
+typedef struct {
+	mid_event_log_type_t type;
+	uint16_t seq;
+	uint16_t data;
+} mid_event_log_entry_t;
+
+bool mid_get_event_log_entry(uint32_t index, mid_event_log_entry_t *entry) {
+	ZapMessage msg = MCU_SendUint32WithReply(ParamMidEventLog, index);
+	if (msg.length != 14 || msg.type != MsgWriteAck || msg.identifier != ParamMidEventLog) {
+		return false;
+	}
+	return false;
+}

@@ -41,7 +41,7 @@ def main(hexfile, binfile):
 
     with open(hexfile, "r") as fr:
         with open(binfile, "wb") as fw:
-            fw.write(parse_version().encode() + b'\0')
+            fw.write(version.encode() + b'\0')
             for byte in hex2bytes(fr):
                 fw.write(bytes([byte]))
 
