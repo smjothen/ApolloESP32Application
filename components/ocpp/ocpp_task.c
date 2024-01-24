@@ -109,6 +109,13 @@ enum ocpp_registration_status get_registration_status(){
 	return registration_status;
 }
 
+long ocpp_get_boot_prohibitet_duration(){
+	if(time(NULL) > last_call_timestamp + boot_retry_interval)
+		return 0;
+
+	return (last_call_timestamp + boot_retry_interval) - time(NULL);
+}
+
 void update_central_system_time_offset(time_t charge_point_time, time_t central_system_time){
 	time_t offset = central_system_time - (charge_point_time + central_system_time_offset);
 
@@ -1235,13 +1242,13 @@ uint32_t await_registration_status_change(uint32_t max_delay_sec, uint32_t event
 		if(data & (eOCPP_TASK_CALL_ENQUEUED << task_notify_offset) || call_count > 0)
 			send_next_call(&call_count);
 
-		if(data & (eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset))
-			break;
-
 		if(data & event_return_mask){
 			ESP_LOGW(TAG, "Awaiting registration change canceled: return event bit set");
 			break;
 		}
+
+		if(data & (eOCPP_TASK_REGISTRATION_STATUS_CHANGED << task_notify_offset))
+			break;
 
 		if(data == 0 && call_count == 0){
 			ESP_LOGE(TAG, "Await loop detected no registration status change within max delay");
@@ -1251,7 +1258,7 @@ uint32_t await_registration_status_change(uint32_t max_delay_sec, uint32_t event
 	return data;
 }
 
-int complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
+uint32_t complete_boot_notification_process(const char * chargebox_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
 				const char * firmware_version, const char * iccid, const char * imsi,
 				const char * meter_serial_number, const char * meter_type, uint32_t event_return_mask){
@@ -1284,7 +1291,7 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 		strcpy(boot_parameter_iccid, iccid);
 	}
 
-        if(imsi != NULL && imsi[0] != '\0'
+	if(imsi != NULL && imsi[0] != '\0'
 		&& is_ci_string_type(imsi, 20)){
 
 		strcpy(boot_parameter_imsi, imsi);
@@ -1307,7 +1314,7 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 	uint8_t old_mask = call_blocking_mask;
 	call_blocking_mask = eOCPP_CALL_TRANSACTION_RELATED;
 
-	int ret = -1;
+	uint32_t notification_value = 0;
 	ESP_LOGI(TAG, "Waiting for response to complete...");
 	for(int i = 0; i < 5; i++){
 
@@ -1321,11 +1328,13 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 		ESP_LOGW(TAG, "Will atempt a new BootNotification.req in %" PRIu32 " sec if not accepted earlier", boot_retry_interval);
 		time_t start = time(NULL);
 		while(time(NULL) < start + boot_retry_interval){
-			uint32_t notification_value = await_registration_status_change(boot_retry_interval+1, event_return_mask);
+			notification_value = await_registration_status_change(boot_retry_interval+1, event_return_mask);
+
+			if(notification_value & event_return_mask)
+				goto cleanup;
 
 			if(registration_status == eOCPP_REGISTRATION_ACCEPTED){
 				ESP_LOGI(TAG, "Registration status: accepted");
-				ret = 0;
 				goto cleanup;
 
 			}else if (registration_status == eOCPP_REGISTRATION_PENDING){
@@ -1333,15 +1342,12 @@ int complete_boot_notification_process(const char * chargebox_serial_number, con
 			}else{
 				ESP_LOGE(TAG, "Registration status: rejected");
 			}
-
-			if(notification_value & event_return_mask)
-				goto cleanup;
 		}
 	}
 
 cleanup:
 	call_blocking_mask = old_mask;
-	return ret;
+	return notification_value;
 }
 
 cJSON * ocpp_task_get_diagnostics(){

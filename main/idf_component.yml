@@ -1,6 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  espressif/esp_websocket_client: "1.1.0" # TODO: change to newest after 1.2.2 is released (1.2.1 fails with large ocpp messages #460)
+  espressif/esp_websocket_client: ">=1.2.2" #TODO: update when issue mentioned in https://github.com/espressif/esp-protocols/pull/495 is resolved
   ## Required IDF version
   idf:
     version: "5.1"

@@ -237,9 +237,11 @@ void ocpp_configure_task_notification(TaskHandle_t task, uint offset);
  * @param meter_type "Optional. This contains the type of the main electrical meter of the Charge Point"
  * @param event_return bitmask for additional events that should cause await to stop and return.
  *
+ * @return task's notification value that caused process to exit if any exist.
+ *
  * @note should only be called by a task set with ocpp_configure_task_notification
  */
-int complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
+uint32_t complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
 				const char * firmware_version, const char * iccid, const char * imsi,
 				const char * meter_serial_number, const char * meter_type,
@@ -314,6 +316,11 @@ cJSON * ocpp_task_get_diagnostics();
  * @brief gets the latest result of BootNotification request
  */
 enum ocpp_registration_status get_registration_status(void);
+
+/**
+ * @brief get minimum wait until next boot
+ */
+long ocpp_get_boot_prohibitet_duration();
 
 /**
  * @brief events that can be sent via xTaskNotify

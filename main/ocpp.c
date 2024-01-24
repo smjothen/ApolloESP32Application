@@ -3628,25 +3628,45 @@ static void ocpp_task(){
 
 		retry_attempts = 0;
 		retry_delay = 5;
+
+		block_sending_call(eOCPP_CALL_TRANSACTION_RELATED);
 		do{
 
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			err = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
-								"Zaptec", GetSoftwareVersion(),
-								LTEGetIccid(), LTEGetImsi(), NULL, NULL, eOCPP_QUIT >> MAIN_EVENT_OFFSET);
-			if(err != 0 && should_run){
+			uint32_t task_notification = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
+										"Zaptec", GetSoftwareVersion(), LTEGetIccid(), LTEGetImsi(),
+										NULL, NULL, (eOCPP_QUIT << MAIN_EVENT_OFFSET) | (eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET));
+
+			if(should_run){
+				if(task_notification & eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET){
+					ocpp_end_and_reconnect(false);
+					goto clean;
+				}
+
+				if(get_registration_status() == eOCPP_REGISTRATION_ACCEPTED)
+					break;
+
 				if(retry_attempts < 7){
 					ESP_LOGE(TAG, "Unable to get accepted boot. Attempt nr %u, retrying in %d sec", retry_attempts++, retry_delay);
 
+					time_t minimum_await_end = time(NULL) + ocpp_get_boot_prohibitet_duration();
 					time_t await_end = time(NULL) + retry_delay;
+
+					if(await_end < minimum_await_end)
+						await_end = minimum_await_end +1;
+
 					while(time(NULL) < await_end && should_run && get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
 						uint32_t actual_delay = await_end - time(NULL);
-						if(actual_delay > retry_delay) // Underflow
+						if(actual_delay > await_end) // Underflow
 							actual_delay = 1;
 
-						await_registration_status_change(actual_delay, eOCPP_QUIT >> MAIN_EVENT_OFFSET);
+						task_notification = await_registration_status_change(actual_delay, (eOCPP_QUIT << MAIN_EVENT_OFFSET) | (eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET));
+						if(task_notification & eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET){
+							ocpp_end_and_reconnect(false);
+							goto clean;
+						}
 					}
 
 					retry_delay *= 5;
@@ -3656,7 +3676,10 @@ static void ocpp_task(){
 					esp_restart(); // TODO: Write reason for reboot
 				}
 			}
-		}while(err != 0);
+		}while(get_registration_status() != eOCPP_REGISTRATION_ACCEPTED);
+
+		block_sending_call(0);
+
 		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
 
 		/*
@@ -3716,6 +3739,10 @@ static void ocpp_task(){
 
 				ocpp_end_and_reconnect(true);
 			}
+
+			ESP_LOGD(TAG, "main_event: %s %s", (main_event & eOCPP_FIRMWARE_UPDATE) ? "eOCPP_FIRMWARE_UPDATE" : "", (main_event & eOCPP_QUIT) ? "eOCPP_QUIT" : "");
+			ESP_LOGD(TAG, "sock_event: %s %s %s %s", (websocket_event & eOCPP_WEBSOCKET_CONNECTION_CHANGED) ? "eOCPP_WEBSOCKET_CONNECTION_CHANGED" : "", (websocket_event & eOCPP_WEBSOCKET_FAILURE) ? "eOCPP_WEBSOCKET_FAILURE" : "", (websocket_event & eOCPP_WEBSOCKET_RECEIVED_MATCHING) ? "eOCPP_WEBSOCKET_RECEIVED_MATCHING" : "", (websocket_event & eOCPP_WEBSOCKET_CLOSED) ? "eOCPP_WEBSOCKET_CLOSED" : "");
+			ESP_LOGD(TAG, "task_event: %s %s %s %s", (task_event & eOCPP_TASK_CALL_ENQUEUED) ? "eOCPP_TASK_CALL_ENQUEUED" : "", (task_event & eOCPP_TASK_CALL_TIMEOUT) ? "eOCPP_TASK_CALL_TIMEOUT" : "", (task_event & eOCPP_TASK_FAILURE) ? "eOCPP_TASK_FAILURE" : "", (task_event & eOCPP_TASK_REGISTRATION_STATUS_CHANGED) ? "eOCPP_TASK_REGISTRATION_STATUS_CHANGED" : "");
 
 			if(main_event != eOCPP_NO_EVENT){
 				ESP_LOGI(TAG, "Handling main event");
@@ -3808,8 +3835,11 @@ static void ocpp_task(){
 				if(websocket_event & eOCPP_WEBSOCKET_RECEIVED_MATCHING)
 					awaiting_response = false;
 
-				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
+				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY){
+					ESP_LOGE(TAG, "Number of errors in OCPP handling exceed max (%u > %u) quitting ocpp", problem_count, OCPP_PROBLEMS_COUNT_BEFORE_RETRY);
 					break;
+				}
+
 
 				if(websocket_event & eOCPP_WEBSOCKET_CLOSED && should_run)
 					ocpp_end_and_reconnect(true);
@@ -3840,6 +3870,7 @@ static void ocpp_task(){
 						problem_count++; //TODO: integrate with problem count restart
 						last_problem_timestamp = time(NULL);
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
+
 					}
 				}else{
 					enqueued_calls = 1; // There may be more calls, but that is irrelevant
@@ -3853,6 +3884,7 @@ static void ocpp_task(){
 		}
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
+		ulTaskNotifyTake(pdTRUE, 0); // Clear waiting events to OCPP
 
 		prepare_reset(graceful_exit);
 		ocpp_auth_deinit();
@@ -3915,12 +3947,14 @@ bool ocpp_task_exists(){
 }
 
 void ocpp_end(bool graceful){
+	ESP_LOGW(TAG, "Ending communication");
 	should_run = false;
 	graceful_exit = graceful;
 	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }
 
 void ocpp_end_and_reboot(bool graceful){
+	ESP_LOGW(TAG, "Ending communication and preparing reboot");
 	should_run = false;
 	should_reboot = true;
 	graceful_exit = graceful;
@@ -3928,6 +3962,7 @@ void ocpp_end_and_reboot(bool graceful){
 }
 
 void ocpp_end_and_reconnect(bool graceful){
+	ESP_LOGW(TAG, "Ending communication and reconnecting");
 	should_run = false;
 	should_reconnect = true;
 	graceful_exit = graceful;
