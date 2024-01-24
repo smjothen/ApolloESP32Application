@@ -1,6 +1,8 @@
 #ifndef __MID_H__
 #define __MID_H__
 
+#include "mid_event.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -22,5 +24,7 @@ bool mid_get_calibration_id(uint32_t *id);
 bool mid_set_blink_enabled(bool enabled);
 bool mid_get_energy_interpolated(float *energy);
 bool mid_get_is_calibration_handle(void);
+
+bool mid_get_event_log(mid_event_log_t *);
 
 #endif

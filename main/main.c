@@ -587,6 +587,15 @@ void app_main(void)
 	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION | WARNING_MID, WarningHandlerReset);
 	warning_handler_install(WARNING_EMETER_ALARM | WARNING_CHARGE_OVERCURRENT, WarningHandlerClear);
 
+	mid_event_log_t evlog;
+	if (!mid_event_log_init(&evlog)) {
+		if (mid_get_event_log(&evlog)) {
+			ESP_LOGI(TAG_MAIN, "Got %d event log entries!", evlog.count);
+		}
+
+		mid_event_log_free(&evlog);
+	}
+
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
 	cellularPinsOn();

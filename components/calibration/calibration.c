@@ -30,7 +30,8 @@
 #include "mid.h"
 #include "mid_status.h"
 
-#include "calibration_crc.h"
+#include "crc16.h"
+
 #include "calibration_util.h"
 #include "calibration_emeter.h"
 
@@ -145,7 +146,7 @@ bool calibration_write_default_calibration_params(CalibrationCtx *ctx) {
     const char *bytes = (const char *)&header;
 
     const char *bytesAfterCrc = bytes + sizeof(header.crc);
-    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+    uint16_t crc = crc16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
     ZEncodeUint16(crc, (uint8_t *)bytes);
 
     char *ptr = hexbuf;
@@ -500,7 +501,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
     const char *bytes = (const char *)&header;
 
     const char *bytesAfterCrc = bytes + sizeof(header.crc);
-    uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+    uint16_t crc = crc16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
     ZEncodeUint16(crc, (uint8_t *)bytes);
 
     char *ptr = hexbuf;
@@ -539,7 +540,7 @@ bool calibration_tick_write_calibration_params(CalibrationCtx *ctx) {
             // Recompute header bytes with given calibration ID
             header.calibration_id = ctx->Params.CalibrationId;
             const char *bytesAfterCrc = bytes + sizeof(header.crc);
-            uint16_t crc = CRC16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
+            uint16_t crc = crc16(0x17FD, (uint8_t *)bytesAfterCrc, sizeof(header) - sizeof(header.crc));
             ZEncodeUint16(crc, (uint8_t *)bytes);
 
             ctx->Flags |= CAL_FLAG_UPLOAD_PAR;
@@ -652,7 +653,7 @@ bool calibration_tick_done(CalibrationCtx *ctx) {
             idBytes[2] = (uint8_t)((calId >> 16) & 0xFF);
             idBytes[3] = (uint8_t)((calId >> 24) & 0xFF);
 
-            uint16_t crc = CRC16(0x2917, idBytes, sizeof (idBytes));
+            uint16_t crc = crc16(0x2917, idBytes, sizeof (idBytes));
 
             uint8_t crcBytes[2];
             ZEncodeUint16(crc, crcBytes);

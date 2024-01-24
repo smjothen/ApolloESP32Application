@@ -651,6 +651,25 @@ MessageType MCU_SendUint32Parameter(uint16_t paramIdentifier, uint32_t data)
 	return rxMsg.type;
 }
 
+ZapMessage MCU_SendUint32WithReply(uint16_t paramIdentifier, uint32_t data)
+{
+	ZapMessage txMsg;
+	txMsg.type = MsgWrite;
+	txMsg.identifier = paramIdentifier;
+
+	uint8_t txBuf[ZAP_PROTOCOL_BUFFER_SIZE];
+	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
+	uint16_t encoded_length = ZEncodeMessageHeaderAndOneUInt32(&txMsg, data, txBuf, encodedTxBuf);
+	ZapMessage rxMsg = runRequest(encodedTxBuf, encoded_length);
+	freeZapMessageReply();
+
+#ifdef DEBUG_ZAP_PROTOCOL
+	if (rxMsg.identifier != txMsg.identifier) { ESP_LOGI(TAG, "Rx.Id != Tx.Id : MsgType %d / MsgId %d", txMsg.type, txMsg.identifier); }
+#endif
+
+	return rxMsg;
+}
+
 
 
 MessageType MCU_SendFloatParameter(uint16_t paramIdentifier, float data)
