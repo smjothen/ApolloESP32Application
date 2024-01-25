@@ -12,6 +12,60 @@
 
 static const char *TAG = "MIDLTS         ";
 
+static midlts_err_t mid_session_active_session_grow(midlts_ctx_t *ctx, size_t capacity) {
+	//ESP_LOGI(TAG, "MID Active Session: Grow %zu", capacity);
+
+	midlts_active_session_t *active = &ctx->active_session;
+	active->events = realloc(active->events, sizeof (mid_session_meter_value_t) * capacity);
+
+	if (!active) {
+		return LTS_ALLOC;
+	}
+
+	active->capacity = capacity;
+	return LTS_OK;
+}
+
+static midlts_err_t mid_session_active_session_alloc(midlts_ctx_t *ctx) {
+	return mid_session_active_session_grow(ctx, 64);
+}
+
+static midlts_err_t mid_session_active_session_append(midlts_ctx_t *ctx, mid_session_meter_value_t *rec) {
+	midlts_active_session_t *active = &ctx->active_session;
+
+	if (active->count >= active->capacity) {
+		midlts_err_t err;
+		if ((err = mid_session_active_session_grow(ctx, active->capacity * 2)) != LTS_OK) {
+			return err;
+		}
+	}
+
+	//ESP_LOGI(TAG, "MID Active Session: Append %zu", active->count);
+	active->events[active->count++] = *rec;
+	return LTS_OK;
+}
+
+static void mid_session_active_session_set_id(midlts_ctx_t *ctx, mid_session_id_t *id) {
+	//ESP_LOGI(TAG, "MID Active Session: Set Id");
+	midlts_active_session_t *active = &ctx->active_session;
+	active->id = *id;
+}
+
+static void mid_session_active_session_set_auth(midlts_ctx_t *ctx, mid_session_auth_t *auth) {
+	//ESP_LOGI(TAG, "MID Active Session: Set Auth");
+	midlts_active_session_t *active = &ctx->active_session;
+	active->auth = *auth;
+}
+
+static void mid_session_active_session_reset(midlts_ctx_t *ctx) {
+	//ESP_LOGI(TAG, "MID Active Session: Reset");
+	midlts_active_session_t *active = &ctx->active_session;
+	memset(&active->id, 0, sizeof (active->id));
+	memset(&active->auth, 0, sizeof (active->auth));
+	memset(active->events, 0, sizeof (mid_session_meter_value_t) * active->capacity);
+	active->count = 0;
+}
+
 static uint32_t mid_session_calc_crc(mid_session_record_t *r) {
 	mid_session_record_t rec = *r;
 	rec.rec_crc = 0xFFFFFFFF;
@@ -23,20 +77,51 @@ static bool mid_session_check_crc(mid_session_record_t *r) {
 }
 
 static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+	if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
+		if (rec->rec_type == MID_SESSION_RECORD_TYPE_ID) {
+			mid_session_active_session_set_id(ctx, &rec->id);
+		}
+
+		if (rec->rec_type == MID_SESSION_RECORD_TYPE_AUTH) {
+			mid_session_active_session_set_auth(ctx, &rec->auth);
+		}
+	}
+
 	if (rec->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
 		return LTS_OK;
 	}
+
+	midlts_err_t ret;
 
 	if (rec->meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
 		if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
 			return LTS_SESSION_ALREADY_OPEN;
 		}
+
+		// First clear active session in RAM
+		mid_session_active_session_reset(ctx);
+
+		if ((ret = mid_session_active_session_append(ctx, &rec->meter_value)) != LTS_OK) {
+			return ret;
+		}
+
 		ctx->flags |= LTS_FLAG_SESSION_OPEN;
 	} else if (rec->meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
 		if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
 			return LTS_SESSION_NOT_OPEN;
 		}
+
+		if ((ret = mid_session_active_session_append(ctx, &rec->meter_value)) != LTS_OK) {
+			return ret;
+		}
+
 		ctx->flags &= ~LTS_FLAG_SESSION_OPEN;
+	} else if (rec->meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
+		if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
+			if ((ret = mid_session_active_session_append(ctx, &rec->meter_value)) != LTS_OK) {
+				return ret;
+			}
+		}
 	}
 
 	return LTS_OK;
@@ -441,6 +526,10 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time
 	midlts_err_t ret = LTS_OK;
 
 	memset(ctx, 0, sizeof (*ctx));
+
+	if ((ret = mid_session_active_session_alloc(ctx) != LTS_OK) != LTS_OK) {
+		return ret;
+	}
 
 	ctx->lr_version = lr_version;
 	ctx->fw_version = fw_version;

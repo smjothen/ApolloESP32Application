@@ -63,13 +63,23 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 
 	uint32_t meter = 0;
 
+	mid_session_auth_t last_auth = {0};
+	mid_session_id_t last_id = {0};
+
+#define MAX_METERS 256
+
+	size_t meter_count = 0;
+	static mid_session_meter_value_t last_meter[MAX_METERS];
+
 	midlts_pos_t pos;
 
 	if (MID_SESSION_IS_OPEN(&ctx)) {
-		if ((err = mid_session_add_close(&ctx, &pos, NULL, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
+		mid_session_record_t rec;
+		if ((err = mid_session_add_close(&ctx, &pos, &rec, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
 			ESP_LOGE(TAG, "Error appending initial session close : %s", mid_session_err_to_string(err));
 			return err;
 		}
+		last_meter[meter_count++] = rec.meter_value;
 	}
 
 	uint32_t sess_length = 0;
@@ -82,36 +92,56 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 
 		if (MID_SESSION_IS_OPEN(&ctx) && sess_length > 0) {
 			if (sess_length % tariff_interval == 0) {
+				mid_session_record_t rec;
 				// Tariff change
-				if ((err = mid_session_add_tariff(&ctx, &pos, NULL, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
+				if ((err = mid_session_add_tariff(&ctx, &pos, &rec, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
 					ESP_LOGE(TAG, "Session tariff : %s", mid_session_err_to_string(err));
 					return err;
 				}
+				last_meter[meter_count++] = rec.meter_value;
 			}
 
 			if (sess_length == auth_time) {
 				uint32_t size = 1 + esp_random() % 16;
-				if ((err = mid_session_add_auth(&ctx, &pos, NULL, time, types[esp_random() % 5], midlts_gen_rand(buf, size), size)) != LTS_OK) {
+				mid_session_record_t rec;
+				if ((err = mid_session_add_auth(&ctx, &pos, &rec, time, types[esp_random() % 5], midlts_gen_rand(buf, size), size)) != LTS_OK) {
 					ESP_LOGE(TAG, "Couldn't log session auth : %s", mid_session_err_to_string(err));
 					return err;
 				}
+				last_auth = rec.auth;
 			}
 
 			if (sess_length == id_time) {
 				uint32_t size = 16;
-				if ((err = mid_session_add_id(&ctx, &pos, NULL, time, midlts_gen_rand(buf, size))) != LTS_OK) {
+				mid_session_record_t rec;
+				if ((err = mid_session_add_id(&ctx, &pos, &rec, time, midlts_gen_rand(buf, size))) != LTS_OK) {
 					ESP_LOGE(TAG, "Couldn't log session id : %s", mid_session_err_to_string(err));
+					return err;
 				}
+				last_id = rec.id;
 			}
 
 			sess_length--;
 		} else if (MID_SESSION_IS_OPEN(&ctx)) {
 			// Close
-
-			if ((err = mid_session_add_close(&ctx, &pos, NULL, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
+			mid_session_record_t rec;
+			if ((err = mid_session_add_close(&ctx, &pos, &rec, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
 				ESP_LOGE(TAG, "Session close : %s", mid_session_err_to_string(err));
 				return err;
 			}
+			last_meter[meter_count++] = rec.meter_value;
+
+			// Verify the active session is as expected!
+
+			assert(meter_count == ctx.active_session.count);
+			assert(memcmp(&last_id, &ctx.active_session.id, sizeof (last_id)) == 0);
+			assert(memcmp(&last_auth, &ctx.active_session.auth, sizeof (last_auth)) == 0);
+			assert(memcmp(last_meter, ctx.active_session.events, sizeof (last_meter[0]) * meter_count) == 0);
+
+			// Clear
+			memset(&last_id, 0, sizeof (last_id));
+			memset(&last_auth, 0, sizeof (last_auth));
+			meter_count = 0;
 
 			nsess++;
 			if (nsess == n) {
@@ -123,15 +153,19 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 			bool start = (esp_random() % 100) < 2;
 
 			if (start) {
-				if ((err = mid_session_add_open(&ctx, &pos, NULL, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
+				mid_session_record_t rec;
+
+				if ((err = mid_session_add_open(&ctx, &pos, &rec, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter++)) != LTS_OK) {
 					ESP_LOGE(TAG, "Session open : %s", mid_session_err_to_string(err));
 					return err;
 				}
+				last_meter[meter_count++] = rec.meter_value;
 
-				if ((err = mid_session_add_id(&ctx, &pos, NULL, time, midlts_gen_rand(buf, 16))) != LTS_OK) {
+				if ((err = mid_session_add_id(&ctx, &pos, &rec, time, midlts_gen_rand(buf, 16))) != LTS_OK) {
 					ESP_LOGE(TAG, "Session id : %s", mid_session_err_to_string(err));
 					return err;
 				}
+				last_id = rec.id;
 
 				sess_length = tariff_interval * (esp_random() % 11); // 0 - 1000 ticks
 				if (sess_length) {
@@ -146,9 +180,14 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 
 		// TODO: Only if meter changed since last meter value?
 		if (time % tariff_interval == 0) {
-			if ((err = mid_session_add_tariff(&ctx, &pos, NULL, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter)) != LTS_OK) {
+			mid_session_record_t rec;
+			if ((err = mid_session_add_tariff(&ctx, &pos, &rec, time, MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED, meter)) != LTS_OK) {
 				ESP_LOGE(TAG, "Tariff : %s", mid_session_err_to_string(err));
 				return err;
+			}
+			if (MID_SESSION_IS_OPEN(&ctx)) {
+				// Add to active session if open!
+				last_meter[meter_count++] = rec.meter_value;
 			}
 		}
 

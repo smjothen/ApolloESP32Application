@@ -1,6 +1,7 @@
 #ifndef __MID_LTS_PRIV_H__
 #define __MID_LTS_PRIV_H__
 
+#include <stdlib.h>
 #include "mid_session.h"
 
 #define MIDLTS_LOG_MAX_SIZE 4096
@@ -33,6 +34,14 @@ typedef struct _midlts_pos_t {
 
 #define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
 
+typedef struct {
+	mid_session_id_t id;
+	mid_session_auth_t auth;
+	size_t count;
+	size_t capacity;
+	mid_session_meter_value_t *events;
+} midlts_active_session_t;
+
 typedef struct _midlts_ctx_t {
 	mid_session_version_fw_t fw_version;
 	mid_session_version_lr_t lr_version;
@@ -43,11 +52,12 @@ typedef struct _midlts_ctx_t {
 	midlts_id_t msg_page;
 	midlts_id_t msg_id;
 
+	// TODO:
 	// Minimum id of stored item in auxiliary storage (offline session/log), anything prior
 	// to this can be purged (if older than the max age as well)
 	midlts_pos_t min_purgeable;
 
-	mid_session_record_t last_record;
+	midlts_active_session_t active_session;
 } midlts_ctx_t;
 
 #define MID_SESSION_IS_OPEN(ctx) (!!((ctx)->flags & LTS_FLAG_SESSION_OPEN))
@@ -57,6 +67,7 @@ typedef struct _midlts_ctx_t {
 	X(LTS_OK) \
 	X(LTS_ERASE) \
 	X(LTS_WRITE) \
+	X(LTS_ALLOC) \
 	X(LTS_READ) \
 	X(LTS_FLUSH) \
 	X(LTS_TELL) \
