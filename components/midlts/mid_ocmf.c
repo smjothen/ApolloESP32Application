@@ -28,6 +28,82 @@ static int midocmf_format_lr_version(char *buf, size_t size, mid_session_meter_v
 	return 0;
 }
 
+static int midocmf_fiscal_add_event_log(cJSON *json, mid_event_log_t *log) {
+	if (!log) {
+		// No log requested, no problem
+		return 0;
+	}
+
+	cJSON *eventArray = cJSON_CreateArray();
+	if (!eventArray) {
+		return -1;
+	}
+
+	for (int i = 0; i < log->count; i++) {
+		mid_event_log_entry_t *entry = &log->entries[i];
+
+		const char *typestr = NULL;
+		switch (entry->type) {
+			case MID_EVENT_LOG_TYPE_INIT:
+				typestr = "INIT";
+				break;
+			case MID_EVENT_LOG_TYPE_ERASE:
+				typestr = "ERASE";
+				break;
+			case MID_EVENT_LOG_TYPE_START:
+				typestr = "START";
+				break;
+			case MID_EVENT_LOG_TYPE_SUCCESS:
+				typestr = "SUCCESS";
+				break;
+			case MID_EVENT_LOG_TYPE_FAIL:
+				typestr = "FAIL";
+				break;
+			default:
+				break;
+		}
+
+		if (!typestr) {
+			continue;
+		}
+
+		cJSON *eventObj = cJSON_CreateObject();
+		if (!eventObj) {
+			cJSON_Delete(eventArray);
+			return -1;
+		}
+
+		cJSON_AddNumberToObject(eventObj, "ES", entry->seq);
+		cJSON_AddStringToObject(eventObj, "ET", typestr);
+
+		char buf[64];
+
+		uint8_t app = (entry->data >> 8) & 0xFF;
+		uint8_t bl = (entry->data & 0xFF) & 0x1F;
+
+		switch (entry->type) {
+			case MID_EVENT_LOG_TYPE_INIT:
+			case MID_EVENT_LOG_TYPE_ERASE:
+				cJSON_AddNumberToObject(eventObj, "EC", entry->data);
+				break;
+			case MID_EVENT_LOG_TYPE_START:
+			case MID_EVENT_LOG_TYPE_SUCCESS:
+			case MID_EVENT_LOG_TYPE_FAIL:
+				snprintf(buf, sizeof (buf), "v1.%d.%d", app, bl);
+				cJSON_AddStringToObject(eventObj, "EV", buf);
+				break;
+			default:
+				break;
+		}
+
+		cJSON_AddItemToArray(eventArray, eventObj);
+	}
+
+	cJSON_AddItemToObject(json, "ZE", eventArray);
+
+	return 0;
+}
+
 int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log) {
 	if (!value) {
 		return -1;
@@ -88,6 +164,12 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 
 	cJSON_AddItemToArray(readerArray, readerObject);
 	cJSON_AddItemToObject(obj, "RD", readerArray);
+
+	if (midocmf_fiscal_add_event_log(obj, log) < 0) {
+		ESP_LOGE(TAG, "Error appending event log to entry!");
+		cJSON_Delete(obj);
+		return -1;
+	}
 
 	char *json = cJSON_PrintUnformatted(obj);
 	snprintf(outbuf, size, "OCMF|%s", json);
