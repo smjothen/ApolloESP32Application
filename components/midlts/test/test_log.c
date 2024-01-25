@@ -22,6 +22,41 @@ TEST_CASE("Test no leakages", "[mid]") {
 	mid_session_free(&ctx);
 }
 
+TEST_CASE("Test active session", "[mid][allowleak]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(0, ctx.active_session.count);
+
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT(MID_SESSION_IS_OPEN(&ctx));
+
+	uint8_t empty[16] = {0};
+	uint8_t uuid[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+	uint8_t uuid1[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16};
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, 0, uuid));
+
+	TEST_ASSERT_EQUAL_INT(1, ctx.active_session.count);
+	TEST_ASSERT_EQUAL_MEMORY(uuid, ctx.active_session.id.uuid, sizeof (uuid));
+
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, 0, uuid1));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, NULL, NULL, 0, 0, 0));
+
+	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
+	TEST_ASSERT_EQUAL_INT(2, ctx.active_session.count);
+
+	TEST_ASSERT_EQUAL_MEMORY(uuid1, ctx.active_session.id.uuid, sizeof (uuid1));
+
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL, 0, 0, 0));
+
+	TEST_ASSERT_EQUAL_MEMORY(empty, ctx.active_session.id.uuid, sizeof (uuid));
+
+	mid_session_free(&ctx);
+}
+
 TEST_CASE("Test session closed when not open", "[mid]") {
 	RESET;
 
