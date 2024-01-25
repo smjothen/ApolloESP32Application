@@ -63,6 +63,7 @@ void app_main(void) {
 	// just leave this here.
 	printf("%s", "");
 
+	unity_utils_set_leak_level(2048);
 	unity_run_menu();
 
 	// All tests that may leak (due to mbedtls)

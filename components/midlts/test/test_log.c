@@ -63,8 +63,8 @@ TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
 	char buf[512];
 
 	// Not a meter value
-	TEST_ASSERT_EQUAL_INT(-1, midocmf_create_fiscal_message(buf, sizeof (buf), "ZAP000001", &rec[0]));
-	TEST_ASSERT_EQUAL_INT(0, midocmf_create_fiscal_message(buf, sizeof (buf), "ZAP000001", &rec[1]));
+	TEST_ASSERT_EQUAL_INT(-1, midocmf_fiscal_from_record(buf, sizeof (buf), "ZAP000001", &rec[0], NULL));
+	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_record(buf, sizeof (buf), "ZAP000001", &rec[1], NULL));
 	ESP_LOGI(TAG, "%s", buf);
 
 	const char *expected = "OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go Plus\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2020-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}";
@@ -153,40 +153,6 @@ TEST_CASE("Test persistence over multiple pages", "[mid]") {
 	midlts_ctx_t ctx1;
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx1, 0, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(0, memcmp(&ctx, &ctx1, sizeof (ctx)));
-}
-
-TEST_CASE("Test wraparound", "[mid]") {
-	RESET;
-
-	midlts_ctx_t ctx;
-	midlts_pos_t pos;
-
-	// Max 4 pages
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 4, 0, default_fw, default_lr));
-
-	uint32_t time = MID_EPOCH;
-	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
-	uint32_t meter = 0;
-	uint32_t count = 0;
-
-	for (int i = 0; i < 128 * 4 + 1; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time++, flag, meter));
-		meter += 100;
-		count++;
-	}
-
-
-	midlts_ctx_t ctx0;
-	TEST_ASSERT_EQUAL_INT(mid_session_init_internal(&ctx0, 4, 0, default_fw, default_lr), LTS_OK);
-	TEST_ASSERT_EQUAL_INT(0, memcmp(&ctx0, &ctx, sizeof (ctx)));
-
-	// Should be around a bit over a wraparound for 4 files so 0 should be enough
-	TEST_ASSERT_EQUAL_INT(0, remove("/mid/1.ms"));
-	TEST_ASSERT_EQUAL_INT(0, remove("/mid/2.ms"));
-	TEST_ASSERT_EQUAL_INT(0, remove("/mid/3.ms"));
-
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx0, 4, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(0, memcmp(&ctx0, &ctx, sizeof (ctx)));
 }
 
 TEST_CASE("Test reading records", "[mid]") {

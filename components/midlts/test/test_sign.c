@@ -12,11 +12,13 @@
 #include "mid_lts.h"
 #include "mid_sign.h"
 
-static char key_prv[512];
-static char key_pub[512];
+static char key_prv[512] = {0};
+static char key_pub[512] = {0};
+static mid_sign_ctx_t ctx = {0};
 
-TEST_CASE("Test generation of keys", "[mid][allowleak]") {
-	mid_sign_ctx_t ctx;
+TEST_CASE("Test generation of keys", "[midsign][allowleak]") {
+	memset(&ctx, 0, sizeof (ctx));
+
 	TEST_ASSERT(mid_sign_ctx_init(&ctx, key_prv, sizeof (key_prv), key_pub, sizeof (key_pub)) == 0);
 	TEST_ASSERT(strstr(key_pub, "BEGIN PUBLIC KEY") != NULL);
 	TEST_ASSERT(strstr(key_pub, "END PUBLIC KEY") != NULL);
@@ -39,10 +41,11 @@ const char *load_prv = "-----BEGIN EC PRIVATE KEY-----\n"
 "4HwzDcGFFwrHbs8FMF97zLschMzczNI=\n"
 "-----END EC PRIVATE KEY-----\n";
 
-TEST_CASE("Test loading of keys", "[mid][allowleak]") {
+TEST_CASE("Test loading of keys", "[midsign][allowleak]") {
 	snprintf(key_prv, sizeof (key_prv), "%s", load_prv);
 	snprintf(key_pub, sizeof (key_pub), "%s", load_pub);
 
+	memset(&ctx, 0, sizeof (ctx));
 	mid_sign_ctx_t ctx;
 	TEST_ASSERT(mid_sign_ctx_init(&ctx, key_prv, sizeof (key_prv), key_pub, sizeof (key_pub)) == 0);
 	TEST_ASSERT_EQUAL_STRING(key_pub, load_pub);
@@ -53,10 +56,11 @@ TEST_CASE("Test loading of keys", "[mid][allowleak]") {
 
 static char sig_buf[512];
 
-TEST_CASE("Test signing", "[mid][allowleak]") {
+TEST_CASE("Test signing", "[midsign][allowleak]") {
 	snprintf(key_prv, sizeof (key_prv), "%s", load_prv);
 	snprintf(key_pub, sizeof (key_pub), "%s", load_pub);
 
+	memset(&ctx, 0, sizeof (ctx));
 	mid_sign_ctx_t ctx;
 	TEST_ASSERT(mid_sign_ctx_init(&ctx, key_prv, sizeof (key_prv), key_pub, sizeof (key_pub)) == 0);
 	TEST_ASSERT(!(ctx.flag & MID_SIGN_FLAG_GENERATED));
@@ -82,10 +86,11 @@ const char *openssl_prv = "-----BEGIN EC PRIVATE KEY-----\n"
 "qzjowZtPljoP1aOo4U8w6spwonYFwHg=\n"
 "-----END EC PRIVATE KEY-----\n";
 
-TEST_CASE("Test OpenSSL verify", "[mid][allowleak]") {
+TEST_CASE("Test OpenSSL verify", "[midsign][allowleak]") {
 	snprintf(key_prv, sizeof (key_prv), "%s", openssl_prv);
 	snprintf(key_pub, sizeof (key_pub), "%s", openssl_pub);
 
+	memset(&ctx, 0, sizeof (ctx));
 	mid_sign_ctx_t ctx;
 	TEST_ASSERT(mid_sign_ctx_init(&ctx, key_prv, sizeof (key_prv), key_pub, sizeof (key_pub)) == 0);
 	TEST_ASSERT(!(ctx.flag & MID_SIGN_FLAG_GENERATED));

@@ -4,6 +4,7 @@
 
 #include "esp_log.h"
 
+#include "mid_event.h"
 #include "mid_ocmf.h"
 
 static const char *TAG = "MIDOCMF        ";
@@ -27,16 +28,14 @@ static int midocmf_format_lr_version(char *buf, size_t size, mid_session_meter_v
 	return 0;
 }
 
-int midocmf_create_fiscal_message(char *outbuf, size_t size, const char *serial, mid_session_record_t *rec) {
-	if (!rec || rec->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
-		ESP_LOGI(TAG, "Not a meter value!");
+int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log) {
+	if (!value) {
 		return -1;
 	}
 
-	mid_session_meter_value_t *value = &rec->meter_value;
-
 	if (!(value->flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF)) {
-		ESP_LOGI(TAG, "Not a tariff meter value!");
+		// Only support serializing tariff change values?
+		ESP_LOGE(TAG, "Attempt to serialize non-tariff change as fiscal message!");
 		return -1;
 	}
 
@@ -97,4 +96,11 @@ int midocmf_create_fiscal_message(char *outbuf, size_t size, const char *serial,
 	free(json);
 
 	return 0;
+}
+
+int midocmf_fiscal_from_record(char *outbuf, size_t size, const char *serial, mid_session_record_t *value, mid_event_log_t *log) {
+	if (!value || value->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
+		return -1;
+	}
+	return midocmf_fiscal_from_meter_value(outbuf, size, serial, &value->meter_value, log);
 }
