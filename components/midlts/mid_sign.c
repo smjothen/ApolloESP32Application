@@ -103,6 +103,13 @@ error:
 	return -1;
 }
 
+bool mid_sign_ctx_ready(mid_sign_ctx_t *ctx) {
+	if (!ctx) {
+		return false;
+	}
+	return !!(ctx->flag & MID_SIGN_FLAG_VERIFIED);
+}
+
 int mid_sign_ctx_free(mid_sign_ctx_t *ctx) {
 	mbedtls_ctr_drbg_free(&ctx->ctr_drbg);
 	mbedtls_entropy_free(&ctx->entropy);

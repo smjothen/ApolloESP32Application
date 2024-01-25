@@ -4,6 +4,7 @@
 
 #include "esp_log.h"
 
+#include "mid_sign.h"
 #include "mid_event.h"
 #include "mid_ocmf.h"
 
@@ -138,7 +139,6 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 	cJSON *readerArray = cJSON_CreateArray();
 	cJSON *readerObject = cJSON_CreateObject();
 
-
 	midocmf_format_time(buf, sizeof (buf), value);
 
 	const char *time_state = " U";
@@ -185,4 +185,69 @@ int midocmf_fiscal_from_record(char *outbuf, size_t size, const char *serial, mi
 		return -1;
 	}
 	return midocmf_fiscal_from_meter_value(outbuf, size, serial, &value->meter_value, log);
+}
+
+static int midocmf_fiscal_do_signature(mid_sign_ctx_t *ctx, char *outbuf, size_t size) {
+	if (!mid_sign_ctx_ready(ctx)) {
+		return -1;
+	}
+
+	cJSON *sigObj = cJSON_CreateObject();
+	if (!sigObj) {
+		return -1;
+	}
+
+	static char sig_buf[256];
+	size_t sig_len = sizeof (sig_buf);
+
+	if (mid_sign_ctx_sign(ctx, outbuf, strlen(outbuf), sig_buf, &sig_len) != 0) {
+		cJSON_Delete(sigObj);
+		ESP_LOGE(TAG, "Error signing fiscal message!");
+		return -1;
+	}
+
+	cJSON_AddStringToObject(sigObj, "SA", "ECDSA-secp384r1-SHA256");
+	cJSON_AddStringToObject(sigObj, "SE", "base64");
+	cJSON_AddStringToObject(sigObj, "SD", sig_buf);
+
+	char *json = cJSON_PrintUnformatted(sigObj);
+	if (!json) {
+		cJSON_Delete(sigObj);
+		ESP_LOGE(TAG, "Error allocating JSON serialization!");
+		return -1;
+	}
+
+	snprintf(sig_buf, sizeof (sig_buf), "|%s", json);
+	strlcat(outbuf, sig_buf, size);
+
+	free(json);
+	return 0;
+}
+
+int midocmf_fiscal_from_meter_value_signed(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign) {
+	if (midocmf_fiscal_from_meter_value(outbuf, size, serial, value, log) < 0) {
+		return -1;
+	}
+
+	if (sign) {
+		if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+int midocmf_fiscal_from_record_signed(char *outbuf, size_t size, const char *serial, mid_session_record_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign) {
+	if (midocmf_fiscal_from_record(outbuf, size, serial, value, log) < 0) {
+		return -1;
+	}
+
+	if (sign) {
+		if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
+			return -1;
+		}
+	}
+
+	return 0;
 }

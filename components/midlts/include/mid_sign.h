@@ -27,6 +27,9 @@ int mid_sign_ctx_init(mid_sign_ctx_t *ctx, char *prv_buf, size_t prv_size, char 
 int mid_sign_ctx_free(mid_sign_ctx_t *ctx);
 int mid_sign_ctx_get_public_key(mid_sign_ctx_t *ctx, char *buf, size_t buf_size);
 
+// Context has loaded/generated keys, verified them, and ready to sign
+bool mid_sign_ctx_ready(mid_sign_ctx_t *ctx);
+
 int mid_sign_ctx_sign(mid_sign_ctx_t *ctx, char *str, size_t str_len, char *sig64, size_t *sig64_len);
 int mid_sign_ctx_verify(mid_sign_ctx_t *ctx, char *str, size_t str_len, char *sig64, size_t sig64_len);
 

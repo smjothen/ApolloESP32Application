@@ -118,3 +118,40 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 
 	mid_event_log_free(&log);
 }
+
+static char key_priv[512] = {0};
+static char key_pub[512] = {0};
+
+const char *ocmf_pub = "-----BEGIN PUBLIC KEY-----\n"
+"MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEj6hkVvHVvhM8mFm1/CkkDPTMTf0nMikK\n"
+"Pw57yHHVO5fJLTTfZdN78XXanzdAe6JK3KqIQj/QXV5HV1XOdZ1Dy0AXykw/h8VZ\n"
+"f+B8Mw3BhRcKx27PBTBfe8y7HITM3MzS\n"
+"-----END PUBLIC KEY-----\n";
+
+const char *ocmf_prv = "-----BEGIN EC PRIVATE KEY-----\n"
+"MIGkAgEBBDDn4fPF8Q992eRJY39nh7Gi8n7dq3hLnv8pQQaUNdI0OsPGiJFC8IEG\n"
+"WzcTMpqyPemgBwYFK4EEACKhZANiAASPqGRW8dW+EzyYWbX8KSQM9MxN/ScyKQo/\n"
+"DnvIcdU7l8ktNN9l03vxddqfN0B7okrcqohCP9BdXkdXVc51nUPLQBfKTD+HxVl/\n"
+"4HwzDcGFFwrHbs8FMF97zLschMzczNI=\n"
+"-----END EC PRIVATE KEY-----\n";
+
+TEST_CASE("Test OCMF signed energy - with signature", "[ocmf]") {
+	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = MID_TIME_PACK(MID_EPOCH), .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED };
+
+	snprintf(key_priv, sizeof (key_priv), "%s", ocmf_prv);
+	snprintf(key_pub, sizeof (key_pub), "%s", ocmf_pub);
+
+	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
+	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, key_priv, sizeof (key_priv), key_pub, sizeof (key_pub)));
+
+	char buf[512];
+
+	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value_signed(buf, sizeof (buf), "ZAP000001", &meter_value, NULL, ctx));
+
+	ESP_LOGI(TAG, "%s", key_pub);
+	ESP_LOGI(TAG, "%s", buf);
+
+	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go Plus\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2020-01-01T00:00:00,000+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGYCMQDguHSV4r1zAgJK01QJMP+Y8AIKDwdEGtQJaFeILBMEexBd4UoselgirPUiweFz6DQCMQDIP8NYAcIwSCcDIiJ1PwCjmd8Xyv7m80mwrLPlhHx0nGlkx2tvtRpDsJ/gxEPXkRE=\"}", buf);
+
+	mid_sign_ctx_free(ctx);
+}
