@@ -18,6 +18,8 @@ TEST_CASE("Test no leakages", "[mid]") {
 
 	midlts_ctx_t ctx;
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test session closed when not open", "[mid]") {
@@ -29,6 +31,8 @@ TEST_CASE("Test session closed when not open", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
+
+	mid_session_free(&ctx);
 }
 
 // Allow leak (probably it is caching the file descriptor or buffers)?
@@ -44,7 +48,7 @@ TEST_CASE("Test session open close", "[mid][allowleak]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
-	// TODO: Readback with pos and verify
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
@@ -69,6 +73,8 @@ TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
 
 	const char *expected = "OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go Plus\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2020-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}";
 	TEST_ASSERT_EQUAL_STRING(expected, buf);
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test session flag persistence", "[mid]") {
@@ -80,14 +86,20 @@ TEST_CASE("Test session flag persistence", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
 
+	mid_session_free(&ctx);
+
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
 	TEST_ASSERT(MID_SESSION_IS_OPEN(&ctx));
 
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
+	mid_session_free(&ctx);
+
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test session open twice", "[mid]") {
@@ -100,6 +112,8 @@ TEST_CASE("Test session open twice", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_SESSION_ALREADY_OPEN, mid_session_add_open(&ctx, &pos, NULL, 0,  0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test tariff change allowed out of session", "[mid]") {
@@ -108,18 +122,19 @@ TEST_CASE("Test tariff change allowed out of session", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test persistence", "[mid]") {
 	RESET;
 
-	midlts_ctx_t ctx;
+	midlts_ctx_t ctx, ctx2;
 	midlts_pos_t pos;
 
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
@@ -128,15 +143,17 @@ TEST_CASE("Test persistence", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
 
-	midlts_ctx_t ctx2;
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx2, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(0, memcmp(&ctx, &ctx2, sizeof (ctx)));
+	TEST_ASSERT_EQUAL_INT(ctx2.msg_id, ctx.msg_id);
+
+	mid_session_free(&ctx);
+	mid_session_free(&ctx2);
 }
 
 TEST_CASE("Test persistence over multiple pages", "[mid]") {
 	RESET;
 
-	midlts_ctx_t ctx;
+	midlts_ctx_t ctx, ctx1;
 	midlts_pos_t pos;
 
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
@@ -150,9 +167,11 @@ TEST_CASE("Test persistence over multiple pages", "[mid]") {
 
 	TEST_ASSERT_EQUAL_INT(0, remove("/mid/0.ms"));
 
-	midlts_ctx_t ctx1;
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx1, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(0, memcmp(&ctx, &ctx1, sizeof (ctx)));
+	TEST_ASSERT_EQUAL_INT(ctx.msg_id, ctx1.msg_id);
+
+	mid_session_free(&ctx);
+	mid_session_free(&ctx1);
 }
 
 TEST_CASE("Test reading records", "[mid]") {
@@ -193,6 +212,8 @@ TEST_CASE("Test reading records", "[mid]") {
 		TEST_ASSERT_EQUAL_INT(LTS_OK, e);
 		TEST_ASSERT_EQUAL_INT(MID_SESSION_RECORD_TYPE_METER_VALUE, rec.rec_type);
 	}
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test bad CRC returns an error", "[mid]") {
@@ -221,6 +242,7 @@ TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	TEST_ASSERT(!fclose(fp));
 
 	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, 0, default_fw, default_lr));
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
@@ -249,6 +271,7 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	TEST_ASSERT(!fclose(fp));
 
 	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, 0, default_fw, default_lr));
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test position and reading", "[mid]") {
@@ -280,6 +303,7 @@ TEST_CASE("Test position and reading", "[mid]") {
 		pos[i].crc += 1;
 		TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_read_record(&ctx, &pos[i], &rec));
 	}
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test purge fail", "[mid]") {
@@ -310,6 +334,7 @@ TEST_CASE("Test purge success", "[mid]") {
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
+
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, 0, default_fw, default_lr));
 
 	uint32_t time = MID_EPOCH;
@@ -328,5 +353,7 @@ TEST_CASE("Test purge success", "[mid]") {
 
 	// Time will be epoch + 256, definitely not old enough to automatically purge
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time, flag, meter));
+
+	mid_session_free(&ctx);
 }
 

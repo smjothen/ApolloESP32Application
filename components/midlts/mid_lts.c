@@ -621,6 +621,13 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version
 	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
 }
 
+void mid_session_free(midlts_ctx_t *ctx) {
+	if (ctx->active_session.events) {
+		free(ctx->active_session.events);
+		memset(&ctx->active_session, 0, sizeof (ctx->active_session));
+	}
+}
+
 midlts_err_t mid_session_reset_page(midlts_id_t id) {
 	char buf[64];
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, id);
