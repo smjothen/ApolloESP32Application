@@ -28,7 +28,12 @@ from ocpp.v16.enums import (
 from ocpp.v16.datatypes import IdTagInfo
 from ocpp_tests.test_utils import ensure_configuration
 expecting_boot_notification = False
-boot_notification_payload = None
+boot_notification_payload = boot_notification_payload = call_result.BootNotificationPayload(
+    current_time=datetime.utcnow().isoformat(),
+    interval=0,
+    status=RegistrationStatus.accepted
+)
+
 expecting_new_rfid = False
 new_rfid = ''
 authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted))
@@ -828,6 +833,8 @@ async def test_core_profile(cp, include_manual_tests = True):
         logging.info("Test got boot msg")
         global expecting_boot_notification
         expecting_boot_notification = False
+
+        boot_notification_payload.current_time=datetime.utcnow().isoformat()
 
         return boot_notification_payload
 

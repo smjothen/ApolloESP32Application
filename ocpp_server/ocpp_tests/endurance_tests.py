@@ -135,6 +135,7 @@ async def smart_charging_extended_with_rapid_meter_values(cp):
                                                     ConfigurationKey.clock_aligned_data_interval: "0",
                                                     ConfigurationKey.meter_value_sample_interval: "2",
                                                     ConfigurationKey.meter_values_sampled_data: Measurand.current_offered,
+                                                    "MessageTimeout": "30",
                                                     "AuthorizationRequired": "false"})
 
     if preconfig_res != 0:
@@ -182,7 +183,7 @@ async def smart_charging_extended_with_rapid_meter_values(cp):
             transaction_id=tx_id
         )
 
-    def on_meter_values(self, connector_id, meter_value, transaction_id, **kwargs):
+    async def on_meter_values(self, connector_id, meter_value, transaction_id, **kwargs):
         global awaiting_meter_value
         global expected_value_count
         global unexpected_value_count

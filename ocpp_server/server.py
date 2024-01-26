@@ -9,8 +9,9 @@ from ocpp_tests.smart_charging_profile import test_smart_charging_profile
 from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
 from ocpp_tests.remote_trigger_profile import test_remote_trigger_profile
 from ocpp_tests.endurance_tests import endurance_tests
-
+from ocpp_tests.websocket_test import test_websocket
 import logging
+
 from datetime import(
     datetime,
     timezone,
@@ -49,14 +50,16 @@ async def _test_runner(cp):
     logging.info("Boot accepted")
 
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage/[E]ndurance Test: ')
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage/[E]ndurance Test/[W]ebsocket: ')
 
     core_result = None
     reservation_result = None
     smart_charging_result = None
     local_auth_result = None
     remote_trigger_result = None
+    websocket_result = None
 
+    response = response.upper();
     if response == "C" or response == "A":
         core_result = await test_core_profile(cp)
 
@@ -72,25 +75,35 @@ async def _test_runner(cp):
     if response == "T" or response == "A":
         remote_trigger_result = await test_remote_trigger_profile(cp)
 
+    if response == "W" or response == "A":
+        websocket_result = await test_websocket(cp)
+
     if response == "E":
         await endurance_tests(cp)
 
-    logging.info(f'Core profile          : {core_result}')
-    logging.info(f'Reservation profile   : {reservation_result}')
-    logging.info(f'Smart charging profile: {smart_charging_result}')
-    logging.info(f'Local auth list profile: {local_auth_result}')
-    logging.info(f'Remote trigger profile: {remote_trigger_result}')
+    logging.info(f'Core profile             : {core_result}')
+    logging.info(f'Reservation profile      : {reservation_result}')
+    logging.info(f'Smart charging profile   : {smart_charging_result}')
+    logging.info(f'Local auth list profile  : {local_auth_result}')
+    logging.info(f'Remote trigger profile   : {remote_trigger_result}')
+    logging.info(f'websocket_result         : {websocket_result}')
 
     await asyncio.sleep(10)
+
+    return True
 
 async def test_runner(cp):
     while True:
         try:
-            await _test_runner(cp)
+            result = await _test_runner(cp)
+            if not result:
+                return
+
         except Exception as e:
             logging.error(f'Exception from test runner {e}')
             traceback.print_exc()
             print(e)
+
 
 class ChargePoint(cp):
     cp.registration_status = RegistrationStatus.rejected
@@ -183,7 +196,6 @@ async def on_connect(websocket, path):
     global charge_points
 
     charge_point_id = path.strip('/')
-
     if charge_point_id in charge_points:
         logging.warning(f"Chargepoint with id {charge_point_id} reconnected")
         charge_points[charge_point_id]._connection = websocket
@@ -208,8 +220,7 @@ async def on_connect(websocket, path):
 
         await test_task
 
-    del charge_points[charge-point_id]
-    logging.info("End of on_connect")
+    del charge_points[charge_point_id]
 
 async def main():
     logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)-8s %(message)s')
@@ -226,7 +237,7 @@ async def main():
         subprotocols=['ocpp1.6'],
     )
 
-    logging.info("WebSocket Server Started")
+    logging.info("Hello")
     await server.wait_closed()
 
 if __name__ == '__main__':
