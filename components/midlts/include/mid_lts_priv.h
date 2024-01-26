@@ -2,6 +2,7 @@
 #define __MID_LTS_PRIV_H__
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include "mid_session.h"
 
 #define MIDLTS_LOG_MAX_SIZE 4096
@@ -35,8 +36,13 @@ typedef struct _midlts_pos_t {
 #define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
 
 typedef struct {
+	bool has_id;
 	mid_session_id_t id;
+	bool has_auth;
 	mid_session_auth_t auth;
+	bool has_versions;
+	mid_session_version_lr_t lr;
+	mid_session_version_fw_t fw;
 	size_t count;
 	size_t capacity;
 	mid_session_meter_value_t *events;

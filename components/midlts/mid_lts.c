@@ -42,26 +42,42 @@ static midlts_err_t mid_session_active_session_append(midlts_ctx_t *ctx, mid_ses
 
 	//ESP_LOGI(TAG, "MID Active Session: Append %zu", active->count);
 	active->events[active->count++] = *rec;
+
+	active->has_versions = true;
+	active->lr = rec->lr;
+	active->fw = rec->fw;
+
 	return LTS_OK;
 }
 
 static void mid_session_active_session_set_id(midlts_ctx_t *ctx, mid_session_id_t *id) {
 	//ESP_LOGI(TAG, "MID Active Session: Set Id");
 	midlts_active_session_t *active = &ctx->active_session;
+	active->has_id = true;
 	active->id = *id;
 }
 
 static void mid_session_active_session_set_auth(midlts_ctx_t *ctx, mid_session_auth_t *auth) {
 	//ESP_LOGI(TAG, "MID Active Session: Set Auth");
 	midlts_active_session_t *active = &ctx->active_session;
+	active->has_auth = true;
 	active->auth = *auth;
 }
 
 static void mid_session_active_session_reset(midlts_ctx_t *ctx) {
 	//ESP_LOGI(TAG, "MID Active Session: Reset");
 	midlts_active_session_t *active = &ctx->active_session;
+
+	active->has_id = false;
 	memset(&active->id, 0, sizeof (active->id));
+
+	active->has_auth = false;
 	memset(&active->auth, 0, sizeof (active->auth));
+
+	active->has_versions = false;
+	memset(&active->lr, 0, sizeof (active->lr));
+	memset(&active->fw, 0, sizeof (active->fw));
+
 	memset(active->events, 0, sizeof (mid_session_meter_value_t) * active->capacity);
 	active->count = 0;
 }

@@ -4,6 +4,7 @@
 
 #include "esp_log.h"
 
+#include "mid_lts.h"
 #include "mid_sign.h"
 #include "mid_event.h"
 #include "mid_ocmf.h"
@@ -17,15 +18,40 @@ static int midocmf_format_time(char *buf, size_t size, mid_session_meter_value_t
 	return 0;
 }
 
-static int midocmf_format_fw_version(char *buf, size_t size, mid_session_meter_value_t *value) {
-	mid_session_version_fw_t fw = value->fw;
-	snprintf(buf, size, "%d.%d.%d.%d", fw.major, fw.minor, fw.patch, fw.extra);
+static int midocmf_format_fw_version(char *buf, size_t size, mid_session_version_fw_t *fw) {
+	snprintf(buf, size, "%d.%d.%d.%d", fw->major, fw->minor, fw->patch, fw->extra);
 	return 0;
 }
 
-static int midocmf_format_lr_version(char *buf, size_t size, mid_session_meter_value_t *value) {
-	mid_session_version_lr_t lr = value->lr;
-	snprintf(buf, size, "v%d.%d.%d", lr.major, lr.minor, lr.patch);
+static int midocmf_format_lr_version(char *buf, size_t size, mid_session_version_lr_t *lr) {
+	snprintf(buf, size, "v%d.%d.%d", lr->major, lr->minor, lr->patch);
+	return 0;
+}
+
+static int midocmf_format_uuid_bytes(char *buf, size_t size, mid_session_id_t *id) {
+	if (size < 36 + 1) {
+		return -1;
+	}
+
+	char *ptr = buf;
+	for (size_t i = 0; i < 16; i++) {
+		bool inter = i == 3 || i == 5 || i == 7 || i == 9;
+		ptr += sprintf(ptr, "%02x%s", id->uuid[i], inter ? "-" : "");
+	}
+
+	return 0;
+}
+
+static int midocmf_format_auth_bytes(char *buf, size_t size, mid_session_auth_t *auth) {
+	if (size < auth->length * 2 + 1) {
+		return -1;
+	}
+
+	char *ptr = buf;
+	for (uint8_t i = 0; i < auth->length; i++) {
+		ptr += sprintf(ptr, "%02X", auth->tag[i]);
+	}
+
 	return 0;
 }
 
@@ -128,10 +154,10 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 	cJSON_AddStringToObject(obj, "GI", "Zaptec Go Plus");
 	cJSON_AddStringToObject(obj, "GS", serial);
 
-	midocmf_format_fw_version(buf, sizeof (buf), value);
+	midocmf_format_fw_version(buf, sizeof (buf), &value->fw);
 	cJSON_AddStringToObject(obj, "GV", buf);
 
-	midocmf_format_lr_version(buf, sizeof (buf), value);
+	midocmf_format_lr_version(buf, sizeof (buf), &value->lr);
 	cJSON_AddStringToObject(obj, "MF", buf);
 
 	cJSON_AddStringToObject(obj, "PG", "F1");
@@ -229,10 +255,8 @@ int midocmf_fiscal_from_meter_value_signed(char *outbuf, size_t size, const char
 		return -1;
 	}
 
-	if (sign) {
-		if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
-			return -1;
-		}
+	if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
+		return -1;
 	}
 
 	return 0;
@@ -243,10 +267,86 @@ int midocmf_fiscal_from_record_signed(char *outbuf, size_t size, const char *ser
 		return -1;
 	}
 
-	if (sign) {
-		if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
-			return -1;
+	if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
+		return -1;
+	}
+
+	return 0;
+}
+
+int midocmf_transaction_from_active_session(char *outbuf, size_t size, const char *serial, midlts_active_session_t *active_session) {
+	if (active_session->count <= 0) {
+		ESP_LOGE(TAG, "Can't serialize empty session!");
+		return -1;
+	}
+
+	cJSON *obj = cJSON_CreateObject();
+	if (!obj) {
+		ESP_LOGE(TAG, "Couldn't allocate JSON struct!");
+		return -1;
+	}
+
+	char buf[64];
+
+	cJSON_AddStringToObject(obj, "FV", "1.0");
+	cJSON_AddStringToObject(obj, "GI", "Zaptec Go Plus");
+	cJSON_AddStringToObject(obj, "GS", serial);
+
+	midocmf_format_fw_version(buf, sizeof (buf), &active_session->fw);
+	cJSON_AddStringToObject(obj, "GV", buf);
+
+	midocmf_format_lr_version(buf, sizeof (buf), &active_session->lr);
+	cJSON_AddStringToObject(obj, "MF", buf);
+
+	// If active session is authenticated:
+	//
+	// "IS": {if BLE, RFID or Cloud => true, else false}
+	// "IL": {if BLE and RFID => "HEARSAY", if Cloud => "TRUSTED"]
+	// "IF": {if RFID => ["RFID_RELATED"], if Cloud, BLE => []}
+	// "IT": {if RFID => "ISO15693" if Len(tag) == 8 else "ISO14443", if Cloud "CENTRAL"}
+	// "ID": Hex Tag/UUID
+
+	if (active_session->has_auth) {
+		cJSON_AddBoolToObject(obj, "IS", true);
+
+		mid_session_auth_t *auth = &active_session->auth;
+		switch (auth->type) {
+			case MID_SESSION_AUTH_TYPE_BLE:
+			case MID_SESSION_AUTH_TYPE_RFID:
+				cJSON_AddStringToObject(obj, "IL", "HEARSAY");
+				break;
+			case MID_SESSION_AUTH_TYPE_CLOUD:
+				cJSON_AddStringToObject(obj, "IL", "TRUSTED");
+				break;
+			case MID_SESSION_AUTH_TYPE_ISO15118:
+				// TODO: Is this always trusted?
+				cJSON_AddStringToObject(obj, "IL", "TRUSTED");
+				break;
 		}
+
+		if (auth->type == MID_SESSION_AUTH_TYPE_RFID) {
+			cJSON *flagArray = cJSON_CreateArray();
+			cJSON_AddItemToArray(flagArray, cJSON_CreateString("RFID_RELATED"));
+			cJSON_AddArrayToObject(obj, "IF");
+
+			cJSON_AddStringToObject(obj, "IT", auth->length == 8 ? "ISO15693" : "ISO14443");
+		} else if (auth->type == MID_SESSION_AUTH_TYPE_BLE) {
+		}
+
+
+	} else {
+		cJSON_AddBoolToObject(obj, "IS", false);
+	}
+
+	cJSON_AddStringToObject(obj, "PG", "T1");
+
+	// TODO: Meter values
+	cJSON *readerArray = cJSON_CreateArray();
+	cJSON *readerObject = cJSON_CreateObject();
+
+	if (active_session->has_id) {
+		midocmf_format_uuid_bytes(buf, sizeof (buf), &active_session->id);
+		cJSON_AddStringToObject(obj, "ZS", buf);
 	}
 
 	return 0;

@@ -20,8 +20,6 @@ const char *mid_session_get_auth_type_name(mid_session_auth_type_t type) {
 			return "BLE";
 		case MID_SESSION_AUTH_TYPE_ISO15118:
 			return "ISO15118";
-		case MID_SESSION_AUTH_TYPE_NEXTGEN:
-			return "NextGen";
 	}
 	return "Unknown";
 }

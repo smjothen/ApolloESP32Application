@@ -10,7 +10,6 @@ typedef enum {
     MID_SESSION_AUTH_TYPE_RFID = 1,
     MID_SESSION_AUTH_TYPE_BLE = 2,
     MID_SESSION_AUTH_TYPE_ISO15118 = 3,
-    MID_SESSION_AUTH_TYPE_NEXTGEN = 4
 } mid_session_auth_type_t;
 
 /* Struct definitions */
