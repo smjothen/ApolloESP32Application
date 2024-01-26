@@ -3,6 +3,6 @@
 
 #include "emclog.h"
 
-void emclogger_register_fields(EmcLogger *logger);
+void emclogger_register_fields(emc_log_t *logger);
 
 #endif

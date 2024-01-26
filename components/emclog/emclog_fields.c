@@ -62,7 +62,7 @@ int emclogger_cable_type(void) { return (int)MCU_GetCableType(); }
 int emclogger_charge_mode(void) { return (int)MCU_GetChargeMode(); }
 int emclogger_charge_op_mode(void) { return (int)MCU_GetChargeOperatingMode(); }
 
-void emclogger_register_fields(EmcLogger *logger) {
+void emclogger_register_fields(emc_log_t *logger) {
 	emclogger_add_str(logger, "Time", emclogger_datetime, EMC_FLAG_NONE);
 
 	emclogger_add_float(logger, "V0", emclogger_v0, EMC_FLAG_NONE);

@@ -716,7 +716,7 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "TCP PORT ACTIVATED");
 	}
 
-	EmcLogger log;
+	emc_log_t log;
 	if((storage_Get_DiagnosticsMode() == eACTIVATE_EMC_LOGGING) && (storage_Get_CommunicationMode() == eCONNECTION_WIFI))
 	{
 		esp_log_level_set("*", ESP_LOG_INFO);

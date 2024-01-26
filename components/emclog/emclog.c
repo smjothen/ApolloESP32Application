@@ -15,7 +15,7 @@
 
 static const char *TAG = "EMCLOG         ";
 
-static void emclogger_write_socket(EmcLogger *logger, const char *buf, bool block) {
+static void emclogger_write_socket(emc_log_t *logger, const char *buf, bool block) {
     if (logger->sock < 0) {
         return;
     }
@@ -41,7 +41,7 @@ static void emclogger_write_socket(EmcLogger *logger, const char *buf, bool bloc
     }
 }
 
-static void emclogger_print_log(EmcLogger *logger) {
+static void emclogger_print_log(emc_log_t *logger) {
     FILE *f = fopen(logger->log_filename, "r");
     if (!f) {
         ESP_LOGE(TAG, "Cant open %s", logger->log_filename);
@@ -64,7 +64,7 @@ static void emclogger_print_log(EmcLogger *logger) {
     fclose(f);
 }
 
-static bool emclogger_tick(EmcLogger *logger) {
+static bool emclogger_tick(emc_log_t *logger) {
     if (!(logger->log_flags & EMC_LOG_FLAG_INITED)) {
         ESP_LOGE(TAG, "EMC logging not initialized!");
         return false;
@@ -105,7 +105,7 @@ static bool emclogger_tick(EmcLogger *logger) {
     if (!size) {
 		// First line, write the header first
 		for (uint32_t i = 0; i < logger->log_colcount; i++) {
-			 EmcColumn *col = &logger->log_cols[i];
+			 emc_column_t *col = &logger->log_cols[i];
 			 ptr += sprintf(ptr, "%s,", col->name);
 		}
 		ptr += sprintf(ptr, "LogSize,");
@@ -113,7 +113,7 @@ static bool emclogger_tick(EmcLogger *logger) {
     }
 
     for (uint32_t i = 0; i < logger->log_colcount; i++) {
-		 EmcColumn *col = &logger->log_cols[i];
+		 emc_column_t *col = &logger->log_cols[i];
 		 emclogger_write_column(col, buf, sizeof (buf));
 		 ptr += sprintf(ptr, "%s,", buf);
 	}
@@ -159,7 +159,7 @@ static bool emclogger_tick(EmcLogger *logger) {
 #define EMC_LOG_DUMP           3
 #define EMC_LOG_NOTE           4
 
-static void emclogger_handle_socket(EmcLogger *logger) {
+static void emclogger_handle_socket(emc_log_t *logger) {
     const char *_sock_cmds[] = {
         [EMC_LOG_START ] = "start",
         [EMC_LOG_STOP  ] = "stop",
@@ -209,7 +209,7 @@ static void emclogger_handle_socket(EmcLogger *logger) {
 }
 
 static void emclogger_socket_task(void *pvParameters) {
-    EmcLogger *logger = (EmcLogger *)pvParameters;
+    emc_log_t *logger = (emc_log_t *)pvParameters;
 
     bool first = false;
 
@@ -286,7 +286,7 @@ static void emclogger_socket_task(void *pvParameters) {
 }
 
 static void emclogger_log_task(void *pvParameter) {
-    EmcLogger *logger = (EmcLogger *)pvParameter;
+    emc_log_t *logger = (emc_log_t *)pvParameter;
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(1000);
@@ -320,19 +320,19 @@ static void emclogger_log_task(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-static EmcColumn *emclogger_add(EmcLogger *logger, EmcColumn col) {
+static emc_column_t *emclogger_add(emc_log_t *logger, emc_column_t col) {
     if (logger->log_colcount >= EMC_LOG_MAX_COLUMNS) {
         ESP_LOGE(TAG, "Too many columns!");
         return NULL;
     }
 
-    EmcColumn *column = &logger->log_cols[logger->log_colcount++];
+    emc_column_t *column = &logger->log_cols[logger->log_colcount++];
 	*column = col;
 
 	return column;
 }
 
-void emclogger_write_column(EmcColumn *col, char *buf, size_t size) {
+void emclogger_write_column(emc_column_t *col, char *buf, size_t size) {
 	switch (col->type) {
 		case EMC_TYPE_INT:
 			snprintf(buf, size - 1, "%d", col->u.i());
@@ -356,32 +356,32 @@ void emclogger_write_column(EmcColumn *col, char *buf, size_t size) {
 	}
 }
 
-EmcColumn *emclogger_add_float(EmcLogger *logger, char *name, EmcFloatColumn fn, EmcColumnFlag flag) {
-    EmcColumn col = { .name = name, .type = EMC_TYPE_FLOAT, .flag = flag, .u.flt = fn };
+emc_column_t *emclogger_add_float(emc_log_t *logger, char *name, emc_float_col_t fn, emc_column_flag_t flag) {
+    emc_column_t col = { .name = name, .type = EMC_TYPE_FLOAT, .flag = flag, .u.flt = fn };
     return emclogger_add(logger, col);
 }
 
-EmcColumn *emclogger_add_double(EmcLogger *logger, char *name, EmcDoubleColumn fn, EmcColumnFlag flag) {
-    EmcColumn col = { .name = name, .type = EMC_TYPE_DOUBLE, .flag = flag, .u.dbl = fn };
+emc_column_t *emclogger_add_double(emc_log_t *logger, char *name, emc_double_col_t fn, emc_column_flag_t flag) {
+    emc_column_t col = { .name = name, .type = EMC_TYPE_DOUBLE, .flag = flag, .u.dbl = fn };
     return emclogger_add(logger, col);
 }
 
-EmcColumn *emclogger_add_int(EmcLogger *logger, char *name, EmcIntColumn fn, EmcColumnFlag flag) {
-    EmcColumn col = { .name = name, .type = EMC_TYPE_INT, .flag = flag, .u.i = fn };
+emc_column_t *emclogger_add_int(emc_log_t *logger, char *name, emc_int_col_t fn, emc_column_flag_t flag) {
+    emc_column_t col = { .name = name, .type = EMC_TYPE_INT, .flag = flag, .u.i = fn };
     return emclogger_add(logger, col);
 }
 
-EmcColumn *emclogger_add_uint32(EmcLogger *logger, char *name, EmcUint32Column fn, EmcColumnFlag flag) {
-    EmcColumn col = { .name = name, .type = EMC_TYPE_UINT32, .flag = flag, .u.u32 = fn };
+emc_column_t *emclogger_add_uint32(emc_log_t *logger, char *name, emc_uint32_col_t fn, emc_column_flag_t flag) {
+    emc_column_t col = { .name = name, .type = EMC_TYPE_UINT32, .flag = flag, .u.u32 = fn };
     return emclogger_add(logger, col);
 }
 
-EmcColumn *emclogger_add_str(EmcLogger *logger, char *name, EmcStrColumn fn, EmcColumnFlag flag) {
-    EmcColumn col = { .name = name, .type = EMC_TYPE_STR, .flag = flag, .u.str = fn };
+emc_column_t *emclogger_add_str(emc_log_t *logger, char *name, emc_str_col_t fn, emc_column_flag_t flag) {
+    emc_column_t col = { .name = name, .type = EMC_TYPE_STR, .flag = flag, .u.str = fn };
     return emclogger_add(logger, col);
 }
 
-void emclogger_init(EmcLogger *logger) {
+void emclogger_init(emc_log_t *logger) {
     memset(logger, 0, sizeof (*logger));
 
     logger->sock = -1;
@@ -397,7 +397,7 @@ void emclogger_init(EmcLogger *logger) {
 	logger->log_note = NULL;
 }
 
-void emclogger_start(EmcLogger *logger) {
+void emclogger_start(emc_log_t *logger) {
     xTaskCreate(emclogger_socket_task, "emc_socket_task", 2560, logger, 5, &logger->sock_task);
     xTaskCreate(emclogger_log_task, "emc_log_task", 3584, logger, 8, &logger->log_task);
 }

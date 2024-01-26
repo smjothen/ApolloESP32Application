@@ -22,11 +22,11 @@
 #include "utz.h"
 #include "zones.h"
 
-typedef double (*EmcDoubleColumn)(void);
-typedef float (*EmcFloatColumn)(void);
-typedef int (*EmcIntColumn)(void);
-typedef uint32_t (*EmcUint32Column)(void);
-typedef void(*EmcStrColumn)(char *, size_t);
+typedef double (*emc_double_col_t)(void);
+typedef float (*emc_float_col_t)(void);
+typedef int (*emc_int_col_t)(void);
+typedef uint32_t (*emc_uint32_col_t)(void);
+typedef void(*emc_str_col_t)(char *, size_t);
 
 typedef enum {
     EMC_TYPE_DOUBLE,
@@ -34,26 +34,26 @@ typedef enum {
     EMC_TYPE_INT,
     EMC_TYPE_UINT32,
     EMC_TYPE_STR,
-} EmcColumnType;
+} emc_column_type_t;
 
 typedef enum {
     EMC_FLAG_NONE = 0,
     EMC_FLAG_HEX = 1,
-} EmcColumnFlag;
+} emc_column_flag_t;
 
 typedef struct {
 	char *name;
-    EmcColumnType type;
-    EmcColumnFlag flag;
+    emc_column_type_t type;
+    emc_column_flag_t flag;
 	char *fmt;
     union {
-        EmcDoubleColumn dbl;
-        EmcFloatColumn flt;
-        EmcIntColumn i;
-        EmcUint32Column u32;
-        EmcStrColumn str;
+        emc_double_col_t dbl;
+        emc_float_col_t flt;
+        emc_int_col_t i;
+        emc_uint32_col_t u32;
+        emc_str_col_t str;
     } u;
-} EmcColumn;
+} emc_column_t;
 
 #define EMC_LOG_MAX_COLUMNS 64
 #define EMC_LOG_NOTE_SIZE 128
@@ -65,7 +65,7 @@ typedef struct {
     uint32_t sock_retries;
 
     TaskHandle_t log_task;
-    EmcColumn log_cols[EMC_LOG_MAX_COLUMNS];
+    emc_column_t log_cols[EMC_LOG_MAX_COLUMNS];
     uint32_t log_colcount;
     uint32_t log_flags;
     char *log_filename;
@@ -73,16 +73,16 @@ typedef struct {
 	char *log_note;
     size_t log_size;
     FILE *log_fp;
-} EmcLogger;
+} emc_log_t;
 
-EmcColumn *emclogger_add_float(EmcLogger *logger, char *name, EmcFloatColumn fn, EmcColumnFlag flag);
-EmcColumn *emclogger_add_double(EmcLogger *logger, char *name, EmcDoubleColumn fn, EmcColumnFlag flag);
-EmcColumn *emclogger_add_int(EmcLogger *logger, char *name, EmcIntColumn fn, EmcColumnFlag flag);
-EmcColumn *emclogger_add_uint32(EmcLogger *logger, char *name, EmcUint32Column fn, EmcColumnFlag flag);
-EmcColumn *emclogger_add_str(EmcLogger *logger, char *name, EmcStrColumn fn, EmcColumnFlag flag);
-void emclogger_write_column(EmcColumn *col, char *buf, size_t size);
+emc_column_t *emclogger_add_float(emc_log_t *logger, char *name, emc_float_col_t fn, emc_column_flag_t flag);
+emc_column_t *emclogger_add_double(emc_log_t *logger, char *name, emc_double_col_t fn, emc_column_flag_t flag);
+emc_column_t *emclogger_add_int(emc_log_t *logger, char *name, emc_int_col_t fn, emc_column_flag_t flag);
+emc_column_t *emclogger_add_uint32(emc_log_t *logger, char *name, emc_uint32_col_t fn, emc_column_flag_t flag);
+emc_column_t *emclogger_add_str(emc_log_t *logger, char *name, emc_str_col_t fn, emc_column_flag_t flag);
+void emclogger_write_column(emc_column_t *col, char *buf, size_t size);
 
-void emclogger_init(EmcLogger *logger);
-void emclogger_start(EmcLogger *logger);
+void emclogger_init(emc_log_t *logger);
+void emclogger_start(emc_log_t *logger);
 
 #endif
