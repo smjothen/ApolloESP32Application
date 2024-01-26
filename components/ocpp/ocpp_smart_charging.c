@@ -1021,7 +1021,8 @@ void set_charging_profile_cb(const char * unique_id, const char * action, cJSON 
 
 	if(charging_profile->profile_purpose == eOCPP_CHARGING_PROFILE_PURPOSE_TX){
 		if(transaction_is_active == false || connector_id < 1
-			|| charging_profile->transaction_id == NULL || *charging_profile->transaction_id != *active_transaction_id){
+			|| charging_profile->transaction_id == NULL || active_transaction_id == NULL
+			|| *charging_profile->transaction_id != *active_transaction_id){
 
 			ESP_LOGW(TAG, "Attempted to set charging profile that would not apply to an ongoing transaction");
 

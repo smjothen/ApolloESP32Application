@@ -307,7 +307,7 @@ void chargeSession_Start()
 		chargeSession.SignedSession = basicOCMF;
 
 		char * sessionData = calloc(1000,1);
-		chargeSession_GetSessionAsString(sessionData);
+		chargeSession_GetSessionAsString(sessionData, 1000);
 
 		sessionFileError = false;
 
@@ -391,7 +391,7 @@ void chargeSession_Finalize()
 
 	/// Finalize offlineSession flash structure
 	char * sessionData = calloc(1000,1);
-	chargeSession_GetSessionAsString(sessionData);
+	chargeSession_GetSessionAsString(sessionData, 1000);
 	offlineSession_UpdateSessionOnFile(sessionData, false);
 
 
@@ -486,7 +486,7 @@ struct ChargeSession chargeSession_Get()
 }
 
 
-int chargeSession_GetSessionAsString(char * message)
+int chargeSession_GetSessionAsString(char * message, size_t message_length)
 {
 	cJSON *CompletedSessionObject = cJSON_CreateObject();
 	if(CompletedSessionObject == NULL){return -10;}
@@ -504,14 +504,11 @@ int chargeSession_GetSessionAsString(char * message)
 	cJSON_AddStringToObject(CompletedSessionObject, "AuthenticationCode", chargeSession.AuthenticationCode);
 	cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", chargeSession.SignedSession);
 
-	char *buf = cJSON_PrintUnformatted(CompletedSessionObject);
+	cJSON_PrintPreallocated(CompletedSessionObject, message, message_length, false);
 
-	strcpy(message, buf);
-
-	ESP_LOGI(TAG, "Made CompletedSessionObject %d", strlen(message));
+	ESP_LOGI(TAG, "Made CompletedSessionObject %zu", strlen(message));
 
 	cJSON_Delete(CompletedSessionObject);
-	free(buf);
 
 	return 0;
 }
@@ -522,7 +519,7 @@ esp_err_t chargeSession_SaveUpdatedSession()
 {
 
 	char * sessionData = calloc(1000,1);
-	chargeSession_GetSessionAsString(sessionData);
+	chargeSession_GetSessionAsString(sessionData, 1000);
 
 	ESP_LOGW(TAG, "Saving hourly session: %s", sessionData);
 
