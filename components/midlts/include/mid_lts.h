@@ -35,7 +35,7 @@ midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_ses
 
 // Add metadata to an open session
 midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, uint8_t uuid[16]);
-midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size);
+midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size);
 
 midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec);
 

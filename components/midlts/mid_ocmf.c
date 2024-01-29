@@ -28,7 +28,7 @@ static int midocmf_format_lr_version(char *buf, size_t size, mid_session_version
 	return 0;
 }
 
-static int midocmf_format_uuid_bytes(char *buf, size_t size, mid_session_id_t *id) {
+static int midocmf_format_uuid_bytes(char *buf, size_t size, uint8_t *bytes) {
 	if (size < 36 + 1) {
 		return -1;
 	}
@@ -36,20 +36,49 @@ static int midocmf_format_uuid_bytes(char *buf, size_t size, mid_session_id_t *i
 	char *ptr = buf;
 	for (size_t i = 0; i < 16; i++) {
 		bool inter = i == 3 || i == 5 || i == 7 || i == 9;
-		ptr += sprintf(ptr, "%02x%s", id->uuid[i], inter ? "-" : "");
+		ptr += sprintf(ptr, "%02x%s", bytes[i], inter ? "-" : "");
 	}
 
 	return 0;
 }
 
-static int midocmf_format_auth_bytes(char *buf, size_t size, mid_session_auth_t *auth) {
-	if (size < auth->length * 2 + 1) {
+static int midocmf_format_uuid(char *buf, size_t size, mid_session_id_t *id) {
+	return midocmf_format_uuid_bytes(buf, size, id->uuid);
+}
+
+static int midocmf_format_raw_bytes(char *buf, size_t bufsize, uint8_t *bytes, size_t len) {
+	if (bufsize < len * 2 + 1) {
 		return -1;
 	}
 
 	char *ptr = buf;
-	for (uint8_t i = 0; i < auth->length; i++) {
-		ptr += sprintf(ptr, "%02X", auth->tag[i]);
+	for (uint8_t i = 0; i < len; i++) {
+		ptr += sprintf(ptr, "%02X", bytes[i]);
+	}
+
+	return 0;
+}
+
+static int midocmf_format_auth(char *buf, size_t bufsize, mid_session_auth_t *auth) {
+	size_t max_tag = sizeof (auth->tag);
+	size_t length = auth->length > max_tag ? max_tag : auth->length;
+
+	switch(auth->type) {
+		case MID_SESSION_AUTH_TYPE_RFID:
+		case MID_SESSION_AUTH_TYPE_EMAID:
+		case MID_SESSION_AUTH_TYPE_EVCCID:
+			midocmf_format_raw_bytes(buf, bufsize, auth->tag, length);
+			break;
+		case MID_SESSION_AUTH_TYPE_UUID:
+			midocmf_format_uuid_bytes(buf, bufsize, auth->tag);
+			break;
+		case MID_SESSION_AUTH_TYPE_STRING:
+			snprintf(buf, bufsize, "%.*s", length, auth->tag);
+			break;
+		case MID_SESSION_AUTH_TYPE_UNKNOWN:
+		default:
+			buf[0] = 0;
+			break;
 	}
 
 	return 0;
@@ -306,34 +335,66 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 	// "IT": {if RFID => "ISO15693" if Len(tag) == 8 else "ISO14443", if Cloud "CENTRAL"}
 	// "ID": Hex Tag/UUID
 
+	mid_session_auth_t *auth = &active_session->auth;
 	if (active_session->has_auth) {
 		cJSON_AddBoolToObject(obj, "IS", true);
 
-		mid_session_auth_t *auth = &active_session->auth;
-		switch (auth->type) {
-			case MID_SESSION_AUTH_TYPE_BLE:
-			case MID_SESSION_AUTH_TYPE_RFID:
+		switch (auth->source) {
+			case MID_SESSION_AUTH_SOURCE_BLE:
+			case MID_SESSION_AUTH_SOURCE_RFID:
 				cJSON_AddStringToObject(obj, "IL", "HEARSAY");
 				break;
-			case MID_SESSION_AUTH_TYPE_CLOUD:
+			case MID_SESSION_AUTH_SOURCE_CLOUD:
 				cJSON_AddStringToObject(obj, "IL", "TRUSTED");
 				break;
-			case MID_SESSION_AUTH_TYPE_ISO15118:
-				// TODO: Is this always trusted?
-				cJSON_AddStringToObject(obj, "IL", "TRUSTED");
+			case MID_SESSION_AUTH_SOURCE_ISO15118:
+				// TODO: Is this always secure?
+				cJSON_AddStringToObject(obj, "IL", "SECURE");
+				break;
+			case MID_SESSION_AUTH_SOURCE_UNKNOWN:
+			default:
+				cJSON_AddStringToObject(obj, "IL", "NONE");
 				break;
 		}
 
-		if (auth->type == MID_SESSION_AUTH_TYPE_RFID) {
+		if (auth->source == MID_SESSION_AUTH_SOURCE_RFID) {
 			cJSON *flagArray = cJSON_CreateArray();
 			cJSON_AddItemToArray(flagArray, cJSON_CreateString("RFID_RELATED"));
 			cJSON_AddArrayToObject(obj, "IF");
-
-			cJSON_AddStringToObject(obj, "IT", auth->length == 8 ? "ISO15693" : "ISO14443");
-		} else if (auth->type == MID_SESSION_AUTH_TYPE_BLE) {
 		}
 
+#define ISO15693_LENGTH 8
 
+		switch(auth->type) {
+			case MID_SESSION_AUTH_TYPE_RFID:
+				if (auth->length == ISO15693_LENGTH) {
+					cJSON_AddStringToObject(obj, "IT", "ISO15693");
+				} else {
+					cJSON_AddStringToObject(obj, "IT", "ISO14443");
+				}
+				break;
+			case MID_SESSION_AUTH_TYPE_UUID:
+				cJSON_AddStringToObject(obj, "IT", "CENTRAL");
+				break;
+			case MID_SESSION_AUTH_TYPE_STRING:
+				// TODO: What to use for generic "string" type?
+				cJSON_AddStringToObject(obj, "IT", "UNDEFINED");
+				break;
+			case MID_SESSION_AUTH_TYPE_EMAID:
+				cJSON_AddStringToObject(obj, "IT", "EMAID");
+				break;
+			case MID_SESSION_AUTH_TYPE_EVCCID:
+				cJSON_AddStringToObject(obj, "IT", "EVCCID");
+				break;
+			case MID_SESSION_AUTH_TYPE_UNKNOWN:
+			default:
+				cJSON_AddStringToObject(obj, "IT", "NONE");
+				break;
+		}
+
+		char data[64];
+		midocmf_format_auth(data, sizeof (data), auth);
+		cJSON_AddStringToObject(obj, "ID", data);
 	} else {
 		cJSON_AddBoolToObject(obj, "IS", false);
 	}
@@ -345,7 +406,7 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 	cJSON *readerObject = cJSON_CreateObject();
 
 	if (active_session->has_id) {
-		midocmf_format_uuid_bytes(buf, sizeof (buf), &active_session->id);
+		midocmf_format_uuid(buf, sizeof (buf), &active_session->id);
 		cJSON_AddStringToObject(obj, "ZS", buf);
 	}
 

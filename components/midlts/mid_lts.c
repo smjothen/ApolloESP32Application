@@ -358,7 +358,7 @@ close:
 	return ret;
 }
 
-static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool initial) {
+static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool *allow_end_before_start, bool initial) {
 	midlts_err_t ret = LTS_OK;
 
 	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
@@ -407,7 +407,11 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 		}
 
 		if ((ret = mid_session_log_update_state(ctx, &rec)) != LTS_OK) {
-			return ret;
+			if (ret == LTS_SESSION_NOT_OPEN && *allow_end_before_start) {
+				*allow_end_before_start = false;
+			} else {
+				return ret;
+			}
 		}
 
 		first_record = false;
@@ -505,7 +509,7 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sessio
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
+midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
 	mid_session_record_t rec = {0};
 
 	if (data_size > sizeof (rec.auth.tag)) {
@@ -517,6 +521,7 @@ midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sess
 	}
 
 	rec.rec_type = MID_SESSION_RECORD_TYPE_AUTH;
+	rec.auth.source = source;
 	rec.auth.type = type;
 	rec.auth.length = data_size;
 	memcpy(rec.auth.tag, data, data_size);
@@ -602,10 +607,15 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time
 
 	midlts_id_t page = min_page;
 
+	// If we delete a file from the front of the queue (oldest entries) then we may have
+	// deleted the start of a session but not the end, in which case we allow the first end without
+	// having seen the corresponding start previously.
+	bool allow_end_before_start = true;
+
 	while (true) {
 		ESP_LOGI(TAG, "MID Session Replay  - %" PRIu32, page);
 
-		if ((ret = mid_session_log_replay(ctx, page, page == min_page)) != LTS_OK) {
+		if ((ret = mid_session_log_replay(ctx, page, &allow_end_before_start, page == min_page)) != LTS_OK) {
 			return ret;
 		}
 

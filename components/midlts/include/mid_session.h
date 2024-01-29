@@ -6,11 +6,22 @@
 #define PACK __attribute__((packed))
 
 typedef enum {
-    MID_SESSION_AUTH_TYPE_CLOUD = 0,
+    MID_SESSION_AUTH_TYPE_UNKNOWN = 0,
     MID_SESSION_AUTH_TYPE_RFID = 1,
-    MID_SESSION_AUTH_TYPE_BLE = 2,
-    MID_SESSION_AUTH_TYPE_ISO15118 = 3,
+    MID_SESSION_AUTH_TYPE_UUID = 2,
+    MID_SESSION_AUTH_TYPE_EMAID = 3,
+    MID_SESSION_AUTH_TYPE_EVCCID = 4,
+	// Generic type encoded as string (Not null-terminated!)
+	MID_SESSION_AUTH_TYPE_STRING = 5
 } mid_session_auth_type_t;
+
+typedef enum {
+	MID_SESSION_AUTH_SOURCE_UNKNOWN = 0,
+	MID_SESSION_AUTH_SOURCE_RFID = 1,
+	MID_SESSION_AUTH_SOURCE_BLE = 2,
+	MID_SESSION_AUTH_SOURCE_ISO15118 = 3,
+	MID_SESSION_AUTH_SOURCE_CLOUD = 4,
+} mid_session_auth_source_t;
 
 /* Struct definitions */
 typedef struct {
@@ -18,9 +29,10 @@ typedef struct {
 } PACK mid_session_id_t;
 
 typedef struct {
+    mid_session_auth_source_t source : 8;
     mid_session_auth_type_t type : 8;
     uint8_t length;
-    uint8_t tag[21];
+    uint8_t tag[20];
 } PACK mid_session_auth_t;
 
 typedef enum {

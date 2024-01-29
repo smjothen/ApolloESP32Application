@@ -13,16 +13,37 @@ static const char *TAG = "MIDLTS         ";
 const char *mid_session_get_auth_type_name(mid_session_auth_type_t type) {
 	switch(type) {
 		case MID_SESSION_AUTH_TYPE_RFID:
-			return "RFID";
-		case MID_SESSION_AUTH_TYPE_CLOUD:
-			return "Cloud";
-		case MID_SESSION_AUTH_TYPE_BLE:
-			return "BLE";
-		case MID_SESSION_AUTH_TYPE_ISO15118:
-			return "ISO15118";
+			return "UID";
+		case MID_SESSION_AUTH_TYPE_UUID:
+			return "UUID";
+		case MID_SESSION_AUTH_TYPE_EMAID:
+			return "EMAID";
+		case MID_SESSION_AUTH_TYPE_EVCCID:
+			return "EVCCID";
+		case MID_SESSION_AUTH_TYPE_STRING:
+			return "String";
+		case MID_SESSION_AUTH_TYPE_UNKNOWN:
+			return "Unknown";
 	}
 	return "Unknown";
 }
+
+const char *mid_session_get_auth_source_name(mid_session_auth_source_t source) {
+	switch(source) {
+		case MID_SESSION_AUTH_SOURCE_RFID:
+			return "RFID";
+		case MID_SESSION_AUTH_SOURCE_BLE:
+			return "BLE";
+		case MID_SESSION_AUTH_SOURCE_CLOUD:
+			return "Cloud";
+		case MID_SESSION_AUTH_SOURCE_ISO15118:
+			return "ISO15118";
+		case MID_SESSION_AUTH_SOURCE_UNKNOWN:
+			return "Unknown";
+	}
+	return "Unknown";
+}
+
 
 void mid_session_format_bytes_uuid(char *buf, uint8_t *bytes, size_t len) {
 	char *ptr = buf;
@@ -49,7 +70,8 @@ void mid_session_format_record_auth(mid_session_auth_t *auth, char *buf, size_t 
 	char rfid_buf[64] = {0};
 	mid_session_format_bytes(rfid_buf, auth->tag, auth->length);
 	const char *type = mid_session_get_auth_type_name(auth->type);
-	snprintf(buf, buf_size, "%s %s", type, rfid_buf);
+	const char *source = mid_session_get_auth_source_name(auth->source);
+	snprintf(buf, buf_size, "%s - %s %s", source, type, rfid_buf);
 }
 
 void mid_session_format_record_meter_value(mid_session_meter_value_t *mv, char *buf, size_t buf_size) {

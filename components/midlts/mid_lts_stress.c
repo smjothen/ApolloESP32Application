@@ -53,12 +53,25 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 
 	uint8_t buf[64] = {0};
 
-	mid_session_auth_type_t types[] = {
-		MID_SESSION_AUTH_TYPE_CLOUD,
-		MID_SESSION_AUTH_TYPE_RFID,
-		MID_SESSION_AUTH_TYPE_BLE,
-		MID_SESSION_AUTH_TYPE_ISO15118,
+	mid_session_auth_source_t sources[] = {
+		MID_SESSION_AUTH_SOURCE_UNKNOWN,
+		MID_SESSION_AUTH_SOURCE_RFID,
+		MID_SESSION_AUTH_SOURCE_BLE,
+		MID_SESSION_AUTH_SOURCE_ISO15118,
+		MID_SESSION_AUTH_SOURCE_CLOUD,
 	};
+	size_t nsources = sizeof (sources) / sizeof (sources[0]);
+
+	mid_session_auth_type_t types[] = {
+		MID_SESSION_AUTH_TYPE_RFID,
+		MID_SESSION_AUTH_TYPE_UUID,
+		MID_SESSION_AUTH_TYPE_EMAID,
+		MID_SESSION_AUTH_TYPE_EVCCID,
+		MID_SESSION_AUTH_TYPE_STRING,
+		MID_SESSION_AUTH_TYPE_UNKNOWN,
+
+	};
+	size_t ntypes = sizeof (types) / sizeof (types[0]);
 
 	uint32_t meter = 0;
 
@@ -78,7 +91,6 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 			ESP_LOGE(TAG, "Error appending initial session close : %s", mid_session_err_to_string(err));
 			return err;
 		}
-		last_meter[meter_count++] = rec.meter_value;
 	}
 
 	uint32_t sess_length = 0;
@@ -103,7 +115,7 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 			if (sess_length == auth_time) {
 				uint32_t size = 1 + esp_random() % 16;
 				mid_session_record_t rec;
-				if ((err = mid_session_add_auth(&ctx, &pos, &rec, time, types[esp_random() % 4], midlts_gen_rand(buf, size), size)) != LTS_OK) {
+				if ((err = mid_session_add_auth(&ctx, &pos, &rec, time, sources[esp_random() % nsources], types[esp_random() % ntypes], midlts_gen_rand(buf, size), size)) != LTS_OK) {
 					ESP_LOGE(TAG, "Couldn't log session auth : %s", mid_session_err_to_string(err));
 					return err;
 				}
