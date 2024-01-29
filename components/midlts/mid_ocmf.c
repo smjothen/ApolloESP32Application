@@ -9,6 +9,9 @@
 #include "mid_event.h"
 #include "mid_ocmf.h"
 
+#define MID_OCMF_FORMAT_VERSION_FV "1.0"
+#define MID_OCMF_GATEWAY_IDENTIFICATION_GI "Zaptec Go+"
+
 static const char *TAG = "MIDOCMF        ";
 
 static int midocmf_format_time(char *buf, size_t size, mid_session_meter_value_t *value) {
@@ -16,6 +19,36 @@ static int midocmf_format_time(char *buf, size_t size, mid_session_meter_value_t
 	utz_unix_to_datetime(MID_TIME_UNPACK(value->time), &dt);
 	utz_datetime_format_iso_ocmf(buf, size, &dt);
 	return 0;
+}
+
+static const char *midocmf_get_time_status_from_flag(uint32_t flag) {
+	char *time_status = NULL;
+
+	if (flag & MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED) {
+		time_status = " S";
+	} else if (flag & MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE) {
+		time_status = " I";
+	} else if (flag & MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE) {
+		time_status = " R";
+	} else if (flag & MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN) {
+		time_status = " U";
+	}
+
+	return time_status;
+}
+
+static const char *midocmf_get_transaction_type_from_flag(uint32_t flag) {
+	char *tx = NULL;
+
+	if (flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
+		tx = "B";
+	} else if (flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
+		tx = "E";
+	} else if (flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
+		tx = "T";
+	}
+
+	return tx;
 }
 
 static int midocmf_format_fw_version(char *buf, size_t size, mid_session_version_fw_t *fw) {
@@ -179,8 +212,8 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 
 	char buf[64];
 
-	cJSON_AddStringToObject(obj, "FV", "1.0");
-	cJSON_AddStringToObject(obj, "GI", "Zaptec Go Plus");
+	cJSON_AddStringToObject(obj, "FV", MID_OCMF_FORMAT_VERSION_FV);
+	cJSON_AddStringToObject(obj, "GI", MID_OCMF_GATEWAY_IDENTIFICATION_GI);
 	cJSON_AddStringToObject(obj, "GS", serial);
 
 	midocmf_format_fw_version(buf, sizeof (buf), &value->fw);
@@ -196,16 +229,15 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 
 	midocmf_format_time(buf, sizeof (buf), value);
 
-	const char *time_state = " U";
-	if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED) {
-		time_state = " S";
-	} else if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE) {
-		time_state = " I";
-	} else if (value->flag & MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE) {
-		time_state = " R";
+	const char *time_status = midocmf_get_time_status_from_flag(value->flag);
+	if (!time_status) {
+		cJSON_Delete(readerArray);
+		cJSON_Delete(readerObject);
+		cJSON_Delete(obj);
+		return -1;
 	}
 
-	strlcat(buf, time_state, sizeof (buf));
+	strlcat(buf, time_status, sizeof (buf));
 
 	cJSON_AddStringToObject(readerObject, "TM", buf);
 
@@ -317,8 +349,8 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 
 	char buf[64];
 
-	cJSON_AddStringToObject(obj, "FV", "1.0");
-	cJSON_AddStringToObject(obj, "GI", "Zaptec Go Plus");
+	cJSON_AddStringToObject(obj, "FV", MID_OCMF_FORMAT_VERSION_FV);
+	cJSON_AddStringToObject(obj, "GI", MID_OCMF_GATEWAY_IDENTIFICATION_GI);
 	cJSON_AddStringToObject(obj, "GS", serial);
 
 	midocmf_format_fw_version(buf, sizeof (buf), &active_session->fw);
@@ -327,16 +359,11 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 	midocmf_format_lr_version(buf, sizeof (buf), &active_session->lr);
 	cJSON_AddStringToObject(obj, "MF", buf);
 
-	// If active session is authenticated:
-	//
-	// "IS": {if BLE, RFID or Cloud => true, else false}
-	// "IL": {if BLE and RFID => "HEARSAY", if Cloud => "TRUSTED"]
-	// "IF": {if RFID => ["RFID_RELATED"], if Cloud, BLE => []}
-	// "IT": {if RFID => "ISO15693" if Len(tag) == 8 else "ISO14443", if Cloud "CENTRAL"}
-	// "ID": Hex Tag/UUID
+	cJSON_AddStringToObject(obj, "PG", "T1");
 
-	mid_session_auth_t *auth = &active_session->auth;
 	if (active_session->has_auth) {
+		mid_session_auth_t *auth = &active_session->auth;
+
 		cJSON_AddBoolToObject(obj, "IS", true);
 
 		switch (auth->source) {
@@ -399,16 +426,60 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 		cJSON_AddBoolToObject(obj, "IS", false);
 	}
 
-	cJSON_AddStringToObject(obj, "PG", "T1");
-
-	// TODO: Meter values
 	cJSON *readerArray = cJSON_CreateArray();
-	cJSON *readerObject = cJSON_CreateObject();
+
+	for (size_t i = 0; i < active_session->count; i++) {
+		mid_session_meter_value_t *reading = &active_session->events[i];
+
+		cJSON *readerObject = cJSON_CreateObject();
+
+		const char *obis = "1-0:1.8.0";
+		const char *tx_type = midocmf_get_transaction_type_from_flag(reading->flag);
+		const char *time_status = midocmf_get_time_status_from_flag(reading->flag);
+
+		if (!tx_type || !time_status) {
+			ESP_LOGI(TAG, "No valid reading flag: %08" PRIX32, reading->flag);
+			cJSON_Delete(readerObject);
+			cJSON_Delete(readerArray);
+			cJSON_Delete(obj);
+			return -1;
+		}
+
+		midocmf_format_time(buf, sizeof (buf), reading);
+		strlcat(buf, time_status, sizeof (buf));
+
+		cJSON_AddStringToObject(readerObject, "TM", buf);
+		cJSON_AddStringToObject(readerObject, "TX", tx_type);
+
+		if (i == 0) {
+			cJSON_AddStringToObject(readerObject, "RU", "kWh");
+		}
+
+		if (reading->flag & MID_SESSION_METER_VALUE_FLAG_METER_ERROR) {
+			const char *meter_state = "E";
+			cJSON_AddStringToObject(readerObject, "ST", meter_state);
+		} else {
+			const char *meter_state = "G";
+			cJSON_AddStringToObject(readerObject, "RI", obis);
+			cJSON_AddNumberToObject(readerObject, "RV", reading->meter / 1000.0);
+			cJSON_AddStringToObject(readerObject, "ST", meter_state);
+		}
+
+		cJSON_AddItemToArray(readerArray, readerObject);
+	}
+
+	cJSON_AddItemToObject(obj, "RD", readerArray);
 
 	if (active_session->has_id) {
 		midocmf_format_uuid(buf, sizeof (buf), &active_session->id);
 		cJSON_AddStringToObject(obj, "ZS", buf);
 	}
+
+	char *json = cJSON_PrintUnformatted(obj);
+	snprintf(outbuf, size, "OCMF|%s", json);
+
+	cJSON_Delete(obj);
+	free(json);
 
 	return 0;
 }
