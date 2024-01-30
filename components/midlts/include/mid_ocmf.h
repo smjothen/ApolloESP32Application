@@ -6,6 +6,7 @@
 
 #include "mid_event.h"
 #include "mid_sign.h"
+#include "mid_lts.h"
 #include "mid_ocmf.h"
 #include "mid_session.h"
 
@@ -14,5 +15,7 @@ int midocmf_fiscal_from_record(char *outbuf, size_t size, const char *serial, mi
 
 int midocmf_fiscal_from_meter_value_signed(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign);
 int midocmf_fiscal_from_record_signed(char *outbuf, size_t size, const char *serial, mid_session_record_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign);
+
+int midocmf_transaction_from_active_session(char *outbuf, size_t size, const char *serial, midlts_active_t *active_session);
 
 #endif

@@ -46,7 +46,7 @@ typedef struct {
 	size_t count;
 	size_t capacity;
 	mid_session_meter_value_t *events;
-} midlts_active_session_t;
+} midlts_active_t;
 
 typedef struct _midlts_ctx_t {
 	mid_session_version_fw_t fw_version;
@@ -63,7 +63,7 @@ typedef struct _midlts_ctx_t {
 	// to this can be purged (if older than the max age as well)
 	midlts_pos_t min_purgeable;
 
-	midlts_active_session_t active_session;
+	midlts_active_t active_session;
 } midlts_ctx_t;
 
 #define MID_SESSION_IS_OPEN(ctx) (!!((ctx)->flags & LTS_FLAG_SESSION_OPEN))

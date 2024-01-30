@@ -335,7 +335,7 @@ int midocmf_fiscal_from_record_signed(char *outbuf, size_t size, const char *ser
 	return 0;
 }
 
-int midocmf_transaction_from_active_session(char *outbuf, size_t size, const char *serial, midlts_active_session_t *active_session) {
+int midocmf_transaction_from_active_session(char *outbuf, size_t size, const char *serial, midlts_active_t *active_session) {
 	if (active_session->count <= 0) {
 		ESP_LOGE(TAG, "Can't serialize empty session!");
 		return -1;
@@ -387,7 +387,7 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 		if (auth->source == MID_SESSION_AUTH_SOURCE_RFID) {
 			cJSON *flagArray = cJSON_CreateArray();
 			cJSON_AddItemToArray(flagArray, cJSON_CreateString("RFID_RELATED"));
-			cJSON_AddArrayToObject(obj, "IF");
+			cJSON_AddItemToObject(obj, "IF", flagArray);
 		}
 
 #define ISO15693_LENGTH 8
