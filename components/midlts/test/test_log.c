@@ -17,7 +17,7 @@ TEST_CASE("Test no leakages", "[mid]") {
 	RESET;
 
 	midlts_ctx_t ctx;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(0), default_fw, default_lr));
 
 	mid_session_free(&ctx);
 }
@@ -27,30 +27,30 @@ TEST_CASE("Test active session", "[mid][allowleak]") {
 
 	midlts_ctx_t ctx;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(0), default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, NULL, NULL, MID_TIME_TO_TS(0), 0, 0));
 	TEST_ASSERT_EQUAL_INT(0, ctx.active_session.count);
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL, MID_TIME_TO_TS(0), 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_OPEN(&ctx));
 
 	uint8_t empty[16] = {0};
 	uint8_t uuid[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 	uint8_t uuid1[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16};
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, 0, uuid));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, MID_TIME_TO_TS(0), uuid));
 
 	TEST_ASSERT_EQUAL_INT(1, ctx.active_session.count);
 	TEST_ASSERT_EQUAL_MEMORY(uuid, ctx.active_session.id.uuid, sizeof (uuid));
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, 0, uuid1));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_id(&ctx, NULL, NULL, MID_TIME_TO_TS(0), uuid1));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, NULL, NULL,MID_TIME_TO_TS( 0), 0, 0));
 
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 	TEST_ASSERT_EQUAL_INT(2, ctx.active_session.count);
 
 	TEST_ASSERT_EQUAL_MEMORY(uuid1, ctx.active_session.id.uuid, sizeof (uuid1));
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, NULL, NULL,MID_TIME_TO_TS( 0), 0, 0));
 
 	TEST_ASSERT_EQUAL_MEMORY(empty, ctx.active_session.id.uuid, sizeof (uuid));
 
@@ -63,8 +63,8 @@ TEST_CASE("Test session closed when not open", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(0), default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_SESSION_NOT_OPEN, mid_session_add_close(&ctx, &pos, NULL, MID_TIME_TO_TS(0), 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
 	mid_session_free(&ctx);
@@ -77,10 +77,10 @@ TEST_CASE("Test session open close", "[mid][allowleak]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(0), default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, MID_TIME_TO_TS(0), 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_OPEN(&ctx));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, MID_TIME_TO_TS(0), 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
 	mid_session_free(&ctx);
@@ -93,11 +93,11 @@ TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
 	midlts_pos_t pos;
 	mid_session_record_t rec[2];
 
-	time_t now = MID_EPOCH;
+	const struct timespec ts = MID_TIME_TO_TS(0);
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, &rec[0], now, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, &rec[1], now, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, ts, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, &rec[0], ts, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, &rec[1], ts, MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN, 0));
 
 	char buf[512];
 
@@ -106,11 +106,13 @@ TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_record(buf, sizeof (buf), "ZAP000001", &rec[1], NULL));
 	ESP_LOGI(TAG, "%s", buf);
 
-	const char *expected = "OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go Plus\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2020-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}";
+	const char *expected = "OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}";
 	TEST_ASSERT_EQUAL_STRING(expected, buf);
 
 	mid_session_free(&ctx);
 }
+
+static const struct timespec epoch = MID_TIME_TO_TS(0);
 
 TEST_CASE("Test session flag persistence", "[mid]") {
 	RESET;
@@ -118,20 +120,20 @@ TEST_CASE("Test session flag persistence", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, epoch, 0, 0));
 
 	mid_session_free(&ctx);
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
 	TEST_ASSERT(MID_SESSION_IS_OPEN(&ctx));
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, epoch, 0, 0));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
 	mid_session_free(&ctx);
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
 	TEST_ASSERT(MID_SESSION_IS_CLOSED(&ctx));
 
 	mid_session_free(&ctx);
@@ -143,10 +145,10 @@ TEST_CASE("Test session open twice", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_SESSION_ALREADY_OPEN, mid_session_add_open(&ctx, &pos, NULL, 0,  0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_SESSION_ALREADY_OPEN, mid_session_add_open(&ctx, &pos, NULL, epoch,  0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, epoch, 0, 0));
 
 	mid_session_free(&ctx);
 }
@@ -157,11 +159,11 @@ TEST_CASE("Test tariff change allowed out of session", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 
 	mid_session_free(&ctx);
 }
@@ -172,13 +174,13 @@ TEST_CASE("Test persistence", "[mid]") {
 	midlts_ctx_t ctx, ctx2;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, 0, 0, 0));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_close(&ctx, &pos, NULL, epoch, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx2, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx2, epoch, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(ctx2.msg_id, ctx.msg_id);
 
 	mid_session_free(&ctx);
@@ -191,18 +193,18 @@ TEST_CASE("Test persistence over multiple pages", "[mid]") {
 	midlts_ctx_t ctx, ctx1;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
 
 	for (size_t i = 0; i < 128; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 	}
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, 0, 0, 0));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 
 	TEST_ASSERT_EQUAL_INT(0, remove("/mid/0.ms"));
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx1, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx1, epoch, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(ctx.msg_id, ctx1.msg_id);
 
 	mid_session_free(&ctx);
@@ -213,9 +215,8 @@ TEST_CASE("Test reading records", "[mid]") {
 	RESET;
 
 	midlts_ctx_t ctx;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, epoch, default_fw, default_lr));
 
-	uint32_t time = MID_EPOCH;
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
@@ -223,7 +224,7 @@ TEST_CASE("Test reading records", "[mid]") {
 	midlts_pos_t pos[8];
 
 	for (int i = 0; i < 8; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, time++, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, epoch, flag, meter));
 		meter += 100;
 		count++;
 	}
@@ -254,10 +255,11 @@ TEST_CASE("Test reading records", "[mid]") {
 TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	RESET;
 
-	midlts_ctx_t ctx;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	uint64_t time = 0;
 
-	uint32_t time = 0;
+	midlts_ctx_t ctx;
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(time), default_fw, default_lr));
+
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
@@ -265,9 +267,10 @@ TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	midlts_pos_t pos[8];
 
 	for (int i = 0; i < 8; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, time++, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, MID_TIME_TO_TS(time), flag, meter));
 		meter += 100;
 		count++;
+		time += 1000 * 60 * 60;
 	}
 
 	// Corrupt first record
@@ -276,17 +279,18 @@ TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	TEST_ASSERT(fputc('z', fp) == 'z');
 	TEST_ASSERT(!fclose(fp));
 
-	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, MID_TIME_TO_TS(time), default_fw, default_lr));
 	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	RESET;
 
-	midlts_ctx_t ctx;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	uint64_t time = 0;
 
-	uint32_t time = 0;
+	midlts_ctx_t ctx;
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(time), default_fw, default_lr));
+
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
@@ -294,9 +298,10 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	midlts_pos_t pos[8];
 
 	for (int i = 0; i < 8; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, time++, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, MID_TIME_TO_TS(time), flag, meter));
 		meter += 100;
 		count++;
+		time += 1000 * 60 * 60;
 	}
 
 	FILE *fp = fopen("/mid/0.ms", "r+");
@@ -305,17 +310,18 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	TEST_ASSERT(fputc('z', fp) == 'z');
 	TEST_ASSERT(!fclose(fp));
 
-	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, MID_TIME_TO_TS(time), default_fw, default_lr));
 	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test position and reading", "[mid]") {
 	RESET;
 
-	midlts_ctx_t ctx;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, 0, default_fw, default_lr));
+	uint64_t time = 0;
 
-	uint32_t time = MID_EPOCH;
+	midlts_ctx_t ctx;
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, MID_TIME_TO_TS(time), default_fw, default_lr));
+
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
@@ -323,9 +329,10 @@ TEST_CASE("Test position and reading", "[mid]") {
 	midlts_pos_t pos[8];
 
 	for (int i = 0; i < 8; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, time++, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos[i], NULL, MID_TIME_TO_TS(time), flag, meter));
 		meter += 100;
 		count++;
+		time += 1000 * 60 * 60;
 	}
 
 	for (int i = 0; i < 8; i++) {
@@ -344,24 +351,26 @@ TEST_CASE("Test position and reading", "[mid]") {
 TEST_CASE("Test purge fail", "[mid]") {
 	RESET;
 
+	uint64_t time = 0;
+
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, 0, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, MID_TIME_TO_TS(time), default_fw, default_lr));
 
-	uint32_t time = MID_EPOCH;
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
 
 	// Fill two full pages, next entry will try to delete the first page
 	for (int i = 0; i < 128 * 2; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time++, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
 		meter += 100;
 		count++;
+		time += 1000 * 60 * 60;
 	}
 
 	// Time will be epoch + 256, definitely not old enough to automatically purge
-	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time++, flag, meter));
+	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
 }
 
 TEST_CASE("Test purge success", "[mid]") {
@@ -370,24 +379,25 @@ TEST_CASE("Test purge success", "[mid]") {
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, 0, default_fw, default_lr));
+	uint64_t time = 0;
 
-	uint32_t time = MID_EPOCH;
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, MID_TIME_TO_TS(time), default_fw, default_lr));
+
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
 	uint32_t count = 0;
 
 	// Fill two full pages, next entry will try to delete the first page
 	for (int i = 0; i < 128 * 2; i++) {
-		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time, flag, meter));
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
 		meter += 100;
 		// Ensures first page is old enough at time of deletion
-		time += 20925;
+		time += 20925 * 1000;
 		count++;
 	}
 
 	// Time will be epoch + 256, definitely not old enough to automatically purge
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, time, flag, meter));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
 
 	mid_session_free(&ctx);
 }

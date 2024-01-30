@@ -157,7 +157,7 @@ static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx) {
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_try_purge(midlts_ctx_t *ctx, time_t now_unix) {
+static midlts_err_t mid_session_log_try_purge(midlts_ctx_t *ctx, const struct timespec now) {
 	bool found = false;
 	mid_session_record_t meter = {0};
 
@@ -174,16 +174,16 @@ static midlts_err_t mid_session_log_try_purge(midlts_ctx_t *ctx, time_t now_unix
 		return mid_session_log_purge(ctx);
 	}
 
-	int32_t age = MID_TIME_PACK(now_unix) - meter.meter_value.time;
+	int64_t age = MID_TS_TO_TIME(now) - meter.meter_value.time;
 
 	if (age > MID_TIME_MAX_AGE) {
-		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days > Threshold", ctx->msg_page, (double)age / (24 * 60 * 60));
+		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days > Threshold", ctx->msg_page, (double)age / (1000 * 24 * 60 * 60));
 		mid_session_print_record(&meter);
 
 		return mid_session_log_purge(ctx);
 	}
 
-	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days < Threshold", ctx->msg_page, (double)age / (24 * 60 * 60));
+	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days < Threshold", ctx->msg_page, (double)age / (1000 * 24 * 60 * 60));
 	mid_session_print_record(&meter);
 
 	return LTS_LOG_FILE_FULL;
@@ -254,7 +254,7 @@ close:
 	return ret;
 }
 
-static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, time_t now, mid_session_record_t *rec) {
+static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos, const struct timespec now, mid_session_record_t *rec) {
 	midlts_err_t err = mid_session_log_record_internal(ctx, pos, rec);
 
 	if (err == LTS_LOG_FILE_FULL) {
@@ -425,16 +425,16 @@ close:
 	return ret;
 }
 
-static void mid_session_fill_meter_value(midlts_ctx_t *ctx, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter, mid_session_record_t *rec) {
+static void mid_session_fill_meter_value(midlts_ctx_t *ctx, const struct timespec now, mid_session_meter_value_flag_t flag, uint32_t meter, mid_session_record_t *rec) {
 	rec->rec_type = MID_SESSION_RECORD_TYPE_METER_VALUE;
 	rec->meter_value.lr = ctx->lr_version;
 	rec->meter_value.fw = ctx->fw_version;
-	rec->meter_value.time = MID_TIME_PACK(now);
+	rec->meter_value.time = MID_TS_TO_TIME(now);
 	rec->meter_value.flag = flag;
 	rec->meter_value.meter = meter;
 }
 
-midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	mid_session_record_t rec = {0};
 	mid_session_fill_meter_value(ctx, now, flag | MID_SESSION_METER_VALUE_READING_FLAG_START, meter, &rec);
 
@@ -453,7 +453,7 @@ midlts_err_t mid_session_add_open(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sess
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	mid_session_record_t rec = {0};
 	mid_session_fill_meter_value(ctx, now, flag | MID_SESSION_METER_VALUE_READING_FLAG_TARIFF, meter, &rec);
 
@@ -469,7 +469,7 @@ midlts_err_t mid_session_add_tariff(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_se
 	return err;
 }
 
-midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_meter_value_flag_t flag, uint32_t meter) {
+midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_meter_value_flag_t flag, uint32_t meter) {
 	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
 		return LTS_SESSION_NOT_OPEN;
 	}
@@ -489,7 +489,7 @@ midlts_err_t mid_session_add_close(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_ses
 }
 
 // These two following functions can only add data to an open session
-midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, uint8_t uuid[16]) {
+midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, uint8_t uuid[16]) {
 	if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
 		return LTS_SESSION_NOT_OPEN;
 	}
@@ -509,7 +509,7 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sessio
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, time_t now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
+midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size) {
 	mid_session_record_t rec = {0};
 
 	if (data_size > sizeof (rec.auth.tag)) {
@@ -543,7 +543,7 @@ midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, const struct timespec now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	midlts_err_t ret = LTS_OK;
 
 	memset(ctx, 0, sizeof (*ctx));
@@ -643,7 +643,7 @@ midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_s
 }
 
 // Functions below only for testing purposes
-midlts_err_t mid_session_init(midlts_ctx_t *ctx, time_t now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+midlts_err_t mid_session_init(midlts_ctx_t *ctx, const struct timespec now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
 }
 

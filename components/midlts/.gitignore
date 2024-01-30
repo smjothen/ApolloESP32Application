@@ -2,3 +2,4 @@
 *.ms
 mid_lts
 mid_signer
+*.dSYM

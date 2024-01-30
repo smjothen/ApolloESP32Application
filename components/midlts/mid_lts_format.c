@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 
+#include "utz.h"
+
 #include "mid_session.h"
 #include "mid_lts.h"
 #include "mid_lts_priv.h"
@@ -100,10 +102,17 @@ void mid_session_format_record_meter_value(mid_session_meter_value_t *mv, char *
 	if (mv->flag & MID_SESSION_METER_VALUE_FLAG_METER_ERROR) {
 		strlcat(type, "M", sizeof (type));
 	}
-	snprintf(buf, buf_size, "FW %d.%d.%d.%d / LR %d.%d.%d - %010" PRId32 " / %08" PRId32 " - %s",
+
+	char buf2[64];
+
+	udatetime_t dt;
+	utz_datetime_init_timespec(&dt, &MID_TIME_TO_TS(mv->time));
+	utz_datetime_format_iso_ocmf(buf2, sizeof (buf2), &dt);
+
+	snprintf(buf, buf_size, "FW %d.%d.%d.%d / LR %d.%d.%d - %s / %08" PRId32 " - %s",
 			mv->fw.major, mv->fw.minor, mv->fw.patch, mv->fw.extra,
 			mv->lr.major, mv->lr.minor, mv->lr.patch,
-			mv->time, mv->meter,
+			buf2, mv->meter,
 			type);
 }
 

@@ -16,13 +16,13 @@ static const char *TAG = "MIDOCMF        ";
 
 static int midocmf_format_time(char *buf, size_t size, mid_session_meter_value_t *value) {
 	udatetime_t dt;
-	utz_unix_to_datetime(MID_TIME_UNPACK(value->time), &dt);
+	utz_datetime_init_timespec(&dt, &MID_TIME_TO_TS(value->time));
 	utz_datetime_format_iso_ocmf(buf, size, &dt);
 	return 0;
 }
 
 static const char *midocmf_get_time_status_from_flag(uint32_t flag) {
-	char *time_status = NULL;
+	const char *time_status = NULL;
 
 	if (flag & MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED) {
 		time_status = " S";
@@ -38,7 +38,7 @@ static const char *midocmf_get_time_status_from_flag(uint32_t flag) {
 }
 
 static const char *midocmf_get_transaction_type_from_flag(uint32_t flag) {
-	char *tx = NULL;
+	const char *tx = NULL;
 
 	if (flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
 		tx = "B";
@@ -438,7 +438,7 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 		const char *time_status = midocmf_get_time_status_from_flag(reading->flag);
 
 		if (!tx_type || !time_status) {
-			ESP_LOGI(TAG, "No valid reading flag: %08" PRIX32, reading->flag);
+			ESP_LOGI(TAG, "No valid reading flag: %08" PRIX16, reading->flag);
 			cJSON_Delete(readerObject);
 			cJSON_Delete(readerArray);
 			cJSON_Delete(obj);
