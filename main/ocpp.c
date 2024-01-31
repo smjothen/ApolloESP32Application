@@ -3884,8 +3884,6 @@ static void ocpp_task(){
 		}
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
-		ulTaskNotifyTake(pdTRUE, 0); // Clear waiting events to OCPP
-
 		prepare_reset(graceful_exit);
 		ocpp_auth_deinit();
 		ocpp_reservation_deinit();
@@ -3893,6 +3891,7 @@ clean:
 		stop_ocpp_heartbeat();
 		stop_ocpp();
 		stop_clock_aligned_meter_values();
+		ulTaskNotifyTake(pdTRUE, 0); // Clear waiting events to OCPP
 
 		ESP_LOGI(TAG, "Teardown complete");
 

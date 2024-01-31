@@ -2264,8 +2264,7 @@ enum ocpp_mcu_error_code{
 	/* eOCPP_MCU_UNDER_VOLTAGE = ,*/
 };
 
-// TODO: Update with errors that need to be cleared before exiting faulted state
-#define MCU_WARNING_TRANSITION_FAULTED (WARNING_RCD | WARNING_CLEAR_REPLUG | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT_TRANSITION | WARNING_CLEAR_DISCONNECT)
+#define MCU_WARNING_TRANSITION_FAULTED ~(eOCPP_MCU_EV_COMMUNICATION_ERROR | WARNING_DISABLED)
 
 static void handle_faulted(){
 	if((ocpp_notified_warnings & MCU_WARNING_TRANSITION_FAULTED) == false){
@@ -2333,7 +2332,12 @@ static void handle_warnings(enum ocpp_cp_status_id * state, uint32_t warning_mas
 						"Unable to lock cable to charging station", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_EV_COMMUNICATION_ERROR){
-			ocpp_send_status_notification(*state, OCPP_CP_ERROR_EV_COMMUNICATION_ERROR,
+			const char * error_code = OCPP_CP_ERROR_EV_COMMUNICATION_ERROR;
+			// OCPP 1.6 only allows EV Communication error to signal warning and not during specific states
+			if(*state == eOCPP_CP_STATUS_CHARGING || *state == eOCPP_CP_STATUS_FAULTED || *state == eOCPP_CP_STATUS_AVAILABLE)
+				error_code = OCPP_CP_ERROR_OTHER_ERROR;
+
+			ocpp_send_status_notification(*state, error_code,
 						"Vehicle communication error, Inspect cable and car", NULL, vendor_error_code, true, false);
 		}
 		if(new_warning & eOCPP_MCU_GROUND_FAILURE){
