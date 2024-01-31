@@ -99,15 +99,13 @@ TEST_CASE("Test OCMF serialization of fiscal message", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_open(&ctx, &pos, &rec[0], ts, 0, 0));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, &rec[1], ts, MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN, 0));
 
-	char buf[512];
-
 	// Not a meter value
-	TEST_ASSERT_EQUAL_INT(-1, midocmf_fiscal_from_record(buf, sizeof (buf), "ZAP000001", &rec[0], NULL));
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_record(buf, sizeof (buf), "ZAP000001", &rec[1], NULL));
-	ESP_LOGI(TAG, "%s", buf);
+	TEST_ASSERT_EQUAL_INT(NULL, midocmf_signed_fiscal_from_record(NULL, "ZAP000001", &rec[0], NULL));
+	const char *ocmf = midocmf_signed_fiscal_from_record(NULL, "ZAP000001", &rec[1], NULL);
+	ESP_LOGI(TAG, "%s", ocmf);
 
 	const char *expected = "OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}";
-	TEST_ASSERT_EQUAL_STRING(expected, buf);
+	TEST_ASSERT_EQUAL_STRING(expected, ocmf);
 
 	mid_session_free(&ctx);
 }

@@ -15,6 +15,7 @@ static midlts_err_t midlts_active_session_grow(midlts_active_t *active, size_t c
 }
 
 midlts_err_t midlts_active_session_alloc(midlts_active_t *active) {
+	memset(active, 0, sizeof (*active));
 	return midlts_active_session_grow(active, 64);
 }
 

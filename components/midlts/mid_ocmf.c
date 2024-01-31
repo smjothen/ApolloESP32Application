@@ -193,21 +193,21 @@ static int midocmf_fiscal_add_event_log(cJSON *json, mid_event_log_t *log) {
 	return 0;
 }
 
-int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log) {
+static const char *midocmf_fiscal_from_meter_value_payload(const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log) {
 	if (!value) {
-		return -1;
+		return NULL;
 	}
 
 	if (!(value->flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF)) {
 		// Only support serializing tariff change values?
 		ESP_LOGE(TAG, "Attempt to serialize non-tariff change as fiscal message!");
-		return -1;
+		return NULL;
 	}
 
 	cJSON *obj = cJSON_CreateObject();
 	if (!obj) {
 		ESP_LOGI(TAG, "Couldn't allocate JSON struct!");
-		return -1;
+		return NULL;
 	}
 
 	char buf[64];
@@ -234,7 +234,7 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 		cJSON_Delete(readerArray);
 		cJSON_Delete(readerObject);
 		cJSON_Delete(obj);
-		return -1;
+		return NULL;
 	}
 
 	strlcat(buf, time_status, sizeof (buf));
@@ -255,42 +255,32 @@ int midocmf_fiscal_from_meter_value(char *outbuf, size_t size, const char *seria
 	if (midocmf_fiscal_add_event_log(obj, log) < 0) {
 		ESP_LOGE(TAG, "Error appending event log to entry!");
 		cJSON_Delete(obj);
-		return -1;
+		return NULL;
 	}
 
 	char *json = cJSON_PrintUnformatted(obj);
-	snprintf(outbuf, size, "OCMF|%s", json);
 
 	cJSON_Delete(obj);
-	free(json);
-
-	return 0;
+	return json;
 }
 
-int midocmf_fiscal_from_record(char *outbuf, size_t size, const char *serial, mid_session_record_t *value, mid_event_log_t *log) {
-	if (!value || value->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
-		return -1;
-	}
-	return midocmf_fiscal_from_meter_value(outbuf, size, serial, &value->meter_value, log);
-}
-
-static int midocmf_fiscal_do_signature(mid_sign_ctx_t *ctx, char *outbuf, size_t size) {
+static const char *midocmf_sign_data(mid_sign_ctx_t *ctx, const char *data) {
 	if (!mid_sign_ctx_ready(ctx)) {
-		return -1;
+		return NULL;
 	}
 
 	cJSON *sigObj = cJSON_CreateObject();
 	if (!sigObj) {
-		return -1;
+		return NULL;
 	}
 
 	static char sig_buf[256];
 	size_t sig_len = sizeof (sig_buf);
 
-	if (mid_sign_ctx_sign(ctx, outbuf, strlen(outbuf), sig_buf, &sig_len) != 0) {
+	if (mid_sign_ctx_sign(ctx, (char *)data, strlen(data), sig_buf, &sig_len) != 0) {
 		cJSON_Delete(sigObj);
 		ESP_LOGE(TAG, "Error signing fiscal message!");
-		return -1;
+		return NULL;
 	}
 
 	cJSON_AddStringToObject(sigObj, "SA", "ECDSA-secp384r1-SHA256");
@@ -301,50 +291,60 @@ static int midocmf_fiscal_do_signature(mid_sign_ctx_t *ctx, char *outbuf, size_t
 	if (!json) {
 		cJSON_Delete(sigObj);
 		ESP_LOGE(TAG, "Error allocating JSON serialization!");
-		return -1;
+		return NULL;
 	}
 
-	snprintf(sig_buf, sizeof (sig_buf), "|%s", json);
-	strlcat(outbuf, sig_buf, size);
-
-	free(json);
-	return 0;
+	cJSON_Delete(sigObj);
+	return json;
 }
 
-int midocmf_fiscal_from_meter_value_signed(char *outbuf, size_t size, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign) {
-	if (midocmf_fiscal_from_meter_value(outbuf, size, serial, value, log) < 0) {
-		return -1;
+static const char *midocmf_signed_ocmf_payload(mid_sign_ctx_t *ctx, const char *payload) {
+	const char *signature = NULL;
+
+	if (ctx && (signature = midocmf_sign_data(ctx, payload)) == NULL) {
+		free((char *)payload);
+		return NULL;
 	}
 
-	if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
-		return -1;
-	}
+	size_t buf_size = 5 + strlen(payload) + (signature ? 1 + strlen(signature) : 0) + 1;
+	char *buf =  malloc(buf_size);
+	snprintf(buf, buf_size, "OCMF|%s%s%s", payload, signature ? "|" : "", signature ? signature : "");
 
-	return 0;
+	free((char *)payload);
+
+	if (signature) {
+		free((char *)signature);
+	}
+	return buf;
 }
 
-int midocmf_fiscal_from_record_signed(char *outbuf, size_t size, const char *serial, mid_session_record_t *value, mid_event_log_t *log, mid_sign_ctx_t *sign) {
-	if (midocmf_fiscal_from_record(outbuf, size, serial, value, log) < 0) {
-		return -1;
+const char *midocmf_signed_fiscal_from_meter_value(mid_sign_ctx_t *ctx, const char *serial, mid_session_meter_value_t *value, mid_event_log_t *log) {
+	const char *payload = NULL;
+	if ((payload = midocmf_fiscal_from_meter_value_payload(serial, value, log)) == NULL) {
+		return NULL;
 	}
 
-	if (midocmf_fiscal_do_signature(sign, outbuf, size) < 0) {
-		return -1;
-	}
-
-	return 0;
+	const char *ocmf_signed = midocmf_signed_ocmf_payload(ctx, payload);
+	return ocmf_signed;
 }
 
-int midocmf_transaction_from_active_session(char *outbuf, size_t size, const char *serial, midlts_active_t *active_session) {
+const char *midocmf_signed_fiscal_from_record(mid_sign_ctx_t *ctx, const char *serial, mid_session_record_t *value, mid_event_log_t *log) {
+	if (!value || value->rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
+		return NULL;
+	}
+	return midocmf_signed_fiscal_from_meter_value(ctx, serial, &value->meter_value, log);
+}
+
+static const char *midocmf_transaction_from_active_session(mid_sign_ctx_t *ctx, const char *serial, midlts_active_t *active_session) {
 	if (active_session->count <= 0) {
 		ESP_LOGE(TAG, "Can't serialize empty session!");
-		return -1;
+		return NULL;
 	}
 
 	cJSON *obj = cJSON_CreateObject();
 	if (!obj) {
 		ESP_LOGE(TAG, "Couldn't allocate JSON struct!");
-		return -1;
+		return NULL;
 	}
 
 	char buf[64];
@@ -442,7 +442,7 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 			cJSON_Delete(readerObject);
 			cJSON_Delete(readerArray);
 			cJSON_Delete(obj);
-			return -1;
+			return NULL;
 		}
 
 		midocmf_format_time(buf, sizeof (buf), reading);
@@ -476,10 +476,17 @@ int midocmf_transaction_from_active_session(char *outbuf, size_t size, const cha
 	}
 
 	char *json = cJSON_PrintUnformatted(obj);
-	snprintf(outbuf, size, "OCMF|%s", json);
-
 	cJSON_Delete(obj);
-	free(json);
 
-	return 0;
+	return json;
+}
+
+const char *midocmf_signed_transaction_from_active_session(mid_sign_ctx_t *ctx, const char *serial, midlts_active_t *active_session) {
+	const char *payload = NULL;
+	if ((payload = midocmf_transaction_from_active_session(ctx, serial, active_session)) == NULL) {
+		return NULL;
+	}
+
+	const char *ocmf_signed = midocmf_signed_ocmf_payload(ctx, payload);
+	return ocmf_signed;
 }

@@ -16,75 +16,58 @@ static const mid_session_version_lr_t lr = { 1, 2, 3 };
 
 TEST_CASE("Test OCMF signed energy - No time flag", "[ocmf][allowleak]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF };
-
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(-1, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	TEST_ASSERT_EQUAL(NULL, midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL));
 }
 
 TEST_CASE("Test OCMF signed energy - No reading flag", "[ocmf][allowleak]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED };
-
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(-1, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	TEST_ASSERT_EQUAL(NULL, midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL));
 }
 
 TEST_CASE("Test OCMF signed energy - Has time flag and reading flag", "[ocmf][allowleak]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED | MID_SESSION_METER_VALUE_READING_FLAG_TARIFF };
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	const char *buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}", buf);
 }
 
 TEST_CASE("Test OCMF signed energy only for tariff changes", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = 0 };
-
-	char buf[512];
-
 	// Not a tariff change (flag = 0)
-	TEST_ASSERT_EQUAL_INT(-1, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	TEST_ASSERT_EQUAL(NULL, midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL));
 }
 
 TEST_CASE("Test OCMF signed energy - Unknown", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN };
-
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
-
-
+	const char * buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 U\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}", buf);
 }
 
 TEST_CASE("Test OCMF signed energy - Sync", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED };
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	const char * buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}", buf);
 }
 
 TEST_CASE("Test OCMF signed energy - Relative", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE };
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	const char * buf  = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 R\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}", buf);
 }
 
 TEST_CASE("Test OCMF signed energy - Informative", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE };
-	char buf[512];
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, NULL));
+	const char * buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, NULL);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}", buf);
 }
 
 TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	mid_session_meter_value_t meter_value = { .fw = fw, .lr = lr, .time = 0, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE };
 
-	char buf[512];
-
 	mid_event_log_t log;
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_init(&log));
 
 	// Empty log
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	const char * buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[]}", buf);
 
@@ -92,7 +75,7 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_add(&log, &entry));
 
 	// 0 Init
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[{\"ES\":0,\"ET\":\"INIT\",\"EC\":0}]}", buf);
 
@@ -101,7 +84,7 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	mid_event_log_entry_t entry2 = {.type = MID_EVENT_LOG_TYPE_FAIL, .seq = 1, .data = (0 << 8) | 6};
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_add(&log, &entry2));
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[{\"ES\":0,\"ET\":\"INIT\",\"EC\":0},{\"ES\":1,\"ET\":\"FAIL\",\"EV\":\"v1.0.6\"}]}", buf);
 
@@ -109,7 +92,7 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	mid_event_log_entry_t entry3 = {.type = MID_EVENT_LOG_TYPE_START, .seq = 2, .data = (0 << 8) | 6};
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_add(&log, &entry3));
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[{\"ES\":0,\"ET\":\"INIT\",\"EC\":0},{\"ES\":1,\"ET\":\"FAIL\",\"EV\":\"v1.0.6\"},{\"ES\":2,\"ET\":\"START\",\"EV\":\"v1.0.6\"}]}", buf);
 
@@ -117,7 +100,7 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	mid_event_log_entry_t entry4 = {.type = MID_EVENT_LOG_TYPE_SUCCESS, .seq = 3, .data = (3 << 8) | 6};
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_add(&log, &entry4));
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[{\"ES\":0,\"ET\":\"INIT\",\"EC\":0},{\"ES\":1,\"ET\":\"FAIL\",\"EV\":\"v1.0.6\"},{\"ES\":2,\"ET\":\"START\",\"EV\":\"v1.0.6\"},{\"ES\":3,\"ET\":\"SUCCESS\",\"EV\":\"v1.3.6\"}]}", buf);
 
@@ -125,7 +108,7 @@ TEST_CASE("Test OCMF signed energy with event log", "[ocmf]") {
 	mid_event_log_entry_t entry5 = {.type = MID_EVENT_LOG_TYPE_ERASE, .seq = 4, .data = 1};
 	TEST_ASSERT_EQUAL_INT(0, mid_event_log_add(&log, &entry5));
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value(buf, sizeof (buf), "ZAP000001", &meter_value, &log));
+	buf = midocmf_signed_fiscal_from_meter_value(NULL, "ZAP000001", &meter_value, &log);
 	ESP_LOGI(TAG, "%s", buf);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 I\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}],\"ZE\":[{\"ES\":0,\"ET\":\"INIT\",\"EC\":0},{\"ES\":1,\"ET\":\"FAIL\",\"EV\":\"v1.0.6\"},{\"ES\":2,\"ET\":\"START\",\"EV\":\"v1.0.6\"},{\"ES\":3,\"ET\":\"SUCCESS\",\"EV\":\"v1.3.6\"},{\"ES\":4,\"ET\":\"ERASE\",\"EC\":1}]}", buf);
 
@@ -157,14 +140,12 @@ TEST_CASE("Test OCMF signed energy - with signature", "[ocmf]") {
 	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
 	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, key_priv, sizeof (key_priv), key_pub, sizeof (key_pub)));
 
-	char buf[512];
-
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value_signed(buf, sizeof (buf), "ZAP000001", &meter_value, NULL, ctx));
+	const char * buf = midocmf_signed_fiscal_from_meter_value(ctx, "ZAP000001", &meter_value, NULL);
 
 	ESP_LOGI(TAG, "%s", key_pub);
 	ESP_LOGI(TAG, "%s", buf);
 
-	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGQCMD12Gm6LBicNABDKtgHbxwa7moA2whL74yjf7gt57X7845GJfvlQncsXhkuNVCEqFAIwKa26PCpQkKAA7HZr4Qm4WW+N562AGVBAmvr4tH9uSwQT5T/Y9bI9nf8JGZMVUKBz\"}", buf);
+	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"1970-01-01T00:00:00,000+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGUCMQDBfiYEJP6l6Y4jE4F12Q0D6S4C9u5KNWkE7K3Xpo0VtEthCaoLtAD7FSHhX6bQCw4CMHVvmyOEj41sGc//JgEy3W8OTJXgc5LPMvYovG2BUrgU/71z1w9Bf2cVhukQ6wH7sg==\"}", buf);
 
 	mid_sign_ctx_free(ctx);
 }
@@ -186,19 +167,15 @@ TEST_CASE("Test OCMF signed energy - milliseconds", "[ocmf]") {
 	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
 	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, key_priv, sizeof (key_priv), key_pub, sizeof (key_pub)));
 
-	char buf[512];
-
-	TEST_ASSERT_EQUAL_INT(0, midocmf_fiscal_from_meter_value_signed(buf, sizeof (buf), "ZAP000001", &meter_value, NULL, ctx));
+	const char * buf = midocmf_signed_fiscal_from_meter_value(ctx, "ZAP000001", &meter_value, NULL);
 
 	ESP_LOGI(TAG, "%s", key_pub);
 	ESP_LOGI(TAG, "%s", buf);
 
-	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGYCMQDvTdoosfMWqOvt2PN5fF/T7DigZ38Ik7s3TD1TokV21l3LWB5YY4xRFEAoB7iwCLUCMQCY7Y6P71fsK8XWJnDktHnRCOtN/Aw3SxD4drdHtKX+NeTiORcXg0wo4Swvhz7Qre8=\"}", buf);
+	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"F1\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"RV\":0,\"RI\":\"1-0:1.8.0\",\"RU\":\"kWh\",\"RT\":\"AC\",\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGUCMQDFpIau4+6ECCvQJbCKWRg6nu4O5ie39RL5JIQFFmEgMfLu0BPgBEGc0/zYuLqAMD4CMGMSlDLWZjDDhpPTJyHcDq1FkKK3ZDn50U5wLxFfKNXdqrlH5fnsVgimokVEi9GH7Q==\"}", buf);
 
 	mid_sign_ctx_free(ctx);
 }
-
-static char buf[4096];
 
 TEST_CASE("Test OCMF transaction - simple", "[ocmf]") {
 	midlts_active_t active = {};
@@ -209,7 +186,7 @@ TEST_CASE("Test OCMF transaction - simple", "[ocmf]") {
 
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":false,\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}]}", buf);
 
@@ -228,8 +205,7 @@ TEST_CASE("Test OCMF transaction - Session ID", "[ocmf]") {
 	midlts_active_session_set_id(&active, &id);
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
-
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":false,\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}],\"ZS\":\"cafebabe-0000-0000-0000-000000000000\"}", buf);
 
 	midlts_active_session_free(&active);
@@ -248,7 +224,7 @@ TEST_CASE("Test OCMF transaction - Auth RFID ISO14443", "[ocmf]") {
 
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":true,\"IL\":\"HEARSAY\",\"IF\":[\"RFID_RELATED\"],\"IT\":\"ISO14443\",\"ID\":\"ABCDEF12\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}]}", buf);
 
@@ -267,7 +243,7 @@ TEST_CASE("Test OCMF transaction - Auth RFID ISO15693", "[ocmf]") {
 
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":true,\"IL\":\"HEARSAY\",\"IF\":[\"RFID_RELATED\"],\"IT\":\"ISO15693\",\"ID\":\"ABCDEF1234455667\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}]}", buf);
 
@@ -286,7 +262,7 @@ TEST_CASE("Test OCMF transaction - Auth Cloud RFID", "[ocmf]") {
 
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":true,\"IL\":\"TRUSTED\",\"IT\":\"ISO15693\",\"ID\":\"ABCDEF1234455667\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}]}", buf);
 
@@ -305,7 +281,7 @@ TEST_CASE("Test OCMF transaction - Auth Cloud UUID", "[ocmf]") {
 
 	midlts_active_session_append(&active, &meter_value);
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
 
 	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":true,\"IL\":\"TRUSTED\",\"IT\":\"CENTRAL\",\"ID\":\"abcdef12-3445-5667-aabb-ccddeeff1122\",\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"T\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"}]}", buf);
 
@@ -330,8 +306,50 @@ TEST_CASE("Test OCMF transaction - Different flags", "[ocmf]") {
 		midlts_active_session_append(&active, &meter_value[i]);
 	}
 
-	TEST_ASSERT_EQUAL_INT(0, midocmf_transaction_from_active_session(buf, sizeof (buf), "ZAP000001", &active));
-	TEST_ASSERT_EQUAL_STRING("", buf);
+	const char * buf = midocmf_signed_transaction_from_active_session(NULL, "ZAP000001", &active);
+
+	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":false,\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"B\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"},{\"TM\":\"2024-01-30T08:46:02,999+00:00 I\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.01,\"ST\":\"G\"},{\"TM\":\"2024-01-30T09:46:02,999+00:00 R\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.02,\"ST\":\"G\"},{\"TM\":\"2024-01-30T10:46:02,999+00:00 U\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.03,\"ST\":\"G\"},{\"TM\":\"2024-01-30T11:46:02,999+00:00 I\",\"TX\":\"T\",\"ST\":\"E\"},{\"TM\":\"2024-01-30T12:46:02,999+00:00 S\",\"TX\":\"E\",\"RI\":\"1-0:1.8.0\",\"RV\":0.05,\"ST\":\"G\"}]}", buf);
 
 	midlts_active_session_free(&active);
+}
+
+TEST_CASE("Test OCMF transaction - Different flags, signed", "[ocmf]") {
+	midlts_active_t active;
+	midlts_active_session_alloc(&active);
+
+	uint64_t time = 1706600762ULL * 1000 + 999;
+	mid_session_meter_value_t meter_value[] = {
+		{ .fw = fw, .lr = lr, .time = time, .meter = 0, .flag = MID_SESSION_METER_VALUE_READING_FLAG_START | MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED },
+		{ .fw = fw, .lr = lr, .time = time + 1 * 60 * 60 * 1000, .meter = 10, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE },
+		{ .fw = fw, .lr = lr, .time = time + 2 * 60 * 60 * 1000, .meter = 20, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_RELATIVE },
+		{ .fw = fw, .lr = lr, .time = time + 3 * 60 * 60 * 1000, .meter = 30, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_UNKNOWN },
+		{ .fw = fw, .lr = lr, .time = time + 4 * 60 * 60 * 1000, .meter = 40, .flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF | MID_SESSION_METER_VALUE_FLAG_TIME_INFORMATIVE | MID_SESSION_METER_VALUE_FLAG_METER_ERROR },
+		{ .fw = fw, .lr = lr, .time = time + 5 * 60 * 60 * 1000, .meter = 50, .flag = MID_SESSION_METER_VALUE_READING_FLAG_END | MID_SESSION_METER_VALUE_FLAG_TIME_SYNCHRONIZED },
+	};
+
+	for (size_t i = 0; i < sizeof (meter_value) / sizeof (meter_value[0]); i++) {
+		midlts_active_session_append(&active, &meter_value[i]);
+	}
+
+	snprintf(key_priv, sizeof (key_priv), "%s", ocmf_prv);
+	snprintf(key_pub, sizeof (key_pub), "%s", ocmf_pub);
+
+	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
+	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, key_priv, sizeof (key_priv), key_pub, sizeof (key_pub)));
+
+	const char * buf = midocmf_signed_transaction_from_active_session(ctx, "ZAP000001", &active);
+
+	TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":false,\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"B\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"},{\"TM\":\"2024-01-30T08:46:02,999+00:00 I\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.01,\"ST\":\"G\"},{\"TM\":\"2024-01-30T09:46:02,999+00:00 R\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.02,\"ST\":\"G\"},{\"TM\":\"2024-01-30T10:46:02,999+00:00 U\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.03,\"ST\":\"G\"},{\"TM\":\"2024-01-30T11:46:02,999+00:00 I\",\"TX\":\"T\",\"ST\":\"E\"},{\"TM\":\"2024-01-30T12:46:02,999+00:00 S\",\"TX\":\"E\",\"RI\":\"1-0:1.8.0\",\"RV\":0.05,\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGUCMFmT53qOe0h/vVgIBUc5Hzk2iGYsw1c23ECORvWXd1Xfn3jAz4tAfzWjxHJsMM7ZQgIxAOg1SejcEGNoqxjvafFzTdJEUfmAZiuVhgaxInO5vOYus1T3kZ1vBROgwy2rcU2Jxw==\"}", buf);
+
+	midlts_active_session_free(&active);
+}
+
+TEST_CASE("Test OCMF transaction - Verify sig", "[ocmf]") {
+	snprintf(key_priv, sizeof (key_priv), "%s", ocmf_prv);
+	snprintf(key_pub, sizeof (key_pub), "%s", ocmf_pub);
+
+	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
+	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, key_priv, sizeof (key_priv), key_pub, sizeof (key_pub)));
+
+	//TEST_ASSERT_EQUAL_STRING("OCMF|{\"FV\":\"1.0\",\"GI\":\"Zaptec Go+\",\"GS\":\"ZAP000001\",\"GV\":\"2.0.4.201\",\"MF\":\"v1.2.3\",\"PG\":\"T1\",\"IS\":false,\"RD\":[{\"TM\":\"2024-01-30T07:46:02,999+00:00 S\",\"TX\":\"B\",\"RU\":\"kWh\",\"RI\":\"1-0:1.8.0\",\"RV\":0,\"ST\":\"G\"},{\"TM\":\"2024-01-30T08:46:02,999+00:00 I\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.01,\"ST\":\"G\"},{\"TM\":\"2024-01-30T09:46:02,999+00:00 R\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.02,\"ST\":\"G\"},{\"TM\":\"2024-01-30T10:46:02,999+00:00 U\",\"TX\":\"T\",\"RI\":\"1-0:1.8.0\",\"RV\":0.03,\"ST\":\"G\"},{\"TM\":\"2024-01-30T12:46:02,999+00:00 S\",\"TX\":\"E\",\"RI\":\"1-0:1.8.0\",\"RV\":0.05,\"ST\":\"G\"}]}|{\"SA\":\"ECDSA-secp384r1-SHA256\",\"SE\":\"base64\",\"SD\":\"MGYCMQCzQoXTeEMk8/FyNKAq3NNZ/JMxXB1DyCmtq+KY18nTdDdSoTETTh4skg9+iy/PiCoCMQDkFA2G0bs0EcrLPdnIaKG4O55xjqDZHzRnYqyDXpkZ/F22K6JWzSoa1v02siykgzA=\"}",buf);
 }
