@@ -14,9 +14,25 @@
 #include "esp_heap_trace.h"
 #endif
 
+#include "mid_lts.h"
+#include "mid_sign.h"
+
 #define TEST_PARTITION "/files"
 
 const char *TAG = "UNITTEST";
+
+static char ocmf_pub[512] = "-----BEGIN PUBLIC KEY-----\n"
+"MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEj6hkVvHVvhM8mFm1/CkkDPTMTf0nMikK\n"
+"Pw57yHHVO5fJLTTfZdN78XXanzdAe6JK3KqIQj/QXV5HV1XOdZ1Dy0AXykw/h8VZ\n"
+"f+B8Mw3BhRcKx27PBTBfe8y7HITM3MzS\n"
+"-----END PUBLIC KEY-----\n";
+
+static char ocmf_prv[512] = "-----BEGIN EC PRIVATE KEY-----\n"
+"MIGkAgEBBDDn4fPF8Q992eRJY39nh7Gi8n7dq3hLnv8pQQaUNdI0OsPGiJFC8IEG\n"
+"WzcTMpqyPemgBwYFK4EEACKhZANiAASPqGRW8dW+EzyYWbX8KSQM9MxN/ScyKQo/\n"
+"DnvIcdU7l8ktNN9l03vxddqfN0B7okrcqohCP9BdXkdXVc51nUPLQBfKTD+HxVl/\n"
+"4HwzDcGFFwrHbs8FMF97zLschMzczNI=\n"
+"-----END EC PRIVATE KEY-----\n";
 
 void setUp(void) {
 	// If heap tracing is enabled in kconfig, leak trace the test
@@ -38,6 +54,11 @@ void tearDown(void) {
 }
 
 void app_main(void) {
+	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
+	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, ocmf_prv, sizeof (ocmf_prv), ocmf_pub, sizeof (ocmf_pub)));
+
+	printf("%s", ocmf_pub);
+
 	wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 	esp_vfs_fat_mount_config_t mount_config = {
