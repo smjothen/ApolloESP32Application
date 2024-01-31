@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.16)
 # TODO: Fix above so we can have access to all components
 #
 set(EXTRA_COMPONENT_DIRS
-	"../components/midlts/"
+	"../components/mid/lts/"
 	"../components/utz/"
 	"../components/nanopb/"
 	"../managed_components/joltwallet__littlefs/"
@@ -17,7 +17,7 @@ set(EXTRA_COMPONENT_DIRS
 )
 
 set(TEST_COMPONENTS
-	"midlts"
+	"lts"
 	"utz"
 	CACHE STRING "List of components to test"
 )
