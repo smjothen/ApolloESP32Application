@@ -20,7 +20,7 @@
 
 #include "mid_sign.h"
 
-static const char *TAG = "MID            ";
+const char *TAG = "MID            ";
 
 static mid_sign_ctx_t ctx = {0};
 

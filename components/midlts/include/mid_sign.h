@@ -1,6 +1,8 @@
 #ifndef __MID_SIGN_H__
 #define __MID_SIGN_H__
 
+#include <stdbool.h>
+
 #include "mbedtls/ecdsa.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/sha256.h"

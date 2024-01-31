@@ -16,11 +16,6 @@
 
 #include "mid_sign.h"
 
-// Compile on host machine:
-//
-// gcc -I/opt/homebrew/include/ /opt/homebrew/lib/libmbedtls.a /opt/homebrew/lib/libmbedcrypto.a mid_sign.c mid_signer.c -o mid_sign
-//
-
 int main(void) {
 	char pub[512];
 	char prv[512];
@@ -38,8 +33,6 @@ int main(void) {
 	// Should be initialized + generated + verified
 	assert(ctx.flag == 7);
 
-	mid_sign_ctx_t ctx2 = {0};
-
 	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
 		ESP_LOGI(TAG, "Init failure: %d", ret);
 		return -1;
@@ -52,8 +45,6 @@ int main(void) {
 
 	// Test mangled input
 	prv[128] = 0xca;
-
-	mid_sign_ctx_t ctx3 = {0};
 
 	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
 		ESP_LOGI(TAG, "Init failure: %d", ret);
