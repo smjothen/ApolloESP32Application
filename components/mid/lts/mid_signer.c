@@ -23,38 +23,39 @@ int main(void) {
 	mid_sign_ctx_t ctx = {0};
 
 	int ret;
-	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
-		ESP_LOGI(TAG, "Init failure: %d", ret);
+	if ((ret = mid_sign_ctx_generate(prv, sizeof (prv), pub, sizeof (pub))) != 0) {
+		ESP_LOGI(TAG, "Generate failure: %d", ret);
 		return -1;
 	}
 
 	printf("%s%s", prv, pub);
-	printf("%x\n", ctx.flag);
-	// Should be initialized + generated + verified
-	assert(ctx.flag == 7);
 
-	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
+	if ((ret = mid_sign_ctx_init(&ctx, prv, pub)) != 0) {
 		ESP_LOGI(TAG, "Init failure: %d", ret);
 		return -1;
 	}
 
-	printf("%s%s", prv, pub);
 	printf("%x\n", ctx.flag);
-	// Should be initialized + verified
-	assert(ctx.flag == 3);
 
+	char tmp = prv[128];
 	// Test mangled input
 	prv[128] = 0xca;
 
-	if ((ret = mid_sign_ctx_init(&ctx, prv, sizeof (prv), pub, sizeof (pub))) != 0) {
-		ESP_LOGI(TAG, "Init failure: %d", ret);
+	if ((ret = mid_sign_ctx_init(&ctx, prv, pub)) == 0) {
+		ESP_LOGI(TAG, "Init success with bad input!: %d", ret);
 		return -1;
 	}
 
 	printf("%s%s", prv, pub);
 	printf("%x\n", ctx.flag);
-	// Should be initialized + generated + verified
-	assert(ctx.flag == 7);
+	assert(ctx.flag == 0);
+
+	prv[128] = tmp;
+
+	if ((ret = mid_sign_ctx_init(&ctx, prv, pub)) != 0) {
+		ESP_LOGI(TAG, "Init failure: %d", ret);
+		return -1;
+	}
 
 	char sig[512];
 	size_t sig_len = 512;

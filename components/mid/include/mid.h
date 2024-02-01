@@ -8,12 +8,13 @@
 
 typedef struct {
 	uint32_t status;
-	uint32_t wattHours;
+	uint32_t watt_hours;
 	uint8_t identifiers[3];
 	uint8_t reserved; // Word-align
 } mid_package_t;
 
-int mid_init(char *prv_pem);
+int mid_init(void);
+uint32_t mid_get_esp_status(void);
 
 bool mid_get_package(mid_package_t *pkg);
 bool mid_get_status(uint32_t *status);

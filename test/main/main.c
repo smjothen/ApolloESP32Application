@@ -55,7 +55,7 @@ void tearDown(void) {
 
 void app_main(void) {
 	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
-	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, ocmf_prv, sizeof (ocmf_prv), ocmf_pub, sizeof (ocmf_pub)));
+	TEST_ASSERT_EQUAL_INT(0, mid_sign_ctx_init(ctx, ocmf_prv, ocmf_pub));
 
 	printf("%s", ocmf_pub);
 

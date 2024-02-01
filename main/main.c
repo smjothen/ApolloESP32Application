@@ -457,26 +457,6 @@ void log_efuse_info()
 	ESP_LOGI(TAG_MAIN, "");
 }
 
-void mid_init_or_generate_keys(void) {
-	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
-
-	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), MID_PRIVATE_KEY_SIZE,
-				storage_Get_MIDPublicKey(), MID_PUBLIC_KEY_SIZE) != 0) {
-		ESP_LOGE(TAG_MAIN, "MID public key generation failed!");
-		return;
-	}
-
-	char buffer[MID_PUBLIC_KEY_SIZE];
-	if (storage_Get_MIDPublicKeyDER(buffer)) {
-		ESP_LOGI(TAG_MAIN, "MID public key: %s", buffer);
-	}
-
-	if (ctx->flag & MID_SIGN_FLAG_GENERATED) {
-		ESP_LOGI(TAG_MAIN, "MID public key persisted!");
-		storage_SaveConfiguration();
-	}
-}
-
 #ifdef CONFIG_HEAP_TRACING_STANDALONE
 #define TRACE_RECORD_COUNT 80
 static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
@@ -550,7 +530,12 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "Certificates disabled");
 	}
 
-	mid_init_or_generate_keys();
+	if (mid_init() < 0) {
+		uint32_t status = mid_get_esp_status();
+		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
+	} else {
+		ESP_LOGI(TAG_MAIN, "MID module initialized!");
+	}
 
 	log_efuse_info();
 
@@ -586,15 +571,6 @@ void app_main(void)
 
 	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION | WARNING_MID, WarningHandlerReset);
 	warning_handler_install(WARNING_EMETER_ALARM | WARNING_CHARGE_OVERCURRENT, WarningHandlerClear);
-
-	mid_event_log_t evlog;
-	if (!mid_event_log_init(&evlog)) {
-		if (mid_get_event_log(&evlog)) {
-			ESP_LOGI(TAG_MAIN, "Got %d event log entries!", evlog.count);
-		}
-
-		mid_event_log_free(&evlog);
-	}
 
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
