@@ -530,13 +530,6 @@ void app_main(void)
 		ESP_LOGE(TAG_MAIN, "Certificates disabled");
 	}
 
-	if (mid_init() < 0) {
-		uint32_t status = mid_get_esp_status();
-		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
-	} else {
-		ESP_LOGI(TAG_MAIN, "MID module initialized!");
-	}
-
 	log_efuse_info();
 
 	//Ensure previous versions not supporting RFID requires authentication if set incorrectly
@@ -555,6 +548,7 @@ void app_main(void)
 	start_ota_task();
     zaptecProtocolStart();
 
+
 #ifndef CONFIG_ZAPTEC_MCU_APPLICATION_ONLY
 
     validate_booted_image();
@@ -571,6 +565,13 @@ void app_main(void)
 
 	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION | WARNING_MID, WarningHandlerReset);
 	warning_handler_install(WARNING_EMETER_ALARM | WARNING_CHARGE_OVERCURRENT, WarningHandlerClear);
+
+	if (mid_init() < 0) {
+		uint32_t status = mid_get_esp_status();
+		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
+	} else {
+		ESP_LOGI(TAG_MAIN, "MID module initialized!");
+	}
 
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
