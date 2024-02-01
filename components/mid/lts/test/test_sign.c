@@ -8,9 +8,12 @@
 #include "memory_checks.h"
 #include "ccomp_timer.h"
 #include "unity_test_utils_memory.h"
+#include "esp_timer.h"
 
 #include "mid_lts.h"
 #include "mid_sign.h"
+
+static const char *TAG = "MIDSIGN";
 
 const char *openssl_pub = "-----BEGIN PUBLIC KEY-----\n"
 "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEpxzQTKmYsqK5+eAJ37bLWeQPVYLhF9jj\n"
@@ -41,12 +44,37 @@ const char *load_prv = "-----BEGIN EC PRIVATE KEY-----\n"
 static char key_prv[512] = {0};
 static char key_pub[512] = {0};
 
+static char sig_buf[512];
+static char buf[256];
+
+mid_sign_ctx_t ctx_main = {0};
+
 TEST_CASE("Test generation of keys", "[midsign][allowleak]") {
 	TEST_ASSERT(mid_sign_ctx_generate(key_prv, sizeof (key_prv), key_pub, sizeof (key_pub)) == 0);
+
 	TEST_ASSERT(strstr(key_pub, "BEGIN PUBLIC KEY") != NULL);
 	TEST_ASSERT(strstr(key_pub, "END PUBLIC KEY") != NULL);
 	TEST_ASSERT(strstr(key_prv, "BEGIN EC PRIVATE KEY") != NULL);
 	TEST_ASSERT(strstr(key_prv, "END EC PRIVATE KEY") != NULL);
+
+	TEST_ASSERT(mid_sign_ctx_init(&ctx_main, key_prv, key_pub) == 0);
+	TEST_ASSERT_EQUAL_INT(MID_SIGN_FLAG_INITIALIZED, ctx_main.flag & MID_SIGN_FLAG_INITIALIZED);
+
+	size_t total = 0;
+	for (size_t j = 0; j < 16; j++) {
+		for (size_t i = 0; i < sizeof (buf); i++) {
+			buf[i] = esp_random();
+		}
+		uint64_t start = esp_timer_get_time();
+		size_t sig_len = sizeof (sig_buf);
+		int ret = mid_sign_ctx_sign(&ctx_main, buf, sizeof (buf), sig_buf, &sig_len);
+		uint64_t end = esp_timer_get_time();
+		ESP_LOGI(TAG, "Signed with %zu byte signature", sig_len);
+		TEST_ASSERT_EQUAL_INT(ret, 0);
+		total += end - start;
+	}
+
+	ESP_LOGI(TAG, "Signing 16 times = %fms, average %fms", total / 1000.0, total / (16.0 * 1000.0));
 }
 
 TEST_CASE("Test loading of keys", "[midsign][allowleak]") {
@@ -55,8 +83,6 @@ TEST_CASE("Test loading of keys", "[midsign][allowleak]") {
 	TEST_ASSERT_EQUAL_INT(MID_SIGN_FLAG_INITIALIZED, ctx.flag & MID_SIGN_FLAG_INITIALIZED);
 	TEST_ASSERT(mid_sign_ctx_free(&ctx) == 0);
 }
-
-static char sig_buf[512];
 
 TEST_CASE("Test signing", "[midsign][allowleak]") {
 	mid_sign_ctx_t ctx = {0};

@@ -20,6 +20,13 @@
 
 #include "mid_sign.h"
 
+// 384 bit key is around 166ms per signing
+#define MID_SIGNATURE_CURVE MBEDTLS_ECP_DP_SECP384R1
+// 256 bit key is around 106ms per signing
+//#define MID_SIGNATURE_CURVE MBEDTLS_ECP_DP_SECP256R1
+// 192 bit key is around 88ms per signing
+//#define MID_SIGNATURE_CURVE MBEDTLS_ECP_DP_SECP192R1
+
 static const char *TAG = "MID            ";
 
 static mid_sign_ctx_t ctx = {0};
@@ -52,7 +59,7 @@ int mid_sign_ctx_generate(char *private_buf, size_t private_size, char *public_b
 		goto error_gen;
 	}
 
-	if ((ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP384R1, mbedtls_pk_ec(key), mbedtls_ctr_drbg_random, &ctr_drbg)) != 0) {
+	if ((ret = mbedtls_ecp_gen_key(MID_SIGNATURE_CURVE, mbedtls_pk_ec(key), mbedtls_ctr_drbg_random, &ctr_drbg)) != 0) {
 		ESP_LOGE(TAG, "mbedtls_ecp_gen_key returned -0x%04x", (unsigned int) -ret);
 		goto error_gen;
 	}
@@ -101,31 +108,6 @@ int mid_sign_ctx_init(mid_sign_ctx_t *ctx, char *private_key, char *public_key) 
 	if ((ret = mbedtls_pk_parse_key(&ctx->key, (unsigned char *)private_key, strlen(private_key) + 1, NULL, 0, mbedtls_ctr_drbg_random, &ctx->ctr_drbg)) != 0) {
 		ESP_LOGE(TAG, "mbedtls_pk_parse_key returned -0x%04x", (unsigned int) -ret);
 		goto error;
-
-		/*
-		// Couldn't parse, probably no key stored so generate...
-		if ((ret = mbedtls_pk_setup(&ctx->key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY))) != 0) {
-			ESP_LOGE(TAG, "mbedtls_pk_setup returned -0x%04x", (unsigned int) -ret);
-			goto error;
-		}
-
-		if ((ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP384R1, mbedtls_pk_ec(ctx->key), mbedtls_ctr_drbg_random, &ctx->ctr_drbg)) != 0) {
-			ESP_LOGE(TAG, "mbedtls_ecp_gen_key returned -0x%04x", (unsigned int) -ret);
-			goto error;
-		}
-
-		if ((ret = mbedtls_pk_write_key_pem(&ctx->key, (unsigned char *)prv_buf, prv_size)) != 0) {
-			ESP_LOGE(TAG, "mbedtls_pk_write_key_pem returned -0x%04x", (unsigned int) -ret);
-			goto error;
-		}
-
-		if ((ret = mbedtls_pk_write_pubkey_pem(&ctx->key, (unsigned char *)pub_buf, pub_size)) != 0) {
-			ESP_LOGE(TAG, "mbedtls_pk_write_pubkey_pem returned -0x%04x", (unsigned int) -ret);
-			goto error;
-		}
-
-		ctx->flag |= MID_SIGN_FLAG_GENERATED;
-		*/
 	}
 
 	if ((ret = mbedtls_ecdsa_from_keypair(&ctx->ecdsa, mbedtls_pk_ec(ctx->key))) != 0) {

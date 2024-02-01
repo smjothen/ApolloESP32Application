@@ -15,6 +15,7 @@
 #include "protocol_task.h"
 #include "zaptec_protocol_serialisation.h"
 #include "storage.h"
+#include "esp_littlefs.h"
 
 #include "mid_sign.h"
 #include "mid_status.h"
@@ -94,6 +95,7 @@ bool mid_get_is_calibration_handle(void) {
 
 #define MID_ESP_STATUS_KEY 1
 #define MID_ESP_STATUS_EVENT_LOG 2
+#define MID_ESP_STATUS_FILESYSTEM 4
 
 static uint32_t mid_status = 0;
 
@@ -102,6 +104,25 @@ uint32_t mid_get_esp_status(void) {
 }
 
 int mid_init(void) {
+	esp_vfs_littlefs_conf_t conf = {
+		.base_path = "/mid",
+		.partition_label = "mid",
+		// Don't mount in case of failure, we will need to inform the user!
+#ifdef MID_ALLOW_LITTLEFS_FORMAT
+		.format_if_mount_failed = true,
+#else
+		.format_if_mount_failed = false,
+#endif
+		.dont_mount = false,
+	};
+
+	esp_err_t ret;
+	if ((ret = esp_vfs_littlefs_register(&conf)) != ESP_OK) {
+		ESP_LOGE(TAG, "Failed to mount MID partition: %s!", esp_err_to_name(ret));
+		mid_status |= MID_ESP_STATUS_FILESYSTEM;
+		return -1;
+	}
+
 	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
 
 	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) != 0) {
@@ -133,6 +154,7 @@ int mid_init(void) {
 		if (mid_get_event_log(&log)) {
 			// Function prints event log too for now, so do nothing
 		} else {
+			ESP_LOGE(TAG, "Failure to read MID event log!");
 			mid_status |= MID_ESP_STATUS_EVENT_LOG;
 		}
 		mid_event_log_free(&log);
