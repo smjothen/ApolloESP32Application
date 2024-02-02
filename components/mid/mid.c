@@ -18,7 +18,9 @@
 #include "esp_littlefs.h"
 
 #include "mid_sign.h"
+#include "mid_lts.h"
 #include "mid_status.h"
+#include "mid_private.h"
 #include "mid.h"
 
 static const char *TAG = "MID            ";
@@ -93,17 +95,14 @@ bool mid_get_is_calibration_handle(void) {
 	return false;
 }
 
-#define MID_ESP_STATUS_KEY 1
-#define MID_ESP_STATUS_EVENT_LOG 2
-#define MID_ESP_STATUS_FILESYSTEM 4
-
 static uint32_t mid_status = 0;
+static midlts_ctx_t mid_lts = {0};
 
 uint32_t mid_get_esp_status(void) {
 	return mid_status;
 }
 
-int mid_init(void) {
+int mid_init(const char *fw_version) {
 	esp_vfs_littlefs_conf_t conf = {
 		.base_path = "/mid",
 		.partition_label = "mid",
@@ -121,6 +120,8 @@ int mid_init(void) {
 		ESP_LOGE(TAG, "Failed to mount MID partition: %s!", esp_err_to_name(ret));
 		mid_status |= MID_ESP_STATUS_FILESYSTEM;
 		return -1;
+	} else {
+		mid_status &= ~MID_ESP_STATUS_FILESYSTEM;
 	}
 
 	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
@@ -142,6 +143,8 @@ int mid_init(void) {
 		mid_status |= MID_ESP_STATUS_KEY;
 		return -1;
 #endif
+	} else {
+		mid_status &= ~MID_ESP_STATUS_KEY;
 	}
 
 	char buffer[MID_PUBLIC_KEY_SIZE];
@@ -153,11 +156,45 @@ int mid_init(void) {
 	if (!mid_event_log_init(&log)) {
 		if (mid_get_event_log(&log)) {
 			// Function prints event log too for now, so do nothing
+			mid_status &= ~MID_ESP_STATUS_EVENT_LOG;
 		} else {
 			ESP_LOGE(TAG, "Failure to read MID event log!");
 			mid_status |= MID_ESP_STATUS_EVENT_LOG;
 		}
 		mid_event_log_free(&log);
+	}
+
+	// Get and parse current versions
+
+	mid_session_version_fw_t fw_ver;
+
+	int len;
+	uint16_t a, b, c, d;
+	if (sscanf(fw_version, "%" PRIu16 ".%" PRIu16 ".%" PRIu16 ".%" PRIu16 "%n", &a, &b, &c, &d, &len) == 4 &&
+			strlen(fw_version) == len && a < 1024 && b < 1024 && c < 1024 && d < 1024) {
+		fw_ver = (mid_session_version_fw_t) { a, b, c, d };
+		mid_status &= ~MID_ESP_STATUS_INVALID_FW_VERSION;
+	} else {
+		mid_status |= MID_ESP_STATUS_INVALID_FW_VERSION;
+		return -1;
+	}
+
+	mid_session_version_lr_t lr_ver;
+	uint8_t identifiers[3];
+
+	if (mid_get_software_identifiers(identifiers)) {
+		lr_ver = (mid_session_version_lr_t) { identifiers[0], identifiers[1], identifiers[2] };
+		mid_status &= ~MID_ESP_STATUS_INVALID_LR_VERSION;
+	} else {
+		mid_status |= MID_ESP_STATUS_INVALID_LR_VERSION;
+		return -1;
+	}
+
+	midlts_err_t err;
+	if ((err = mid_session_init(&mid_lts, fw_ver, lr_ver)) != LTS_OK) {
+		mid_status |= MID_ESP_STATUS_LTS;
+	} else {
+		mid_status &= ~MID_ESP_STATUS_LTS;
 	}
 
 	return mid_status ? -1 : 0;

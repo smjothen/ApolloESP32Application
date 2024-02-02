@@ -28,7 +28,7 @@ midlts_err_t midlts_replay(size_t maxpages) {
 	mid_session_version_fw_t fw = { 2, 0, 4, 201 };
 	mid_session_version_lr_t lr = { 1, 2, 3 };
 
-	if ((err = mid_session_init_internal(&ctx, maxpages, MID_TIME_TO_TS(0), fw, lr)) != LTS_OK) {
+	if ((err = mid_session_init_internal(&ctx, maxpages, fw, lr)) != LTS_OK) {
 		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return err;
 	}
@@ -46,7 +46,7 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 
 	ESP_LOGI(TAG, "Initializing with %zu max pages!", maxpages);
 
-	if ((err = mid_session_init_internal(&ctx, maxpages, MID_TIME_TO_TS(time), fw, lr)) != LTS_OK) {
+	if ((err = mid_session_init_internal(&ctx, maxpages, fw, lr)) != LTS_OK) {
 		ESP_LOGE(TAG, "Couldn't init MID session log! Error: %s", mid_session_err_to_string(err));
 		return err;
 	}

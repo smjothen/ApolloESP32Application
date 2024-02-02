@@ -566,13 +566,6 @@ void app_main(void)
 	warning_handler_install(WARNING_EMETER_LINK | WARNING_FPGA_VERSION | WARNING_MID, WarningHandlerReset);
 	warning_handler_install(WARNING_EMETER_ALARM | WARNING_CHARGE_OVERCURRENT, WarningHandlerClear);
 
-	if (mid_init() < 0) {
-		uint32_t status = mid_get_esp_status();
-		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
-	} else {
-		ESP_LOGI(TAG_MAIN, "MID module initialized!");
-	}
-
 //#define BG_BRIDGE
 #ifdef BG_BRIDGE
 	cellularPinsOn();
@@ -700,6 +693,13 @@ void app_main(void)
 		emclogger_init(&log);
 		emclogger_register_fields(&log);
 		emclogger_start(&log);
+	}
+
+	if (mid_init(softwareVersion) < 0) {
+		uint32_t status = mid_get_esp_status();
+		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
+	} else {
+		ESP_LOGI(TAG_MAIN, "MID module initialized!");
 	}
 
   #ifndef BG_BRIDGE

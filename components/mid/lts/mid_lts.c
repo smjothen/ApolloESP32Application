@@ -474,7 +474,7 @@ midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, const struct timespec now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	midlts_err_t ret = LTS_OK;
 
 	memset(ctx, 0, sizeof (*ctx));
@@ -574,8 +574,8 @@ midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_s
 }
 
 // Functions below only for testing purposes
-midlts_err_t mid_session_init(midlts_ctx_t *ctx, const struct timespec now, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
-	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, now, fw_version, lr_version);
+midlts_err_t mid_session_init(midlts_ctx_t *ctx, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, fw_version, lr_version);
 }
 
 void mid_session_free(midlts_ctx_t *ctx) {
