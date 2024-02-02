@@ -20,7 +20,8 @@ from ocpp.v16.enums import (
     RemoteStartStopStatus,
     Measurand,
     ClearChargingProfileStatus,
-    ChargingProfileStatus
+    ChargingProfileStatus,
+    UnlockStatus
 )
 from ocpp.v16.datatypes import(
     ChargingProfile,
@@ -228,6 +229,52 @@ async def test_tx_profile_applied_current_at_iec_61851_limits(cp):
 
     return False
 
+async def test_tx_profile_overcurrent(cp):
+    while(cp.connector1_status != ChargePointStatus.charging):
+        logging.warning(f"Waiting for status charging with load...({cp.connector1_status})")
+        await asyncio.sleep(3)
+
+    result = await cp.call(call.SetChargingProfilePayload(connector_id = 1, cs_charging_profiles = create_charging_profile(transaction_id = tx_id, limit=6)))
+    if result is None or result.status != ChargingProfileStatus.accepted:
+        logging.info('Unable to set charging profile with limit 6')
+        return False
+
+    i = 0
+    while cp.connector1_status == ChargePointStatus.charging:
+        i+=1
+        if i > 15:
+            logging.error("Overcurrent did not trigger within expected delay")
+            return False
+
+        logging.warning("Waiting for overcurrent to trigger state change to faulted")
+        await asyncio.sleep(4)
+
+    if cp.connector1_status != ChargePointStatus.faulted:
+        logging.error(f'Overcurrent did not result in faulted state: {cp.connector1_status}')
+        return False
+
+    result = await cp.call(call.UnlockConnectorPayload(connector_id = 1))
+    if result.status != UnlockStatus.unlocked:
+        logging.error(f'Unable to unlock connector while in state preparing')
+        return False
+
+    i = 0
+    while cp.connector1_status == ChargePointStatus.faulted:
+        i+=1
+        if i > 5:
+            logging.error("Unlock connector in overcurrent faulted state did not result in transition away from faulted")
+            return False
+
+        logging.info(f'waiting for unlock command to take effect... {cp.connector1_status}')
+        await asyncio.sleep(3)
+
+    await asyncio.sleep(4) # should transition back to charging, then to finishing and then to available
+    if cp.connector1_status != ChargePointStatus.available:
+        logging.error(f'Expected charger to enter available after disconnect command')
+        return False
+
+    return True
+
 async def test_smart_charging_profile(cp, include_manual_tests = True):
     logging.info('Setting up smart charging profile test')
     preconfig_res = await ensure_configuration(cp, {ConfigurationKey.local_pre_authorize: "false",
@@ -256,7 +303,7 @@ async def test_smart_charging_profile(cp, include_manual_tests = True):
             transaction_id=tx_id
         )
 
-    def on_meter_values(self, connector_id, meter_value, transaction_id, **kwargs):
+    def on_meter_values(self, call_unique_id, connector_id, meter_value, transaction_id, **kwargs):
         global awaiting_meter_value
         logging.info(f'Got meter values')
         if awaiting_meter_value and meter_value is not None:
@@ -286,6 +333,9 @@ async def test_smart_charging_profile(cp, include_manual_tests = True):
             return False
 
         if await test_tx_profile_applied_current_at_iec_61851_limits(cp) != True:
+            return False
+
+        if await test_tx_profile_overcurrent(cp) != True:
             return False
 
     logging.info("Smart charging test complete successfully")

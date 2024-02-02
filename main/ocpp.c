@@ -2487,6 +2487,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
 		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, is_valid_interval);
+		sessionHandler_OcppChangeSampleInterval(eOCPP_CONTEXT_OTHER);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION) == 0){
 		err = set_config_u32(storage_Set_ocpp_minimum_status_duration, value, NULL);

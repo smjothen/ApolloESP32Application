@@ -225,7 +225,7 @@ async def test_remote_trigger_profile(cp, include_manual_tests = True):
             current_time=time,
         )
 
-    def on_meter_values(self, connector_id, meter_value, **kwargs):
+    def on_meter_values(self, call_unique_id, connector_id, meter_value, **kwargs):
         logging.info(f"Trigger test got {Action.MeterValues}")
 
         global got_meter_values

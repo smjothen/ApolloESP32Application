@@ -887,7 +887,7 @@ void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter
 	current_meter_values_length += length;
 
 	while(current_meter_values_length > CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES){
-		ESP_LOGW(TAG, "Too stop transaction meter values exceed maximum (%d > %d), deleting intermittent values", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
+		ESP_LOGW(TAG, "Too stop transaction meter values exceed maximum (%zu > %d), deleting intermittent values", current_meter_values_length, CONFIG_OCPP_STOP_TRANSACTION_MAX_METER_VALUES);
 
 		/*
 		 * Deletion starts with 2nd item, continues with 4th then 6th and so on.
@@ -927,6 +927,7 @@ error:
 	ocpp_meter_list_delete(values);
 }
 
+SemaphoreHandle_t sample_handle_lock;
 TimerHandle_t sample_handle = NULL;
 
 static void sample_meter_values(){
@@ -938,7 +939,7 @@ static void sample_meter_values(){
 			transaction_id, transaction_id_is_valid, &connector, 1, false);
 }
 
-static void start_sample_interval(enum ocpp_reading_context_id context){
+static void _start_sample_interval(enum ocpp_reading_context_id context){
 	ESP_LOGI(TAG, "Starting sample interval");
 
 	sample_handle = xTimerCreate("Ocpp sample",
@@ -957,10 +958,9 @@ static void start_sample_interval(enum ocpp_reading_context_id context){
 	}
 }
 
-static void stop_sample_interval(){
-	if(sample_handle == NULL){
+static void _stop_sample_interval(){
+	if(sample_handle == NULL)
 		return;
-	}
 
 	ESP_LOGI(TAG, "Stopping sample interval");
 
@@ -973,8 +973,39 @@ static void stop_sample_interval(){
 			transaction_id, transaction_id_is_valid, &connector, 1, false);
 }
 
+static void _change_sample_interval(){
+	ESP_LOGI(TAG, "Changing sample interval");
+
+	if(xTimerChangePeriod(sample_handle, pdMS_TO_TICKS(storage_Get_ocpp_meter_value_sample_interval() * 1000),
+							pdMS_TO_TICKS(2000)) != pdPASS){
+		ESP_LOGE(TAG, "Unable to change sampled value interval while active");
+	}
+}
+
+void sessionHandler_OcppChangeSampleInterval(enum ocpp_reading_context_id context){
+
+	if(sample_handle_lock == NULL || xSemaphoreTake(sample_handle_lock, pdMS_TO_TICKS(2000)) != pdTRUE){
+		ESP_LOGE(TAG, "Unable to take semaphore to change sample interval");
+		return;
+	}
+
+	if(storage_Get_ocpp_meter_value_sample_interval() != 0
+		&& (context == eOCPP_CONTEXT_TRANSACTION_BEGIN
+			|| (context != eOCPP_CONTEXT_TRANSACTION_END && sessionHandler_OcppTransactionIsActive(0)))){
+
+		if(sample_handle != NULL){
+			_change_sample_interval();
+		}else{
+			_start_sample_interval(context);
+		}
+	}else{
+		_stop_sample_interval();
+	}
+	xSemaphoreGive(sample_handle_lock);
+}
+
 void stop_transaction(enum ocpp_cp_status_id ocpp_state){
-	stop_sample_interval();
+	sessionHandler_OcppChangeSampleInterval(eOCPP_CONTEXT_TRANSACTION_END);
 	ocpp_set_transaction_is_active(false, 0);
 
 	int meter_stop = floor(get_accumulated_energy() * 1000);
@@ -1083,7 +1114,7 @@ void start_transaction(){
 
 	if(storage_Get_ocpp_meter_value_sample_interval() > 0){
 
-		start_sample_interval(eOCPP_CONTEXT_TRANSACTION_BEGIN);
+		sessionHandler_OcppChangeSampleInterval(eOCPP_CONTEXT_TRANSACTION_BEGIN);
 
 		uint connector = 1;
 		handle_meter_value(eOCPP_CONTEXT_TRANSACTION_BEGIN,
@@ -2182,10 +2213,12 @@ static void handle_suspended_ev(){
 	handle_charging();
 }
 
+static uint32_t ocpp_notified_warnings = 0x00000000;
+
 static void handle_suspended_evse(){
 
 	// In case sessionHandler_OcppSetChargingVariables was unable to resume charging due to state STOPPING (instead of STOPPED) on dsPic side
-	if(ocpp_max_limit > ocpp_min_limit && time(NULL) > ocpp_last_charging_variable_change + 3){
+	if(ocpp_notified_warnings == 0 && ocpp_max_limit > ocpp_min_limit && time(NULL) > ocpp_last_charging_variable_change + 3){
 		ESP_LOGW(TAG, "Delayed attempt to resume charging");
 		ocpp_last_charging_variable_change = time(NULL);
 
@@ -2244,7 +2277,6 @@ static void handle_reserved(){
 	}
 }
 
-static uint32_t ocpp_notified_warnings = 0x00000000;
 static uint16_t last_emeter_alarm = 0x0000;
 static uint16_t ocpp_notified_emeter_alarm = 0x0000;
 
@@ -2910,6 +2942,8 @@ static void sessionHandler_task()
 				ocpp_startup = false;
 				isAuthorized = false;
 
+				sample_handle_lock = xSemaphoreCreateMutex();
+
 				ESP_LOGI(TAG, "Check if active transaction was on file before CS accepted boot");
 				if(ocpp_transaction_find_active_entry(1) != -1){
 					ESP_LOGW(TAG, "Transaction was on file");
@@ -2928,7 +2962,7 @@ static void sessionHandler_task()
 							ocpp_set_transaction_is_active(true, transaction_start);
 
 							if(storage_Get_ocpp_meter_value_sample_interval() > 0)
-								start_sample_interval(eOCPP_CONTEXT_OTHER);
+								sessionHandler_OcppChangeSampleInterval(eOCPP_CONTEXT_OTHER);
 
 							enum ChargerOperatingMode operating_mode = MCU_GetChargeOperatingMode();
 
@@ -2977,6 +3011,9 @@ static void sessionHandler_task()
 			ocpp_old_state = eOCPP_CP_STATUS_UNAVAILABLE;
 
 			clear_ocpp_state_led_overwrite();
+
+			vSemaphoreDelete(sample_handle_lock);
+			sample_handle_lock = NULL;
 			ocpp_startup = true;
 		}
 

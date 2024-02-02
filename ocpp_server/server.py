@@ -1,4 +1,6 @@
+import argparse
 import asyncio
+import serial_asyncio
 import traceback
 import websockets
 import time
@@ -10,6 +12,11 @@ from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
 from ocpp_tests.remote_trigger_profile import test_remote_trigger_profile
 from ocpp_tests.endurance_tests import endurance_tests
 from ocpp_tests.websocket_test import test_websocket
+from ocpp_tests.test_utils import(
+    ZapClientInput,
+    ZapClientOutput
+)
+
 import logging
 
 from datetime import(
@@ -32,6 +39,24 @@ import random
 
 charge_points = dict()
 new_exipry_date = datetime.utcnow() + timedelta(days=1)
+
+zap_in = None
+zap_out = None
+
+async def init_zap_client(path):
+    loop = asyncio.get_event_loop()
+
+    print(f'Setting up zapclient on {path}')
+    transport, protocol = await serial_asyncio.create_serial_connection(loop, ZapClientInput, path, baudrate=115200)
+
+    global zap_in
+    global zap_out
+
+    zap_out = ZapClientOutput(transport)
+    zap_in = protocol
+
+    zap_out.enable()
+    zap_out.attempt_ready()
 
 async def _test_runner(cp):
 
@@ -61,7 +86,7 @@ async def _test_runner(cp):
 
     response = response.upper();
     if response == "C" or response == "A":
-        core_result = await test_core_profile(cp)
+        core_result = await test_core_profile(cp, zap_in, zap_out)
 
     if response == "R" or response == "A":
         reservation_result = await test_reservation_profile(cp)
@@ -149,7 +174,7 @@ class ChargePoint(cp):
         )
 
     @on('MeterValues')
-    def on_meter_value(self, connector_id, meter_value, **kwargs):
+    def on_meter_value(self, call_unique_id, connector_id, meter_value, **kwargs):
         logging.info(f'Meter value: {meter_value}')
         return call_result.MeterValuesPayload()
 
@@ -210,7 +235,6 @@ async def on_connect(websocket, path):
 
         logging.info("Starting tests")
 
-
         test_task = asyncio.create_task(test_runner(charge_points[charge_point_id]))
 
         try:
@@ -229,6 +253,13 @@ async def main():
     ip = '0.0.0.0'
     port = 9000
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-z", "--zap_cli_path", help="Path to serial device for communication with MCU. Example -z /dev/ttyUSB1")
+    args = parser.parse_args()
+
+    if args.zap_cli_path:
+        await init_zap_client(args.zap_cli_path)
+
     logging.info(f'Creating websocket server at {ip}:{port}')
     server = await websockets.serve(
         on_connect,
@@ -241,6 +272,7 @@ async def main():
     await server.wait_closed()
 
 if __name__ == '__main__':
+
     try:
         asyncio.run(main(), debug=True)
     except Exception:

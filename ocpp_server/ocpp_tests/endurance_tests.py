@@ -183,7 +183,7 @@ async def smart_charging_extended_with_rapid_meter_values(cp):
             transaction_id=tx_id
         )
 
-    async def on_meter_values(self, connector_id, meter_value, transaction_id, **kwargs):
+    async def on_meter_values(self, call_unique_id, connector_id, meter_value, transaction_id, **kwargs):
         global awaiting_meter_value
         global expected_value_count
         global unexpected_value_count

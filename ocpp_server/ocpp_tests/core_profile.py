@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+from collections import deque
 import types
 import asyncio
+#import serial_asyncio
 import logging
 from datetime import datetime, timedelta
+import dateutil
 import time
 
 from ocpp.routing import on
@@ -26,7 +29,13 @@ from ocpp.v16.enums import (
     Phase
 )
 from ocpp.v16.datatypes import IdTagInfo
-from ocpp_tests.test_utils import ensure_configuration
+from ocpp_tests.test_utils import (
+    ensure_configuration,
+    ZapClientOutput,
+    ZapClientInput,
+    OperationState,
+    MCUWarning
+)
 expecting_boot_notification = False
 boot_notification_payload = boot_notification_payload = call_result.BootNotificationPayload(
     current_time=datetime.utcnow().isoformat(),
@@ -40,6 +49,7 @@ authorize_response = call_result.AuthorizePayload(IdTagInfo(status=Authorization
 
 awaiting_meter_connectors = []
 new_meter_values = dict()
+last_meter_value_timestamps = deque(maxlen = 10)
 
 async def test_got_presented_rfid(cp):
     while(cp.connector1_status != ChargePointStatus.available):
@@ -323,9 +333,30 @@ async def test_meter_values(cp):
 
             await asyncio.sleep(3)
 
+        logging.info("Waiting 40 sec to get meter values to check correct interval")
+        await asyncio.sleep(40)
+
+        start_end_time_diff = (last_meter_value_timestamps[-1] - last_meter_value_timestamps[0]).total_seconds()
+        if start_end_time_diff > 33 or start_end_time_diff < 27:
+            logging.error(f'Expected {interval_type} of 3 sec to send last 10 messages within 27 to 33 sec but got them within {start_end_time_diff} sec')
+            return False
+
+        res = await cp.call(call.ChangeConfigurationPayload(interval_type, "6"))
+        if(result == None or change_res.status != ConfigurationStatus.accepted):
+            logging.error(f"Unable to change {interval_type} to 6 sec")
+            return False
+
+        logging.info("Waiting 70 sec to get meter values to check new interval")
+        await asyncio.sleep(70)
+
+        start_end_time_diff = (last_meter_value_timestamps[-1] - last_meter_value_timestamps[0]).total_seconds()
+        if start_end_time_diff > 66 or start_end_time_diff < 54:
+            logging.error(f'Expected {interval_type} of 6 sec to send last 10 messages within 54 to 66 sec but got them within {start_end_time_diff} sec')
+            return False
+
         res = await cp.call(call.ChangeConfigurationPayload(interval_type, "0"))
         if(result == None or change_res.status != ConfigurationStatus.accepted):
-            logging.error(f"Unable to turn of clock aligned interval")
+            logging.error(f"Unable to turn off {interval_type}")
             return False
 
         gotten_phases = set()
@@ -740,6 +771,28 @@ async def test_change_availability(cp):
 
     return True
 
+async def test_faulted_state(cp, zap_in: ZapClientInput, zap_out: ZapClientOutput):
+
+    if zap_in is None or zap_out is None:
+        logging.error(f"Testing faulted state requires a connection to zapcli {zap_in} {zap_out}")
+        return False
+
+    zap_out.set_warning(MCUWarning.WARNING_EMETER_NO_RESPONSE)
+
+    while cp.connector1_status != ChargePointStatus().faulted:
+        logging.warning(F'Waiting for status faulted...{cp.connector1_status}')
+        await asyncio.sleep(3)
+
+    await asyncio.sleep(1) # Wait in case connector 1 was updated before connector 0 status
+
+    if cp.connector0_status != ChargePointStatus.faulted:
+        logging.error(F'Expected connector 0 to have faulted status')
+        return False
+
+    zap_out.set_warning(MCUWarning.WARNING_EMETER_NO_RESPONSE)
+
+    return False
+
 async def test_unlock_connector(cp):
     while cp.connector1_status != ChargePointStatus.preparing:
         logging.warning(f'Waiting for status preparing...{cp.connector1_status}')
@@ -791,8 +844,8 @@ async def test_unlock_connector(cp):
 
     return True
 
-async def test_core_profile(cp, include_manual_tests = True):
-    logging.info('Setting up core profile test')
+async def test_core_profile(cp, zap_in, zap_out, include_manual_tests = True):
+    logging.info(f'Setting up core profile test')
     preconfig_res = await ensure_configuration(cp,{ConfigurationKey.local_pre_authorize: "false",
                                                    ConfigurationKey.authorize_remote_tx_requests: "true",
                                                    ConfigurationKey.heartbeat_interval: "0",
@@ -816,16 +869,22 @@ async def test_core_profile(cp, include_manual_tests = True):
 
         return authorize_response
 
-    def on_meter_value(self, connector_id, meter_value, **kwargs):
+    def on_meter_value(self, call_unique_id, connector_id, meter_value, **kwargs):
         global awaiting_meter_connectors
+        global last_meter_value_timestamps
 
         if connector_id in awaiting_meter_connectors:
-            logging.info(f'Test got awaited meter value')
+            logging.info(f'Test got awaited meter value {call_unique_id}')
             global new_meter_value
             new_meter_values[connector_id] = meter_value
             awaiting_meter_connectors.remove(connector_id)
         else:
-            logging.info(f'Test got meter value')
+            logging.info(f'Test got meter value {call_unique_id}')
+
+        recieved_date = dateutil.parser.isoparse(meter_value[0]['timestamp']).replace(tzinfo=None)
+        logging.info(f'Created {datetime.utcnow().replace(tzinfo=None) - recieved_date} sec ago')
+        if len(last_meter_value_timestamps) == 0 or last_meter_value_timestamps[-1] + timedelta(seconds=1) < recieved_date:
+            last_meter_value_timestamps.append(recieved_date)
 
         return call_result.MeterValuesPayload()
 
@@ -861,6 +920,9 @@ async def test_core_profile(cp, include_manual_tests = True):
 
     if await test_change_availability(cp) != True:
         return False
+
+    # if await test_faulted_state(cp, zap_in, zap_out) != True:
+    #     return False
 
     if include_manual_tests:
         if await test_unlock_connector(cp) != True:
