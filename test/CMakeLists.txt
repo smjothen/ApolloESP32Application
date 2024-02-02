@@ -12,6 +12,7 @@ set(EXTRA_COMPONENT_DIRS
 	"../components/mid/lts/"
 	"../components/utz/"
 	"../components/nanopb/"
+	"../components/uuid/"
 	"../managed_components/joltwallet__littlefs/"
 	"$ENV{IDF_PATH}/tools/unit-test-app/components/test_utils/"
 )
@@ -19,6 +20,7 @@ set(EXTRA_COMPONENT_DIRS
 set(TEST_COMPONENTS
 	"lts"
 	"utz"
+	"uuid"
 	CACHE STRING "List of components to test"
 )
 
