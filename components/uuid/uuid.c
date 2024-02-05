@@ -46,3 +46,39 @@ bool uuid_to_string(const uuid_t id, char *buf, size_t bufsize) {
 		id.node[0], id.node[1], id.node[2], id.node[3], id.node[4], id.node[5]);
 	return true;
 }
+
+void uuid_from_bytes(uuid_t *id, uint8_t *bytes) {
+	id->time_low = ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16) | ((uint32_t)bytes[2] << 8) | bytes[3];
+	id->time_mid = ((uint16_t)bytes[4] << 8) | bytes[5];
+	id->time_high_version = ((uint16_t)bytes[6] << 8) | bytes[7];
+	id->clock_seq_high_reserved = bytes[8];
+	id->clock_seq_low = bytes[9];
+	id->node[0] = bytes[10];
+	id->node[1] = bytes[11];
+	id->node[2] = bytes[12];
+	id->node[3] = bytes[13];
+	id->node[4] = bytes[14];
+	id->node[5] = bytes[15];
+}
+
+void uuid_to_bytes(const uuid_t id, uint8_t *bytes) {
+	uint32_t i = id.time_low;
+	bytes[0] = (i >> 24) & 0xFF;
+	bytes[1] = (i >> 16) & 0xFF;
+	bytes[2] = (i >> 8) & 0xFF;
+	bytes[3] = i & 0xFF;
+	i = id.time_mid;
+	bytes[4] = (i >> 8) & 0xFF;
+	bytes[5] = i & 0xFF;
+	i = id.time_high_version;
+	bytes[6] = (i >> 8) & 0xFF;
+	bytes[7] = i & 0xFF;
+	bytes[8] = id.clock_seq_high_reserved;
+	bytes[9] = id.clock_seq_low;
+	bytes[10] = id.node[0];
+	bytes[11] = id.node[1];
+	bytes[12] = id.node[2];
+	bytes[13] = id.node[3];
+	bytes[14] = id.node[4];
+	bytes[15] = id.node[5];
+}
