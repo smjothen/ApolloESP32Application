@@ -1,6 +1,7 @@
 #ifndef __MID_H__
 #define __MID_H__
 
+#include "uuid.h"
 #include "mid_event.h"
 
 #include <stdint.h>
@@ -43,5 +44,16 @@ bool mid_get_calibration_id(uint32_t *id);
 bool mid_set_blink_enabled(bool enabled);
 bool mid_get_energy_interpolated(float *energy);
 bool mid_get_is_calibration_handle(void);
+
+bool mid_session_is_open(void);
+
+int mid_session_event_uuid(uuid_t uuid);
+int mid_session_event_auth_cloud(const char *data);
+int mid_session_event_auth_ble(const char *data);
+int mid_session_event_auth_rfid(const char *data);
+int mid_session_event_auth_iso15118(const char *data);
+int mid_session_event_open(void);
+int mid_session_event_close(void);
+int mid_session_event_tariff(void);
 
 #endif

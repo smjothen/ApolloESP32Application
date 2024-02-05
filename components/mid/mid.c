@@ -16,6 +16,7 @@
 #include "zaptec_protocol_serialisation.h"
 #include "storage.h"
 #include "esp_littlefs.h"
+#include "uuid.h"
 
 #include "mid_sign.h"
 #include "mid_lts.h"
@@ -256,6 +257,8 @@ int mid_session_add_event(mid_session_event_t event, mid_session_meter_value_fla
 		watt_hours = pkg.watt_hours;
 	}
 
+	// TODO: Use semaphore to serialize events
+	//
 	midlts_err_t err;
 	if ((err = event(&mid_lts, &pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
 		ESP_LOGE(TAG, "Can't add session event: LTS");
@@ -269,39 +272,203 @@ bool mid_session_is_open(void) {
 	return MID_SESSION_IS_OPEN(&mid_lts);
 }
 
-int mid_session_open(void) {
+int mid_session_event_open(void) {
 	return mid_session_add_event(mid_session_add_open, MID_SESSION_METER_VALUE_READING_FLAG_START);
 }
 
-int mid_session_close(void) {
+int mid_session_event_close(void) {
 	return mid_session_add_event(mid_session_add_close, MID_SESSION_METER_VALUE_READING_FLAG_END);
 }
 
-int mid_session_tariff(void) {
+int mid_session_event_tariff(void) {
 	return mid_session_add_event(mid_session_add_tariff, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF);
 }
 
 // NOTE: Session must be verified to be open when calling this!
-int mid_session_add_metadata_uuid() {
+int mid_session_event_uuid(uuid_t uuid) {
 	if (mid_status) {
-		ESP_LOGE(TAG, "Can't add session event: Status %08" PRIu32, mid_status);
+		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
 		return -1;
 	}
 
-	/*
-	midlts_err_t err;
-	if ((err = event(&mid_lts, &pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
-		ESP_LOGE(TAG, "Can't add session event: LTS");
+	int ret;
+	struct timespec ts;
+
+	if ((ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0) {
+		ESP_LOGE(TAG, "Can't add session metadata: Time");
 		return -1;
 	}
-	*/
+
+	uint8_t buf[16];
+	uuid_to_bytes(uuid, buf);
+
+	midlts_err_t err;
+	if ((err = mid_session_add_id(&mid_lts, NULL, NULL, ts, buf)) != LTS_OK) {
+		ESP_LOGE(TAG, "Can't add session metadata: LTS");
+		return -1;
+	}
+
 	return 0;
 }
 
-// Add metadata to an open session
-/*
-midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, uint8_t uuid[16]);
-midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size);
+static int mid_session_metadata_auth_uuid(mid_session_auth_source_t source, uuid_t uuid) {
+	if (mid_status) {
+		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
+		return -1;
+	}
 
-midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec);
-*/
+	int ret;
+	struct timespec ts;
+
+	if ((ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0) {
+		ESP_LOGE(TAG, "Can't add session metadata: Time");
+		return -1;
+	}
+
+	uint8_t len = 16;
+	uint8_t data[20];
+	uuid_to_bytes(uuid, data);
+
+	midlts_err_t err;
+	if ((err = mid_session_add_auth(&mid_lts, NULL, NULL, ts, source, MID_SESSION_AUTH_TYPE_UUID, data, len)) != LTS_OK) {
+		ESP_LOGE(TAG, "Can't add session metadata: LTS");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int mid_session_metadata_auth_rfid(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
+	if (mid_status) {
+		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
+		return -1;
+	}
+
+	int ret;
+	struct timespec ts;
+
+	if ((ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0) {
+		ESP_LOGE(TAG, "Can't add session metadata: Time");
+		return -1;
+	}
+
+	midlts_err_t err;
+	if ((err = mid_session_add_auth(&mid_lts, NULL, NULL, ts, source, MID_SESSION_AUTH_TYPE_RFID, data, len)) != LTS_OK) {
+		ESP_LOGE(TAG, "Can't add session metadata: LTS");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int mid_session_metadata_auth_string(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
+	if (mid_status) {
+		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
+		return -1;
+	}
+
+	int ret;
+	struct timespec ts;
+
+	if ((ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0) {
+		ESP_LOGE(TAG, "Can't add session metadata: Time");
+		return -1;
+	}
+
+	midlts_err_t err;
+	if ((err = mid_session_add_auth(&mid_lts, NULL, NULL, ts, source, MID_SESSION_AUTH_TYPE_STRING, data, len)) != LTS_OK) {
+		ESP_LOGE(TAG, "Can't add session metadata: LTS");
+		return -1;
+	}
+
+	return 0;
+}
+
+static bool hex_to_bytes(const char *in, size_t inlen, uint8_t *out, size_t *outlen) {
+	if (inlen % 2 != 0) {
+		ESP_LOGE(TAG, "Should be even amount of nibbles!");
+		return -1;
+	}
+
+	// Simple validation
+	for (size_t i = 0; i < inlen; i++) {
+		if (!isxdigit((int)in[i])) {
+			ESP_LOGE(TAG, "Non-hex digit in hex string!");
+			return -1;
+		}
+	}
+
+	size_t len = 0;
+	for (uint8_t i = 0; i < inlen; i += 2) {
+		if (sscanf(&in[i], "%02" SCNx8, &out[i / 2]) != 1) {
+			ESP_LOGE(TAG, "Error scanning hex string!");
+			return -1;
+		}
+		len++;
+	}
+
+	*outlen = len;
+	return 0;
+}
+
+static int mid_session_event_auth_internal(mid_session_auth_source_t source, const char *data) {
+	// Rudimentary data parsing, assuming 4 byte prefix and dash (nfc- / ble-)
+
+	size_t len = strlen(data);
+	if (len < 4) {
+		ESP_LOGE(TAG, "Can't add session metadata: Invalid");
+		return -1;
+	}
+
+	len = len - 4;
+	data = data + 4;
+
+	// UUID
+	if (len == 36) {
+		uuid_t uuid;
+		if (!uuid_from_string(&uuid, data)) {
+			ESP_LOGE(TAG, "Can't add session metadata: UUID");
+			return -1;
+		}
+		return mid_session_metadata_auth_uuid(source, uuid);
+	}
+
+	// RFID
+	if (len == 8 * 2 ||
+		len == 4 * 2 ||
+		len == 7 * 2 ||
+		len == 10 * 2) {
+
+		uint8_t out[20];
+		size_t outlen = 0;
+		if (!hex_to_bytes(data, len, out, &outlen)) {
+			ESP_LOGE(TAG, "Can't add session metadata: Hex");
+			return -1;
+		}
+		return mid_session_metadata_auth_rfid(source, out, outlen);
+	}
+
+	// TODO: Will data have separate prefix for ISO15118 auth modes? How to detect?
+
+	if (len > 20) {
+		len = 20;
+	}
+	return mid_session_metadata_auth_string(source, (uint8_t *)data, len);
+}
+
+// Different sources of authentication
+int mid_session_event_auth_cloud(const char *data) {
+	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_CLOUD, data);
+}
+
+int mid_session_event_auth_ble(const char *data) {
+	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_BLE, data);
+}
+
+int mid_session_event_auth_rfid(const char *data) {
+	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_RFID, data);
+}
+
+int mid_session_event_auth_iso15118(const char *data) {
+	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
+}
