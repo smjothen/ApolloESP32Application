@@ -1,6 +1,8 @@
 #include "esp_log.h"
 #include "uuid.h"
 
+// Adapted from Eldar's OCPP code ;)
+
 uuid_t uuid_generate(void) {
 	uuid_t id;
 
