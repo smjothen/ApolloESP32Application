@@ -34,7 +34,8 @@ from ocpp_tests.test_utils import (
     ZapClientOutput,
     ZapClientInput,
     OperationState,
-    MCUWarning
+    MCUWarning,
+    wait_for_cp_status
 )
 expecting_boot_notification = False
 boot_notification_payload = boot_notification_payload = call_result.BootNotificationPayload(
@@ -43,6 +44,7 @@ boot_notification_payload = boot_notification_payload = call_result.BootNotifica
     status=RegistrationStatus.accepted
 )
 
+tx_id = 500
 expecting_new_rfid = False
 new_rfid = ''
 authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted))
@@ -55,6 +57,8 @@ async def test_got_presented_rfid(cp):
     while(cp.connector1_status != ChargePointStatus.available):
         logging.warning(f"Waiting for status available...({cp.connector1_status})")
         await asyncio.sleep(3)
+
+    authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
 
     global expecting_new_rfid
     expecting_new_rfid = True
@@ -79,14 +83,20 @@ async def test_got_presented_rfid(cp):
     return True
 
 async def test_remote_start(cp):
-    while(cp.connector1_status != ChargePointStatus.available):
-        logging.warning(f"Waiting for status available...({cp.connector1_status})")
-        await asyncio.sleep(3)
+    cp.action_events = {
+        Action.StatusNotification: asyncio.Event()
+    }
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available])
+    if state != ChargePointStatus.available:
+        logging.error("CP did not enter available to start remote_start_test")
+        return False
 
     global expecting_new_rfid
     global authorize_response
     authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
     expecting_new_rfid = True
+    timeout_start = time.time()
     result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
     if result.status != RemoteStartStopStatus.accepted:
         logging.error("Remote start transaction was not accepted while in available state")
@@ -100,19 +110,19 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
-    if cp.connector1_status != ChargePointStatus.preparing:
+    state = await wait_for_cp_status(cp, [ChargePointStatus.preparing], 10)
+    if state != ChargePointStatus.preparing:
         logging.error(f'CP did not enter preparing after accepted Authorize.req: {cp.connector1_status}')
         return False
 
-    i = 0
-    while cp.connector1_status != ChargePointStatus.available:
-        i+=1
-        if i > 8:
-            logging.error(f'CP did not enter avaialble after connection timeout')
-            return False
-        logging.warning(f'Awaiting connection timeout')
-        await asyncio.sleep(2)
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 16)
+    if state != ChargePointStatus.available:
+        logging.error("CP did not enter avaialble after connection timeout")
+        return False
+
+    if (time.time() - timeout_start) < 7:
+        logging.error(f"CP did not wait for Connection timeout. Waited for less than {int(time.time() - timeout_start)}")
+        return False
 
     authorize_response= call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.concurrent_tx))
     expecting_new_rfid = True
@@ -129,8 +139,8 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
-    if cp.connector1_status != ChargePointStatus.available:
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 10)
+    if state != ChargePointStatus.available:
         logging.error(f'CP did not remain in available after concurrent tx Authorize.req: {cp.connector1_status}')
         return False
 
@@ -149,8 +159,8 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
-    if cp.connector1_status != ChargePointStatus.available:
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 10)
+    if state != ChargePointStatus.available:
         logging.error(f'CP did not remain in available after after blocked Authorize.req: {cp.connector1_status}')
         return False
 
@@ -169,8 +179,8 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
-    if cp.connector1_status != ChargePointStatus.available:
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 10)
+    if state != ChargePointStatus.available:
         logging.error(f'CP did not remain in available after invalid Authorize.req: {cp.connector1_status}')
         return False
 
@@ -189,8 +199,8 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
-    if cp.connector1_status != ChargePointStatus.available:
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 10)
+    if state != ChargePointStatus.available:
         logging.error(f'CP did not remain in available after expired Authorize.req: {cp.connector1_status}')
         return False
 
@@ -210,7 +220,7 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    await asyncio.sleep(3)
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 10)
     if cp.connector1_status != ChargePointStatus.available:
         logging.error(f'CP did not remain in available after accept and expire Authorize.req: {cp.connector1_status}')
         return False
@@ -222,6 +232,7 @@ async def test_remote_start(cp):
 
     authorize_response= call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
     expecting_new_rfid = True
+    timeout_start = time.time()
     result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
     if result.status != RemoteStartStopStatus.accepted:
         logging.error("Remote start transaction was not accepted while in available state")
@@ -235,25 +246,80 @@ async def test_remote_start(cp):
         logging.error(f"Unexpected rfid tag in Authorize.req :{new_rfid}")
         return False
 
-    i = 0
-    while cp.connector1_status != ChargePointStatus.preparing:
-        i+=1
-        if i > 8:
-            logging.error('Did not get transition to preparing')
-            return False
-        logging.warning('awaiting transition due to remote start accept')
-        await asyncio.sleep(0.3)
+    state = await wait_for_cp_status(cp, [ChargePointStatus.preparing], 10)
+    if state != ChargePointStatus.preparing:
+        logging.error('Did not get transition to preparing')
+        return False
 
-    i = 0
-    while cp.connector1_status != ChargePointStatus.available:
-        i+=1
-        if i > 8:
-            break
-        logging.warning(f'Awaiting longer connection timeout')
-        await asyncio.sleep(2)
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available], 25)
+    if state != ChargePointStatus.available:
+        logging.error("CP did not go back to available after longer connection timeout")
+        return False
 
-    if i < 8:
+    if (time.time() - timeout_start) < 20:
         logging.error(f'longer connection timout was not long')
+        return False
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.preparing])
+    while cp.connector1_status != ChargePointStatus.preparing:
+        logging.error("Car did not connect to test remote start during preparing")
+        return False
+
+    authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
+    expecting_new_rfid = True
+    result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
+    if result.status != RemoteStartStopStatus.accepted:
+        logging.error("Remote start transaction was not accepted while in preparing state")
+        return False
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.charging, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse], 16)
+    if state not in [ChargePointStatus.charging, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse]:
+        logging.error("CP did not enter state charging after all preconditions where met")
+        return False
+
+    result = await cp.call(call.RemoteStopTransactionPayload(tx_id))
+    if result.status != RemoteStartStopStatus.accepted:
+        logging.error("Remote stop of remote authorized transaction failed")
+        return False
+
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.finishing], 16)
+    if state != ChargePointStatus.finishing:
+        logging.error("CP did not enter state finishing after transaction was stopped remotely")
+        return False
+
+    logging.warning("Waiting to see if finishing remains")
+    await asyncio.sleep(5)
+    if cp.connector1_status != ChargePointStatus.finishing:
+        logging.error("CP did not remain in finishing state")
+        return False
+
+    authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
+    expecting_new_rfid = True
+    result = await cp.call(call.RemoteStartTransactionPayload(id_tag = "test_tag"))
+    if result.status != RemoteStartStopStatus.accepted:
+        logging.error("Remote start transaction was not accepted while in finishing state")
+        return False
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.charging, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse], 16)
+    if state not in [ChargePointStatus.charging, ChargePointStatus.suspended_ev, ChargePointStatus.suspended_evse]:
+        logging.error("CP did not enter state charging after all preconditions where met in finishing state")
+        return False
+
+    result = await cp.call(call.RemoteStopTransactionPayload(tx_id))
+    if result.status != RemoteStartStopStatus.accepted:
+        logging.error("Remote stop of remote authorized transaction failed")
+        return False
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.finishing], 16)
+    if state != ChargePointStatus.finishing:
+        logging.error("CP did not enter state finishing after transaction was stopped remotely")
+        return False
+
+    logging.warning("Waiting to see if finishing remains")
+    await asyncio.sleep(5)
+    if cp.connector1_status != ChargePointStatus.finishing:
+        logging.error("CP did not remain in finishing state")
         return False
 
     return True
@@ -897,10 +963,20 @@ async def test_core_profile(cp, zap_in, zap_out, include_manual_tests = True):
 
         return boot_notification_payload
 
-    cp.route_map[Action.BootNotification]["_on_action"] = types.MethodType(on_boot_notitication, cp)
+    def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
+        logging.info(f"Testing got start transaction with id {id_tag}")
+        info=dict(parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
+        global tx_id
+        tx_id +=1
+        return call_result.StartTransactionPayload(
+            id_tag_info=info,
+            transaction_id=tx_id
+        )
 
+    cp.route_map[Action.BootNotification]["_on_action"] = types.MethodType(on_boot_notitication, cp)
     cp.route_map[Action.Authorize]["_on_action"] = types.MethodType(on_authorize, cp)
     cp.route_map[Action.MeterValues]["_on_action"] = types.MethodType(on_meter_value, cp)
+    cp.route_map[Action.StartTransaction]["_on_action"] = types.MethodType(on_start_transaction, cp)
 
     if include_manual_tests:
         if await test_got_presented_rfid(cp) != True:

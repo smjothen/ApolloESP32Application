@@ -4,9 +4,10 @@ from enum import Enum
 import logging
 import asyncio
 import serial_asyncio
-
+import time
+from typing import Optional
 from ocpp.routing import on
-from ocpp.v16.enums import ConfigurationStatus
+from ocpp.v16.enums import ConfigurationStatus, Action
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call
 
@@ -45,7 +46,6 @@ class MCUWarning(Enum):
     WARNING_RCD_FAILURE = 18
     WARNING_SERVO = 29
     WARNING_MID = 30
-
 
 class ZapClientInput(asyncio.Protocol):
     def __init__(self):
@@ -138,3 +138,32 @@ async def ensure_configuration(cp, key_value_pairs: dict):
         return -1
     else:
         return 0
+
+async def wait_for_cp_action_event(cp, action: Action, timeout: Optional[int] = None):
+    await asyncio.wait_for(cp.action_events[action].wait(), timeout)
+    cp.action_events[action].clear()
+
+async def wait_for_cp_status(cp, states: list, timeout: Optional[int] = None):
+    start_time = time.time()
+    while(cp.connector1_status not in states):
+        elapsed = int(time.time() - start_time)
+
+        wait = None
+        if timeout is None:
+            logging.warning(f"Waiting for status {states}...({cp.connector1_status})")
+        else:
+            if elapsed >= timeout:
+                break
+
+            wait = timeout - elapsed
+            logging.warning(f"Waiting up to {wait} seconds for status {states}...({cp.connector1_status})")
+        try:
+            await wait_for_cp_action_event(cp, Action.StatusNotification, wait)
+        except TimeoutError:
+            logging.error("Timed out")
+            break
+        except Exception:
+            logging.error(f"Exception occured while waiting for status: {Exception}")
+            break
+
+    return cp.connector1_status

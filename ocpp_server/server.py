@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from functools import wraps
 import serial_asyncio
 import traceback
 import websockets
@@ -131,22 +132,29 @@ async def test_runner(cp):
 
 
 class ChargePoint(cp):
-    cp.registration_status = RegistrationStatus.rejected
-    cp.connector1_status = ChargePointStatus.unavailable
 
-    @on('BootNotification')
+
+    def __init__(self, id, connection, response_timeout=30):
+        super().__init__(id, connection, response_timeout)
+
+        self.registration_status = RegistrationStatus.rejected
+        self.connector1_status = ChargePointStatus.unavailable
+
+        self.action_events = dict()
+
+    @on(Action.BootNotification)
     def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
         logging.info("replying to on boot msg")
 
-        cp.registration_status = RegistrationStatus.accepted
+        self.registration_status = RegistrationStatus.accepted
 
         return call_result.BootNotificationPayload(
             current_time=datetime.utcnow().isoformat(),
             interval=15,
-            status=cp.registration_status
+            status=self.registration_status
         )
 
-    @on('Heartbeat')
+    @on(Action.Heartbeat)
     def on_heartbeat(self, **kwargs):
         logging.info("replying to heartbeat")
 
@@ -157,14 +165,14 @@ class ChargePoint(cp):
             current_time=time,
         )
 
-    @on('Authorize')
+    @on(Action.Authorize)
     def on_authorize_request(self, id_tag):
         logging.info(f'authorizing {id_tag}')
         return call_result.AuthorizePayload(
             dict(expiry_date = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         )
 
-    @on('StartTransaction')
+    @on(Action.StartTransaction)
     def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
         logging.info('Replying to start transaction')
         info=dict(expiryDate = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
@@ -173,19 +181,19 @@ class ChargePoint(cp):
             transaction_id=1231312
         )
 
-    @on('MeterValues')
+    @on(Action.MeterValues)
     def on_meter_value(self, call_unique_id, connector_id, meter_value, **kwargs):
         logging.info(f'Meter value: {meter_value}')
         return call_result.MeterValuesPayload()
 
-    @on('StopTransaction')
+    @on(Action.StopTransaction)
     def on_stop_transaction(self, **kwargs):
         logging.info("----------------------------------------")
         logging.info(f'Replying to stop transaction {kwargs}')
         logging.info("----------------------------------------")
         return call_result.StopTransactionPayload()
 
-    @on('StatusNotification')
+    @on(Action.StatusNotification)
     def on_status_notification(self, connector_id, error_code, status, **kwargs):
         if connector_id == 0:
             self.connector0_status = status
@@ -198,6 +206,9 @@ class ChargePoint(cp):
             logging.info(f'Connector {connector_id} status: {status} ({error_code})')
         else:
             logging.error(f'Connector {connector_id} status: {status} ({error_code}) {kwargs}')
+
+        if Action.StatusNotification in self.action_events:
+            self.action_events[Action.StatusNotification].set()
 
         return call_result.StatusNotificationPayload()
 

@@ -1148,7 +1148,6 @@ static enum  SessionResetMode sessionResetMode = eSESSION_RESET_NONE;
 
 void start_charging_on_tag_accept(const char * tag){
 	ESP_LOGI(TAG, "Start transaction accepted for %s", tag);
-	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_accepted();
 	MessageType ret = MCU_SendCommandId(CommandAuthorizationGranted);
@@ -1168,11 +1167,12 @@ void start_charging_on_tag_accept(const char * tag){
 		strncpy(ocpp_start_token, pendingAuthID, sizeof(ocpp_id_token));
 		SetAuthorized(true);
 	}
+
+	pending_ocpp_authorize = false;
 }
 
 void start_charging_on_tag_deny(const char * tag){
 	ESP_LOGW(TAG, "Start transaction denied for %s", tag);
-	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_denied();
 	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied);
@@ -1194,11 +1194,11 @@ void start_charging_on_tag_deny(const char * tag){
 	else
 		ESP_LOGW(TAG, "NACK on SESSION_NOT_AUTHORIZED!!!");
 
+	pending_ocpp_authorize = false;
 }
 
 void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
 	ESP_LOGI(TAG, "Cancel authorization for preparing token: %s comparable to %s", tag_1, tag_2);
-	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_accepted();
 	SetAuthorized(false);
@@ -1206,11 +1206,12 @@ void cancel_authorization_on_tag_accept(const char * tag_1, const char * tag_2){
 
 	sessionHandler_InitiateResetChargeSession();
 	chargeSession_ClearAuthenticationCode();
+
+	pending_ocpp_authorize = false;
 }
 
 void cancel_authorization_on_tag_deny(const char * tag_1, const char * tag_2){
 	ESP_LOGI(TAG, "Won't cancel authorization for preparing token: %s not comparable to %s", tag_1, tag_2);
-	pending_ocpp_authorize = false;
 
 	audio_play_nfc_card_denied();
 	MessageType ret = MCU_SendCommandId(CommandAuthorizationDenied); // Will only change led, not actual authorization status on dsPIC
@@ -1222,6 +1223,8 @@ void cancel_authorization_on_tag_deny(const char * tag_1, const char * tag_2){
 	{
 		ESP_LOGI(TAG, "MCU authorization denied command FAILED");
 	}
+
+	pending_ocpp_authorize = false;
 }
 
 void stop_charging_on_tag_accept(const char * tag_1, const char * tag_2){
