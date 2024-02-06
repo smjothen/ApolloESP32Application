@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from enum import Enum
 
+import traceback
 import logging
 import asyncio
 import serial_asyncio
@@ -162,8 +163,9 @@ async def wait_for_cp_status(cp, states: list, timeout: Optional[int] = None):
         except TimeoutError:
             logging.error("Timed out")
             break
-        except Exception:
-            logging.error(f"Exception occured while waiting for status: {Exception}")
+        except Exception as e:
+            logging.error(f"Exception occured while waiting for status: {e}")
+            traceback.print_exc()
             break
 
     return cp.connector1_status

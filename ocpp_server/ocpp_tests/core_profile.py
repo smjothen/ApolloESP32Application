@@ -54,9 +54,14 @@ new_meter_values = dict()
 last_meter_value_timestamps = deque(maxlen = 10)
 
 async def test_got_presented_rfid(cp):
-    while(cp.connector1_status != ChargePointStatus.available):
-        logging.warning(f"Waiting for status available...({cp.connector1_status})")
-        await asyncio.sleep(3)
+    cp.action_events = {
+        Action.StatusNotification: asyncio.Event()
+    }
+
+    state = await wait_for_cp_status(cp, [ChargePointStatus.available])
+    if cp.connector1_status != ChargePointStatus.available:
+        logging.error(f"CP did not enter available to test presented RFID tag")
+        return False
 
     authorize_response = call_result.AuthorizePayload(IdTagInfo(status=AuthorizationStatus.accepted, expiry_date=(datetime.utcnow() + timedelta(days=1)).isoformat()))
 
@@ -69,15 +74,33 @@ async def test_got_presented_rfid(cp):
 
     global new_rfid
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, input, f'does "{new_rfid}" match presented id? y/n')
+    response = await loop.run_in_executor(None, input, f'does "{new_rfid}" match presented id? y/n ')
 
-    if response != "y":
+    if response.lower() != "y":
         logging.error(f'Authorize got incorrect RFID. User typed {response}')
         return False
 
-    response = await loop.run_in_executor(None, input, f'Did the CP indicate accepted via LED and sound? y/n')
-    if response != "y":
+    response = await loop.run_in_executor(None, input, f'Did the CP indicate accepted via LED and sound? y/n ')
+    if response.lower() != "y":
         logging.error(f'Unexpected LED: {response}')
+        return False
+
+    logging.warning("Present RFID tag again and set car in charging state")
+    state = await wait_for_cp_status(cp, [ChargePointStatus.charging])
+    if state != ChargePointStatus.charging:
+        logging.error("CP did not enter charging to test locally started transaction")
+        return False
+
+
+    logging.warning("Present same RFID tag again to check that it can stop the transaction")
+    state = await wait_for_cp_status(cp, [ChargePointStatus.finishing])
+    if state != ChargePointStatus.finishing:
+        logging.error("CP did not enter finishing when testing locally stopped transaction")
+        return False
+
+    response = await loop.run_in_executor(None, input, f'Did the CP react to presented tag as expected? y/n ')
+    if response.lower() != "y":
+        logging.error(f'Unexpected stopping behaviour: {response}')
         return False
 
     return True
