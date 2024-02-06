@@ -71,6 +71,8 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 		}
 	}
 
+	ctx->msg_latest = rec->meter_value;
+
 	return LTS_OK;
 }
 

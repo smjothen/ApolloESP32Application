@@ -55,6 +55,7 @@ typedef struct _midlts_ctx_t {
 	uint32_t flags;
 	size_t max_pages;
 
+	mid_session_meter_value_t msg_latest;
 	midlts_id_t msg_page;
 	midlts_id_t msg_id;
 

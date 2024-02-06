@@ -39,7 +39,7 @@ static void ChargeSession_Set_GUID()
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[2]);
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[1]);
 //	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
-	
+
 	sprintf(chargeSession.SessionId, "%08" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "%08" PRIx32, GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
 	//hasNewSessionIdFromCloud = true;
 	strcpy(sidOrigin, "local");
