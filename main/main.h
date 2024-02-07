@@ -12,6 +12,7 @@ extern "C" {
 
 void GetTimeOnString(char * onTimeString);
 void SetOnlineWatchdog();
+char * GetCapabilityString();
 
 #ifdef __cplusplus
 }

@@ -21,9 +21,9 @@
 static const char *TAG = "CONNECTIVITY   ";
 
 
-enum CommunicationMode activeInterface = eCONNECTION_NONE;
-static enum CommunicationMode staticNewInterface = eCONNECTION_NONE;
-static enum CommunicationMode previousInterface = eCONNECTION_NONE;
+enum eCommunicationMode activeInterface = eCONNECTION_NONE;
+static enum eCommunicationMode staticNewInterface = eCONNECTION_NONE;
+static enum eCommunicationMode previousInterface = eCONNECTION_NONE;
 
 static bool certificateInitialized = false;
 static bool sntpInitialized = false;
@@ -41,18 +41,18 @@ bool connectivity_GetMQTTInitialized()
 	return mqttInitialized;
 }
 
-void connectivity_ActivateInterface(enum CommunicationMode selectedInterface)
+void connectivity_ActivateInterface(enum eCommunicationMode selectedInterface)
 {
 	previousInterface = activeInterface;
 	staticNewInterface = selectedInterface;
 }
 
-enum CommunicationMode connectivity_GetActivateInterface()
+enum eCommunicationMode connectivity_GetActivateInterface()
 {
 	return activeInterface;
 }
 
-enum CommunicationMode connectivity_GetPreviousInterface()
+enum eCommunicationMode connectivity_GetPreviousInterface()
 {
 	return previousInterface;
 }
@@ -76,7 +76,9 @@ uint32_t connectivity_GetNrOfLTEReconnects()
 static void OneSecondTimer()
 {
 	//ESP_LOGW(TAG,"OneSec?");
-	sessionHandler_Pulse();
+
+	if(storage_Get_PulseType() == ePULSE_IOT_HUB)
+		sessionHandler_Pulse();
 
 	if(storage_Get_CommunicationMode() != eCONNECTION_NONE)
 	{
@@ -114,9 +116,9 @@ static void OneSecondTimer()
 				restartTimeLimit = 86400;
 			}
 
-			if(mqttUnconnectedCounter % 10 == 0)
+			if((mqttUnconnectedCounter % 10 == 0) && (mqttUnconnectedCounter > 120))
 			{
-				ESP_LOGE(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900 || noc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
+				ESP_LOGW(TAG, "MQTT_unconnected restart (%" PRId32 "/%" PRId32 " && (disc:%" PRId32 "/3900 || noc:%" PRId32 "/3900))", mqttUnconnectedCounter, restartTimeLimit, carDisconnectedCounter, carNotChargingCounter);
 			}
 
 			enum ChargerOperatingMode chOpMode = sessionHandler_GetCurrentChargeOperatingMode();
@@ -178,14 +180,14 @@ static void OneSecondTimer()
 static void connectivity_task()
 {
 	/// Read from Flash. If no interface is configured, use none and wait for setting
-	staticNewInterface = (enum CommunicationMode)storage_Get_CommunicationMode();
+	staticNewInterface = (enum eCommunicationMode)storage_Get_CommunicationMode();
 
 	struct DeviceInfo devInfo = i2cGetLoadedDeviceInfo();
 	if(devInfo.factory_stage != FactoryStageFinnished || mid_get_is_calibration_handle()) {
 		staticNewInterface = eCONNECTION_WIFI;
 	}
 
-	enum CommunicationMode localNewInterface = eCONNECTION_NONE;
+	enum eCommunicationMode localNewInterface = eCONNECTION_NONE;
 
 	bool interfaceChange = false;
 	bool zntpIsRunning = false;

@@ -56,6 +56,8 @@
 #include "ocpp_smart_charging.h"
 #include "ocpp_task.h"
 #include "types/ocpp_charge_point_error_code.h"
+#include "../components/capabilities/Capabilities.c"
+#include "../components/capabilities/include/list.h"
 
 #include "emclog.h"
 #include "emclog_fields.h"
@@ -73,7 +75,7 @@ static const char *TAG_MAIN = "MAIN           ";
 #define GPIO_OUTPUT_DEBUG_PIN_SEL (1ULL<<GPIO_OUTPUT_DEBUG_LED)
 
 uint32_t onTimeCounter = 0;
-char softwareVersion[] = "2.3.0.305";
+char softwareVersion[] = "2.4.0.2";
 
 uint8_t GetEEPROMFormatVersion()
 {
@@ -457,6 +459,63 @@ void log_efuse_info()
 	ESP_LOGI(TAG_MAIN, "");
 }
 
+
+static char * capabilityString = NULL;
+char * GetCapabilityString()
+{
+	return capabilityString;
+}
+
+void MakeCapabilityString()
+{
+	/// Device Type
+	enum DeviceType deviceType = DEVICETYPE_GO;
+
+	/// Meter calibrated
+	uint32_t calibrationId = 0;
+	bool isCalibrated = mid_get_calibration_id(&calibrationId);
+	if((isCalibrated == true) && (calibrationId != 0))
+		ESP_LOGW(TAG_MAIN, "MID Calibration ID: %lu", calibrationId);
+	else
+		isCalibrated = false;
+
+	/// OCPP
+	list_t * ocppList = list_create(false, NULL);
+	enum CommunicationMode ocppMode = OCPPVERSION_V1_6;
+	list_add(ocppList, (void*)&ocppMode, sizeof(void*));
+
+	/// Communication Modes
+	list_t * comList = list_create(false, NULL);
+	enum CommunicationMode LTEMode = COMMUNICATIONMODE_LTE;
+	enum CommunicationMode wifiMode = COMMUNICATIONMODE_WI_FI;
+	list_add(comList, (void*)&LTEMode, sizeof(void*));
+	list_add(comList, (void*)&wifiMode, sizeof(void*));
+
+	/// Make capabilites
+	const struct Capabilities capabilities = {
+		.schema_version			= (char*)CapabilitiesSchemaVersionString,
+		.device_type 			= &deviceType,
+		.meter_calibrated 		= &isCalibrated,
+		.ocpp_versions 			= ocppList,
+		.communication_modes 	= comList
+	};
+
+	cJSON * capaObject = cJSON_CreateCapabilities(&capabilities);
+
+	capabilityString = cJSON_PrintUnformatted(capaObject);
+	/// Clean up, keep only string permanently in memory.
+	list_release(comList);
+	list_release(ocppList);
+	cJSON_Delete(capaObject);
+	//cJSON_DeleteCapabilities(&capabilities);
+
+	/// Frees JSON object and sublists by calling list_release() on each list used
+	ESP_LOGW(TAG_MAIN, "Capabilities: %s", GetCapabilityString());
+}
+
+
+
+
 #ifdef CONFIG_HEAP_TRACING_STANDALONE
 #define TRACE_RECORD_COUNT 80
 static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
@@ -627,6 +686,27 @@ void app_main(void)
 		ESP_LOGW(TAG_MAIN, "Waiting for MCU: %d", mcuTimeout);
 	}
 
+	if(MCU_IsReady())
+	{
+		ESP_LOGW(TAG_MAIN, "MCU Ready");
+
+		size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+		size_t min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+		size_t blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+		ESP_LOGI(TAG_MAIN, "1 DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+
+
+		MakeCapabilityString();
+
+		free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
+		min_dma = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA);
+		blk_dma = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+
+		ESP_LOGI(TAG_MAIN, "2 DMA memory free: %d, min: %d, largest block: %d", free_dma, min_dma, blk_dma);
+	}
+
+
 	///Check for MID calibrationHandle at boot
 	bool isCalibrationHandle = mid_get_is_calibration_handle();
 
@@ -794,6 +874,11 @@ void app_main(void)
 				periodic_refresh_token(2);	//Argument is for diagnostics
 			}
     	}
+
+		if(cloud_listener_test_reconnect() == true)
+		{
+			periodic_refresh_token(3);	//Argument is for diagnostics
+		}
 
 
     	//For 4G testing - activated with command

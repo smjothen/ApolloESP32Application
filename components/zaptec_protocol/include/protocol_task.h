@@ -97,6 +97,7 @@ void MCU_GetOPENSamples(char * samples);
 uint8_t MCU_GetRelayStates();
 uint8_t MCU_GetRCDButtonTestStates();
 void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen);
+bool MCU_SendCommandServoForceUnlock();
 
 float MCU_GetMaxInstallationCurrentSwitch();
 uint8_t GetMaxCurrentConfigurationSource();
@@ -114,12 +115,6 @@ void SetFinalStopActiveStatus(uint8_t status);
 uint8_t GetFinalStopActiveStatus();
 bool MCU_IsReady();
 
-bool MCU_GetMidStoredCalibrationId(uint32_t *id);
-bool MCU_SetMIDBlinkEnabled(bool enabled);
-bool MCU_GetInterpolatedEnergyCounter(float *energy);
-bool MCU_IsCalibrationHandle(void);
-
-bool MCU_GetMidStatus(uint32_t *id);
 bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalCount);
 
 bool MCU_ClearWarning(uint32_t warning);

@@ -13,6 +13,7 @@
 #include <inttypes.h>
 
 #include "../../main/storage.h"
+#include "../../main/main.h"
 #include "../../components/wifi/include/network.h"
 #include "string.h"
 #include "esp_wifi.h"
@@ -29,6 +30,8 @@
 #include "../../main/chargeController.h"
 #include "../../components/authentication/rfidPairing.h"
 #include "../../components/authentication/authentication.h"
+#include "../../components/ocpp/include/ocpp_task.h"
+#include "../../main/ocpp.h"
 
 
 static const char *TAG = "BLE SERVICE    ";
@@ -165,6 +168,12 @@ const uint8_t Timezone_uid128[ESP_UUID_LEN_128] 		= {0xe0, 0xfc, 0xb5, 0xc0, 0x5
 const uint8_t TimeSchedule_uid128[ESP_UUID_LEN_128] 	= {0xe1, 0xfc, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
 const uint8_t RCDTest_uid128[ESP_UUID_LEN_128] 			= {0x0d, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+
+const uint8_t Capabilities_uid128[ESP_UUID_LEN_128] 	 = {0x02, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+
+const uint8_t SessionController_uid128[ESP_UUID_LEN_128] 	 = {0x10, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+const uint8_t OCPP_Native_URL_uid128[ESP_UUID_LEN_128] 	 	 = {0x11, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
+const uint8_t OCPP_Native_Connected_uid128[ESP_UUID_LEN_128] = {0x16, 0xfe, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
 
 
 const uint8_t RunCommand_uid128[ESP_UUID_LEN_128] = 	{0x03, 0xfd, 0xb5, 0xc0, 0x50, 0x69, 0x5a, 0xa2, 0x77, 0x45, 0xec, 0xde, 0x5a, 0x2c, 0x49, 0x10};
@@ -333,6 +342,21 @@ const esp_gatts_attr_db_t wifi_serv_gatt_db[WIFI_NB] =
 	//[CHARGER_RCDTEST_DESCR] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *) &character_description, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, 0, NULL}},
 
 
+	[CHARGER_CAPABILITIES_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_CAPABILITIES_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &Capabilities_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
+
+
+	[CHARGER_SESSION_CONTROLLER_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_SESSION_CONTROLLER_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &SessionController_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+
+	[CHARGER_OCPP_NATIVE_URL_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_OCPP_NATIVE_URL_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &OCPP_Native_URL_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+
+	[CHARGER_OCPP_NATIVE_CONNECTED_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
+	[CHARGER_OCPP_NATIVE_CONNECTED_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &OCPP_Native_Connected_uid128, ESP_GATT_PERM_READ, sizeof(uint16_t), 0, NULL}},
+
+
+
 	[CHARGER_RUN_COMMAND_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *) &character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write_notify}},
 	[CHARGER_RUN_COMMAND_UUID] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_128, (uint8_t *) &RunCommand_uid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), 0, NULL}},
 
@@ -406,7 +430,8 @@ static char * timeScheduleString = NULL;
 static int timeScheduleLength = 0;
 char *jsonString = NULL;
 cJSON *jsonObject = NULL;
-
+static int readCapabilityIndex = 0;
+static int readOCPPNativeURLIndex = 0;
 
 void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gatt_rsp_t* rsp)
 {
@@ -427,7 +452,10 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 			(attrIndex != CHARGER_FIRMWARE_VERSION_UUID) && (attrIndex != CHARGER_WARNINGS_UUID) &&
 			(attrIndex != CHARGER_AUTH_UUID) && (attrIndex != CHARGER_OPERATION_STATE_UUID) &&
 			(attrIndex != CHARGER_PAIR_NFC_TAG_UUID) && (attrIndex != CHARGER_AUTHORIZATION_RESULT_UUID) &&
-			(attrIndex != CHARGER_NETWORK_STATUS_UUID) && (attrIndex != CHARGER_OCCUPIED_STATE_UUID))
+			(attrIndex != CHARGER_NETWORK_STATUS_UUID) && (attrIndex != CHARGER_OCCUPIED_STATE_UUID) &&
+			(attrIndex != CHARGER_CAPABILITIES_UUID) && (attrIndex != CHARGER_SESSION_CONTROLLER_UUID) &&
+			(attrIndex != CHARGER_OCPP_NATIVE_URL_UUID) && (attrIndex != CHARGER_OCPP_NATIVE_CONNECTED_UUID)
+			)
 	{
 		ESP_LOGE(TAG, "Read: No pin set: %d", attrIndex);
 		return;
@@ -490,6 +518,45 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 		memcpy(rsp->attr_value.value, CHARGER_SERV_CHAR_CHARGER_MID_val, sizeof(CHARGER_SERV_CHAR_CHARGER_MID_val));
 		rsp->attr_value.len = sizeof(CHARGER_SERV_CHAR_CHARGER_MID_val);
 		break;
+
+	case CHARGER_CAPABILITIES_UUID:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		ESP_LOGW(TAG, "readCapabilityIndex: %i", readCapabilityIndex);	
+		if(GetCapabilityString() != NULL)
+		{
+			size_t len = strlen(GetCapabilityString());
+			char * stringIndex = GetCapabilityString();
+			ESP_LOGW(TAG, "CapaStrLen: %d: %s", len, stringIndex);
+			
+			/// Check for more data
+			int remainingBytes = 0;
+			if(readCapabilityIndex < len)
+			{
+				remainingBytes = len - readCapabilityIndex;
+				if(remainingBytes > 0)
+				{
+					int bytesToSend = 22;
+					if(remainingBytes < 22)
+					{
+						bytesToSend = remainingBytes;
+					}
+
+					ESP_LOGW(TAG, "From index %i, sending %i bytes ", readCapabilityIndex,  bytesToSend);	
+					memcpy(rsp->attr_value.value, &stringIndex[readCapabilityIndex], bytesToSend);
+					rsp->attr_value.len = bytesToSend;
+				}
+			}
+
+			//Enable to autoread in LightBlue app
+			/*if(remainingBytes >= 22)
+				readCapabilityIndex +=22;
+			else
+				readCapabilityIndex = 0;
+			*/
+		}
+		break;
+
 
     /*case CHARGER_DEVICE_MID_DESCR:
 		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
@@ -1228,13 +1295,71 @@ void handleWifiReadEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_gat
 
     	break;
 
+
+	case CHARGER_SESSION_CONTROLLER_UUID:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		snprintf(nrTostr, sizeof(nrTostr), "%i", ocpp_get_session_controller_mode());
+
+		ESP_LOGI(TAG, "Read SessionController: %s", nrTostr);
+
+		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
+		rsp->attr_value.len = strlen(nrTostr);
+		break;
+
+	case CHARGER_OCPP_NATIVE_URL_UUID:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+
+		ESP_LOGW(TAG, "readOCPPNativeURL: %i", readCapabilityIndex);	
+		if(storage_Get_url_ocpp() != NULL)
+		{
+			size_t len = strlen(storage_Get_url_ocpp());
+			const char * stringIndex = storage_Get_url_ocpp();
+			ESP_LOGW(TAG, "URLStrLen: %d: %s", len, stringIndex);
+			
+			/// Check for more data
+			int remainingBytes = 0;
+			if(readOCPPNativeURLIndex < len)
+			{
+				remainingBytes = len - readOCPPNativeURLIndex;
+				if(remainingBytes > 0)
+				{
+					int bytesToSend = 22;
+					if(remainingBytes < 22)
+					{
+						bytesToSend = remainingBytes;
+					}
+
+					ESP_LOGW(TAG, "URL index %i, sending %i bytes ", readOCPPNativeURLIndex,  bytesToSend);	
+					memcpy(rsp->attr_value.value, &stringIndex[readOCPPNativeURLIndex], bytesToSend);
+					rsp->attr_value.len = bytesToSend;
+				}
+			}
+
+			//Enable to autoread in LightBlue app
+			if(remainingBytes >= 22)
+				readOCPPNativeURLIndex +=22;
+			else
+				readOCPPNativeURLIndex = 0;
+			
+		}
+		break;
+
+	case CHARGER_OCPP_NATIVE_CONNECTED_UUID:
+		memset(rsp->attr_value.value, 0, sizeof(rsp->attr_value.value));
+		snprintf(nrTostr, sizeof(nrTostr), "%i",ocpp_is_connected());
+
+		ESP_LOGI(TAG, "Read ocpp_is_connected: %s", nrTostr);
+
+		memcpy(rsp->attr_value.value, nrTostr, strlen(nrTostr));
+		rsp->attr_value.len = strlen(nrTostr);
+		break;	
     }
 }
 
 static bool saveWifi = false;
 static bool saveConfiguration = false;
-static enum CommunicationMode interface = eCONNECTION_NONE;
-static enum CommunicationMode previousInterface = eCONNECTION_NONE;
+static enum eCommunicationMode interface = eCONNECTION_NONE;
+static enum eCommunicationMode previousInterface = eCONNECTION_NONE;
 
 static bool newLocation = false;
 static bool newTimezone = false;
@@ -1271,7 +1396,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
 #ifdef USE_PIN
 	//Check authentication before allowing writes
-	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_AUTH_UUID)	&& (attrIndex != CHARGER_PAIR_NFC_TAG_UUID) && (attrIndex != CHARGER_AUTH_UUID_UUID))
+	if((AUTH_SERV_CHAR_val[0] == '0') && (attrIndex != CHARGER_AUTH_UUID)	&& (attrIndex != CHARGER_PAIR_NFC_TAG_UUID) && (attrIndex != CHARGER_AUTH_UUID_UUID) && (attrIndex != CHARGER_CAPABILITIES_UUID))
 	{
 		ESP_LOGE(TAG, "Write: No pin set: %d", attrIndex);
 		return;
@@ -1281,52 +1406,81 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
     switch( attrIndex )
     {
 
+	    case CHARGER_CAPABILITIES_UUID:
+
+			memset(nrTostr, 0, sizeof(nrTostr));
+			memcpy(nrTostr, param->write.value, param->write.len);
+			int tmpIndex = atoi(nrTostr);
+
+			ESP_LOGW(TAG, "New tmpIndex %i", tmpIndex);
+
+			int maxLen = 0;
+			if(GetCapabilityString() != NULL)
+			{
+				maxLen = strlen(GetCapabilityString());
+			}
+			//Sanity check
+			if(((maxLen-1) >= tmpIndex) && (tmpIndex >= 0))
+			{
+				readCapabilityIndex = tmpIndex;
+				ESP_LOGW(TAG, "New readCapabilityIndex: %i", readCapabilityIndex);
+			}
+
+   		break;
+
 
     case CHARGER_AUTH_UUID_UUID:
 
-    	if((rfidPairing_GetState() == ePairing_Inactive) && (NFCGetTagInfo().tagIsValid == false))
-    	{
-    		char bleId[50] = {0};
-    		strcpy(bleId, "ble-");
-    		memcpy(bleId+4, param->write.value, param->write.len);
-    		ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
+		if(ocpp_is_configured() == false)
+		{
+			if((rfidPairing_GetState() == ePairing_Inactive) && (NFCGetTagInfo().tagIsValid == false))
+			{
+				char bleId[50] = {0};
+				strcpy(bleId, "ble-");
+				memcpy(bleId+4, param->write.value, param->write.len);
+				ESP_LOGW(TAG, "### BLE-UUID: %s ###", bleId);
 
-    		if((isMqttConnected()) && (storage_Get_Standalone() == false))
-    		{
+				if((isMqttConnected()) && (storage_Get_Standalone() == false))
+				{
 
-    			MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
-				if(ret == MsgWriteAck)
-					ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+					MessageType ret = MCU_SendUint8Parameter(ParamAuthState, SESSION_AUTHORIZING);
+					if(ret == MsgWriteAck)
+						ESP_LOGI(TAG, "Ack on SESSION_AUTHORIZING");
+					else
+						ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
+
+					ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
+					SetPendingRFIDTag(bleId);
+					publish_debug_telemetry_observation_NFC_tag_id(bleId);
+					publish_debug_telemetry_observation_ChargingStateParameters();
+				}
 				else
-					ESP_LOGW(TAG, "NACK on SESSION_AUTHORIZING!!!");
-
-    			ESP_LOGW(TAG, "Setting BLE pending, waithing for cloud authentication");
-    			SetPendingRFIDTag(bleId);
-    			publish_debug_telemetry_observation_NFC_tag_id(bleId);
-    			publish_debug_telemetry_observation_ChargingStateParameters();
-    		}
-    		else
-    		{
-    			ESP_LOGW(TAG, "Local authentication, setting to chargeSession if Ok");
-    			uint8_t match = authentication_CheckBLEId(bleId);
-    			if(match == 1)
-    			{
-    				chargeSession_SetAuthenticationCode(bleId);
-    			}
-    		}
-    	}
-
-    	if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))
-    	{
-    		if(param->write.len == 36)
-			{
-    			rfidPairing_SetNewUserId(param->write.value, param->write.len);
+				{
+					ESP_LOGW(TAG, "Local authentication, setting to chargeSession if Ok");
+					uint8_t match = authentication_CheckBLEId(bleId);
+					if(match == 1)
+					{
+						chargeSession_SetAuthenticationCode(bleId);
+					}
+				}
 			}
-			else
+
+			if((rfidPairing_GetState() == ePairing_Reading) && (NFCGetTagInfo().tagIsValid == false))
 			{
-				ESP_LOGI(TAG, "Incorrect Auth UUID length %d", param->write.len);
+				if(param->write.len == 36)
+				{
+					rfidPairing_SetNewUserId(param->write.value, param->write.len);
+				}
+				else
+				{
+					ESP_LOGI(TAG, "Incorrect Auth UUID length %d", param->write.len);
+				}
 			}
-    	}
+		}
+		else
+		{
+			ESP_LOGW(TAG, "OCPP is configured");
+		}
 
 		break;
 
@@ -1409,7 +1563,7 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 		memcpy(COMMUNICATION_MODE_val,param->write.value, param->write.len);
 		ESP_LOGI(TAG, "New Communication Mode %s", COMMUNICATION_MODE_val);
 
-		//enum CommunicationMode interface = eCONNECTION_NONE;
+		//enum eCommunicationMode interface = eCONNECTION_NONE;
 
 		if(strncmp("Wifi", (char*)COMMUNICATION_MODE_val, 4) == 0)
 		{
@@ -1537,7 +1691,9 @@ void handleWifiWriteEvent(int attrIndex, esp_ble_gatts_cb_param_t* param, esp_ga
 
     	if((standalone == 0) || (standalone == 1))
 		{
-    		if(chargeController_SetStandaloneState(standalone))
+			ESP_LOGI(TAG, "Setting Standalone=%i", standalone);
+			storage_Set_Standalone(standalone);
+    		if(chargeController_SetStandaloneState(standalone == 1 ? eSESSION_STANDALONE : eSESSION_ZAPTEC_CLOUD))
     		{
     			saveConfiguration = true;
     			SAVE_SERV_CHAR_val[0] = '0';
@@ -2051,6 +2207,8 @@ void ClearAuthValue()
 		statusSegmentCount = 0;
 		readTimeScheduleMessageNo = 0;
 		writeTimeScheduleMessageNo = 0;
+		readCapabilityIndex = 0;
+		readOCPPNativeURLIndex = 0;
 		rfidPairing_SetState(ePairing_Inactive);
 		MCU_StopLedOverride();
 }

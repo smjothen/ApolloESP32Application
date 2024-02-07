@@ -143,7 +143,7 @@ typedef enum {
 #define DEFAULT_COVER_ON_VALUE 0xB2//0xd0
 
 //Numbers should match Pro
-enum CommunicationMode
+enum eCommunicationMode
 {
 	eCONNECTION_NONE 		 = 0,
 	eCONNECTION_WIFI		 = 1,
@@ -185,6 +185,13 @@ enum session_controller
 	eSESSION_STANDALONE = eCONTROLLER_MCU_STANDALONE | eCONTROLLER_ESP_STANDALONE | eCONTROLLER_ZAP_STANDALONE | eCONTROLLER_OCPP_STANDALONE,
 	eSESSION_ZAPTEC_CLOUD = eCONTROLLER_OCPP_STANDALONE,
 	eSESSION_OCPP = eCONTROLLER_ZAP_STANDALONE | eCONTROLLER_ESP_STANDALONE,
+};
+
+enum PulseType
+{
+	ePULSE_IOT_HUB = 0,
+	eMQTT_KEEP_ALIVE = 1,
+	eNR_OF_PULSE_TYPES = 2,
 };
 
 struct Configuration
@@ -282,6 +289,7 @@ struct Configuration
 
 	uint16_t cover_on_value;
 	uint8_t connectToPortalType;
+	uint8_t pulseType;
 };
 
 

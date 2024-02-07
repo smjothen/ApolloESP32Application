@@ -73,9 +73,12 @@ void sessionHandler_OcppSetChargingVariables(float min_charging_limit, float max
 void sessionHandler_OcppStopTransaction(enum ocpp_reason_id reason);
 // Transfers the ownership of the meter values to sessionHandler
 void sessionHandler_OcppTransferMeterValues(uint connector_id, struct ocpp_meter_value_list * values, size_t length);
+void sessionHandler_OcppChangeSampleInterval(enum ocpp_reading_context_id context);
 void sessionHandler_OcppSaveState();
 bool sessionHandler_OcppStateHasChanged();
 void sessionHandler_OcppSendState(bool is_trigger);
+void * sessionHandler_ocppGetDiagnostics();
+
 void ChargeModeUpdateToCloudNeeded();
 void sessionHandler_SendMCUSettings();
 void sessionHandler_SendRelayStates();

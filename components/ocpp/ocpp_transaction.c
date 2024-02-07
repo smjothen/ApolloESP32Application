@@ -78,24 +78,28 @@ struct timestamp_queue{
 	time_t timestamps[CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE];
 	int front;
 	int back;
+	bool emptying;
 };
 
 static struct timestamp_queue txn_enqueue_timestamps = {
 	.front = -1,
 	.back = -1,
+	.emptying = true
 };
 
 static void set_txn_enqueue_timestamp(time_t timestamp){
+	txn_enqueue_timestamps.emptying = false;
 	txn_enqueue_timestamps.back++;
-	if(txn_enqueue_timestamps.back == CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
+	if(txn_enqueue_timestamps.back >= CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
 		txn_enqueue_timestamps.back = 0;
 
 	txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.back] = timestamp;
 }
 
 static time_t get_txn_enqueue_timestamp(){
+	txn_enqueue_timestamps.emptying = true;
 	txn_enqueue_timestamps.front++;
-	if(txn_enqueue_timestamps.front == CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
+	if(txn_enqueue_timestamps.front >= CONFIG_OCPP_MAX_TRANSACTION_QUEUE_SIZE)
 		txn_enqueue_timestamps.front = 0;
 
 	return txn_enqueue_timestamps.timestamps[txn_enqueue_timestamps.front];
@@ -129,7 +133,7 @@ BaseType_t ocpp_transaction_queue_send(struct ocpp_call_with_cb ** message, Tick
 }
 
 static time_t peek_txn_enqueue_timestamp(){
-	if(txn_enqueue_timestamps.front == txn_enqueue_timestamps.back) // No data to peek or get/set missused
+	if(txn_enqueue_timestamps.front == txn_enqueue_timestamps.back && txn_enqueue_timestamps.emptying == true) // No data to peek or get/set missused
 		return LONG_MAX;
 
 	int position = txn_enqueue_timestamps.front +1;
@@ -407,7 +411,7 @@ bool count_messages(FILE * fp, const char * file_path, int entry, void * buffer)
 		struct transaction_header header;
 
 		if(read_header(fp, &header) == ESP_OK){
-			ESP_LOGI(TAG, "file message count: %ul", header.awaiting_message_count);
+			ESP_LOGI(TAG, "file message count: %zu", header.awaiting_message_count);
 			*count += header.awaiting_message_count;
 		}else{
 			ESP_LOGE(TAG, "Unable to read header to get transaction message count");
@@ -486,6 +490,7 @@ esp_err_t read_start_transaction(FILE * fp, int * connector_id_out, ocpp_id_toke
 	}
 
 	*connector_id_out = data.connector_id;
+	data.id_tag[20] = '\0';
 	strcpy(id_tag_out, data.id_tag);
 	*meter_start_out = data.meter_start;
 	*valid_reservation_out = data.valid_reservation;
@@ -517,7 +522,7 @@ esp_err_t read_meter_value_string(FILE * fp, unsigned char ** meter_data, size_t
 	}
 
 	if(*meter_data_length > MAX_METER_VALUE_LENGTH){
-		ESP_LOGE(TAG, "Meter value on file exceed max length: %d > %d", *meter_data_length, MAX_METER_VALUE_LENGTH);
+		ESP_LOGE(TAG, "Meter value on file exceed max length: %zu > %d", *meter_data_length, MAX_METER_VALUE_LENGTH);
 		return ESP_FAIL;
 	}
 
@@ -583,6 +588,7 @@ esp_err_t read_stop_transaction(FILE * fp, struct stop_transaction_data * stop_t
 		return ESP_ERR_INVALID_CRC;
 	}
 
+	stop_transaction_out->id_tag[20] = '\0';
 	return ESP_OK;
 }
 
@@ -673,7 +679,7 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
 		.reservation_id = reservation_id,
 		.valid_reservation = valid_reservation,
 	};
-	strcpy(data.id_tag, id_tag);
+	strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 
 	if(fseek(fp, OFFSET_START_TRANSACTION, SEEK_SET) != 0){
 		ESP_LOGE(TAG, "Unable to seek to start transaction during write: %s", strerror(errno));
@@ -712,15 +718,15 @@ esp_err_t write_start_transaction(FILE * fp, int connector_id, const ocpp_id_tok
  */
 //Consider using to overwrite completed messages and using truncate to ensure last
 
-esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp){
+esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, size_t meter_data_length, time_t timestamp, bool stop_related){
 
 	if(meter_data_length > MAX_METER_VALUE_LENGTH){
-		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %u > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
+		ESP_LOGE(TAG, "Rejecting write of meter data with excessive length: %zu > %d", meter_data_length, MAX_METER_VALUE_LENGTH);
 		return ESP_ERR_INVALID_SIZE;
 	}
 
 	if(meter_data_length <= 0){
-		ESP_LOGE(TAG, "Rejecting write of meter data with no or invalid length: %u <= 0", meter_data_length);
+		ESP_LOGE(TAG, "Rejecting write of meter data with no or invalid length: %zu <= 0", meter_data_length);
 		return ESP_ERR_INVALID_SIZE;
 	}
 
@@ -742,7 +748,7 @@ esp_err_t write_meter_value_string(FILE * fp, const unsigned char * meter_data, 
 		return ESP_ERR_INVALID_SIZE;
 	}
 
-	if(write_header(fp, NULL, NULL, NULL, NULL, 1, false) != ESP_OK){
+	if(write_header(fp, NULL, NULL, NULL, NULL, stop_related ? 0 : 1, false) != ESP_OK){
 		ESP_LOGE(TAG, "Unable to update header during stop transaction write");
 		return ESP_FAIL;
 	}
@@ -799,7 +805,7 @@ esp_err_t write_stop_transaction(FILE * fp, const char * id_tag, int meter_stop,
 
 	if(id_tag != NULL){
 		data.token_is_valid = true;
-		strcpy(data.id_tag, id_tag);
+		strncpy(data.id_tag, id_tag, sizeof(ocpp_id_token));
 	}else{
 		data.token_is_valid = false;
 	}
@@ -920,6 +926,7 @@ enum transaction_message_type_id{
 struct transaction_header loaded_transaction_header;
 time_t loaded_transaction_timestamp = LONG_MAX;
 void * loaded_transaction_data = NULL;
+unsigned char * loaded_transaction_stop_meter_data = NULL;
 size_t loaded_transaction_size;
 int loaded_transaction_entry = -1;
 long loaded_transaction_on_confirmed_offset;
@@ -930,6 +937,8 @@ void loaded_transaction_reset(){
 	free(loaded_transaction_data);
 	loaded_transaction_data = NULL;
 	loaded_transaction_entry = -1;
+	free(loaded_transaction_stop_meter_data);
+	loaded_transaction_stop_meter_data = NULL;
 }
 
 /*
@@ -1176,7 +1185,7 @@ esp_err_t load_next_transaction_message(){
 
 	struct stat st;
 	if(loaded_transaction_entry == -1 || stat(file_path, &st) != 0){ // If no loaded transaction or loaded file has been deleted
-	        esp_err_t err = find_oldest_transaction_file(&loaded_transaction_entry, &loaded_transaction_header.start_timestamp);
+		esp_err_t err = find_oldest_transaction_file(&loaded_transaction_entry, &loaded_transaction_header.start_timestamp);
 		if(err != ESP_OK){
 			if(err == ESP_ERR_NOT_FOUND){
 				ESP_LOGI(TAG, "No transaction file for loading message");
@@ -1229,8 +1238,6 @@ esp_err_t load_next_transaction_message(){
 						&loaded_transaction_header.start_timestamp) != ESP_OK){
 
 			ESP_LOGE(TAG, "Unable to read start transaction into loaded");
-			free(loaded_transaction_data);
-			loaded_transaction_data = NULL;
 			goto cleanup;
 		}
 
@@ -1272,8 +1279,6 @@ esp_err_t load_next_transaction_message(){
 					if(read_stop_transaction(fp, data) != ESP_OK){
 						ESP_LOGE(TAG, "Unable to read stop transaction to load message");
 						ret = ESP_FAIL;
-						free(loaded_transaction_data);
-						loaded_transaction_data = NULL;
 						goto cleanup;
 					}
 
@@ -1292,6 +1297,25 @@ esp_err_t load_next_transaction_message(){
 			loaded_transaction_type = eTRANSACTION_TYPE_METER;
 			loaded_transaction_timestamp = timestamp;
 			loaded_transaction_on_confirmed_offset = ftell(fp);
+
+			bool is_stop_related;
+			if(ocpp_is_stop_txn_data_from_contiguous_buffer((unsigned char *)loaded_transaction_data, loaded_transaction_size, &is_stop_related) == ESP_OK && is_stop_related){
+				loaded_transaction_stop_meter_data = loaded_transaction_data;
+				loaded_transaction_data = malloc(sizeof(struct stop_transaction_data));
+				if(loaded_transaction_data == NULL){
+					ESP_LOGE(TAG, "Unable to allocate memory for stop transaction when stop txn meter data existed");
+					ret = ESP_ERR_NO_MEM;
+					goto cleanup;
+				}
+
+				struct stop_transaction_data * data = (struct stop_transaction_data *)loaded_transaction_data;
+				if(read_stop_transaction(fp, data) != ESP_OK){
+					ESP_LOGE(TAG, "Unable to read stop transaction after meter value indicate stop related");
+					ret = ESP_FAIL;
+					goto cleanup;
+				}
+				loaded_transaction_type = eTRANSACTION_TYPE_STOP;
+			}
 
 			ret = ESP_OK;
 		}
@@ -1513,42 +1537,12 @@ cJSON * read_next_message(){
 			ESP_LOGE(TAG, "Unable to create value list from meter data");
 			fail_loaded_transaction();
 		}else{
-			if(is_stop_txn_data){
-				ESP_LOGI(TAG, "Read meter value is stop transaction data, checking for stop transaction request");
-				char file_path[32];
-				sprintf(file_path, "%s/%d.bin", DIRECTORY_PATH, loaded_transaction_entry % CONFIG_OCPP_MAX_TRANSACTION_FILES);
+			message = ocpp_create_meter_values_request(1, &loaded_transaction_header.transaction_id, value_list);
 
-				FILE * fp = fopen(file_path, "rb");
-				if(fp == NULL){
-					ESP_LOGE(TAG, "Unable to read loaded entry given stop meter value");
-					fail_loaded_transaction();
-				}
-
-				struct stop_transaction_data stop_data;
-				if(read_stop_transaction(fp, &stop_data) != ESP_OK){
-					ESP_LOGE(TAG, "Unable to read stop transaction after reading stop meter value");
-					fail_loaded_transaction();
-				}else{
-					message = ocpp_create_stop_transaction_request(stop_data.token_is_valid ? stop_data.id_tag : NULL, stop_data.meter_stop,
-										stop_data.timestamp, loaded_transaction_header.transaction_id, ocpp_reason_from_id(stop_data.reason_id), value_list);
-
-					if(message == NULL){
-						ESP_LOGE(TAG, "Unable to create stop transaction request");
-						fail_loaded_transaction();
-					}
-				}
-
-				fclose(fp);
-			}else{
-				ESP_LOGI(TAG, "Read meter value");
-				message = ocpp_create_meter_values_request(1, &loaded_transaction_header.transaction_id, value_list);
-
-				if(message == NULL){
-					ESP_LOGE(TAG, "unable to create meter value request");
-					fail_loaded_transaction();
-				}
+			if(message == NULL){
+				ESP_LOGE(TAG, "unable to create meter value request");
+				fail_loaded_transaction();
 			}
-
 		}
 
 		ocpp_meter_list_delete(value_list);
@@ -1557,8 +1551,24 @@ cJSON * read_next_message(){
 	if(loaded_transaction_data != NULL && loaded_transaction_type == eTRANSACTION_TYPE_STOP){
 
 		struct stop_transaction_data * data = (struct stop_transaction_data *)loaded_transaction_data;
+
+		value_list = NULL;
+		if(loaded_transaction_stop_meter_data != NULL){
+			ESP_LOGI(TAG, "Read meter value is stop transaction data, Attempting conversion");
+
+			unsigned char * meter_data = (unsigned char *)loaded_transaction_stop_meter_data;
+			bool is_stop_txn_data;
+			value_list = ocpp_meter_list_from_contiguous_buffer(meter_data, loaded_transaction_size, &is_stop_txn_data);
+
+			if(value_list == NULL)
+				ESP_LOGE(TAG, "Unable to convert StopTransaction meter data");
+		}
+
 		message = ocpp_create_stop_transaction_request(data->token_is_valid ? data->id_tag : NULL, data->meter_stop,
-							data->timestamp, loaded_transaction_header.transaction_id, ocpp_reason_from_id(data->reason_id), NULL);
+													data->timestamp, loaded_transaction_header.transaction_id,
+													ocpp_reason_from_id(data->reason_id), value_list);
+
+		free(value_list);
 
 		if(message == NULL){
 			ESP_LOGE(TAG, "Unable to create stop transaction");
@@ -1843,17 +1853,7 @@ int ocpp_transaction_enqueue_start(int connector_id, const char * id_tag, int me
 }
 
 
-esp_err_t ocpp_transaction_write_stop(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason){
-	if(!filesystem_is_ready()){
-		ESP_LOGE(TAG, "Filesystem not ready for stop transaction");
-		return ESP_FAIL;
-	}
-
-	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
-	{
-		ESP_LOGE(TAG, "Failed to obtain lock to write stop transaction");
-		return ESP_FAIL;
-	}
+esp_err_t ocpp_transaction_write_stop_no_lock(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason){
 
 	int entry = find_active_entry(1);
 	if(entry == -1){
@@ -1877,27 +1877,29 @@ esp_err_t ocpp_transaction_write_stop(const char * id_tag, int meter_stop, time_
 	esp_err_t err = write_stop_transaction(fp, id_tag, meter_stop, timestamp, reason);
 
 	fclose(fp);
-	xSemaphoreGive(file_lock);
 
 	return err;
 }
 
-esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer, size_t buffer_length){
+esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer, size_t buffer_length, bool stop_related){
 
-	if(!filesystem_is_ready()){
-		ESP_LOGE(TAG, "Filesystem not ready for meter value");
-		return ESP_FAIL;
-	}
+	if(!stop_related){
+		if(!filesystem_is_ready()){
+			ESP_LOGE(TAG, "Filesystem not ready for meter value");
+			return ESP_FAIL;
+		}
 
-	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
-	{
-		ESP_LOGE(TAG, "Failed to obtain lock to write meter value");
-		return ESP_FAIL;
+		if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
+		{
+			ESP_LOGE(TAG, "Failed to obtain lock to write meter value");
+			return ESP_FAIL;
+		}
 	}
 
 	int entry = find_active_entry(1);
 	if(entry == -1){
 		ESP_LOGE(TAG, "Unable to find active transaction to write meter value");
+		xSemaphoreGive(file_lock);
 		return ESP_ERR_NOT_FOUND;
 	}
 
@@ -1913,6 +1915,7 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 
 	if(fseek(fp, 0, SEEK_END) != 0){
 		ESP_LOGE(TAG, "Unable to seek to end to write meter value");
+		xSemaphoreGive(file_lock);
 		return ESP_FAIL;
 	}
 
@@ -1925,14 +1928,17 @@ esp_err_t ocpp_transaction_write_meter_value(const unsigned char * meter_buffer,
 	if(offset_end < OFFSET_METER_VALUES){
 		if(fseek(fp, OFFSET_METER_VALUES, SEEK_SET) != 0){
 			ESP_LOGE(TAG, "Unable to seek to end to write first meter value");
+			xSemaphoreGive(file_lock);
 			return ESP_FAIL;
 		}
 	}
 
-	esp_err_t err = write_meter_value_string(fp, meter_buffer, buffer_length, time(NULL));
+	esp_err_t err = write_meter_value_string(fp, meter_buffer, buffer_length, time(NULL), stop_related);
 
 	fclose(fp);
-	xSemaphoreGive(file_lock);
+
+	if(!stop_related)
+		xSemaphoreGive(file_lock);
 
 	if(task_to_notify != NULL)
 		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);
@@ -1971,7 +1977,7 @@ int ocpp_transaction_enqueue_meter_value(unsigned int connector_id, const int * 
 			ESP_LOGE(TAG, "Could not create meter value as string");
 			err = -1;
 		}else{
-			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length)!= ESP_OK){
+			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length, false)!= ESP_OK){
 				ESP_LOGE(TAG, "Unable to store transaction related meter value");
 				err = -1;
 			}else{
@@ -1986,6 +1992,17 @@ int ocpp_transaction_enqueue_meter_value(unsigned int connector_id, const int * 
 
 int ocpp_transaction_enqueue_stop(const char * id_tag, int meter_stop, time_t timestamp, enum ocpp_reason_id reason, struct ocpp_meter_value_list * transaction_data){
 
+	if(!filesystem_is_ready()){
+		ESP_LOGE(TAG, "Filesystem not ready for stop transaction");
+		return ESP_FAIL;
+	}
+
+	if(xSemaphoreTake(file_lock, pdMS_TO_TICKS(5000)) != pdTRUE)
+	{
+		ESP_LOGE(TAG, "Failed to obtain lock to write stop transaction");
+		return ESP_FAIL;
+	}
+
 	if(transaction_data != NULL){
 		size_t meter_buffer_length;
 		unsigned char * meter_buffer = ocpp_meter_list_to_contiguous_buffer(transaction_data, true, &meter_buffer_length);
@@ -1993,16 +2010,18 @@ int ocpp_transaction_enqueue_stop(const char * id_tag, int meter_stop, time_t ti
 			ESP_LOGE(TAG, "Unable to create meter value as string for stop transaction request");
 		}else{
 			ESP_LOGI(TAG, "Storing stop transaction data as short string");
-			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length) != ESP_OK){
+			if(ocpp_transaction_write_meter_value(meter_buffer, meter_buffer_length, true) != ESP_OK){
 				ESP_LOGE(TAG, "Unable to save stop transaction data");
 			}
 			free(meter_buffer);
 		}
 	}
 
-	if(ocpp_transaction_write_stop(id_tag, meter_stop, timestamp, reason)){
+	if(ocpp_transaction_write_stop_no_lock(id_tag, meter_stop, timestamp, reason)){
 		ESP_LOGE(TAG, "Unable to store stop transaction.");
 	}
+
+	xSemaphoreGive(file_lock);
 
 	if(task_to_notify != NULL)
 		xTaskNotify(task_to_notify, eOCPP_TASK_CALL_ENQUEUED << task_notify_offset, eSetBits);

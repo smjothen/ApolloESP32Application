@@ -3,6 +3,8 @@ build.clang
 sdkconfig
 sdkconfig.old
 
+ocpp_server/Pipfile.lock
+
 .vscode
 .vscode/**
 .ipynb_checkpoints

@@ -276,10 +276,10 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 		break;
 	case WEBSOCKET_EVENT_DATA:
 		switch(data->op_code){
-		case 0:
+		case WS_TRANSPORT_OPCODES_CONT:
 			ESP_LOGE(TAG, "Got unexpected continuation frame");
 			break;
-		case 1:
+		case WS_TRANSPORT_OPCODES_TEXT:
 			ESP_LOGD(TAG, "Handle text frame");
 
 			if(data->payload_len > data->data_len){ // If payload exceed websocket rx_buffer
@@ -324,7 +324,7 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 
 			text_frame_handler(client, data->data_ptr);
 			break;
-		case 2:
+		case WS_TRANSPORT_OPCODES_BINARY:
 			ESP_LOGE(TAG, "Got unexpected binary frame");
 			break;
 		case 3:
@@ -334,15 +334,20 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 		case 7:
 			ESP_LOGE(TAG, "Recieved reserved opcode");
 			break;
-		case 8:
+		case WS_TRANSPORT_OPCODES_CLOSE:
 			ESP_LOGW(TAG, "Recieved connection closed");
 			break;
-		case 9:
+		case WS_TRANSPORT_OPCODES_PING:
 			ESP_LOGD(TAG, "Recieved ping");
 			break;
-		case 10:
+		case WS_TRANSPORT_OPCODES_PONG:
 			ESP_LOGD(TAG, "Recieved pong");
 			break;
+		case WS_TRANSPORT_OPCODES_FIN:
+			ESP_LOGE(TAG, "Got unexpected FIN upcode");
+			break;
+		default:
+			ESP_LOGE(TAG, "Unknown opcode: %"PRIu8, data->op_code);
 		}
 
 		break;
@@ -354,9 +359,11 @@ void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t 
 
 	case WEBSOCKET_EVENT_CLOSED:
 			ESP_LOGW(TAG, "WEBSOCKET_EVENT_CLOSED");
-			if(task_to_notify != NULL)
-				xTaskNotify(task_to_notify, eOCPP_WEBSOCKET_CLOSED<<notify_offset, eSetBits);
-
+			if(task_to_notify != NULL){
+				xTaskNotify(task_to_notify, (eOCPP_WEBSOCKET_CONNECTION_CHANGED | eOCPP_WEBSOCKET_CLOSED)<<notify_offset, eSetBits);
+			}else{
+				ESP_LOGE(TAG, "No task handle to notify");
+			}
 			break;
 
 	case WEBSOCKET_EVENT_BEFORE_CONNECT:

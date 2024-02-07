@@ -94,6 +94,7 @@ void storage_Set_MaxStartDelay(uint32_t newValue);
 
 void storage_Set_cover_on_value(uint16_t newValue);
 void storage_Set_ConnectToPortalType(uint8_t newValue);
+void storage_Set_PulseType(uint8_t newValue);
 
 //Get Cloud settings
 uint8_t storage_Get_AuthenticationRequired();
@@ -149,6 +150,7 @@ uint8_t storage_Get_ocpp_security_profile();
 
 //Get Local settings
 enum session_controller storage_Get_session_controller();
+int ocpp_get_session_controller_mode();
 uint8_t storage_Get_CommunicationMode();
 float storage_Get_HmiBrightness();
 uint8_t storage_Get_PermanentLock();
@@ -173,6 +175,7 @@ char * storage_Get_TimeSchedule();
 
 uint16_t storage_Get_cover_on_value();
 uint8_t storage_Get_ConnectToPortalType();
+uint8_t storage_Get_PulseType();
 
 esp_err_t storage_SaveConfiguration();
 esp_err_t storage_ReadConfiguration();
@@ -197,6 +200,7 @@ void storage_PrintConfiguration();
 esp_err_t storage_ReadSessionResetInfo(char * csId, char * csStartTime, uint32_t csUnixTime, float csEnergy, char * csAuthCode);
 size_t storage_CheckSessionResetFile();
 esp_err_t storage_clearSessionResetInfo();*/
+double storage_GetAccumulatedEnergy();
 double storage_update_accumulated_energy(float session_energy);
 int storage_clear_accumulated_energy();
 

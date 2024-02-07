@@ -126,6 +126,13 @@ int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_i
 static cJSON *logRoot = NULL;
 static cJSON * logReaderArray = NULL;
 
+static bool energyFaultFlag = false;
+bool OCMP_GetEnergyFaultFlag()
+{
+	bool tmp = energyFaultFlag;
+	energyFaultFlag = false;
+	return tmp;
+}
 
 esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * messageString)
 {
@@ -191,9 +198,14 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 
 		energyDiff = fabs(sessEnergy - signedEnergy);
 		if(energyDiff >= 0.0001)
+		{
 			ESP_LOGE(TAG, "2#### Sess: %f vs Signed: %f -> Diff: %f #### FAILED", sessEnergy, signedEnergy, energyDiff);
+			energyFaultFlag = true;
+		}
 		else
+		{
 			ESP_LOGI(TAG, "2**** Sess: %f vs Signed: %f -> Diff: %f **** OK", sessEnergy, signedEnergy, energyDiff);
+		}
 
 		/// Update the rounded session energy
 		cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble = sessEnergy;

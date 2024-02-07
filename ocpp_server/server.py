@@ -1,456 +1,162 @@
+import argparse
 import asyncio
+from functools import wraps
+import serial_asyncio
+import traceback
 import websockets
 import time
 import datetime
-from datetime import datetime, timezone
+from ocpp_tests.core_profile import test_core_profile
+from ocpp_tests.reservation_profile import test_reservation_profile
+from ocpp_tests.smart_charging_profile import test_smart_charging_profile
+from ocpp_tests.local_auth_list_profile import test_local_auth_list_profile
+from ocpp_tests.remote_trigger_profile import test_remote_trigger_profile
+from ocpp_tests.endurance_tests import endurance_tests
+from ocpp_tests.websocket_test import test_websocket
+from ocpp_tests.test_utils import(
+    ZapClientInput,
+    ZapClientOutput
+)
+
+import logging
+
+from datetime import(
+    datetime,
+    timezone,
+    timedelta
+)
 
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call_result, call
+from ocpp.v16.enums import (
+    Action,
+    ResetType,
+    RegistrationStatus,
+    ChargePointStatus,
+    ChargePointErrorCode
+)
 import random
 
-config_keys=['AllowOfflineTxForUnknownId',
-             'AuthorizationCacheEnabled',
-             'AuthorizeRemoteTxRequests',
-             'BlinkRepeat',
-             'ClockAlignedDataInterval',
-             'ConnectionTimeOut',
-             'ConnectorPhaseRotation',
-             'ConnectorPhaseRotationMaxLength',
-             'GetConfigurationMaxKeys',
-             'HeartbeatInterval',
-             'LightIntensity',
-             'LocalAuthorizeOffline',
-             'LocalPreAuthorize',
-             'MaxEnergyOnInvalidId',
-             'MeterValuesAlignedData',
-             'MeterValuesAlignedDataMaxLength',
-             'MeterValuesSampledData',
-             'MeterValuesSampledDataMaxLength',
-             'MeterValueSampleInterval',
-             'MinimumStatusDuration',
-             'NumberOfConnectors',
-             'ResetRetries',
-             'StopTransactionOnEVSideDisconnect',
-             'StopTransactionOnInvalidId',
-             'StopTxnAlignedData',
-             'StopTxnAlignedDataMaxLength',
-             'StopTxnSampledData',
-             'StopTxnSampledDataMaxLength',
-             'SupportedFeatureProfiles',
-             'SupportedFeatureProfilesMaxLength',
-             'TransactionMessageAttempts',
-             'TransactionMessageRetryInterval',
-             'UnlockConnectorOnEVSideDisconnect',
-             'WebSocketPingInterval',# end of core profile
-             'LocalAuthListEnabled',
-             'LocalAuthListMaxLength',
-             'SendLocalListMaxLength',
-             'ReserveConnectorZeroSupported',
-             'ChargeProfileMaxStackLevel',
-             'ChargingScheduleAllowedChargingRateUnit',
-             'ChargingScheduleMaxPeriods',
-             'ConnectorSwitch3to1PhaseSupported',
-             'MaxChargingProfilesInstalled']
+charge_points = dict()
+new_exipry_date = datetime.utcnow() + timedelta(days=1)
 
-async def call_runner(cp):
-    await asyncio.sleep(2)
+zap_in = None
+zap_out = None
 
-    print('Changing connection timeout')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='ConnectionTimeOut',
-            value='30')
-    )
-    print(result)
+async def init_zap_client(path):
+    loop = asyncio.get_event_loop()
 
-    print('Changing phase rotation (valid)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='ConnectorPhaseRotation',
-            value='0.RST, 1.RST')
-    )
-    print(result)
+    print(f'Setting up zapclient on {path}')
+    transport, protocol = await serial_asyncio.create_serial_connection(loop, ZapClientInput, path, baudrate=115200)
 
-    print('calling get configuration for phase rotation')
-    result = await cp.call(
-        call.GetConfigurationPayload(
-            key=['ConnectorPhaseRotation'])
-    )
-    print(result)
+    global zap_in
+    global zap_out
 
-    print('Changing clock aligned interval (valid uint32)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='ClockAlignedDataInterval',
-            value='0')
-    )
-    print(result)
+    zap_out = ZapClientOutput(transport)
+    zap_in = protocol
 
-    print('Changing sample interval (valid uint32)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='MeterValueSampleInterval',
-            value='10')
-    )
-    print(result)
+    zap_out.enable()
+    zap_out.attempt_ready()
 
-    print('Changing MeterValuesAlignedData (valid csl)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='MeterValuesAlignedData',
-            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
-    )
-    print(result)
+async def _test_runner(cp):
 
-    print('Changing MeterValuesSampledData (valid csl)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='MeterValuesSampledData',
-            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
-    )
-    print(result)
+    i = 0
+    while cp.registration_status != RegistrationStatus.accepted:
+        i+=1
+        if i > 10:
+            logging.info("Attempting reset due to no bootNotification")
+            await cp.call(call.ResetPayload(type = ResetType.hard))
+            i = 0
 
-    print('Changing StopTxnAlignedData (valid csl)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='StopTxnAlignedData',
-            value='Energy.Active.Import.Interval')
-    )
-    print(result)
+        logging.warning(f"Awaiting accepted boot...({cp.registration_status})")
+        await asyncio.sleep(2)
 
-    print('Changing StopTxnSampledData (valid csl)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='StopTxnSampledData',
-            value='Current.Import, Current.Offered, Energy.Active.Import.Interval, Power.Active.Import, Temperature, Voltage')
-    )
-    print(result)
 
-    print('Enabling LocalAuthListEnabled')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='LocalAuthListEnabled',
-            value='true')
-    )
-    print(result)
+    logging.info("Boot accepted")
 
-    print('Enabling local pre authorization ')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='LocalPreAuthorize',
-            value='true')
-    )
-    print(result)
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, input, 'Input test id [A]ll/[C]ore/[R]eservation/[S]mart/[L]ocalAuthList/[T]riggerMessage/[E]ndurance Test/[W]ebsocket: ')
 
-    print('Adding known test tags')
-    result = await cp.call(
-        call.SendLocalListPayload(
-            list_version = 12,
-            local_authorization_list = [{'idTag' : 'nfc-0307A5CC',
-                                         'idTagInfo' : {'parentIdTag' : "other",
-                                                        'status' : 'Accepted'}},
-                                        {'idTag' : 'nfc-73F776CC',
-                                         'idTagInfo' : {'parentIdTag' : "fd65bbe2-edc8-4940-9",
-                                                        'status' : 'Accepted'}}
-                                        ],
-            update_type = 'Differential')
-    )
-    print(result)
+    core_result = None
+    reservation_result = None
+    smart_charging_result = None
+    local_auth_result = None
+    remote_trigger_result = None
+    websocket_result = None
 
-    print('Attempting remote start transaction')
-    try:
-        result = await cp.call(
-            call.RemoteStartTransactionPayload(
-                connector_id=1,
-                id_tag ="nfc-73F776CC"
-            )
-        )
-        print(result)
-    except Exception as e:
-        print(e)
+    response = response.upper();
+    if response == "C" or response == "A":
+        core_result = await test_core_profile(cp, zap_in, zap_out)
+
+    if response == "R" or response == "A":
+        reservation_result = await test_reservation_profile(cp)
+
+    if response == "S" or response == "A":
+        smart_charging_result = await test_smart_charging_profile(cp)
+
+    if response == "L" or response == "A":
+        local_auth_result = await test_local_auth_list_profile(cp)
+
+    if response == "T" or response == "A":
+        remote_trigger_result = await test_remote_trigger_profile(cp)
+
+    if response == "W" or response == "A":
+        websocket_result = await test_websocket(cp)
+
+    if response == "E":
+        await endurance_tests(cp)
+
+    logging.info(f'Core profile             : {core_result}')
+    logging.info(f'Reservation profile      : {reservation_result}')
+    logging.info(f'Smart charging profile   : {smart_charging_result}')
+    logging.info(f'Local auth list profile  : {local_auth_result}')
+    logging.info(f'Remote trigger profile   : {remote_trigger_result}')
+    logging.info(f'websocket_result         : {websocket_result}')
 
     await asyncio.sleep(10)
-    print('Attempting remote stop transaction')
 
-    try:
-        result = await cp.call(
-            call.RemoteStopTransactionPayload(
-                transaction_id=1231312,
-            )
-        )
-        print(result)
-    except Exception as e:
-        print(e)
-    return
+    return True
 
-    try:
-        print('unlocking connector (expect not supported)')
-        result = await cp.call(
-            call.ClearCachePayload()
-        )
-        print(result)
-    except Exception as e:
-        print(e)
+async def test_runner(cp):
+    while True:
+        try:
+            result = await _test_runner(cp)
+            if not result:
+                return
 
-    print('clearing authorization cach (expect not supported)')
-    result = await cp.call(
-        call.UnlockConnectorPayload(
-            connector_id = 1)
-    )
-    print(result)
+        except Exception as e:
+            logging.error(f'Exception from test runner {e}')
+            traceback.print_exc()
+            print(e)
 
-    print('Starting data transfer')
-    result = await cp.call(
-        call.DataTransferPayload(
-            vendor_id='com.zaptec')
-    )
-    print(result)
-
-    for x in range(5) :
-        await asyncio.sleep(2)
-        print('calling ChangeAvailability')
-        result = await cp.call(
-            call.ChangeAvailabilityPayload(
-                connector_id=random.randint(0,999),
-                type='Operative')
-        )
-
-        print(result)
-        print('calling ReserveNow')
-        result = await cp.call(
-            call.ReserveNowPayload(
-                connector_id=random.randint(0,999),
-                expiry_date='2021-01-01',
-                id_tag='73f776cc',
-                reservation_id=53)
-        )
-        print(result)
-#{'idTag' = 'e0752f98-3bed-4386-bf57-7d783afe9013', 'idTagInfo' = {'expiryDate' = '2021-01-01', 'parentIdTag' = "fd65bbe2-edc8-4940-99e7-17832961684d", 'status' = 'Accepted'}}
-    print('Changing LocalAuthListEnabled')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='LocalAuthListEnabled',
-            value='true')
-    )
-    print(result)
-
-    print('calling sendLocalList with list')
-    try:
-        result = await cp.call(
-            call.SendLocalListPayload(
-                list_version = 1,
-                local_authorization_list = [{'idTag' : 'e0752f98-3bed-4386-b',
-                                             'idTagInfo' : {'expiryDate' : datetime.now().isoformat(),
-                                                            'parentIdTag' : "fd65bbe2-edc8-4940-9",
-                                                            'status' : 'Accepted'}}],
-                update_type = 'Full')
-        )
-        print(result)
-    except Exception as e:
-        print(e)
-
-    print('calling sendLocalList with empty differential list')
-    result = await cp.call(
-        call.SendLocalListPayload(
-            list_version = 2,
-            update_type = 'Differential')
-    )
-    print(result)
-
-    print('calling sendLocalList with differential list old version (expect version mismatch)')
-    result = await cp.call(
-        call.SendLocalListPayload(
-            list_version = 2,
-            update_type = 'Differential')
-    )
-    print(result)
-
-    print('calling sendLocalList with differential list updating existing and adding new')
-    result = await cp.call(
-        call.SendLocalListPayload(
-            list_version = 3,
-            local_authorization_list = [{'idTag' : 'e0752f98-3bed-4386-b',
-                                         'idTagInfo' : {'parentIdTag' : "fd65bbe2-edc8-4940-9",
-                                                        'status' : 'Expired'}},
-                                        {'idTag' : '961299e7-b2ce-4231-b',
-                                         'idTagInfo' : {'parentIdTag' : "fd65bbe2-edc8-4940-9",
-                                                        'status' : 'Accepted'}}
-                                        ],
-            update_type = 'Differential')
-    )
-    print(result)
-
-    print('calling sendLocalList with differential list with shortform delete')
-    result = await cp.call(
-        call.SendLocalListPayload(
-            list_version = 4,
-            local_authorization_list = [{'idTag' : 'e0752f98-3bed-4386-b'}],
-            update_type = 'Differential')
-    )
-    print(result)
-
-    try:
-        import keys
-        print('calling sendLocalList with Full with many keys')
-        result = await cp.call(
-            call.SendLocalListPayload(
-                list_version = 1,
-                local_authorization_list = keys.key_list,
-                update_type = 'Full')
-        )
-        print(result)
-    except Exception as e:
-        print(e)
-    #print('calling bad reset')
-    #result = await cp.call(
-    #    call.ResetPayload(
-    #        type='other')
-    #)
-    #print(result)
-
-    print('calling soft reset')
-    result = await cp.call(
-        call.ResetPayload(
-            type='Soft')
-    )
-    print(result)
-
-    # print('calling hard reset')
-    # result = await cp.call(
-    #     call.ResetPayload(
-    #         type='Hard')
-    # )
-    # print(result)
-
-    # print('Changing authorize remote tx (valid bool)')
-    # result = await cp.call(
-    #     call.ChangeConfigurationPayload(
-    #         key='AuthorizeRemoteTxRequests',
-    #         value='false')
-    # )
-    # print(result)
-    # time.sleep(1)
-
-    print('Changing reset retries (valid uint8)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='LightIntensity',
-            value='5')
-    )
-    print(result)
-    time.sleep(1)
-
-    print('Changing transaction retry (valid uint16)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='TransactionMessageAttempts',
-            value='25')
-    )
-    print(result)
-    time.sleep(1)
-
-    print('Changing feature profiles (invalid Supported)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='SupportedFeatureProfiles',
-            value='core,FirmwareManagement')
-    )
-    print(result)
-    time.sleep(1)
-
-    print('Changing ReserveConnectorZeroSupported (invalid NotSupported)')
-    result = await cp.call(
-        call.ChangeConfigurationPayload(
-            key='ReserveConnectorZeroSupported',
-            value='true')
-    )
-    print(result)
-    time.sleep(1)
-
-    for attemp in range(0,5):
-        print('calling get configuration for SupportedFeatureProfile')
-        result = await cp.call(
-            call.GetConfigurationPayload(
-                key=['SupportedFeatureProfiles'])
-        )
-        print(result)
-        time.sleep(1)
-
-    for attemp in range(0,5):
-        print('calling get configuration for invalid key')
-        result = await cp.call(
-            call.GetConfigurationPayload(
-                key=['Not_an_actual_config_key'])
-        )
-        print(result)
-        time.sleep(1)
-
-    for attemp in range(0,5):
-        print('calling get configuration for invalid and valid key')
-        result = await cp.call(
-            call.GetConfigurationPayload(
-                key=['SupportedFeatureProfiles', 'Not_an_actual_config_key'])
-        )
-        print(result)
-        time.sleep(1)
-
-    for attempt in range(0,5):
-        keys = random.sample(config_keys, random.randrange(0,len(config_keys)))
-        print(f'calling get configuration random config keys: {keys}')
-        result = await cp.call(
-            call.GetConfigurationPayload(
-                key=keys)
-        )
-        print(result)
-        print("\n")
-        time.sleep(1)
-
-    for attempt in range(0,5):
-    # while True:
-        print('calling get configuration for all known configurations')
-        result = await cp.call(
-            call.GetConfigurationPayload()
-        )
-        print(result)
-        print("\n")
-        time.sleep(1)
-
-    time.sleep(5)
-
-    # print('calling change configuration for heartbeat')
-    # result = await cp.call(
-    #     call.ChangeConfigurationPayload(
-    #         key='HeartbeatInterval',
-    #         value='1')
-    # )
-    # print(result)
-
-    # time.sleep(5)
-
-    # print('calling change configuration for heartbeat')
-    # result = await cp.call(
-    #     call.ChangeConfigurationPayload(
-    #         key='HeartbeatInterval',
-    #         value='4')
-    # )
-    # print(result)
-    # time.sleep(10)
 
 class ChargePoint(cp):
-    @on('BootNotification')
+
+
+    def __init__(self, id, connection, response_timeout=30):
+        super().__init__(id, connection, response_timeout)
+
+        self.registration_status = RegistrationStatus.rejected
+        self.connector1_status = ChargePointStatus.unavailable
+
+        self.action_events = dict()
+
+    @on(Action.BootNotification)
     def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
-        print(charge_point_vendor, charge_point_model, kwargs)
-        print("replying to on boot msg")
+        logging.info("replying to on boot msg")
+
+        self.registration_status = RegistrationStatus.accepted
+
         return call_result.BootNotificationPayload(
             current_time=datetime.utcnow().isoformat(),
-            interval=120,
-            status='Accepted'
+            interval=15,
+            status=self.registration_status
         )
 
-    @on('Heartbeat')
+    @on(Action.Heartbeat)
     def on_heartbeat(self, **kwargs):
-        print("replying to heartbeat")
+        logging.info("replying to heartbeat")
 
         time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
         time = datetime.utcnow().isoformat() + 'Z'
@@ -459,63 +165,126 @@ class ChargePoint(cp):
             current_time=time,
         )
 
-    @on('Authorize')
+    @on(Action.Authorize)
     def on_authorize_request(self, id_tag):
-        print(f'authorizing {id_tag}')
+        logging.info(f'authorizing {id_tag}')
         return call_result.AuthorizePayload(
-            dict(expiry_date='2021-01-01', parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
+            dict(expiry_date = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         )
 
-    @on('StartTransaction')
-    def on_start_transaction(self, connector_id, id_tag, meter_start, **kwargs):
-        print('Replying to start transaction')
-        info=dict(expiryDate='2021-01-01', parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
+    @on(Action.StartTransaction)
+    def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
+        logging.info('Replying to start transaction')
+        info=dict(expiryDate = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
         return call_result.StartTransactionPayload(
             id_tag_info=info,
             transaction_id=1231312
         )
 
-    @on('MeterValues')
-    def on_meter_value(self, **kwargs):
-        print(f'Meter value: {kwargs}')
+    @on(Action.MeterValues)
+    def on_meter_value(self, call_unique_id, connector_id, meter_value, **kwargs):
+        logging.info(f'Meter value: {meter_value}')
         return call_result.MeterValuesPayload()
 
-    @on('StopTransaction')
+    @on(Action.StopTransaction)
     def on_stop_transaction(self, **kwargs):
-        print("----------------------------------------")
-        print(f'Replying to stop transaction {kwargs}')
-        print("----------------------------------------")
+        logging.info("----------------------------------------")
+        logging.info(f'Replying to stop transaction {kwargs}')
+        logging.info("----------------------------------------")
         return call_result.StopTransactionPayload()
 
-    @on('StatusNotification')
+    @on(Action.StatusNotification)
     def on_status_notification(self, connector_id, error_code, status, **kwargs):
-        print(f'CP status: {status} ({error_code})')
+        if connector_id == 0:
+            self.connector0_status = status
+        elif connector_id == 1:
+            self.connector1_status = status
+        else:
+            logging.error(f'Unexpected connector {connector_id}')
+
+        if error_code == ChargePointErrorCode.no_error:
+            logging.info(f'Connector {connector_id} status: {status} ({error_code})')
+        else:
+            logging.error(f'Connector {connector_id} status: {status} ({error_code}) {kwargs}')
+
+        if Action.StatusNotification in self.action_events:
+            self.action_events[Action.StatusNotification].set()
+
         return call_result.StatusNotificationPayload()
+
+    @on(Action.DiagnosticsStatusNotification)
+    def on_diagnostics_status_notification(self, status):
+        logging.info(f"Got diagnostics status: {status}")
+        return call_result.DiagnosticsStatusNotificationPayload()
+
+    @on(Action.FirmwareStatusNotification)
+    def on_firmware_status_notification(self, status):
+        logging.info(f"Got firmware status: {status}")
+
+        return FirmwareStatusNotificationPayload()
 
 async def on_connect(websocket, path):
     """ For every new charge point that connects, create a ChargePoint instance
     and start listening for messages.
 
     """
+
+    global charge_points
+
     charge_point_id = path.strip('/')
-    cp = ChargePoint(charge_point_id, websocket)
+    if charge_point_id in charge_points:
+        logging.warning(f"Chargepoint with id {charge_point_id} reconnected")
+        charge_points[charge_point_id]._connection = websocket
 
-    print("starting ocpp handler")
-    
-    caller = asyncio.create_task(call_runner(cp))
+        try:
+            await charge_points[charge_point_id].start()
+        except Exception as e:
+            logging.error(f"Chargepoint raised exception: {e}")
+        return
+    else:
+        charge_points[charge_point_id] = ChargePoint(charge_point_id, websocket)
 
-    await cp.start()
+        logging.info("Starting tests")
+
+        test_task = asyncio.create_task(test_runner(charge_points[charge_point_id]))
+
+        try:
+            await charge_points[charge_point_id].start()
+        except Exception as e:
+            logging.error(f"Chargepoint raised exception: {e}")
+
+        await test_task
+
+    del charge_points[charge_point_id]
 
 async def main():
+    logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)-8s %(message)s')
+    logging.getLogger('root').setLevel(logging.INFO)
+    logging.getLogger('ocpp').setLevel(logging.WARNING)
+    ip = '0.0.0.0'
+    port = 9000
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-z", "--zap_cli_path", help="Path to serial device for communication with MCU. Example -z /dev/ttyUSB1")
+    args = parser.parse_args()
+
+    if args.zap_cli_path:
+        await init_zap_client(args.zap_cli_path)
+
+    logging.info(f'Creating websocket server at {ip}:{port}')
     server = await websockets.serve(
         on_connect,
-        '0.0.0.0',
-        9000,
+        ip,
+        port,
         subprotocols=['ocpp1.6'],
     )
 
+    logging.info("Hello")
     await server.wait_closed()
 
-
 if __name__ == '__main__':
-    asyncio.run(main())
+
+    try:
+        asyncio.run(main(), debug=True)
+    except Exception:
+        logging.error(f"Unhandled exception: {Exception}")

@@ -701,7 +701,7 @@ void offlineSession_DeleteLastUsedFile()
 
 int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 {
-	ESP_LOGE(TAG, " *** UpdateSessionOnFile: %i ***", createNewFile);
+	ESP_LOGW(TAG, " *** UpdateSessionOnFile: %i ***", createNewFile);
 
 	if (!offlineSession_is_mounted()) {
 		ESP_LOGE(TAG, "files is not mounted!");

@@ -235,13 +235,33 @@ void ocpp_configure_task_notification(TaskHandle_t task, uint offset);
  * @param meter_serial_number "Optional. This contains the serial number of the main electrical
  * meter of the Charge Point"
  * @param meter_type "Optional. This contains the type of the main electrical meter of the Charge Point"
+ * @param event_return bitmask for additional events that should cause await to stop and return.
+ *
+ * @return task's notification value that caused process to exit if any exist.
  *
  * @note should only be called by a task set with ocpp_configure_task_notification
  */
-int complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
+uint32_t complete_boot_notification_process(const char * charge_box_serial_number, const char * charge_point_model,
 				const char * charge_point_serial_number, const char * charge_point_vendor,
 				const char * firmware_version, const char * iccid, const char * imsi,
-				const char * meter_serial_number, const char * meter_type);
+				const char * meter_serial_number, const char * meter_type,
+				uint32_t event_return_mask);
+
+/**
+ * @brief A mimimalistic OCPP handler used when awaiting boot confirmation or boot trigger.
+ *
+ * @details Awaits a task notification for eOCPP_TASK_REGISTRATION_STATUS_CHANGED ignoring
+ * most other notifications that are not necessary for a boot to complete or a boot trigger to
+ * be handled. It will timeout active calls and send new ocpp messages.
+ *
+ * @param max_delay_sec the maximum time that one should wait for boot notification confirmation.
+ * @param event_return_mask bitmask for additional events that should cause await to stop and return.
+ *
+ * @return task's notification value that caused await to exit if any exist.
+ *
+ * @note should only be called by a task set with ocpp_configure_task_notification
+ **/
+uint32_t await_registration_status_change(uint32_t max_delay_sec, uint32_t event_return_mask);
 
 /**
  * @brief Used by complete_boot_notification_process and when requested with trigger message.
@@ -266,11 +286,18 @@ void ocpp_trigger_heartbeat();
 void stop_ocpp_heartbeat(void);
 
 /**
+ * @brief get active ocpp heartbeat interval
+ */
+uint32_t ocpp_get_active_heartbeat_interval();
+
+/**
  * @brief changes the interval between ocpp heartbeats
  *
  * @param sec Interval in seconds between each heartbeat request.
+ *
+ * @note O will be treated as "disable" and max value is limited by CONFIG_OCPP_TIMER_MAX_SEC
  */
-void update_heartbeat_timer(uint sec);
+void update_heartbeat_timer(uint32_t sec);
 
 /**
  * @brief change number of retries and interval between each failed transaction related message
@@ -289,6 +316,11 @@ cJSON * ocpp_task_get_diagnostics();
  * @brief gets the latest result of BootNotification request
  */
 enum ocpp_registration_status get_registration_status(void);
+
+/**
+ * @brief get minimum wait until next boot
+ */
+long ocpp_get_boot_prohibitet_duration();
 
 /**
  * @brief events that can be sent via xTaskNotify

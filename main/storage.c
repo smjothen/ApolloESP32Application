@@ -94,7 +94,7 @@ void storage_Init_Configuration()
 	configurationStruct.ocpp_heartbeat_interval = 86400;
 	configurationStruct.ocpp_local_authorize_offline = true;
 	configurationStruct.ocpp_local_pre_authorize = true;
-	configurationStruct.ocpp_message_timeout = 10;
+	configurationStruct.ocpp_message_timeout = CONFIG_OCPP_MESSAGE_TIMEOUT_DEFAULT;
 	strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
 	strcpy(configurationStruct.ocpp_meter_values_sampled_data, "Energy.Active.Import.Register");
 	configurationStruct.ocpp_meter_value_sample_interval = 0;
@@ -137,6 +137,7 @@ void storage_Init_Configuration()
 
 	configurationStruct.cover_on_value = DEFAULT_COVER_ON_VALUE;
 	configurationStruct.connectToPortalType = 0;
+	configurationStruct.pulseType = ePULSE_IOT_HUB;
 }
 
 
@@ -271,9 +272,16 @@ void storage_Set_chargebox_identity_ocpp(const char * newValue)
 
 void storage_Set_session_controller(enum session_controller newValue)
 {
+	ESP_LOGW(TAG, "storage_Set_session_controller %i", newValue);
+
 	configurationStruct.session_controller = newValue;
 
-	storage_Set_Standalone((newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0);
+	///Only let SessionController affect standalone when OCPP-controlled. 
+	///Otherwise let Zaptec Cloud set standalone mode.
+	if(newValue == eSESSION_OCPP)
+	{
+		configurationStruct.standalone = (newValue & eCONTROLLER_ESP_STANDALONE) ? 1 : 0;
+	}
 }
 
 void storage_Set_ocpp_allow_offline_tx_for_unknown_id(bool newValue)
@@ -378,6 +386,18 @@ void storage_Set_ocpp_transaction_message_retry_interval(uint16_t newValue)
 void storage_Set_ocpp_unlock_connector_on_ev_side_disconnect(bool newValue)
 {
 	configurationStruct.ocpp_unlock_connector_on_ev_side_disconnect = newValue;
+
+	//Keep Zaptec lock and OCPP lock in sync
+	if(newValue)
+	{
+		// Do unlock equals not permanent
+		configurationStruct.permanentLock = 0;
+	}
+	else
+	{
+		// No unlock equals permanent lock
+		configurationStruct.permanentLock = 1;
+	}
 }
 
 void storage_Set_ocpp_websocket_ping_interval(uint32_t newValue)
@@ -427,13 +447,15 @@ void storage_Set_PermanentLock(uint8_t newValue)
 
 void storage_Set_Standalone(uint8_t newValue)
 {
-	configurationStruct.standalone = newValue;
-
-	if(newValue == 1){
-		configurationStruct.session_controller |= eCONTROLLER_ESP_STANDALONE;
-	}else{
-		configurationStruct.session_controller &= ~eCONTROLLER_ESP_STANDALONE;
+	if(newValue != configurationStruct.standalone){
+		if(newValue == 1){
+			configurationStruct.session_controller = eSESSION_STANDALONE;
+		}else{
+			configurationStruct.session_controller = eSESSION_ZAPTEC_CLOUD;
+		}
 	}
+
+	configurationStruct.standalone = newValue;
 }
 
 void storage_Set_StandalonePhase(uint8_t newValue)
@@ -561,6 +583,12 @@ void storage_Set_ConnectToPortalType(uint8_t newValue)
 	configurationStruct.connectToPortalType = newValue;
 }
 
+void storage_Set_PulseType(uint8_t newValue)
+{
+	configurationStruct.pulseType = newValue;
+}
+
+
 
 //****************************************************
 
@@ -664,7 +692,7 @@ const char * storage_Get_url_ocpp()
 
 bool storage_Get_allow_lte_ocpp()
 {
-	return configurationStruct.allow_lte_ocpp;
+	return configurationStruct.allow_lte_ocpp || CONFIG_ZAPTEC_OCPP_ALWAYS_ALLOW_LTE;
 }
 
 bool storage_Get_availability_ocpp()
@@ -685,6 +713,26 @@ const char * storage_Get_chargebox_identity_ocpp()
 enum session_controller storage_Get_session_controller()
 {
 	return configurationStruct.session_controller;
+}
+
+int ocpp_get_session_controller_mode()
+{
+	int management_mode = 0;
+	switch(storage_Get_session_controller()){
+	case eSESSION_ZAPTEC_CLOUD:
+		management_mode = 0;
+		break;
+	case eSESSION_STANDALONE:
+		management_mode = 1;
+		break;
+	case eSESSION_OCPP:
+		management_mode = 2;
+		break;
+	default:
+		management_mode = -1;
+	}
+
+	return management_mode;
 }
 
 bool storage_Get_ocpp_allow_offline_tx_for_unknown_id()
@@ -1046,6 +1094,15 @@ uint8_t storage_Get_ConnectToPortalType()
 	return configurationStruct.connectToPortalType;
 }
 
+uint8_t storage_Get_PulseType()
+{
+	//Default to old Pulse type if set incorrectly
+	if(configurationStruct.pulseType >= eNR_OF_PULSE_TYPES)
+		configurationStruct.pulseType = ePULSE_IOT_HUB;
+
+	return configurationStruct.pulseType;
+}
+
 //************************************************
 
 esp_err_t storage_SaveConfiguration()
@@ -1137,6 +1194,7 @@ esp_err_t storage_SaveConfiguration()
 
 	err += nvs_set_u16(configuration_handle, "CoverOnValue", configurationStruct.cover_on_value);
 	err += nvs_set_u8(configuration_handle, "ConPortType", configurationStruct.connectToPortalType);
+	err += nvs_set_u8(configuration_handle, "PulseType", configurationStruct.pulseType);
 
 	err += nvs_commit(configuration_handle);
 	nvs_close(configuration_handle);
@@ -1216,7 +1274,7 @@ esp_err_t storage_ReadConfiguration()
 	//if(nvs_get_u32(configuration_handle, "oEnergyOnInv_m", &configurationStruct.ocpp_max_energy_on_invalid_id) != 0)
 	//
 	if(nvs_get_u16(configuration_handle, "oMessageTimeOut", &configurationStruct.ocpp_message_timeout) != 0)
-		configurationStruct.ocpp_message_timeout = 10;
+		configurationStruct.ocpp_message_timeout = CONFIG_OCPP_MESSAGE_TIMEOUT_DEFAULT;
 	readSize = DEFAULT_CSL_SIZE;
 	if(nvs_get_str(configuration_handle, "oMtrValAlign", configurationStruct.ocpp_meter_values_aligned_data, &readSize) != 0)
 		strcpy(configurationStruct.ocpp_meter_values_aligned_data, "");
@@ -1309,6 +1367,10 @@ esp_err_t storage_ReadConfiguration()
 
 	if(nvs_get_u8(configuration_handle, "ConPortType", &configurationStruct.connectToPortalType) != ESP_OK)
 		configurationStruct.connectToPortalType = PORTAL_TYPE_PROD_DEFAULT;
+
+	if(nvs_get_u8(configuration_handle, "PulseType", &configurationStruct.pulseType) != ESP_OK)
+		configurationStruct.pulseType = ePULSE_IOT_HUB;
+
 
 	//!!! When adding more parameters, don't accumulate their error, since returning an error will cause all parameters to be reinitialized
 
@@ -1896,6 +1958,24 @@ void storage_GetStats(char * stat)
 	nvs_get_stats(NULL, &nvs_stats);
 	sprintf(stat, "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
 	ESP_LOGI(TAG, "%s", stat);
+}
+
+double storage_GetAccumulatedEnergy()
+{
+	nvs_handle_t handle;
+	esp_err_t open_result = nvs_open("energy", NVS_READONLY, &handle);
+	if(open_result != ESP_OK ){
+		ESP_LOGE(TAG, "Failed to open NVS energy %d", open_result);
+		return 0.0;
+	}
+	
+	double accEnergy = 0.0;
+	esp_err_t result = nvs_get_zdouble(handle, "accumulated", &accEnergy);
+	ESP_LOGW(TAG, "Reading Accumulated Energy(%d): %f", result, accEnergy);
+
+	nvs_close(handle);
+
+	return accEnergy;
 }
 
 double storage_update_accumulated_energy(float session_energy){

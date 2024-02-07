@@ -34,6 +34,8 @@
       "type": "cppdbg",
       "request": "launch",
       "MIMode": "gdb",
+                          //"C:\gitHub\espressif\ .espressif511\ tools\ xtensa-esp-elf-gdb\ 12.1_20221002\ xtensa-esp-elf-gdb\bin"
+      //"miDebuggerPath":   "C:\\gitHub\\espressif\\.espressif511\\tools\\xtensa-esp-elf-gdb\\12.1_20221002\\xtensa-esp-elf-gdb\\bin\\xtensa-esp32-elf-gdb.exe",
       //"miDebuggerPath":   "C:/gitHub/esp/v503/tools/tools/xtensa-esp32-elf/esp-2022r1-11.2.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gdb.exe",
       "miDebuggerPath": "${command:espIdf.getXtensaGdb}",
       "program": "${workspaceFolder}/build/${command:espIdf.getProjectName}.elf",

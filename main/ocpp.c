@@ -18,7 +18,9 @@
 #include "apollo_ota.h"
 #include "OCMF.h"
 #include "zaptec_cloud_observations.h"
+#include "zaptec_cloud_listener.h"
 #include "ocpp_listener.h"
+#include "ocpp_reservation.h"
 #include "ocpp_task.h"
 #include "ocpp_transaction.h"
 #include "ocpp_smart_charging.h"
@@ -44,6 +46,7 @@
 #include "types/ocpp_date_time.h"
 #include "types/ocpp_enum.h"
 #include "types/ocpp_data_transfer_status.h"
+#include "types/ocpp_phase_rotation.h"
 #include "types/ocpp_reason.h"
 #include "types/ocpp_message_trigger.h"
 #include "types/ocpp_trigger_message_status.h"
@@ -65,9 +68,15 @@ StackType_t task_ocpp_stack[TASK_OCPP_STACK_SIZE];
 static bool should_run = false;
 static bool should_reboot = false;
 static bool should_reconnect = false;
+static uint8_t cloud_publish_awaiting = 0;
 static bool graceful_exit = false;
 static bool connected = false;
 static bool reset_from_cs = false;
+
+enum cloud_publish_type{
+	ePUBLISH_DEVICE_TWIN = 1<<0,
+	ePUBLISH_OCPP_CONNECTED = 1 << 1,
+};
 
 static char * mnt_directory = "/files";
 static char * firmware_update_request_path = "/files/ocpp_upd.bin";
@@ -169,25 +178,18 @@ void unlock_connector_cb(const char * unique_id, const char * action, cJSON * pa
 		ESP_LOGW(TAG, "Requested to unlock an unknown connector");
 		response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_NOT_SUPPORTED);
 	}else{
-
-		MessageType ret = MCU_SendUint8Parameter(PermanentCableLock, true);
-		if(ret != MsgWriteAck){
-			ocpp_send_status_notification(-1, OCPP_CP_ERROR_INTERNAL_ERROR, "Unable to lock connector to attempt unlock",
-						NULL, NULL, true, false);
-			ESP_LOGE(TAG, "Unlock connector preparation failed");
-		}
-
-		ret = MCU_SendUint8Parameter(PermanentCableLock, false);
-		if(ret != MsgWriteAck){
-			ESP_LOGE(TAG, "Unlock connector failed");
-			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCK_FAILED);
-
-		}else{
+		if(MCU_SendCommandServoForceUnlock())
+		{
 			if(sessionHandler_OcppTransactionIsActive(connector_id)){
 				sessionHandler_OcppStopTransaction(eOCPP_REASON_UNLOCK_COMMAND);
 			}
 
 			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCKED);
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Unlock connector failed");
+			response = ocpp_create_unlock_connector_confirmation(unique_id, OCPP_UNLOCK_STATUS_UNLOCK_FAILED);
 		}
 	}
 
@@ -216,7 +218,7 @@ error:
 }
 
 float current_offered_from_pilot_state(float pilot_state){
-	if(pilot_state < 6 || pilot_state > 80)
+	if(pilot_state == 100)
 		return 0;
 
 	return pilot_state;
@@ -355,7 +357,7 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		.unit = eOCPP_UNIT_CELSIUS
 	};
 
-	if(connector_id == 0){
+	if(connector_id == 0 && phase == NULL){
 		// Body
 		sprintf(new_value.value, "%.1f", MCU_GetTemperaturePowerBoard(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) == NULL){
@@ -372,6 +374,9 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 		new_value.location = eOCPP_LOCATION_OUTLET;
 
 		size_t new_values_count = 0;
+
+		if(phase == NULL && (MCU_GetGridType() == NETWORK_1P3W || MCU_GetGridType() == NETWORK_1P4W))
+			phase = OCPP_PHASE_L1;
 
 		if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 			//phase 1
@@ -399,7 +404,6 @@ static int populate_sample_temperature(char * phase, uint connector_id, enum ocp
 
 		return new_values_count;
 	}else{
-		ESP_LOGE(TAG, "Unexpected connector id");
 		return 0;
 	}
 }
@@ -411,13 +415,13 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 		.measurand = eOCPP_MEASURAND_VOLTAGE,
 		.phase = eOCPP_PHASE_L1,
 		.location = eOCPP_LOCATION_OUTLET,
-		.unit = eOCPP_UNIT_A
+		.unit = eOCPP_UNIT_V
 	};
 
 	size_t new_values_count = 0;
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L1) == 0){
 		//Phase 1
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(0));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(0));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -425,7 +429,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L2) == 0){
 		//Phase 2
 		new_value.phase = eOCPP_PHASE_L2;
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(1));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(1));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -433,7 +437,7 @@ static int populate_sample_voltage(char * phase, enum ocpp_reading_context_id co
 	if(phase == NULL || strcmp(phase, OCPP_PHASE_L3) == 0){
 		//Phase 3
 		new_value.phase = eOCPP_PHASE_L3;
-		sprintf(new_value.value, "%.1f", MCU_GetCurrents(2));
+		sprintf(new_value.value, "%.1f", MCU_GetVoltages(2));
 		if(ocpp_sampled_list_add(value_list_out, new_value) != NULL)
 			new_values_count++;
 	}
@@ -504,9 +508,11 @@ void save_interval_measurands(enum ocpp_reading_context_id context){
 int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connector_id, enum ocpp_reading_context_id context,
 		struct ocpp_sampled_value_list * value_list_out){
 
-	if(phase == NULL){
-		uint8_t rotation = storage_Get_PhaseRotation();
-		if((rotation > 0 && rotation < 4) || (rotation > 9 && rotation < 13))
+	/*
+	* Default to only report on active phases on measurands that are only reported on phases
+	*/
+	if(phase == NULL && measurand != eOCPP_MEASURAND_TEMPERATURE){
+		if(MCU_GetGridType() == NETWORK_1P3W || MCU_GetGridType() == NETWORK_1P4W)
 			phase = OCPP_PHASE_L1;
 	}
 
@@ -532,7 +538,6 @@ int populate_sample(enum ocpp_measurand_id measurand, char * phase, uint connect
 }
 
 char * csl_token_get_phase_index(const char * csl_token){
-
 	char * phase_index = rindex(csl_token, '.');
 	if(phase_index == NULL){
 		return NULL;
@@ -547,14 +552,11 @@ char * csl_token_get_phase_index(const char * csl_token){
 	}
 }
 
-//TODO: "All "per-period" data [...] should be [...] transmitted [...] at the end of each interval, bearing the interval start time timestamp"
-//TODO: Optionally add ISO8601 duration to meter value timestamp
-int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id context,
-			const char * measurand_csl, struct ocpp_meter_value_list * meter_value_out){
+int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
+					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
 
-	if(strlen(measurand_csl) == 0){
+	if(measurand_csl == NULL || strlen(measurand_csl) == 0)
 		return 0;
-	}
 
 	/**
 	 * The amount of samples to add to any ocpp meter value may depend on:
@@ -573,75 +575,7 @@ int ocpp_populate_meter_values(uint connector_id, enum ocpp_reading_context_id c
 	char * item = strtok(measurands, ",");
 
 	while(item != NULL){
-
 		ESP_LOGI(TAG, "Attempting to add %s to meter value", item);
-
-		struct ocpp_meter_value * meter_value = malloc(sizeof(struct ocpp_meter_value));
-		if(meter_value == NULL){
-			ESP_LOGE(TAG, "Unable to create new meter_value");
-			free(measurands);
-			return -1;
-		}
-
-		meter_value->timestamp = time(NULL);
-		meter_value->sampled_value = ocpp_create_sampled_list();
-		if(meter_value->sampled_value == NULL){
-			ESP_LOGE(TAG, "Unable to create new sample");
-			free(meter_value);
-			free(measurands);
-			return -1;
-		}
-		ESP_LOGI(TAG, "Creating %s value", item);
-
-		char * phase_index = csl_token_get_phase_index(item);
-		if(phase_index != NULL){
-			*phase_index = '\0'; // Terminate the item at end of measurand
-			phase_index++;
-		}
-
-		int new_item_count = populate_sample(ocpp_measurand_to_id(item), phase_index, connector_id, context, meter_value->sampled_value);
-
-		if(new_item_count < 1){
-			if(new_item_count < 0)
-				ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
-
-			free(meter_value->sampled_value);
-			free(meter_value);
-		}else{
-			struct ocpp_meter_value_list * new_node = ocpp_meter_list_add_reference(meter_value_out, meter_value);
-			if(new_node == NULL){
-				ESP_LOGE(TAG, "Unable to add sample to meter value");
-				free(meter_value->sampled_value);
-				free(meter_value);
-				return -1;
-			}
-		}
-
-		item = strtok(NULL, ",");
-	}
-
-	free(measurands);
-
-	return ocpp_meter_list_get_length(meter_value_out);
-}
-
-// TODO: move similarity with ocpp_populate_meter_values to new function
-int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_reading_context_id context, const char * measurand_csl,
-					struct ocpp_meter_value_list * existing_list, struct ocpp_meter_value_list * meter_value_out){
-
-	if(measurand_csl == NULL)
-		return 0;
-
-	char * measurands = strdup(measurand_csl);
-	if(measurands == NULL){
-		ESP_LOGE(TAG, "Unable to duplicate measurands");
-		return -1;
-	}
-
-	char * item = strtok(measurands, ",");
-
-	while(item != NULL){
-		ESP_LOGI(TAG, "Looking through existing for: '%s'", item);
 
 		bool added = false;
 		struct ocpp_meter_value_list * existing_value = existing_list;
@@ -660,6 +594,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 					if(ocpp_meter_list_add(meter_value_out, *existing_value->value) == NULL){
 						ESP_LOGE(TAG, "Unable to add exiting measurand");
 					}else{
+						ESP_LOGI(TAG, "Added from existing");
 						added = true;
 					}
 					break;
@@ -669,7 +604,6 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 		}
 
 		if(added == false){
-			ESP_LOGW(TAG, "Not found, creating new");
 			struct ocpp_meter_value * meter_value = malloc(sizeof(struct ocpp_meter_value));
 			if(meter_value == NULL){
 				ESP_LOGE(TAG, "Unable to create new meter_value");
@@ -677,7 +611,19 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 				return -1;
 			}
 
-			meter_value->timestamp = time(NULL);
+			if(ocpp_measurand_is_interval(item)){
+				if(context == eOCPP_CONTEXT_SAMPLE_CLOCK){
+					meter_value->timestamp = aligned_timestamp_end;
+
+				}else if(context == eOCPP_CONTEXT_SAMPLE_PERIODIC || context == eOCPP_CONTEXT_TRANSACTION_END){
+					meter_value->timestamp = sampled_timestamp_end;
+
+				}else{ // Will probably be rejected by populate_sample_<measurand>
+					meter_value->timestamp = time(NULL);
+				}
+			}else{
+				meter_value->timestamp = time(NULL);
+			}
 			meter_value->sampled_value = ocpp_create_sampled_list();
 			if(meter_value->sampled_value == NULL){
 				ESP_LOGE(TAG, "Unable to create new sample");
@@ -685,9 +631,9 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 				free(measurands);
 				return -1;
 			}
+			ESP_LOGI(TAG, "Creating %s value", item);
 
 			char * phase_index = csl_token_get_phase_index(item);
-
 			if(phase_index != NULL){
 				*phase_index = '\0'; // Terminate the item at end of measurand
 				phase_index++;
@@ -698,6 +644,7 @@ int ocpp_populate_meter_values_from_existing(uint connector_id, enum ocpp_readin
 			if(new_item_count < 1){
 				if(new_item_count < 0)
 					ESP_LOGE(TAG, "Failed to populate sample for measurand '%s'", item);
+
 				free(meter_value->sampled_value);
 				free(meter_value);
 			}else{
@@ -735,15 +682,13 @@ void handle_meter_value(enum ocpp_reading_context_id context, const char * csl, 
 				return;
 			}
 
-			int length = ocpp_populate_meter_values(connector, context, csl, meter_value_list);
+			int length = ocpp_populate_meter_values_from_existing(connector, context, csl, NULL, meter_value_list);
 
 			if(length < 0){
 				ESP_LOGW(TAG, "No meter values to send");
 
 			}else{
-				if(transaction_related){
-					ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list);
-
+				if(transaction_related && ocpp_transaction_enqueue_meter_value(connector, valid_id ? transaction_id : NULL, meter_value_list) == 0){
 					if(stoptxn_csl != NULL && stoptxn_csl[0] != '\0'){
 						ESP_LOGI(TAG, "Creating stoptxn meter values");
 
@@ -807,15 +752,30 @@ static void clock_aligned_meter_values_on_aligned_start(){
 	ESP_LOGI(TAG, "Aligned for meter values, sending values and starting repeating timer");
 
 	clock_aligned_meter_values();
-	clock_aligned_handle = xTimerCreate("Ocpp clock aligned",
-					pdMS_TO_TICKS(storage_Get_ocpp_clock_aligned_data_interval() * 1000),
-					pdTRUE, NULL, clock_aligned_meter_values);
 
+	if(clock_aligned_handle != NULL){
+		if(xTimerDelete(clock_aligned_handle, 0) != pdPASS){
+			ESP_LOGE(TAG, "on_aligned_start was unable to delete its own timer");
+			return;
+		}
+		clock_aligned_handle = NULL;
+	}
+
+	TickType_t new_period = pdMS_TO_TICKS(storage_Get_ocpp_clock_aligned_data_interval() * 1000);
+	if(new_period == 0){
+		ESP_LOGW(TAG, "Clock aligned interval seems to have changed after on_aligned_start");
+		return;
+	}
+
+	clock_aligned_handle = xTimerCreate("Ocpp clock aligned", new_period, pdTRUE, NULL, clock_aligned_meter_values);
 	if(clock_aligned_handle == NULL){
 		ESP_LOGE(TAG, "Unable to create repeating clock aligned meter values timer");
 
 	}else{
-		xTimerStart(clock_aligned_handle, 0);
+		if(xTimerStart(clock_aligned_handle, 0) != pdPASS){
+			ESP_LOGE(TAG, "on_aligned_start was unable to start clock aligned timer");
+			return;
+		}
 		init_interval_measurands(eOCPP_CONTEXT_SAMPLE_CLOCK);
 	}
 }
@@ -824,7 +784,10 @@ static void restart_clock_aligned_meter_values(){
 	ESP_LOGI(TAG, "Restarting clock aligned meter value timer");
 
 	if(clock_aligned_handle != NULL){
-		xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(200));
+		if(xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(200)) != pdPASS){
+			ESP_LOGE(TAG, "Unable to delete timer to reset clock aligned meter values");
+			return;
+		}
 		clock_aligned_handle = NULL;
 	}
 
@@ -858,6 +821,14 @@ static void restart_clock_aligned_meter_values(){
 		}
 	}else{
 		ESP_LOGW(TAG, "Clock aligned meter values are disabled");
+	}
+}
+
+static void stop_clock_aligned_meter_values(){
+	ESP_LOGI(TAG, "Stopping clock aligned meter value timer");
+	if(clock_aligned_handle != NULL){
+		xTimerDelete(clock_aligned_handle, pdMS_TO_TICKS(2000));
+		clock_aligned_handle = NULL;
 	}
 }
 
@@ -897,87 +868,82 @@ static int write_configuration_bool(bool value, char * value_out){
 	}
 }
 
-static char * convert_to_ocpp_phase(uint8_t phase_rotation){
-	switch(phase_rotation){ //TODO: Check if understood correctly and handling of 1,2,3 and 1,11,12 is correct
+static const char * convert_to_ocpp_phase(uint8_t phase_rotation){
+	switch(phase_rotation){
 	case 1:
 	case 2:
 	case 3:
-		return "NotApplicable";
+		return OCPP_PHASE_ROTATION_NOT_APPLICABLE;
 	case 4:
-		return "RST";
+		return OCPP_PHASE_ROTATION_RST;
 	case 5:
-		return "STR";
+		return OCPP_PHASE_ROTATION_STR;
 	case 6:
-		return "TRS";
+		return OCPP_PHASE_ROTATION_TRS;
 	case 7:
-		return "RTS";
+		return OCPP_PHASE_ROTATION_RTS;
 	case 8:
-		return "SRT";
+		return OCPP_PHASE_ROTATION_SRT;
 	case 9:
-		return "TSR";
+		return OCPP_PHASE_ROTATION_TSR;
 	case 10:
 	case 11:
 	case 12:
-		return "NotApplicable";
+		return OCPP_PHASE_ROTATION_NOT_APPLICABLE;
 	case 13:
-		return "RST";
+		return OCPP_PHASE_ROTATION_RST;
 	case 14:
-		return "STR";
+		return OCPP_PHASE_ROTATION_STR;
 	case 15:
-		return "TRS";
+		return OCPP_PHASE_ROTATION_TRS;
 	case 16:
-		return "RTS";
+		return OCPP_PHASE_ROTATION_RTS;
 	case 17:
-		return "SRT";
+		return OCPP_PHASE_ROTATION_SRT;
 	case 18:
-		return "TSR";
+		return OCPP_PHASE_ROTATION_TSR;
 	default:
 		return "Unknown";
 	}
 }
 
 // Returns 0 if it can not be determined
-static uint8_t convert_from_ocpp_phase(char L1, char L2, char L3, bool is_it){
-	char phase_rotation[4];
-	phase_rotation[0] = L1;
-	phase_rotation[1] = L2;
-	phase_rotation[2] = L3;
-	phase_rotation[3] = '\0';
+static uint8_t convert_from_ocpp_phase(enum ocpp_phase_rotation_id phase_rotation_id, bool is_it){
 
 	if(!is_it){
-		if(strcmp(phase_rotation, "RST") == 0){
+		switch(phase_rotation_id){
+		case eOCPP_PHASE_ROTATION_RST:
 			return 4;
-		}else if(strcmp(phase_rotation, "STR") == 0){
+		case eOCPP_PHASE_ROTATION_STR:
 			return 5;
-		}else if(strcmp(phase_rotation, "TRS") == 0){
+		case eOCPP_PHASE_ROTATION_TRS:
 			return 6;
-		}else if(strcmp(phase_rotation, "RTS") == 0){
+		case eOCPP_PHASE_ROTATION_RTS:
 			return 7;
-		}else if(strcmp(phase_rotation, "SRT") == 0){
+		case eOCPP_PHASE_ROTATION_SRT:
 			return 8;
-		}else if(strcmp(phase_rotation, "TSR") == 0){
+		case eOCPP_PHASE_ROTATION_TSR:
 			return 9;
-		}else{
+		default:
 			return 0;
 		}
-	}
-	else{
-		if(strcmp(phase_rotation, "RST") == 0){
+	}else{
+		switch(phase_rotation_id){
+		case eOCPP_PHASE_ROTATION_RST:
 			return 13;
-		}else if(strcmp(phase_rotation, "STR") == 0){
+		case eOCPP_PHASE_ROTATION_STR:
 			return 14;
-		}else if(strcmp(phase_rotation, "TRS") == 0){
+		case eOCPP_PHASE_ROTATION_TRS:
 			return 15;
-		}else if(strcmp(phase_rotation, "RTS") == 0){
+		case eOCPP_PHASE_ROTATION_RTS:
 			return 16;
-		}else if(strcmp(phase_rotation, "SRT") == 0){
+		case eOCPP_PHASE_ROTATION_SRT:
 			return 17;
-		}else if(strcmp(phase_rotation, "TSR") == 0){
+		case eOCPP_PHASE_ROTATION_TSR:
 			return 18;
-		}else{
+		default:
 			return 0;
 		}
-
 	}
 }
 
@@ -1071,11 +1037,11 @@ esp_err_t add_configuration_ocpp_connector_phase_rotation(cJSON * key_list){
 
 	size_t offset = 0;
 
-	for(size_t i = 0; i < CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
+	for(size_t i = 0; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
 		if(i > 0)
 			phase_rotation_str[offset++] = ',';
 
-		sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
+		offset += sprintf(phase_rotation_str + offset, "%u.%s", i, convert_to_ocpp_phase(storage_Get_PhaseRotation()));
 	}
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION, false, phase_rotation_str);
@@ -1361,7 +1327,7 @@ esp_err_t add_configuration_ocpp_stop_txn_aligned_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_aligned_data_max_length(cJSON * key_list){
-	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_ALIGNED_DATA_MAX_LENGTH, true, value_buffer);
@@ -1389,7 +1355,7 @@ esp_err_t add_configuration_ocpp_stop_txn_sampled_data(cJSON * key_list){
 }
 
 esp_err_t add_configuration_ocpp_stop_txn_sampled_data_max_length(cJSON * key_list){
-	if(write_configuration_bool(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
+	if(write_configuration_u16(CONFIG_OCPP_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, value_buffer) != 0)
 		return ESP_FAIL;
 
 	cJSON * key_value_json = create_key_value(OCPP_CONFIG_KEY_STOP_TXN_SAMPLED_DATA_MAX_LENGTH, true, value_buffer);
@@ -2025,11 +1991,15 @@ static void change_config_confirm(const char * unique_id, const char * configura
 	}
 }
 
+static bool is_valid_interval(uint32_t sec){
+	return sec <= CONFIG_OCPP_TIMER_MAX_SEC;
+}
+
 static bool is_valid_alignment_interval(uint32_t sec){
 	if(sec == 0)
 		return true;
 
-	return (86400 % sec) == 0 ? true : false;
+	return (86400 % sec) == 0 && is_valid_interval(sec);
 }
 
 static bool is_true(bool value){
@@ -2038,8 +2008,8 @@ static bool is_true(bool value){
 
 static bool is_valid_security_profile(uint8_t security_profile){
 
-	//If the Charge Point receives a lower value then currently configured, the Charge Point SHALL Rejected the ChangeConfiguration.req
-	if(security_profile < storage_Get_ocpp_security_profile() || security_profile > 3) // Highest defined securityProfile is 3
+	//If the Charge Point receives a lower or equal value then currently configured, the Charge Point SHALL Rejected the ChangeConfiguration.req
+	if(security_profile <= storage_Get_ocpp_security_profile() || security_profile > 3) // Highest defined securityProfile is 3
 		return false;
 
 	if(security_profile == 0){
@@ -2053,6 +2023,13 @@ static bool is_valid_security_profile(uint8_t security_profile){
 	}
 
 	return false;
+}
+
+static bool is_valid_message_timeout(uint16_t message_timeout){
+	if(message_timeout < CONFIG_OCPP_MESSAGE_TIMEOUT_MINIMUM)
+		return false;
+
+	return true;
 }
 
 static long validate_u(const char * value, uint32_t upper_bounds){
@@ -2090,10 +2067,13 @@ static int set_config_u8(void (*config_function)(uint8_t), const char * value, b
 	return 0;
 }
 
-static int set_config_u16(void (*config_function)(uint16_t), const char * value){
+static int set_config_u16(void (*config_function)(uint16_t), const char * value, bool (*additional_validation)(uint16_t)){
 	long value_long = validate_u(value, UINT16_MAX);
 
 	if(value_long == -1)
+		return -1;
+
+	if(additional_validation != NULL && additional_validation((uint32_t)value_long) == false)
 		return -1;
 
 	config_function((uint16_t)value_long);
@@ -2194,7 +2174,7 @@ static int set_config_csl(void (*config_function)(const char *), const char * va
 	}
 
 	if(item_count > max_items){
-		ESP_LOGW(TAG, "CSL item count exceed maximum number of values: %d/%d", item_count, max_items);
+		ESP_LOGW(TAG, "CSL item count exceed maximum number of values: %zu/%" PRIu8, item_count, max_items);
 		goto error;
 	}
 
@@ -2334,116 +2314,113 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_CONNECTOR_PHASE_ROTATION) == 0){
 		/*
-		 * The go represent connector phase rotation via wire index.
-		 * OCPP uses three letters representing L1, L2, L3 optionally
-		 * prefixed by the connector. As the Go only has one connecrot,
-		 * it has been decided that it will reject a request to set
-		 * connector 0 to a different value than connector 1, and
-		 * setting either will be reported as both values updated.
+		 * The go represent connector phase rotation via wire index. OCPP uses three letters (R,S and T) representing L1, L2, L3 optionally
+		 * prefixed by the connector. Since the Go only has one connector, it has been decided that it will reject a request to set
+		 * connector 0 to a different value than connector 1, and setting either will be reported as both values updated.
 		 */
+		_Static_assert(CONFIG_OCPP_NUMBER_OF_CONNECTORS == 1, "Logic for ocpp connector phase rotation configuration is only valid with 1 connector");
 
-		bool is_valid = true;
-		size_t value_count = 1;
-		uint current_connector_id = 0;
+		size_t value_count = 0; // Number of items in the CSL type (number of seperate connectors configured)
 
-		char L1 = '\0';
-		char L2 = '\0';
-		char L3 = '\0';
+		enum ocpp_phase_rotation_id phase_rotation_id = -1;
+		uint8_t grid_type = MCU_GetGridType();
+		size_t offset = 0;
+		uint8_t configured_connector_mask = 0;
 
-		size_t current_item_phase_count = 0;
+		char phase_rotation_buffer[16];
 
+		err = 0;
 		size_t data_length = strlen(value);
-		for(size_t i = 0; i < data_length; i++){
-			if(isspace((unsigned char)value[i])){
-				// skip space;
-			}else if(isdigit((unsigned char)value[i])){ // connector id
-				if(current_item_phase_count == 0){ // if not expecting phase value
-					current_connector_id = value[i] - '0';
-					if(current_connector_id > CONFIG_OCPP_NUMBER_OF_CONNECTORS){
-						is_valid = false;
-						break;
-					}
-				}else{
-					is_valid = false;
-					break;
-				}
-			}else if(isupper((unsigned char)value[i])){ // phase value
-				if(value[i] == 'R' || value[i] == 'S' || value[i] == 'T'){
-					switch(++current_item_phase_count){
-					case 1:
-						if(L1 == '\0'){
-							L1 = value[i];
-						}else{
-							is_valid = (L1 == value[i]);
-						}
-						break;
-					case 2:
-						if(L2 == '\0'){
-							L2 = value[i];
-						}else{
-							is_valid = (L2 == value[i]);
-						}
-						break;
-					case 3:
-						if(L3 == '\0'){
-							L3 = value[i];
-						}else{
-							is_valid = (L3 == value[i]);
-						}
-						break;
-					default: // not expecting more phase values
-						is_valid = false;
-					}
+		while(data_length > 0 && isspace((unsigned char)value[data_length]))
+			data_length--;
 
-					if(is_valid == false)
-						break;
-				}else{ // invalid phase value
-					is_valid = false;
-					break;
-				}
-			}else if(ispunct((unsigned char)value[i])){
-				switch(value[i]){
-				case '.':
-					if(current_item_phase_count != 0)
-						is_valid = false;
-					break;
-				case ',':
-					if(current_item_phase_count == 3){ // Phase rotation item complete
-						current_item_phase_count = 0;
-						if(++value_count > CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH){
-							is_valid = false;
-						}
-					}else{
-						is_valid = false;
-					}
-					break;
-				default:
-					is_valid = false;
-				}
-
-				if(is_valid == false){
-					break;
-				}
-			}else if(value[i] == '\0'){
+		while(offset < data_length){
+			if(++value_count > CONFIG_OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH){
+				ESP_LOGW(TAG, "Number of CSL value in new connector phase rotation exceed max");
+				err = -1;
 				break;
-			}else{
-				is_valid = false;
+			}
+
+			if(value_count > 1){
+				if(value[offset] == ','){
+					offset++;
+				}else{
+					ESP_LOGW(TAG, "Expected ',' separated list");
+				}
+			}
+
+			while(isspace((unsigned char)value[offset]))
+				offset++;
+
+			if(isdigit((unsigned char)value[offset])){
+				int connector = atoi(&value[offset]);
+				if(value[offset+1] == '.' && ((configured_connector_mask & 1 << connector) == 0) && connector <= CONFIG_OCPP_NUMBER_OF_CONNECTORS){
+					configured_connector_mask = configured_connector_mask | 1 << connector;
+				}else{
+					ESP_LOGW(TAG, "Invalid use of connector prefix in connector phase rotation");
+					err = -1;
+					break;
+				}
+
+				offset += 2; //skip past connector id and the . seperating it from its rotation
+			}
+
+			size_t i = 0;
+			for(; i < sizeof(phase_rotation_buffer); i++){
+				if(isalpha((unsigned char)value[offset])){
+					phase_rotation_buffer[i] = value[offset];
+					offset++;
+				}else{
+					break;
+				}
+			}
+
+			phase_rotation_buffer[i] = '\0';
+			enum ocpp_phase_rotation_id new_phase_rotation_id = ocpp_phase_rotation_to_id(phase_rotation_buffer);
+
+			if(phase_rotation_id == -1){
+				if(new_phase_rotation_id == -1){
+					ESP_LOGE(TAG, "Got invalid phase rotation: %s", phase_rotation_buffer);
+					err = -1;
+					break;
+
+				}else{
+					if(grid_type == NETWORK_NONE){
+						ESP_LOGE(TAG, "Requested to set phase rotation, but no grid type was detected. Unable to validate or set rotation");
+						err = -1;
+						break;
+
+					}else if((grid_type == NETWORK_1P3W || grid_type == NETWORK_1P4W) && (new_phase_rotation_id != eOCPP_PHASE_ROTATION_NOT_APPLICABLE && new_phase_rotation_id != eOCPP_PHASE_ROTATION_UNKNOWN)){
+						ESP_LOGE(TAG, "Got phase rotation not supported with detected single phase grid"); // All attempts to change rotation away from NotApplicable on UK OPEN should hit this
+						err = -1;
+						break;
+
+					}else if((grid_type == NETWORK_3P3W || grid_type == NETWORK_3P4W) && new_phase_rotation_id == eOCPP_PHASE_ROTATION_NOT_APPLICABLE){
+						ESP_LOGE(TAG, "Got NotApplicable phase rotation (for single phase or DC charge point) when grid indicate three phase");
+						err = -1;
+						break;
+					}
+				}
+
+				phase_rotation_id = new_phase_rotation_id;
+
+			}else if(phase_rotation_id != new_phase_rotation_id){
+				ESP_LOGE(TAG, "The connectors phase rotations do not match: %d != %d", phase_rotation_id, new_phase_rotation_id);
+				err = -1;
 				break;
 			}
 		}
 
-		//TODO: find better way to check if it should be TN or IT connector wiring
-		uint8_t wire_index = convert_from_ocpp_phase(L1, L2, L3, storage_Get_PhaseRotation() > 9);
-
-		if(!is_valid || current_item_phase_count != 3 || wire_index == 0){
-			err = -1;
-		}else{
-
+		if(err == 0){
+			uint8_t wire_index = convert_from_ocpp_phase(phase_rotation_id, grid_type == NETWORK_1P3W || grid_type == NETWORK_3P3W);
+			ESP_LOGI(TAG, "New phase rotation wire index is %d", wire_index);
 			storage_Set_PhaseRotation(wire_index);
-			err = 0;
+		}else{
+			ESP_LOGE(TAG, "Unable to configure phase rotation");
 		}
+
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_HEARTBEAT_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, NULL);
+		err = set_config_u32(storage_Set_ocpp_heartbeat_interval, value, is_valid_interval);
 		if(err == 0)
 			update_heartbeat_timer(storage_Get_ocpp_heartbeat_interval());
 
@@ -2482,7 +2459,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MESSAGE_TIMEOUT) == 0){
-		err = set_config_u16(storage_Set_ocpp_message_timeout, value);
+		err = set_config_u16(storage_Set_ocpp_message_timeout, value, is_valid_message_timeout);
 		if(err == 0)
 			ocpp_change_message_timeout(storage_Get_ocpp_message_timeout());
 
@@ -2509,7 +2486,8 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_METER_VALUE_SAMPLE_INTERVAL) == 0){
-		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, NULL);
+		err = set_config_u32(storage_Set_ocpp_meter_value_sample_interval, value, is_valid_interval);
+		sessionHandler_OcppChangeSampleInterval(eOCPP_CONTEXT_OTHER);
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_MINIMUM_STATUS_DURATION) == 0){
 		err = set_config_u32(storage_Set_ocpp_minimum_status_duration, value, NULL);
@@ -2561,7 +2539,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 				storage_Get_ocpp_transaction_message_retry_interval());
 
 	}else if(strcasecmp(key, OCPP_CONFIG_KEY_TRANSACTION_MESSAGE_RETRY_INTERVAL) == 0){
-		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value);
+		err = set_config_u16(storage_Set_ocpp_transaction_message_retry_interval, value, NULL);
 		if(err == 0)
 			update_transaction_message_related_config(
 				storage_Get_ocpp_transaction_message_attempts(),
@@ -2605,6 +2583,7 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		err = set_config_u8(storage_Set_ocpp_security_profile, value, is_valid_security_profile);
 
 		if(active_security_profile != storage_Get_ocpp_security_profile()){
+			cloud_settings_changed = true;
 			ocpp_end_and_reconnect(true);
 		}
 
@@ -2646,8 +2625,10 @@ static void change_configuration_cb(const char * unique_id, const char * action,
 		storage_SaveConfiguration();
 
 		if(cloud_settings_changed){
-			if(publish_debug_telemetry_observation_cloud_settings() != 0)
+			if(publish_debug_telemetry_observation_cloud_settings() != 0){
 				ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+				cloud_publish_awaiting |= ePUBLISH_DEVICE_TWIN;
+			}
 		}
 	}else{
 		ESP_LOGW(TAG, "Unsuccessfull in configuring %s", key);
@@ -3270,7 +3251,7 @@ error:
 	}
 }
 
-int set_firmware_update_state(){
+int set_firmware_update_state(bool check_if_updated){
 	ESP_LOGI(TAG, "Setting firmware update state");
 	int err = load_update_request(&update_info);
 	if(err != 0){
@@ -3279,12 +3260,13 @@ int set_firmware_update_state(){
 
 	if(update_info.retrieve_date < time(NULL)){ // An update should have been attempted
 		cJSON * call = NULL;
-		if(ota_CheckIfHasBeenUpdated()){
+		if(check_if_updated && ota_CheckIfHasBeenUpdated()){
 			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLED);
 
 			remove(firmware_update_request_path);
 		}else{
-			call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
+			if(check_if_updated)
+				call = ocpp_create_firmware_status_notification_request(OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED);
 
 			if(update_info.retries > 0){
 				update_info.retries--;
@@ -3308,7 +3290,7 @@ int set_firmware_update_state(){
 				ESP_LOGE(TAG, "Unable to enqueue firmware_status_notification");
 				cJSON_Delete(call);
 			}
-		}else{
+		}else if(check_if_updated){
 			ESP_LOGE(TAG, "Expected firmware status call");
 		}
 
@@ -3317,6 +3299,21 @@ int set_firmware_update_state(){
 	}
 
 	return err;
+}
+
+void firmware_status_cb(const char * status){
+	cJSON * call = ocpp_create_firmware_status_notification_request(status);
+	if(call != NULL){
+		enqueue_call(call, NULL, NULL, NULL, eOCPP_CALL_GENERIC);
+	}else{
+		ESP_LOGE(TAG, "Unable to create %s FirmwareStatusNotification", status);
+	}
+
+	if(strcmp(status, OCPP_FIRMWARE_STATUS_DOWNLOAD_FAILED) == 0
+		|| strcmp(status, OCPP_FIRMWARE_STATUS_INSTALLATION_FAILED) == 0){
+
+		set_firmware_update_state(false);
+	}
 }
 
 uint8_t previous_enqueue_mask = 0;
@@ -3340,18 +3337,46 @@ cJSON * ocpp_get_diagnostics(){
 		cJSON_AddBoolToObject(main_res, "connected", connected);
 		cJSON_AddNumberToObject(main_res, "stack_watermark", ocpp_get_stack_watermark());
 		cJSON_AddNumberToObject(main_res, "previous mask", previous_enqueue_mask);
+		cJSON_AddNumberToObject(main_res, "active_heartbeat_interval", ocpp_get_active_heartbeat_interval());
 		cJSON_AddNumberToObject(main_res, "last_online", last_online_timestamp);
 		cJSON_AddStringToObject(main_res, "stored_url", storage_Get_url_ocpp());
 		cJSON_AddStringToObject(main_res, "stored_cbid", storage_Get_chargebox_identity_ocpp());
 		cJSON_AddItemToObject(res, "main", main_res);
+
+		cJSON * configuration_key = cJSON_CreateArray();
+		if(configuration_key != NULL){
+			get_all_ocpp_configurations(configuration_key);
+		}
+
+		cJSON_AddItemToObject(main_res, "configuration", configuration_key);
 	}
 
 	cJSON_AddItemToObject(res, "task", ocpp_task_get_diagnostics());
 	cJSON_AddItemToObject(res, "listener", ocpp_listener_get_diagnostics());
 	cJSON_AddItemToObject(res, "smart", ocpp_smart_get_diagnostics());
 	cJSON_AddItemToObject(res, "auth", ocpp_auth_get_diagnostics());
-
+	cJSON_AddItemToObject(res, "session", sessionHandler_ocppGetDiagnostics());
+	cJSON_AddItemToObject(res, "reservation", ocpp_reservation_get_diagnostics());
 	return res;
+}
+
+
+bool ocpp_is_configured()
+{
+	if((*storage_Get_url_ocpp() != '\0') && (storage_Get_session_controller() == eSESSION_OCPP))
+		return true;
+	else
+		return false;
+}
+
+static void publish_cloud_awaiting_messages(){
+	if(cloud_publish_awaiting != 0 && isMqttConnected()){
+		if(cloud_publish_awaiting & ePUBLISH_DEVICE_TWIN && publish_debug_telemetry_observation_cloud_settings() == 0)
+			cloud_publish_awaiting &= !ePUBLISH_DEVICE_TWIN;
+
+		if(cloud_publish_awaiting & ePUBLISH_OCPP_CONNECTED && publish_debug_telemetry_observation_ocpp_native_connected(connected) == 0)
+			cloud_publish_awaiting &= !ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 static void transition_online(){
@@ -3364,7 +3389,10 @@ static void transition_online(){
 
 	connected = true;
 
-	publish_debug_telemetry_observation_ocpp_box_connected(connected);
+	if(publish_debug_telemetry_observation_ocpp_native_connected(connected) != 0){
+		ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 static void transition_offline(){
@@ -3379,7 +3407,10 @@ static void transition_offline(){
 
 	connected = false;
 
-	publish_debug_telemetry_observation_ocpp_box_connected(connected);
+	if(publish_debug_telemetry_observation_ocpp_native_connected(connected) != 0){
+		ESP_LOGE(TAG, "Unable to inform cloud of updated cloud_settings");
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+	}
 }
 
 #define MAIN_EVENT_OFFSET 0
@@ -3397,7 +3428,7 @@ static esp_err_t prepare_reset(){
 
 	ESP_LOGI(TAG, "Checking for ongoing transactions.");
 	for(size_t i = 1; i <= CONFIG_OCPP_NUMBER_OF_CONNECTORS; i++){
-		ESP_LOGI(TAG, "Checking connector %d", i);
+		ESP_LOGI(TAG, "Checking connector %zu", i);
 		if(sessionHandler_OcppTransactionIsActive(i)){
 			ESP_LOGI(TAG, "Active transaction. Will attempt to stop");
 			if(should_reboot && reset_from_cs){
@@ -3490,6 +3521,7 @@ static esp_err_t prepare_reset(){
 	return ESP_OK;
 }
 
+
 static void ocpp_task(){
 	while(should_run){
 		ESP_LOGI(TAG, "Attempting to start ocpp task");
@@ -3499,7 +3531,7 @@ static void ocpp_task(){
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			ESP_LOGI(TAG, "Waiting for WIFI connection...");
+			ESP_LOGI(TAG, "Waiting for network connection...");
 			vTaskDelay(pdMS_TO_TICKS(2000));
 		}
 
@@ -3555,8 +3587,10 @@ static void ocpp_task(){
 
 			if(err != ESP_OK){
 				if(retry_attempts < 7){
-					ESP_LOGE(TAG, "Unable to open socket for ocpp, retrying in %d sec", retry_delay);
-					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
+					ESP_LOGE(TAG, "Unable to open socket for ocpp: %s. Attempt nr %u, retrying in %d sec",
+							esp_err_to_name(err), retry_attempts++, retry_delay);
+
+					ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 * retry_delay));
 					retry_delay *= 5;
 
 				}else{
@@ -3565,15 +3599,16 @@ static void ocpp_task(){
 				}
 			}
 		}while(err != 0);
-		publish_debug_telemetry_observation_ocpp_box_security_profile(ocpp_config.security_profile);
 
 		ocpp_configure_task_notification(task_ocpp_handle, TASK_EVENT_OFFSET);
 		ocpp_configure_websocket_notification(task_ocpp_handle, WEBSOCKET_EVENT_OFFSET);
 
-		connected = true;
+		connected = ocpp_is_connected();
 
 		if(ocpp_auth_init() != 0)
 			ESP_LOGE(TAG, "Unable to initialize ocpp authorization, local authorization will not work");
+		if(ocpp_reservation_init() != ESP_OK)
+			ESP_LOGE(TAG, "Unable to initialize ocpp reservation, local reservation will not work");
 
 		ocpp_change_local_pre_authorize(storage_Get_ocpp_local_pre_authorize());
 		ocpp_change_authorize_offline(storage_Get_ocpp_local_authorize_offline());
@@ -3594,18 +3629,47 @@ static void ocpp_task(){
 
 		retry_attempts = 0;
 		retry_delay = 5;
+
+		block_sending_call(eOCPP_CALL_TRANSACTION_RELATED);
 		do{
 
 			if(should_run == false || should_reboot)
 				goto clean;
 
-			err = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
-								"Zaptec", GetSoftwareVersion(),
-								LTEGetIccid(), LTEGetImsi(), NULL, NULL);
-			if(err != 0){
+			uint32_t task_notification = complete_boot_notification_process(NULL, "Zaptec Go OCPP", i2cGetLoadedDeviceInfo().serialNumber,
+										"Zaptec", GetSoftwareVersion(), LTEGetIccid(), LTEGetImsi(),
+										NULL, NULL, (eOCPP_QUIT << MAIN_EVENT_OFFSET) | (eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET));
+
+			if(should_run){
+				if(task_notification & eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET){
+					ocpp_end_and_reconnect(false);
+					goto clean;
+				}
+
+				if(get_registration_status() == eOCPP_REGISTRATION_ACCEPTED)
+					break;
+
 				if(retry_attempts < 7){
-					ESP_LOGE(TAG, "Unable to get accepted boot, retrying in %d sec", retry_delay);
-					ulTaskNotifyTake(pdTRUE, 1000 * retry_delay);
+					ESP_LOGE(TAG, "Unable to get accepted boot. Attempt nr %u, retrying in %d sec", retry_attempts++, retry_delay);
+
+					time_t minimum_await_end = time(NULL) + ocpp_get_boot_prohibitet_duration();
+					time_t await_end = time(NULL) + retry_delay;
+
+					if(await_end < minimum_await_end)
+						await_end = minimum_await_end +1;
+
+					while(time(NULL) < await_end && should_run && get_registration_status() != eOCPP_REGISTRATION_ACCEPTED){
+						uint32_t actual_delay = await_end - time(NULL);
+						if(actual_delay > await_end) // Underflow
+							actual_delay = 1;
+
+						task_notification = await_registration_status_change(actual_delay, (eOCPP_QUIT << MAIN_EVENT_OFFSET) | (eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET));
+						if(task_notification & eOCPP_WEBSOCKET_CLOSED << WEBSOCKET_EVENT_OFFSET){
+							ocpp_end_and_reconnect(false);
+							goto clean;
+						}
+					}
+
 					retry_delay *= 5;
 
 				}else{
@@ -3613,8 +3677,11 @@ static void ocpp_task(){
 					esp_restart(); // TODO: Write reason for reboot
 				}
 			}
-		}while(err != 0);
-		publish_debug_telemetry_observation_ocpp_box_connected(connected);
+		}while(get_registration_status() != eOCPP_REGISTRATION_ACCEPTED);
+
+		block_sending_call(0);
+
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
 
 		/*
 		 * From ocpp errata
@@ -3638,7 +3705,7 @@ static void ocpp_task(){
 		restart_clock_aligned_meter_values();
 
 		// Check if UpdateFormware.req is in progress or need to be restarted and update with FirmwareStatusNotification if needed
-		err = set_firmware_update_state();
+		err = set_firmware_update_state(true);
 		if(err != 0){
 			ESP_LOGE(TAG, "Error while attemptig to set firmware update status: %s", strerror(err));
 		}
@@ -3656,8 +3723,10 @@ static void ocpp_task(){
 			}else if(connected){
 				data = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 			}else{
-				data = ulTaskNotifyTake(pdTRUE, OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp));
+				data = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000 * (OCPP_MAX_SEC_OFFLINE_BEFORE_REBOOT - (time(NULL) - last_online_timestamp))));
 			}
+
+			publish_cloud_awaiting_messages();
 
 			const uint websocket_event = (data & WEBSOCKET_EVENT_MASK) >> WEBSOCKET_EVENT_OFFSET;
 			const uint task_event = (data & TASK_EVENT_MASK) >> TASK_EVENT_OFFSET;
@@ -3672,39 +3741,56 @@ static void ocpp_task(){
 				ocpp_end_and_reconnect(true);
 			}
 
+			ESP_LOGD(TAG, "main_event: %s %s", (main_event & eOCPP_FIRMWARE_UPDATE) ? "eOCPP_FIRMWARE_UPDATE" : "", (main_event & eOCPP_QUIT) ? "eOCPP_QUIT" : "");
+			ESP_LOGD(TAG, "sock_event: %s %s %s %s", (websocket_event & eOCPP_WEBSOCKET_CONNECTION_CHANGED) ? "eOCPP_WEBSOCKET_CONNECTION_CHANGED" : "", (websocket_event & eOCPP_WEBSOCKET_FAILURE) ? "eOCPP_WEBSOCKET_FAILURE" : "", (websocket_event & eOCPP_WEBSOCKET_RECEIVED_MATCHING) ? "eOCPP_WEBSOCKET_RECEIVED_MATCHING" : "", (websocket_event & eOCPP_WEBSOCKET_CLOSED) ? "eOCPP_WEBSOCKET_CLOSED" : "");
+			ESP_LOGD(TAG, "task_event: %s %s %s %s", (task_event & eOCPP_TASK_CALL_ENQUEUED) ? "eOCPP_TASK_CALL_ENQUEUED" : "", (task_event & eOCPP_TASK_CALL_TIMEOUT) ? "eOCPP_TASK_CALL_TIMEOUT" : "", (task_event & eOCPP_TASK_FAILURE) ? "eOCPP_TASK_FAILURE" : "", (task_event & eOCPP_TASK_REGISTRATION_STATUS_CHANGED) ? "eOCPP_TASK_REGISTRATION_STATUS_CHANGED" : "");
+
 			if(main_event != eOCPP_NO_EVENT){
 				ESP_LOGI(TAG, "Handling main event");
 
 				if(main_event & eOCPP_QUIT){
-					esp_err_t reset_result = prepare_reset(graceful_exit);
-					if(reset_result != ESP_OK && graceful_exit){
-						ESP_LOGE(TAG, "Failed to restart attempting to continue with ocpp");
-						if(reset_from_cs){
-							switch(reset_result){
-							case ESP_ERR_TIMEOUT:
+					ESP_LOGW(TAG, "Event quit. Preparing OCPP exit");
+
+					esp_err_t reset_result = ESP_FAIL;
+					if(reset_from_cs && graceful_exit){
+						for(size_t i = 0; i <= storage_Get_ocpp_reset_retries(); i++){
+							reset_result = prepare_reset(graceful_exit);
+
+							if(reset_result == ESP_ERR_TIMEOUT){
+								ESP_LOGE(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req timed out", i+1, storage_Get_ocpp_reset_retries()+1);
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Transaction related Timeout while prepare reset",
-											NULL, NULL, true, false);
+															"Transaction related Timeout while prepare reset",
+															NULL, NULL, true, false);
+							}else if(reset_result == ESP_OK){
+								ESP_LOGI(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req succeeded", i+1, storage_Get_ocpp_reset_retries()+1);
 								break;
-							default:
+							}else{
+								ESP_LOGE(TAG, "Attempt %zu of %u to reset gracefully due to Reset.req failed", i+1, storage_Get_ocpp_reset_retries()+1);
 								ocpp_send_status_notification(-1, OCPP_CP_ERROR_RESET_FAILURE,
-											"Unable to prepare for reset",
-											NULL, NULL, true, false);
+															"Unable to prepare for reset",
+															NULL, NULL, true, false);
 							}
-						}else{
-							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");
 						}
+					}else{
+						reset_result = prepare_reset(graceful_exit);
+					}
+
+					if(reset_result != ESP_OK && graceful_exit){
+						ESP_LOGE(TAG, "Failed graceful reset. Attempting to continue with ocpp");
+
+						if(!reset_from_cs)
+							publish_debug_telemetry_observation_Diagnostics("Unable to gracefully exit ocpp");
 
 						should_run = true;
 						should_reboot = false;
 						should_reconnect = false;
 						graceful_exit = false;
 						reset_from_cs = false;
+
 					}else{
 						ESP_LOGW(TAG, "Quitting ocpp loop");
 						break;
 					}
-
 				}
 				if(data & eOCPP_FIRMWARE_UPDATE){
 					ESP_LOGI(TAG, "Attempting to start firmware update from ocpp");
@@ -3713,7 +3799,7 @@ static void ocpp_task(){
 					{
 						ESP_LOGI(TAG, "MCU CommandHostFwUpdateStart OK");
 
-						start_ocpp_ota(update_info.location);
+						start_ocpp_ota(update_info.location, firmware_status_cb);
 					}
 					else
 					{
@@ -3750,11 +3836,14 @@ static void ocpp_task(){
 				if(websocket_event & eOCPP_WEBSOCKET_RECEIVED_MATCHING)
 					awaiting_response = false;
 
-				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY)
+				if(problem_count > OCPP_PROBLEMS_COUNT_BEFORE_RETRY){
+					ESP_LOGE(TAG, "Number of errors in OCPP handling exceed max (%u > %u) quitting ocpp", problem_count, OCPP_PROBLEMS_COUNT_BEFORE_RETRY);
 					break;
+				}
 
-				if(websocket_event & eOCPP_WEBSOCKET_CLOSED)
-						ocpp_end_and_reconnect(true); // TODO: Check if eOCPP_WEBSOCKET_CLOSED is ever sent in a state where the websocket auto-reconnect is active
+
+				if(websocket_event & eOCPP_WEBSOCKET_CLOSED && should_run)
+					ocpp_end_and_reconnect(true);
 			}
 
 			if(task_event & eOCPP_TASK_CALL_TIMEOUT){
@@ -3782,6 +3871,7 @@ static void ocpp_task(){
 						problem_count++; //TODO: integrate with problem count restart
 						last_problem_timestamp = time(NULL);
 						enqueued_calls = 1; // We don't know how many remain, will try atleast one more send.
+
 					}
 				}else{
 					enqueued_calls = 1; // There may be more calls, but that is irrelevant
@@ -3795,11 +3885,14 @@ static void ocpp_task(){
 		}
 clean:
 		ESP_LOGW(TAG, "Exited ocpp handling, tearing down");
-
+		prepare_reset(graceful_exit);
 		ocpp_auth_deinit();
+		ocpp_reservation_deinit();
 		ocpp_smart_charging_deinit();
 		stop_ocpp_heartbeat();
 		stop_ocpp();
+		stop_clock_aligned_meter_values();
+		ulTaskNotifyTake(pdTRUE, 0); // Clear waiting events to OCPP
 
 		ESP_LOGI(TAG, "Teardown complete");
 
@@ -3813,6 +3906,10 @@ clean:
 			reset_from_cs = false;
 			connected = false;
 		}
+
+		connected = ocpp_is_connected();
+		cloud_publish_awaiting |= ePUBLISH_OCPP_CONNECTED;
+		publish_cloud_awaiting_messages();
 	}
 
 	if(should_reboot){
@@ -3850,12 +3947,14 @@ bool ocpp_task_exists(){
 }
 
 void ocpp_end(bool graceful){
+	ESP_LOGW(TAG, "Ending communication");
 	should_run = false;
 	graceful_exit = graceful;
 	xTaskNotify(task_ocpp_handle, eOCPP_QUIT, eSetBits);
 }
 
 void ocpp_end_and_reboot(bool graceful){
+	ESP_LOGW(TAG, "Ending communication and preparing reboot");
 	should_run = false;
 	should_reboot = true;
 	graceful_exit = graceful;
@@ -3863,6 +3962,7 @@ void ocpp_end_and_reboot(bool graceful){
 }
 
 void ocpp_end_and_reconnect(bool graceful){
+	ESP_LOGW(TAG, "Ending communication and reconnecting");
 	should_run = false;
 	should_reconnect = true;
 	graceful_exit = graceful;
@@ -3877,5 +3977,6 @@ void ocpp_init(){
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	}else{
 		ESP_LOGW(TAG, "Requested to init ocpp task, but task already exists");
+		ocpp_end_and_reconnect(false);
 	}
 }

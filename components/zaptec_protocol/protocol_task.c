@@ -157,7 +157,7 @@ void zaptecProtocolStart(){
 
 void dspic_periodic_poll_start(){
     static uint8_t ucParameterToPass = {0};
-    int stack_size = 5000;//8192;
+    int stack_size = 6000;//8192;
     xTaskCreate( uartSendTask, "UARTSendTask", stack_size, &ucParameterToPass, 5, &sendTaskHandle );
     configASSERT( sendTaskHandle );
 }
@@ -1398,6 +1398,24 @@ void MCU_GetFPGAInfo(char *stringBuf, int maxTotalLen)
 
 bool MCU_ClearWarning(uint32_t warning) {
 	return MCU_SendUint32Parameter(ParamClearWarning, warning) == MsgWriteAck;
+}
+
+/*
+ * Required in OCPP mode according to OCPP 1.6j specification to unlock
+ * handle remotely in state B.
+ */
+bool MCU_SendCommandServoForceUnlock()
+{
+	if(MsgCommandAck == MCU_SendCommandId(CommandServoForceUnlock))
+	{
+		ESP_LOGI(TAG, "Sent CommandServoForceUnlock OK");
+		return true;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Sent CommandServoForceUnlock FAILED");
+		return false;
+	}
 }
 
 void SetEspNotification(uint16_t notification)

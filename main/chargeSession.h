@@ -66,7 +66,7 @@ bool sessionSession_IsHoldingUserUUID();
 void chargeSession_ClearHeldUserUUID();
 
 struct ChargeSession chargeSession_Get();
-int chargeSession_GetSessionAsString(char * message);
+int chargeSession_GetSessionAsString(char * message, size_t message_length);
 
 esp_err_t chargeSession_SaveUpdatedSession();
 //esp_err_t chargeSession_ReadSessionResetInfo();

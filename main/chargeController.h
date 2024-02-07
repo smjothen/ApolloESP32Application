@@ -1,6 +1,8 @@
 #ifndef _CHARGECONTROLLER_H_
 #define _CHARGECONTROLLER_H_
 
+#include "storage.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -48,7 +50,7 @@ bool chargeController_IsScheduleActive();
 void chargeController_Override();
 void chargeController_CancelOverride();
 void chargeController_SetNowTime(char * timeString);
-bool chargeController_SetStandaloneState(uint8_t isStandalone);
+bool chargeController_SetStandaloneState(enum session_controller controller);
 void chargeController_StartWithRandomDelay();
 void chargeController_SetRandomStartDelay();
 void chargeController_ClearRandomStartDelay();

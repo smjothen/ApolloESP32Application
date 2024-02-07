@@ -1,7 +1,6 @@
 #ifndef OTA_LOG_H
 #define OTA_LOG_H
 
-void log_set_origin_ocpp(bool new_value);
 int log_message(char *msg);
 int ota_log_location_fetch();
 int ota_log_download_start(char *location);

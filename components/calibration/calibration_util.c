@@ -324,7 +324,7 @@ bool calibration_get_total_charge_power(CalibrationCtx *ctx, float *val) {
 
 // Blocks other LED activity
 bool calibration_set_blinking(CalibrationCtx *ctx, int enabled) {
-    return MCU_SetMIDBlinkEnabled(enabled);
+    return mid_set_blink_enabled(enabled);
 }
 
 bool calibration_turn_led_off(CalibrationCtx *ctx) {

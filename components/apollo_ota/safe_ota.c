@@ -235,6 +235,7 @@ void do_safe_ota(char *image_location){
         ota_log_all_chunks_success();
         publish_debug_telemetry_security_log("OTA", "Accepted");
     }
+
     vTaskDelay(pdMS_TO_TICKS(3000));
     end_err = esp_ota_set_boot_partition(update_partition);
     if(end_err!=ESP_OK)

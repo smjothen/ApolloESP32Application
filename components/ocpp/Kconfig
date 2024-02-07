@@ -2,6 +2,22 @@ menu "OCPP"
 
 menu "Core profile"
 
+config OCPP_TIMER_MAX_SEC
+       int "Max timer values in seconds"
+       help
+	OCPP does not define max values for heartbeat interval, meter value interval and similar timer related values.
+	These values may be used with freeRTOS or other places where infinite values could cause overflow.
+       default 4294967 # Close to portMAX_DELAY (2^32-1) as the result of pdMS_TO_TICKS if FREERTOS_HZ is maximum
+
+
+config OCPP_DEFAULT_BOOT_NOTIFICATION_INTERVAL_SEC
+       int "Default boot notification interval"
+       help
+	If the bootNotification.conf does not have status accepted and the interval value is zero, then the Charge Point
+	chooses a waiting interval on its own, in a way that avoids flooding the Central System with requests.
+       default 120
+       range 1 OCPP_TIMER_MAX_SEC
+
 config OCPP_VENDOR_ID
        string "Vendor id"
        help
@@ -52,13 +68,29 @@ config OCPP_CONNECTOR_PHASE_ROTATION_MAX_LENGTH # 9.1.8
        int "ConnectorPhaseRotationMaxLength"
        help
 	Maximum number of items in a ConnectorPhaseRotation Configuration Key.
-       default 1
+       default 2
 
 config OCPP_GET_CONFIGURATION_MAX_KEYS # 9.1.9
        int "GetConfigurationMaxKeys"
        help
 	Maximum number of requested configuration keys in a GetConfiguration.req PDU.
        default 62
+
+# For message timeout described in errata v4.0 as 9.1.15
+config OCPP_MESSAGE_TIMEOUT_DEFAULT
+       int "MessageTimeout"
+       help
+	Defines the OCPP Message timeout default value in seconds.
+	If the Charge Point has not received a response to a request within this timeout, the Charge Point SHALL consider the request
+	timed out.
+       default 10
+
+config OCPP_MESSAGE_TIMEOUT_MINIMUM
+       int "MessageTimeout minimum"
+       help
+	Minimum value CS(MS) can configure message timeout too. This timeout is used during all ocpp messages including boot.
+	If the value is too low then it may be impossible to complete the boot procedure.
+       default 10
 
 config OCPP_METER_VALUES_ALIGNED_DATA_MAX_LENGTH # 9.1.16
        int "MeterValuesAlignedDataMaxLength"
@@ -114,7 +146,7 @@ config OCPP_SUPPORTED_FEATURE_PROFILES_MAXL_ENGTH # 9.1.30
        int "SupportedFeatureProfilesMaxLength"
        help
 	Maximum number of items in a SupportedFeatureProfiles Configuration Key.
-       default 6
+       default 8
 endmenu
 
 menu "Firmware Management"

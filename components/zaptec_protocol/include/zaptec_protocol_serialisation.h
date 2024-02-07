@@ -215,13 +215,13 @@ typedef enum {
 	IT3PhaseDiagnosticsLog = 853,
 	PilotTestResults = 854,
 
-	SessionController = 860,
-	OcppBoxURL = 861,
-	OcppBoxCBID = 862,
-	//OcppBoxAuthorizationKey = 863,
-	OcppBoxAuthorizationKeyFromZaptec = 864,
-	OcppBoxSecurityProfile = 865,
-	OcppBoxConnected = 866,
+        SessionController = 860,
+        OcppNativeURL = 861,
+        OcppNativeCBID = 862,
+        OcppNativeAuthorizationKey = 863, // The key itself should be WRITE only from Zaptec portal and CS(MS)
+        OcppNativeAuthorizationKeyFromZaptec = 864,
+        OcppNativeSecurityProfile = 865,
+        OcppNativeConnected = 866,
 
 	ServoCheckStartPosition = 870,
 	ServoCheckStartCurrent  = 871,
@@ -321,12 +321,12 @@ typedef enum
 	CommandIndicateOffline = 605,
 	CommandIndicateOk = 606,
 	CommandBlinkWhite = 607,
-
 	CommandEnterProductionMode = 701,
 	CommandServoClearCalibration = 702,
 	CommandTestHWTrig = 705,
 	CommandOpenPENRelay = 706,
 	CommandClosePENRelay = 707,
+	CommandServoForceUnlock = 708,
 
 	CommandFactoryReset = 710,
 	CommandRunGridTest = 804,
