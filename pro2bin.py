@@ -39,6 +39,10 @@ def main(hexfile, binfile):
     if not version:
         raise click.UsageError("Can't find version in version file!")
 
+    print("Hex    : %s" % hexfile)
+    print("Bin    : %s" % binfile)
+    print("Version: %s" % version)
+
     with open(hexfile, "r") as fr:
         with open(binfile, "wb") as fw:
             fw.write(version.encode() + b'\0')
