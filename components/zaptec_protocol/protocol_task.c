@@ -949,8 +949,25 @@ enum ChargerOperatingMode GetTransitionOperatingModeState()
 	return overrideOpModeState;
 }
 
+static bool sim_charge_op_enabled = false;
+static uint8_t sim_charge_op_mode = CHARGE_OPERATION_STATE_UNINITIALIZED;
+
+// Disable by setting mode to -1
+void mcu_simulate_charge_op_mode(int mode) {
+	if (mode < 0) {
+		sim_charge_op_enabled = false;
+	} else {
+		sim_charge_op_enabled = true;
+		sim_charge_op_mode = mode;
+	}
+}
+
 uint8_t MCU_GetChargeOperatingMode()
 {
+	if (sim_charge_op_enabled) {
+		return sim_charge_op_mode;
+	}
+
 	/// Used for Session reset
 	if(overrideOpModeState == CHARGE_OPERATION_STATE_PAUSED)
 		return CHARGE_OPERATION_STATE_PAUSED;

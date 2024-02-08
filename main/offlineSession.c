@@ -30,6 +30,8 @@ static const int max_offline_signed_values = 100;
 #define FILE_SESSION_CRC_ADDR_996	996L
 #define FILE_NR_OF_OCMF_ADDR_1000  	1000L
 #define FILE_OCMF_START_ADDR_1004 	1004L
+#define FILE_MID_ID_ADDR_4088 		4088L
+#define FILE_MID_ID_CRC_ADDR_4092 	4092L
 
 struct LogHeader {
     int start;
@@ -608,8 +610,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 		lastUsedFile = fopen(buf, "r");
 		if(lastUsedFile != NULL)
 		{
-			cJSON * lastSession = cJSON_CreateObject();
-			lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
+			cJSON * lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
 
 			if(cJSON_HasObjectItem(lastSession, "EndDateTime"))
 			{
@@ -629,7 +630,12 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 							cJSON_HasObjectItem(lastSession, "StartDateTime") &&
 							cJSON_HasObjectItem(lastSession, "ReliableClock") &&
 							cJSON_HasObjectItem(lastSession, "StoppedByRFID")&&
-							cJSON_HasObjectItem(lastSession, "AuthenticationCode"))
+							cJSON_HasObjectItem(lastSession, "AuthenticationCode")
+#ifdef GOPLUS
+							&& cJSON_HasObjectItem(lastSession, "MIDSessionId")
+#endif
+
+						)
 					{
 						strncpy(incompleteSession->SessionId, 	cJSON_GetObjectItem(lastSession,"SessionId")->valuestring, 37);
 						incompleteSession->Energy = 				cJSON_GetObjectItem(lastSession,"Energy")->valuedouble;
@@ -647,6 +653,12 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 							incompleteSession->StoppedByRFID = false;
 
 						strncpy(incompleteSession->AuthenticationCode ,cJSON_GetObjectItem(lastSession,"AuthenticationCode")->valuestring, 41);
+
+#ifdef GOPLUS
+						incompleteSession->MIDSessionId = cJSON_GetObjectItem(lastSession,"MIDSessionId")->valuedouble;
+						incompleteSession->HasMIDSessionId = true;
+						ESP_LOGI(TAG, "MIDSessionId=%" PRIu32, incompleteSession->MIDSessionId);
+#endif
 
 						ESP_LOGI(TAG, "SessionId=%s",incompleteSession->SessionId);
 						ESP_LOGI(TAG, "Energy=%f",incompleteSession->Energy);

@@ -119,4 +119,6 @@ bool MCU_GetAutoClearStatus(uint32_t *timeout, uint16_t *count, uint16_t *totalC
 
 bool MCU_ClearWarning(uint32_t warning);
 
+void mcu_simulate_charge_op_mode(int mode);
+
 #endif /* PROTOCOL_TASK_H */

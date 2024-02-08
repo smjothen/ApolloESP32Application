@@ -15,6 +15,7 @@
 #include "eeprom_wp.h"
 #include "EEPROM.h"
 #include "zaptec_cloud_listener.h"
+#include "protocol_task.h"
 #include "offline_log.h"
 
 #include "calibration.h"
@@ -136,7 +137,7 @@ static int prodtest_write_cmd(int argc, char **argv){
 
     int stage = prodtest_write_args.stage->ival[0];
     ESP_LOGI(REPLY_TAG, "Writing %d to EEPROM factory stage", stage);
-    
+
     eeprom_wp_disable_nfc_disable();
 	if(EEPROM_WriteFactoryStage(stage)!=ESP_OK){
 		ESP_LOGE(REPLY_TAG, "Failed to write eeprom");
@@ -165,17 +166,52 @@ int register_prodtest_write_cmd(void){
     return 0;
 }
 
+static struct {
+    struct arg_int *state;
+    struct arg_end *end;
+} sim_charge_op_args;
+
+static int sim_charge_op_cmd(int argc, char **argv){
+    int nerrors = arg_parse(argc, argv, (void **) &sim_charge_op_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, sim_charge_op_args.end, argv[0]);
+        return 1;
+    }
+
+    int state = sim_charge_op_args.state->ival[0];
+    ESP_LOGI(REPLY_TAG, "Setting charge operation mode to %d", state);
+
+	mcu_simulate_charge_op_mode(state);
+	return 0;
+}
+
+static int register_sim_charge_op_state(void){
+	sim_charge_op_args.state = arg_int0(NULL, NULL, "opmode", "Set simulated charge operation mode");
+	sim_charge_op_args.end = arg_end(2);
+
+    const esp_console_cmd_t cmd = {
+        .command = "chop",
+        .help = "simulate charge operation state (-1=disable, 0=uninit, 1=discon, 2=req, 3=charge, ...)",
+        .hint = NULL,
+        .func = sim_charge_op_cmd,
+        .argtable = &sim_charge_op_args
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
 #ifdef CONFIG_HEAP_TRACING_STANDALONE
 
 #include "esp_heap_trace.h"
 
 #define NUM_RECORDS 256
 
-static heap_trace_record_t trace_record[NUM_RECORDS]; 
+static heap_trace_record_t trace_record[NUM_RECORDS];
 
 static int heap_toggle_cmd(int argc, char **argv) {
     static bool heap_inited = false;
-    static bool heap_start = true; 
+    static bool heap_start = true;
 
     if (!heap_inited) {
         ESP_LOGI(TAG, "Initializing heap records...");
@@ -283,7 +319,7 @@ static void initialize_console(void)
 static bool run = true;
 void console_task(){
     const char *prompt =  "APOLLO ESP> ";
-        
+
     while(run) {
             /* Get a line using linenoise.
             * The line is returned when ENTER is pressed.
@@ -331,6 +367,7 @@ void apollo_console_init(void){
     register_reboot_cmd();
     register_new_id_cmd();
     register_clear_energy_cmd();
+	register_sim_charge_op_state();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }

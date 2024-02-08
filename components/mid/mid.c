@@ -19,6 +19,7 @@
 #include "uuid.h"
 
 #include "mid_sign.h"
+#include "mid_ocmf.h"
 #include "mid_lts.h"
 #include "mid_status.h"
 #include "mid_private.h"
@@ -98,12 +99,20 @@ bool mid_get_is_calibration_handle(void) {
 
 static uint32_t mid_status = 0;
 static midlts_ctx_t mid_lts = {0};
+static mid_sign_ctx_t mid_sign = {0};
+static const char *mid_serial = NULL;
 
 uint32_t mid_get_esp_status(void) {
 	return mid_status;
 }
 
-int mid_init(const char *fw_version) {
+int mid_init(const char *serial, const char *fw_version) {
+	if (!serial || !fw_version) {
+		return -1;
+	}
+
+	mid_serial = serial;
+
 	esp_vfs_littlefs_conf_t conf = {
 		.base_path = "/mid",
 		.partition_label = "mid",
@@ -125,9 +134,7 @@ int mid_init(const char *fw_version) {
 		mid_status &= ~MID_ESP_STATUS_FILESYSTEM;
 	}
 
-	mid_sign_ctx_t *ctx = mid_sign_ctx_get_global();
-
-	if (mid_sign_ctx_init(ctx, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) != 0) {
+	if (mid_sign_ctx_init(&mid_sign, storage_Get_MIDPrivateKey(), storage_Get_MIDPublicKey()) != 0) {
 		ESP_LOGE(TAG, "Public/private key failure!");
 
 #ifdef MID_ALLOW_KEY_GENERATION
@@ -222,7 +229,7 @@ typedef enum {
 	MID_ERR_SESSION_NOT_OPEN = 4,
 } miderr_t;
 
-int mid_session_add_event(mid_session_event_t event, mid_session_meter_value_flag_t type_flag) {
+int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_session_meter_value_flag_t type_flag) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session event: Status %08" PRIu32, mid_status);
 		return -1;
@@ -245,7 +252,6 @@ int mid_session_add_event(mid_session_event_t event, mid_session_meter_value_fla
 	// TODO: Return these? They should kind of be internal, but pos might be
 	// useful for the application to store
 	mid_session_record_t rec;
-	midlts_pos_t pos;
 
 	mid_session_meter_value_flag_t flag = mid_get_time_status() | type_flag;
 
@@ -260,7 +266,7 @@ int mid_session_add_event(mid_session_event_t event, mid_session_meter_value_fla
 	// TODO: Use semaphore to serialize events
 	//
 	midlts_err_t err;
-	if ((err = event(&mid_lts, &pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
+	if ((err = event(&mid_lts, pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
 		ESP_LOGE(TAG, "Can't add session event: LTS");
 		return -1;
 	}
@@ -272,16 +278,31 @@ bool mid_session_is_open(void) {
 	return MID_SESSION_IS_OPEN(&mid_lts);
 }
 
-int mid_session_event_open(void) {
-	return mid_session_add_event(mid_session_add_open, MID_SESSION_METER_VALUE_READING_FLAG_START);
+int mid_session_event_open(uint32_t *out) {
+	midlts_pos_t pos;
+	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_START) < 0) {
+		return -1;
+	}
+	*out = pos.u32;
+	return 0;
 }
 
-int mid_session_event_close(void) {
-	return mid_session_add_event(mid_session_add_close, MID_SESSION_METER_VALUE_READING_FLAG_END);
+int mid_session_event_close(uint32_t *out) {
+	midlts_pos_t pos;
+	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_END) < 0) {
+		return -1;
+	}
+	*out = pos.u32;
+	return 0;
 }
 
-int mid_session_event_tariff(void) {
-	return mid_session_add_event(mid_session_add_tariff, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF);
+int mid_session_event_tariff(uint32_t *out) {
+	midlts_pos_t pos;
+	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) < 0) {
+		return -1;
+	}
+	*out = pos.u32;
+	return 0;
 }
 
 // NOTE: Session must be verified to be open when calling this!
@@ -471,4 +492,13 @@ int mid_session_event_auth_rfid(const char *data) {
 
 int mid_session_event_auth_iso15118(const char *data) {
 	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
+}
+
+// TODO: Need to convert record pos / offset to ID format
+const char *mid_session_sign_session(uint64_t id) {
+	return NULL;
+}
+
+const char *mid_session_sign_current_session(void) {
+	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.active_session);
 }

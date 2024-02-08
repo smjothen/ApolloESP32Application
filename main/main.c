@@ -777,7 +777,7 @@ void app_main(void)
 
 	// NOTE: MID stuff must be inited after MCU communication is setup, but before session
 	// handler is started.
-	if (mid_init(softwareVersion) < 0) {
+	if (mid_init(devInfo.serialNumber, softwareVersion) < 0) {
 		uint32_t status = mid_get_esp_status();
 		ESP_LOGE(TAG_MAIN, "MID module initialization failure: %08" PRIX32 "!", status);
 	} else {

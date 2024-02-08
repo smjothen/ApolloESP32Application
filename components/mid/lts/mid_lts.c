@@ -178,7 +178,6 @@ close:
 		if (pos) {
 			pos->id = ctx->msg_page;
 			pos->offset = size;
-			pos->crc = rec->rec_crc;
 		}
 
 		ctx->msg_id++;
@@ -568,9 +567,6 @@ midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_s
 	midlts_err_t err = mid_session_log_read_record(ctx, pos->id, pos->offset, rec);
 	if (err != LTS_OK) {
 		return err;
-	}
-	if (pos->crc != rec->rec_crc) {
-		return LTS_BAD_CRC;
 	}
 	return LTS_OK;
 }

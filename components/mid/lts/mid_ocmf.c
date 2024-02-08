@@ -266,11 +266,13 @@ static const char *midocmf_fiscal_from_meter_value_payload(const char *serial, m
 
 static const char *midocmf_sign_data(mid_sign_ctx_t *ctx, const char *data) {
 	if (!mid_sign_ctx_ready(ctx)) {
+		ESP_LOGE(TAG, "Not ready to sign OCMF packages!");
 		return NULL;
 	}
 
 	cJSON *sigObj = cJSON_CreateObject();
 	if (!sigObj) {
+		ESP_LOGE(TAG, "Error allocating JSON object");
 		return NULL;
 	}
 
@@ -302,6 +304,7 @@ static const char *midocmf_signed_ocmf_payload(mid_sign_ctx_t *ctx, const char *
 	const char *signature = NULL;
 
 	if (ctx && (signature = midocmf_sign_data(ctx, payload)) == NULL) {
+		ESP_LOGE(TAG, "Couldn't sign OCMF package!");
 		free((char *)payload);
 		return NULL;
 	}
@@ -438,7 +441,7 @@ static const char *midocmf_transaction_from_active_session(mid_sign_ctx_t *ctx, 
 		const char *time_status = midocmf_get_time_status_from_flag(reading->flag);
 
 		if (!tx_type || !time_status) {
-			ESP_LOGI(TAG, "No valid reading flag: %08" PRIX16, reading->flag);
+			ESP_LOGE(TAG, "No valid reading flag: %08" PRIX16, reading->flag);
 			cJSON_Delete(readerObject);
 			cJSON_Delete(readerArray);
 			cJSON_Delete(obj);
@@ -484,9 +487,13 @@ static const char *midocmf_transaction_from_active_session(mid_sign_ctx_t *ctx, 
 const char *midocmf_signed_transaction_from_active_session(mid_sign_ctx_t *ctx, const char *serial, midlts_active_t *active_session) {
 	const char *payload = NULL;
 	if ((payload = midocmf_transaction_from_active_session(ctx, serial, active_session)) == NULL) {
+		ESP_LOGE(TAG, "Error creating OCMF transaction");
 		return NULL;
 	}
 
 	const char *ocmf_signed = midocmf_signed_ocmf_payload(ctx, payload);
+	if (!ocmf_signed) {
+		ESP_LOGE(TAG, "Error signing OCMF transaction");
+	}
 	return ocmf_signed;
 }

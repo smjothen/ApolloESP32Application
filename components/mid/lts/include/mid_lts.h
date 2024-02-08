@@ -21,7 +21,7 @@
 #include "mid_session.h"
 
 typedef struct _midlts_ctx_t midlts_ctx_t;
-typedef struct _midlts_pos_t midlts_pos_t;
+typedef union _midlts_pos_t midlts_pos_t;
 typedef enum _midlts_err_t midlts_err_t;
 
 midlts_err_t mid_session_init(midlts_ctx_t *ctx, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version);

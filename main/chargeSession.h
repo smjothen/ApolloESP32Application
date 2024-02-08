@@ -1,6 +1,10 @@
 #ifndef _CHARGESESSION_H_
 #define _CHARGESESSION_H_
 
+#include <time.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,6 +28,9 @@ struct ChargeSession
 	uint32_t EpochStartTimeUsec;
 	time_t EpochEndTimeSec;
 	uint32_t EpochEndTimeUsec;
+
+	bool HasMIDSessionId;
+	uint32_t MIDSessionId;
 
 	char * SignedSession;
 };

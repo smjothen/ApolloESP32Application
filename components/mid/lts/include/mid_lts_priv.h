@@ -24,16 +24,17 @@ typedef enum _midlts_flag_t {
 	LTS_FLAG_REPLAY_PRINT = 2,
 } midlts_flag_t;
 
-typedef struct _midlts_pos_t {
-	// Log id
-	uint16_t id;
-	// Offset in log
-	uint16_t offset;
-	// CRC of record
-	uint32_t crc;
+typedef union _midlts_pos_t {
+	struct {
+		// Log id
+		uint16_t id;
+		// Offset in log
+		uint16_t offset;
+	};
+	uint32_t u32;
 } midlts_pos_t;
 
-#define MIDLTS_POS_MAX ((midlts_pos_t){ .loc = 0xFFFFFFFF, .crc = 0xFFFFFFFF })
+_Static_assert(sizeof (midlts_pos_t) == 4, "Position must be 4 bytes!");
 
 typedef struct {
 	bool has_id;

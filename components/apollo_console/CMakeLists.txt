@@ -1,4 +1,4 @@
-set(COMPONENT_REQUIRES "console vfs i2c")
+set(COMPONENT_REQUIRES "console vfs i2c zaptec_protocol")
 #set(COMPONENT_PRIV_REQUIRES )
 
 set(COMPONENT_SRCS "apollo_console.c")

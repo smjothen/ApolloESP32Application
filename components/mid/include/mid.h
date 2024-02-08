@@ -32,7 +32,7 @@ typedef struct {
 	uint8_t reserved; // Word-align
 } mid_package_t;
 
-int mid_init(const char *fw_version);
+int mid_init(const char *serial, const char *fw_version);
 uint32_t mid_get_esp_status(void);
 
 bool mid_get_package(mid_package_t *pkg);
@@ -52,8 +52,12 @@ int mid_session_event_auth_cloud(const char *data);
 int mid_session_event_auth_ble(const char *data);
 int mid_session_event_auth_rfid(const char *data);
 int mid_session_event_auth_iso15118(const char *data);
-int mid_session_event_open(void);
-int mid_session_event_close(void);
-int mid_session_event_tariff(void);
+int mid_session_event_open(uint32_t *out);
+int mid_session_event_close(uint32_t *out);
+int mid_session_event_tariff(uint32_t *out);
+
+// TODO:
+const char *mid_session_sign_session(uint64_t id);
+const char *mid_session_sign_current_session(void);
 
 #endif
