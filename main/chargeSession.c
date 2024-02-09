@@ -341,21 +341,26 @@ void chargeSession_Start()
 	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
 	chargeSession_SetParentId("\0");
 
-#ifdef GOPLUS
-	// MID Session should be open if CompletedSession exists since we only write
-	// it after opening the MID Session (and getting the ID we store alongside
-	// the CompletedSession JSON)
-	if((strlen(chargeSession.SessionId) == 36) && mid_session_is_open())// && (readErr == ESP_OK))
-#else
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
-#endif
 	{
 		ESP_LOGI(TAG, "chargeSession_Start() using uncompleted Session from flash");
 		strcpy(sidOrigin, "file ");
 
 		chargeSession.SignedSession = basicOCMF;
+
 		//Read from last file.
 		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
+
+#ifdef GOPLUS
+		// Open MID Session if not already open
+		if (!mid_session_is_open()) {
+			uint32_t id;
+			if (mid_session_event_open(&id) < 0) {
+				ESP_LOGE(TAG, "Error opening MID session (CompletedSession exists)");
+				return;
+			}
+		}
+#endif
 	}
 	else
 	{
@@ -375,12 +380,14 @@ void chargeSession_Start()
 		}
 
 #ifdef GOPLUS
-		uint32_t id;
-		if (mid_session_event_open(&id) < 0) {
-			ESP_LOGE(TAG, "MID Session Open: Error");
-			return;
-		} else {
-			ESP_LOGI(TAG, "Opened MID Session %" PRIu32, id);
+		uint32_t id = 0;
+		if (!mid_session_is_open()) {
+			if (mid_session_event_open(&id) < 0) {
+				ESP_LOGE(TAG, "MID Session Open: Error");
+				return;
+			} else {
+				ESP_LOGI(TAG, "Opened MID Session %" PRIu32, id);
+			}
 		}
 
 		chargeSession.MIDSessionId = id;
@@ -402,7 +409,11 @@ void chargeSession_Start()
 
 		sessionFileError = false;
 
+#ifdef GOPLUS
+		esp_err_t saveErr = offlineSession_SaveSessionMID(sessionData, id);
+#else
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
+#endif
 
 		//Check to see if the file could not be created
 		if((saveErr == -2) || (testFileCorrection == true))
@@ -413,7 +424,11 @@ void chargeSession_Start()
 			ESP_LOGW(TAG, "FILE ERROR");
 			offlineSession_ClearDiagnostics();
 			offlineSession_eraseAndRemountPartition();
+#ifdef GOPLUS
+			saveErr = offlineSession_SaveSessionMID(sessionData, id);
+#else
 			saveErr = offlineSession_SaveSession(sessionData);
+#endif
 		}
 
 		free(sessionData);

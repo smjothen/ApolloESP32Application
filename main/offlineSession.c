@@ -610,9 +610,17 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 		lastUsedFile = fopen(buf, "r");
 		if(lastUsedFile != NULL)
 		{
-			cJSON * lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
+			bool isMid = false;
+			uint32_t sessionId = 0;
 
+			cJSON * lastSession = offlineSession_ReadChargeSessionFromFile(fileNo, &isMid, &sessionId);
+
+#ifdef GOPLUS
+			// For Go+ don't allow files without the link to the MID session!
+			if(isMid && cJSON_HasObjectItem(lastSession, "EndDateTime"))
+#else
 			if(cJSON_HasObjectItem(lastSession, "EndDateTime"))
+#endif
 			{
 				int i = strlen(cJSON_GetObjectItem(lastSession,"EndDateTime")->valuestring);
 				if (i > 0)
@@ -630,12 +638,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 							cJSON_HasObjectItem(lastSession, "StartDateTime") &&
 							cJSON_HasObjectItem(lastSession, "ReliableClock") &&
 							cJSON_HasObjectItem(lastSession, "StoppedByRFID")&&
-							cJSON_HasObjectItem(lastSession, "AuthenticationCode")
-#ifdef GOPLUS
-							&& cJSON_HasObjectItem(lastSession, "MIDSessionId")
-#endif
-
-						)
+							cJSON_HasObjectItem(lastSession, "AuthenticationCode"))
 					{
 						strncpy(incompleteSession->SessionId, 	cJSON_GetObjectItem(lastSession,"SessionId")->valuestring, 37);
 						incompleteSession->Energy = 				cJSON_GetObjectItem(lastSession,"Energy")->valuedouble;
@@ -654,11 +657,11 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 						strncpy(incompleteSession->AuthenticationCode ,cJSON_GetObjectItem(lastSession,"AuthenticationCode")->valuestring, 41);
 
-#ifdef GOPLUS
-						incompleteSession->MIDSessionId = cJSON_GetObjectItem(lastSession,"MIDSessionId")->valuedouble;
-						incompleteSession->HasMIDSessionId = true;
-						ESP_LOGI(TAG, "MIDSessionId=%" PRIu32, incompleteSession->MIDSessionId);
-#endif
+						if (isMid) {
+							incompleteSession->MIDSessionId = sessionId;
+							incompleteSession->HasMIDSessionId = isMid;
+							ESP_LOGI(TAG, "MIDSessionId=%" PRIu32, incompleteSession->MIDSessionId);
+						}
 
 						ESP_LOGI(TAG, "SessionId=%s",incompleteSession->SessionId);
 						ESP_LOGI(TAG, "Energy=%f",incompleteSession->Energy);
@@ -711,7 +714,7 @@ void offlineSession_DeleteLastUsedFile()
 	}
 }
 
-int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
+int offlineSession_UpdateSessionOnFileInternal(char *sessionData, bool createNewFile, bool isMid, uint32_t sessionId)
 {
 	ESP_LOGW(TAG, " *** UpdateSessionOnFile: %i ***", createNewFile);
 
@@ -787,6 +790,15 @@ int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 
 	//ESP_LOGW(TAG, "Session CRC:: 0x%X", crcCalc);
 
+	if (isMid) {
+		fseek(sessionFile, FILE_MID_ID_ADDR_4088, SEEK_SET);
+		fwrite(&sessionId, sizeof(uint32_t), 1, sessionFile);
+		fseek(sessionFile, FILE_MID_ID_CRC_ADDR_4092, SEEK_SET);
+		crcCalc = esp_crc32_le(0, (uint8_t *)&sessionId, sizeof (sessionId));
+		fwrite(&crcCalc, sizeof(uint32_t), 1, sessionFile);
+		ESP_LOGI(TAG, "Linking session to MID Session %" PRIu32, sessionId);
+	}
+
 	free(base64SessionData);
 	fclose(sessionFile);
 
@@ -799,6 +811,14 @@ int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile)
 	xSemaphoreGive(offs_lock);
 
 	return ESP_OK;
+}
+
+int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile) {
+	return offlineSession_UpdateSessionOnFileInternal(sessionData, createNewFile, false, 0);
+}
+
+int offlineSession_UpdateSessionOnFileMID(char *sessionData, bool createNewFile, uint32_t sessionId) {
+	return offlineSession_UpdateSessionOnFileInternal(sessionData, createNewFile, true, sessionId);
 }
 
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
@@ -956,7 +976,7 @@ esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo)
 	return ESP_OK;
 }
 
-cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
+cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo, bool *isMid, uint32_t *sessionId)
 {
 	if (!offlineSession_is_mounted()) {
 		ESP_LOGE(TAG, "files is not mounted!");
@@ -986,6 +1006,21 @@ cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo)
 	uint8_t fileVersion = 0;
 	fread(&fileVersion, 1, 1, sessionFile);
 	ESP_LOGI(TAG, "File version: %d", fileVersion);
+
+	fseek(sessionFile, FILE_MID_ID_ADDR_4088, SEEK_SET);
+	uint32_t sessId = 0;
+	fread(&sessId, sizeof(uint32_t), 1, sessionFile);
+
+	fseek(sessionFile, FILE_MID_ID_CRC_ADDR_4092, SEEK_SET);
+	uint32_t sessCRC = 0;
+	fread(&sessCRC, sizeof(uint32_t), 1, sessionFile);
+
+	uint32_t sessCRC2 = esp_crc32_le(0, (uint8_t *)&sessId, sizeof (sessId));
+	if (sessCRC == sessCRC2) {
+		*isMid = true;
+		*sessionId = sessId;
+		ESP_LOGI(TAG, "MID Session: %" PRIu32, sessId);
+	}
 
 	/// Read session CRC
 	fseek(sessionFile, FILE_SESSION_CRC_ADDR_996, SEEK_SET);
@@ -1185,7 +1220,7 @@ cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo)
 	return entryArray;
 }
 
-esp_err_t offlineSession_SaveSession(char * sessionData)
+esp_err_t offlineSession_SaveSessionInternal(char * sessionData, bool isMid, uint32_t sessionId)
 {
 	int ret = 0;
 
@@ -1207,11 +1242,18 @@ esp_err_t offlineSession_SaveSession(char * sessionData)
 	sprintf(activePathString,"%s/%d.bin", tmp_path, activeFileNumber);
 
 	//Save the session structure to the file including the start 'B' message
-	ret = offlineSession_UpdateSessionOnFile(sessionData, true);
+	ret = offlineSession_UpdateSessionOnFileInternal(sessionData, true, isMid, sessionId);
 
 	return ret;
 }
 
+esp_err_t offlineSession_SaveSession(char * sessionData) {
+	return offlineSession_SaveSessionInternal(sessionData, false, 0);
+}
+
+esp_err_t offlineSession_SaveSessionMID(char * sessionData, uint32_t sessionId) {
+	return offlineSession_SaveSessionInternal(sessionData, true, sessionId);
+}
 
 void offlineSession_append_energy(char label, time_t timestamp, double energy)
 {

@@ -39,5 +39,6 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sessio
 midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *out, const struct timespec now, mid_session_auth_source_t source, mid_session_auth_type_t type, uint8_t *data, size_t data_size);
 
 midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec);
+midlts_err_t mid_session_read_session(midlts_ctx_t *ctx, midlts_pos_t *pos);
 
 #endif

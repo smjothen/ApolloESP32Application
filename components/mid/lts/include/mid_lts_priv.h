@@ -37,6 +37,7 @@ typedef union _midlts_pos_t {
 _Static_assert(sizeof (midlts_pos_t) == 4, "Position must be 4 bytes!");
 
 typedef struct {
+	midlts_pos_t pos; // Pos of current session start
 	bool has_id;
 	mid_session_id_t id;
 	bool has_auth;
@@ -66,6 +67,7 @@ typedef struct _midlts_ctx_t {
 	midlts_pos_t min_purgeable;
 
 	midlts_active_t active_session;
+	midlts_active_t query_session;
 } midlts_ctx_t;
 
 #define MID_SESSION_IS_OPEN(ctx) (!!((ctx)->flags & LTS_FLAG_SESSION_OPEN))
@@ -90,6 +92,7 @@ typedef struct _midlts_ctx_t {
 	X(LTS_LOG_FILE_FULL) \
 	X(LTS_SESSION_NOT_OPEN) \
 	X(LTS_SESSION_ALREADY_OPEN) \
+	X(LTS_SESSION_QUERY) \
 
 #define X(e) e,
 typedef enum _midlts_err_t {

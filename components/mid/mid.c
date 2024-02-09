@@ -289,7 +289,7 @@ int mid_session_event_open(uint32_t *out) {
 
 int mid_session_event_close(uint32_t *out) {
 	midlts_pos_t pos;
-	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_END) < 0) {
+	if (mid_session_add_event(mid_session_add_close, &pos, MID_SESSION_METER_VALUE_READING_FLAG_END) < 0) {
 		return -1;
 	}
 	*out = pos.u32;
@@ -298,7 +298,7 @@ int mid_session_event_close(uint32_t *out) {
 
 int mid_session_event_tariff(uint32_t *out) {
 	midlts_pos_t pos;
-	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) < 0) {
+	if (mid_session_add_event(mid_session_add_tariff, &pos, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) < 0) {
 		return -1;
 	}
 	*out = pos.u32;
@@ -494,9 +494,17 @@ int mid_session_event_auth_iso15118(const char *data) {
 	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
 }
 
-// TODO: Need to convert record pos / offset to ID format
-const char *mid_session_sign_session(uint64_t id) {
-	return NULL;
+const char *mid_session_sign_session(uint32_t id) {
+	midlts_pos_t pos;
+	pos.u32 = id;
+
+	midlts_err_t err;
+	if ((err = mid_session_read_session(&mid_lts, &pos)) != LTS_OK) {
+		ESP_LOGE(TAG, "Error reading session ID %" PRIu32 " : %d", id, err);
+		return NULL;
+	}
+
+	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.query_session);
 }
 
 const char *mid_session_sign_current_session(void) {

@@ -290,6 +290,89 @@ close:
 	return ret;
 }
 
+static midlts_err_t mid_session_log_replay_single_session(midlts_ctx_t *ctx, midlts_id_t logid, size_t offset, bool *done) {
+	midlts_err_t ret = LTS_OK;
+
+	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+
+	char buf[64];
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
+
+	struct stat st;
+	if (stat(buf, &st) || st.st_size > sizeof (databuf)
+			|| st.st_size % sizeof (mid_session_record_t) != 0
+			|| offset > sizeof (databuf)
+			|| offset % sizeof (mid_session_record_t) != 0) {
+		return LTS_STAT;
+	}
+
+	FILE *fp = fopen(buf, "r");
+	if (!fp) {
+		return LTS_OPEN;
+	}
+
+	if (fread(databuf, 1, st.st_size, fp) != st.st_size) {
+		ret = LTS_READ;
+		goto close;
+	}
+
+	bool first_record = true;
+
+	for (size_t i = offset; i < st.st_size; i += sizeof (mid_session_record_t)) {
+		mid_session_record_t rec = *(mid_session_record_t *)&databuf[i];
+
+		if (!mid_session_check_crc(&rec)) {
+			ret = LTS_BAD_CRC;
+			goto close;
+		}
+
+		mid_session_print_record(&rec);
+
+		if (first_record) {
+			if (rec.rec_type != MID_SESSION_RECORD_TYPE_METER_VALUE) {
+				ESP_LOGE(TAG, "Session should start with meter value record!");
+				ret = LTS_SESSION_QUERY;
+				goto close;
+			}
+
+			if (!(rec.meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_START)) {
+				ESP_LOGE(TAG, "Session should start with start record!");
+				ret = LTS_SESSION_QUERY;
+				goto close;
+			}
+		}
+
+		if (rec.rec_type == MID_SESSION_RECORD_TYPE_ID) {
+			midlts_active_session_set_id(&ctx->query_session, &rec.id);
+		}
+
+		if (rec.rec_type == MID_SESSION_RECORD_TYPE_AUTH) {
+			midlts_active_session_set_auth(&ctx->query_session, &rec.auth);
+		}
+
+		if (rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE) {
+			if ((ret = midlts_active_session_append(&ctx->query_session, &rec.meter_value)) != LTS_OK) {
+				goto close;
+			}
+
+			if (rec.meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
+				*done = true;
+				goto close;
+			}
+		}
+
+		first_record = false;
+	}
+
+close:
+	if (fclose(fp)) {
+		return LTS_CLOSE;
+	}
+
+	return ret;
+}
+
+
 static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool *allow_end_before_start, bool initial) {
 	midlts_err_t ret = LTS_OK;
 
@@ -430,6 +513,12 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sessio
 	rec.rec_type = MID_SESSION_RECORD_TYPE_ID;
 	memcpy(rec.id.uuid, uuid, sizeof (rec.id.uuid));
 
+	if (ctx->active_session.has_id &&
+			memcmp(&ctx->active_session.id, &rec.id, sizeof (rec.id)) == 0) {
+		ESP_LOGI(TAG, "Ignoring MID log of duplicate session ID!");
+		return LTS_OK;
+	}
+
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
 		return err;
@@ -458,6 +547,13 @@ midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sess
 	rec.auth.length = data_size;
 	memcpy(rec.auth.tag, data, data_size);
 
+	if (ctx->active_session.has_auth &&
+			memcmp(&ctx->active_session.auth, &rec.auth, sizeof (rec.auth)) == 0) {
+		ESP_LOGI(TAG, "Ignoring MID log of duplicate auth data!");
+		return LTS_OK;
+	}
+
+
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
 		return err;
@@ -480,7 +576,11 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, mid_
 
 	memset(ctx, 0, sizeof (*ctx));
 
-	if ((ret = midlts_active_session_alloc(&ctx->active_session) != LTS_OK) != LTS_OK) {
+	if ((ret = midlts_active_session_alloc(&ctx->active_session)) != LTS_OK) {
+		return ret;
+	}
+
+	if ((ret = midlts_active_session_alloc(&ctx->query_session)) != LTS_OK) {
 		return ret;
 	}
 
@@ -571,6 +671,32 @@ midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_s
 	return LTS_OK;
 }
 
+midlts_err_t mid_session_read_session(midlts_ctx_t *ctx, midlts_pos_t *pos) {
+	midlts_active_session_reset(&ctx->query_session);
+
+	midlts_err_t ret;
+	midlts_id_t logid = pos->id;
+	size_t offset = pos->offset;
+
+	while (true) {
+		ESP_LOGI(TAG, "MID Session Read  - %" PRIu32, logid);
+
+		bool done = false;
+		if ((ret = mid_session_log_replay_single_session(ctx, logid, offset, &done)) != LTS_OK) {
+			return ret;
+		}
+
+		if (done) {
+			break;
+		}
+
+		logid++;
+		offset = 0;
+	}
+
+	return LTS_OK;
+}
+
 // Functions below only for testing purposes
 midlts_err_t mid_session_init(midlts_ctx_t *ctx, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, fw_version, lr_version);
@@ -578,6 +704,7 @@ midlts_err_t mid_session_init(midlts_ctx_t *ctx, mid_session_version_fw_t fw_ver
 
 void mid_session_free(midlts_ctx_t *ctx) {
 	midlts_active_session_free(&ctx->active_session);
+	midlts_active_session_free(&ctx->query_session);
 }
 
 midlts_err_t mid_session_reset_page(midlts_id_t id) {

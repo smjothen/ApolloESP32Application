@@ -37,13 +37,17 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 
 void offlineSession_SetSessionFileInactive();
 void offlineSession_DeleteLastUsedFile();
-int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile);
+
 esp_err_t offlineSession_Diagnostics_ReadFileContent(int fileNo);
 
-cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo);
+cJSON * offlineSession_ReadChargeSessionFromFile(int fileNo, bool *isMid, uint32_t *sessionId);
 cJSON* offlineSession_GetSignedSessionFromActiveFile(int fileNo);
 
+int offlineSession_UpdateSessionOnFile(char *sessionData, bool createNewFile);
+int offlineSession_UpdateSessionOnFileMID(char *sessionData, bool createNewFile, uint32_t sessionId);
+
 esp_err_t offlineSession_SaveSession(char * sessionData);
+esp_err_t offlineSession_SaveSessionMID(char * sessionData, uint32_t sessionId);
 
 void offlineSession_append_energy(char label, time_t timestamp, double energy);
 
