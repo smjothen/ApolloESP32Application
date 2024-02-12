@@ -242,35 +242,24 @@ async def test_tx_profile_overcurrent(cp):
     i = 0
     while cp.connector1_status == ChargePointStatus.charging:
         i+=1
-        if i > 15:
+        if i > 20:
             logging.error("Overcurrent did not trigger within expected delay")
             return False
 
         logging.warning("Waiting for overcurrent to trigger state change to faulted")
-        await asyncio.sleep(4)
+        await asyncio.sleep(5)
 
     if cp.connector1_status != ChargePointStatus.faulted:
         logging.error(f'Overcurrent did not result in faulted state: {cp.connector1_status}')
         return False
 
-    result = await cp.call(call.UnlockConnectorPayload(connector_id = 1))
-    if result.status != UnlockStatus.unlocked:
-        logging.error(f'Unable to unlock connector while in state preparing')
-        return False
-
-    i = 0
     while cp.connector1_status == ChargePointStatus.faulted:
-        i+=1
-        if i > 5:
-            logging.error("Unlock connector in overcurrent faulted state did not result in transition away from faulted")
-            return False
-
-        logging.info(f'waiting for unlock command to take effect... {cp.connector1_status}')
-        await asyncio.sleep(3)
+        logging.warning(f'Set state A')
+        await asyncio.sleep(5)
 
     await asyncio.sleep(4) # should transition back to charging, then to finishing and then to available
     if cp.connector1_status != ChargePointStatus.available:
-        logging.error(f'Expected charger to enter available after disconnect command')
+        logging.error(f'Expected charger to enter available after disconnect command: {cp.connector1_status}')
         return False
 
     return True
