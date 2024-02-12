@@ -2966,7 +2966,6 @@ static void sessionHandler_task()
 			is_active_mid_session = false;
 			active_mid_session = 0;
 		}
-
 #else
 		bool is_mid = false;
 		uint32_t active_mid_session = 0;
