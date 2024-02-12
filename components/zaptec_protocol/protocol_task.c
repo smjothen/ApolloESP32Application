@@ -62,15 +62,15 @@ typedef enum {
 	PERIODIC_U32,
 	PERIODIC_BYTE,
 	PERIODIC_CB,
-} PeriodicTxType;
+} periodic_tx_type_t;
 
-typedef void (*PeriodicCallback)(ZapMessage *m);
+typedef void (*periodic_cb_t)(ZapMessage *m);
 
 typedef struct {
 	uint16_t id;
-	PeriodicTxType type;
+	periodic_tx_type_t type;
 	void *var;
-} PeriodicTx;
+} periodic_tx_t;
 
 void HandleReset(ZapMessage *msg) {
 	if (msg->data[0]) {
@@ -92,7 +92,7 @@ void HandleDebug(ZapMessage *msg) {
 	mcuDebugCounter = GetUint32_t(msg->data);
 }
 
-static const PeriodicTx periodicTx[] = {
+static const periodic_tx_t periodic_tx[] = {
 #ifdef GOPLUS
 	// TODO: Add ParamMode to Go?
 	{ ParamMode,                         PERIODIC_BYTE,  &mcuMode },
@@ -124,7 +124,7 @@ static const PeriodicTx periodicTx[] = {
 	{ ParamChargeCurrentUserMax,         PERIODIC_FLOAT, &mcuChargeCurrentUserMax },
 };
 
-#define PERIODIC_TX_COUNT (sizeof (periodicTx) / sizeof (periodicTx[0]))
+#define PERIODIC_TX_COUNT (sizeof (periodic_tx) / sizeof (periodic_tx[0]))
 
 #define RX_TIMEOUT        (2000 / (portTICK_PERIOD_MS))
 #define SEMAPHORE_TIMEOUT (20000 / (portTICK_PERIOD_MS))
@@ -461,12 +461,12 @@ void uartSendTask(void *pvParameters){
 	uint8_t encodedTxBuf[ZAP_PROTOCOL_BUFFER_SIZE_ENCODED];
 
     while (true) {
-		const PeriodicTx *pTx = &periodicTx[count % PERIODIC_TX_COUNT];
+		const periodic_tx_t *tx = &periodic_tx[count % PERIODIC_TX_COUNT];
 		printCount++;
 
 		ZapMessage txMsg = {0};
 		txMsg.type = MsgRead;
-		txMsg.identifier = pTx->id;
+		txMsg.identifier = tx->id;
 
 		uint16_t encoded_length = ZEncodeMessageHeaderOnly(&txMsg, txBuf, encodedTxBuf);
 
@@ -478,19 +478,19 @@ void uartSendTask(void *pvParameters){
 			offsetCount++;
 		} else {
 
-			if (pTx->var) {
-				switch(pTx->type) {
+			if (tx->var) {
+				switch(tx->type) {
 					case PERIODIC_U32:
-						*(uint32_t *)pTx->var = GetUint32_t(rxMsg.data);
+						*(uint32_t *)tx->var = GetUint32_t(rxMsg.data);
 						break;
 					case PERIODIC_BYTE:
-						*(uint8_t *)pTx->var = rxMsg.data[0];
+						*(uint8_t *)tx->var = rxMsg.data[0];
 						break;
 					case PERIODIC_FLOAT:
-						*(float *)pTx->var = GetFloat(rxMsg.data);
+						*(float *)tx->var = GetFloat(rxMsg.data);
 						break;
 					case PERIODIC_CB:
-						((PeriodicCallback)(pTx->var))(&rxMsg);
+						((periodic_cb_t)(tx->var))(&rxMsg);
 						break;
 				}
 			} else {
