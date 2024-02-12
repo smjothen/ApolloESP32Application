@@ -15,6 +15,7 @@
 #include <math.h>
 #include "../components/zaptec_cloud/include/zaptec_cloud_observations.h"
 #include "types/ocpp_reason.h"
+#include "uuid.h"
 
 
 static const char *TAG = "CHARGESESSION  ";
@@ -29,23 +30,16 @@ static char sidOrigin[6] = {0};
 
 static bool isCarConnected = false;
 
-static void ChargeSession_Set_GUID()
+static uuid_t ChargeSession_Set_GUID()
 {
-	volatile uint32_t GUID[4] = {0};
-	for (int i = 0; i < 4; i++)
-		GUID[i] = esp_random();
+	uuid_t uuid = uuid_generate();
+	uuid_to_string(uuid, chargeSession.SessionId, sizeof (chargeSession.SessionId));
 
-//	ESP_LOGW(TAG, "GUID: %08x", GUID[3]);
-//	ESP_LOGW(TAG, "GUID: %08x", GUID[2]);
-//	ESP_LOGW(TAG, "GUID: %08x", GUID[1]);
-//	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
-
-	sprintf(chargeSession.SessionId, "%08" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "%08" PRIx32, GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
-	//hasNewSessionIdFromCloud = true;
 	strcpy(sidOrigin, "local");
 	ESP_LOGI(TAG, "GUID: %s (%s)", chargeSession.SessionId, sidOrigin);
 
 	hasNewSessionIdFromCloud = false;
+	return uuid;
 }
 
 void chargeSession_PrintSession(bool online, bool pingReplyActive)
@@ -270,12 +264,14 @@ bool chargeSession_GetFileError()
 }
 
 static double startAcc = 0.0;
-void chargeSession_Start(bool isMid, uint32_t sessionId)
+uuid_t chargeSession_Start(bool isMid, uint32_t sessionId)
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
 	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
 	chargeSession_SetParentId("\0");
+
+	uuid_t uuid = {0};
 
 	if((strlen(chargeSession.SessionId) == 36))// && (readErr == ESP_OK))
 	{
@@ -283,6 +279,8 @@ void chargeSession_Start(bool isMid, uint32_t sessionId)
 		strcpy(sidOrigin, "file ");
 
 		chargeSession.SignedSession = basicOCMF;
+
+		uuid_from_string(&uuid, chargeSession.SessionId);
 		//Read from last file.
 		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
 	}
@@ -294,7 +292,7 @@ void chargeSession_Start(bool isMid, uint32_t sessionId)
 		chargeSession.HasMIDSessionId = isMid;
 		chargeSession.MIDSessionId = sessionId;
 
-		ChargeSession_Set_GUID();
+		uuid = ChargeSession_Set_GUID();
 		ChargeSession_Set_StartTime();
 
 		if(connectivity_GetSNTPInitialized() == true)
@@ -341,6 +339,7 @@ void chargeSession_Start(bool isMid, uint32_t sessionId)
 	}
 
 	startAcc = storage_GetAccumulatedEnergy();
+	return uuid;
 }
 
 

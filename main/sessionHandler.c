@@ -62,7 +62,9 @@
 #include "types/ocpp_charging_profile_status.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
+
 #include "mid.h"
+#include "uuid.h"
 
 static const char *TAG = "SESSION        ";
 
@@ -3111,7 +3113,16 @@ static void sessionHandler_task()
 #endif
 		{
 			offlineSession_ClearLog();
-			chargeSession_Start(is_mid, active_mid_session);
+			uuid_t uuid = chargeSession_Start(is_mid, active_mid_session);
+
+#ifdef GOPLUS
+			// Should be open ...
+			if (mid_session_is_open()) {
+				if (mid_session_event_uuid(uuid) != 0) {
+					ESP_LOGE(TAG, "Error setting MID Session ID");
+				}
+			}
+#endif
 
 			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
 			if(isOnline && (OCMF_GetEnergyFault() == true))

@@ -53,6 +53,7 @@ int mid_session_event_auth_cloud(const char *data);
 int mid_session_event_auth_ble(const char *data);
 int mid_session_event_auth_rfid(const char *data);
 int mid_session_event_auth_iso15118(const char *data);
+
 int mid_session_event_open(uint32_t *out);
 int mid_session_event_close(uint32_t *out);
 int mid_session_event_tariff(uint32_t *out);
