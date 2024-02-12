@@ -16,6 +16,7 @@
 #include "../components/zaptec_cloud/include/zaptec_cloud_observations.h"
 #include "types/ocpp_reason.h"
 #include "uuid.h"
+#include "mid.h"
 
 
 static const char *TAG = "CHARGESESSION  ";
@@ -428,6 +429,17 @@ bool chargeSession_IsLocalSession()
 void chargeSession_SetAuthenticationCode(const char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
+
+#ifdef GOPLUS
+	if (mid_session_is_open()) {
+		// TODO: Handle BLE and RFID being sent from ZapCloud commands
+		if (strstr(idAsString, "ble-")) {
+			mid_session_event_auth_ble(idAsString);
+		} else {
+			mid_session_event_auth_rfid(idAsString);
+		}
+	}
+#endif
 
 	/// Once a new auth string is registered, allow holding it during session reset from cloud
 	UUIDClearedFlag = false;
