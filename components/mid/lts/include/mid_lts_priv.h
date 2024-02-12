@@ -117,5 +117,6 @@ void mid_session_format_bytes_uuid(char *buf, uint8_t *bytes, size_t len);
 void mid_session_format_bytes(char *buf, uint8_t *bytes, size_t len);
 
 void mid_session_print_record(mid_session_record_t *rec);
+void mid_session_print_record_pos(midlts_pos_t *pos, mid_session_record_t *rec);
 
 #endif

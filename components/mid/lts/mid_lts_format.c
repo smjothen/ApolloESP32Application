@@ -116,24 +116,33 @@ void mid_session_format_record_meter_value(mid_session_meter_value_t *mv, char *
 			type);
 }
 
-void mid_session_print_record(mid_session_record_t *rec) {
+void mid_session_print_record_pos(midlts_pos_t *pos, mid_session_record_t *rec) {
 	char buf[128];
+
+	char posbuf[16] = {0};
+	if (pos) {
+		snprintf(posbuf, sizeof (posbuf), "%04X:%04X", pos->id, pos->offset);
+	}
 
 	switch(rec->rec_type) {
 		case MID_SESSION_RECORD_TYPE_ID: {
 			mid_session_format_record_id(&rec->id, buf, sizeof (buf));
-			ESP_LOGI(TAG, "MID Session Record  - SessionId  - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			ESP_LOGI(TAG, "MID Session Record %s - SessionId  - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", posbuf, rec->rec_id, rec->rec_crc, buf);
 			break;
 		}
 		case MID_SESSION_RECORD_TYPE_AUTH: {
 			mid_session_format_record_auth(&rec->auth, buf, sizeof (buf));
-			ESP_LOGI(TAG, "MID Session Record  - Auth       - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			ESP_LOGI(TAG, "MID Session Record %s - Auth       - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", posbuf, rec->rec_id, rec->rec_crc, buf);
 			break;
 		}
 		case MID_SESSION_RECORD_TYPE_METER_VALUE: {
 			mid_session_format_record_meter_value(&rec->meter_value, buf, sizeof (buf));
-			ESP_LOGI(TAG, "MID Session Record  - MeterValue - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", rec->rec_id, rec->rec_crc, buf);
+			ESP_LOGI(TAG, "MID Session Record %s - MeterValue - #%08" PRIu32 " - CRC %08" PRIx32 " - %s", posbuf, rec->rec_id, rec->rec_crc, buf);
 			break;
 		}
 	}
+}
+
+void mid_session_print_record(mid_session_record_t *rec) {
+	mid_session_print_record_pos(NULL, rec);
 }

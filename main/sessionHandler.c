@@ -62,6 +62,7 @@
 #include "types/ocpp_charging_profile_status.h"
 #include "ocpp_listener.h"
 #include "ocpp_task.h"
+#include "mid.h"
 
 static const char *TAG = "SESSION        ";
 
@@ -2610,7 +2611,7 @@ void sessionHandler_CheckAndSendOfflineSessions()
 			offlineSession_delete_session(fileToUse);
 
 			ESP_LOGW(TAG,"Sent CompletedSession: %i/%i", nrOfSentSessions, nrOfOfflineSessionFiles);
-			
+
 			/// If there is an energy mismatch: OCMF ((stop-start) != session energy), the make this visible with an event
 			if(OCMP_GetEnergyFaultFlag())
 				publish_debug_message_event("Energy difference in session", cloud_event_level_warning);
@@ -2695,8 +2696,10 @@ static void sessionHandler_task()
     uint32_t signalCounter = 0;
 
     enum CarChargeMode currentCarChargeMode = eCAR_UNINITIALIZED;
-    enum  ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
+    enum ChargerOperatingMode previousChargeOperatingMode = CHARGE_OPERATION_STATE_UNINITIALIZED;
     enum eCommunicationMode networkInterface = eCONNECTION_NONE;
+
+	bool prev_is_active_mid_session = false;
 
 #ifndef CONFIG_ZAPTEC_MCU_APPLICATION_ONLY
 
@@ -2921,6 +2924,51 @@ static void sessionHandler_task()
 		currentCarChargeMode = MCU_GetChargeMode();
 		chargeOperatingMode = MCU_GetChargeOperatingMode();
 
+#ifdef GOPLUS
+		// Handle MID sessions - must be recorded even if in OCPP mode
+		//
+		bool is_mid = true;
+		bool is_active_mid_session = false;
+		uint32_t active_mid_session = 0;
+
+		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && sessionResetMode == eSESSION_RESET_NONE) {
+			uint32_t mid_id = 0;
+			if (mid_session_get_session_id(&mid_id) == 0) {
+				// Previously opened session (ESP reset / power loss / etc while cable connected)
+				is_active_mid_session = true;
+				active_mid_session = mid_id;
+				ESP_LOGI(TAG, "Opening MID Session %" PRIu32 " (Restored)", mid_id);
+			} else if(mid_session_event_open(&mid_id) == 0) {
+				// New session
+				is_active_mid_session = true;
+				active_mid_session = mid_id;
+				ESP_LOGI(TAG, "Opening MID Session %" PRIu32, mid_id);
+			} else {
+				// Error, couldn't open session
+				ESP_LOGE(TAG, "Couldn't open MID session!");
+			}
+		}
+
+		if (chargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) {
+			if (mid_session_is_open()) {
+				uint32_t close_id = 0;
+				if (mid_session_event_close(&close_id) == 0) {
+					ESP_LOGI(TAG, "Closing MID Session %" PRIu32 " = %" PRIu32, active_mid_session, close_id);
+				} else {
+					ESP_LOGE(TAG, "Error closing MID session");
+				}
+			} else {
+				ESP_LOGE(TAG, "Can't close MID session, session not currently open!");
+			}
+
+			is_active_mid_session = false;
+			active_mid_session = 0;
+		}
+
+#else
+		bool is_mid = false;
+		uint32_t active_mid_session = 0;
+#endif
 
 		/// If a car is connected when booting, check for incomplete offline session and resume if incomplete
 		if((firstTimeAfterBoot == true) && (chargeOperatingMode != CHARGE_OPERATION_STATE_DISCONNECTED))
@@ -3054,12 +3102,16 @@ static void sessionHandler_task()
 			}
 		}
 
-
+#ifdef GOPLUS
+		// MID Session has begun
+		if (!prev_is_active_mid_session && is_active_mid_session)
+#else
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) && (sessionResetMode == eSESSION_RESET_NONE))
+#endif
 		{
 			offlineSession_ClearLog();
-			chargeSession_Start();
+			chargeSession_Start(is_mid, active_mid_session);
 
 			/// Flag event warning as diagnostics if energy in OCMF Begin does not match OCMF End in previous session
 			if(isOnline && (OCMF_GetEnergyFault() == true))
@@ -3290,8 +3342,13 @@ static void sessionHandler_task()
 		if(chargeOperatingMode > CHARGE_OPERATION_STATE_REQUESTING)//CHARGE_OPERATION_STATE_DISCONNECTED)
 			chargeSession_UpdateEnergy();
 
+#ifdef GOPLUS
+		// MID session is ending
+		if (prev_is_active_mid_session && !is_active_mid_session)
+#else
 		// Check if car connecting -> start a new session
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_DISCONNECTED) && (previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED))
+#endif
 		{
 			//Clear RCD error counter on disconnect to allow recount
 			errorCountAB = 0;
@@ -3347,7 +3404,9 @@ static void sessionHandler_task()
 			ESP_LOGW(TAG, " ### No longer charging but must report remaining energy ###");
 		}
 
-
+#ifdef GOPLUS
+		prev_is_active_mid_session = is_active_mid_session;
+#endif
 		previousChargeOperatingMode = chargeOperatingMode;
 
 		onTime++;
@@ -4334,7 +4393,7 @@ void sessionHandler_TestOfflineSessions(int nrOfSessions, int nrOfSignedValues)
 	for(i = 0; i < nrOfSessions; i++)
 	{
 		ESP_LOGI(TAG, "Generating OfflineSession nr: %i", i);
-		chargeSession_Start();
+		chargeSession_Start(false, 0);
 
 		for(j = 0; j < nrOfSignedValues; j++)
 		{

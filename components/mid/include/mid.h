@@ -46,6 +46,7 @@ bool mid_get_energy_interpolated(float *energy);
 bool mid_get_is_calibration_handle(void);
 
 bool mid_session_is_open(void);
+int mid_session_get_session_id(uint32_t *out);
 
 int mid_session_event_uuid(uuid_t uuid);
 int mid_session_event_auth_cloud(const char *data);

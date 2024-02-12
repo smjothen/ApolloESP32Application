@@ -270,7 +270,7 @@ bool chargeSession_GetFileError()
 }
 
 static double startAcc = 0.0;
-void chargeSession_Start()
+void chargeSession_Start(bool isMid, uint32_t sessionId)
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 
@@ -290,6 +290,10 @@ void chargeSession_Start()
 	{
 		/// If no resetSession is found on Flash create new session
 		memset(&chargeSession, 0, sizeof(chargeSession));
+
+		chargeSession.HasMIDSessionId = isMid;
+		chargeSession.MIDSessionId = sessionId;
+
 		ChargeSession_Set_GUID();
 		ChargeSession_Set_StartTime();
 
@@ -504,6 +508,10 @@ int chargeSession_GetSessionAsString(char * message, size_t message_length)
 	cJSON_AddStringToObject(CompletedSessionObject, "AuthenticationCode", chargeSession.AuthenticationCode);
 	cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", chargeSession.SignedSession);
 
+	if (chargeSession.HasMIDSessionId) {
+		cJSON_AddNumberToObject(CompletedSessionObject, "MIDSessionId", chargeSession.MIDSessionId);
+	}
+
 	cJSON_PrintPreallocated(CompletedSessionObject, message, message_length, false);
 
 	ESP_LOGI(TAG, "Made CompletedSessionObject %zu", strlen(message));
@@ -512,7 +520,6 @@ int chargeSession_GetSessionAsString(char * message, size_t message_length)
 
 	return 0;
 }
-
 
 /// When an RFID-tag is validated, call this to update the session on file
 esp_err_t chargeSession_SaveUpdatedSession()

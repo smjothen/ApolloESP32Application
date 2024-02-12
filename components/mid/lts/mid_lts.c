@@ -23,7 +23,7 @@ static bool mid_session_check_crc(mid_session_record_t *r) {
 	return r->rec_crc == mid_session_calc_crc(r);
 }
 
-static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_record_t *rec) {
+static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, midlts_pos_t *recpos, mid_session_record_t *rec) {
 	if (ctx->flags & LTS_FLAG_SESSION_OPEN) {
 		if (rec->rec_type == MID_SESSION_RECORD_TYPE_ID) {
 			midlts_active_session_set_id(&ctx->active_session, &rec->id);
@@ -52,6 +52,7 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, mid_session_
 			return ret;
 		}
 
+		ctx->active_session.pos = *recpos;
 		ctx->flags |= LTS_FLAG_SESSION_OPEN;
 	} else if (rec->meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
 		if (!(ctx->flags & LTS_FLAG_SESSION_OPEN)) {
@@ -169,16 +170,16 @@ close:
 	}
 
 	if (ret == LTS_OK) {
-		if ((ret = mid_session_log_update_state(ctx, rec)) != LTS_OK) {
-			return ret;
-		}
-
-		mid_session_print_record(rec);
-
 		if (pos) {
 			pos->id = ctx->msg_page;
 			pos->offset = size;
 		}
+
+		if ((ret = mid_session_log_update_state(ctx, pos, rec)) != LTS_OK) {
+			return ret;
+		}
+
+		mid_session_print_record_pos(pos, rec);
 
 		ctx->msg_id++;
 	}
@@ -407,7 +408,11 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 			goto close;
 		}
 
-		mid_session_print_record(&rec);
+		midlts_pos_t pos;
+		pos.id = logid;
+		pos.offset = i;
+
+		mid_session_print_record_pos(&pos, &rec);
 
 		if (initial && first_record) {
 			ctx->msg_id = rec.rec_id;
@@ -421,7 +426,7 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 			ctx->msg_id++;
 		}
 
-		if ((ret = mid_session_log_update_state(ctx, &rec)) != LTS_OK) {
+		if ((ret = mid_session_log_update_state(ctx, &pos, &rec)) != LTS_OK) {
 			if (ret == LTS_SESSION_NOT_OPEN && *allow_end_before_start) {
 				*allow_end_before_start = false;
 			} else {

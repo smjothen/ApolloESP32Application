@@ -25,6 +25,9 @@ struct ChargeSession
 	time_t EpochEndTimeSec;
 	uint32_t EpochEndTimeUsec;
 
+	bool HasMIDSessionId;
+	uint32_t MIDSessionId;
+
 	char * SignedSession;
 };
 
@@ -43,7 +46,7 @@ void chargeSession_ClearHasNewSession();
 void chargeSession_CheckIfLastSessionIncomplete();
 bool chargeSession_GetFileError();
 void chargeSession_SetTestFileCorrection();
-void chargeSession_Start();
+void chargeSession_Start(bool isMid, uint32_t sessionId);
 float chargeSession_GetEnergy();
 void chargeSession_UpdateEnergy();
 void chargeSession_Finalize();

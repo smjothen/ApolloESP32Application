@@ -278,6 +278,14 @@ bool mid_session_is_open(void) {
 	return MID_SESSION_IS_OPEN(&mid_lts);
 }
 
+int mid_session_get_session_id(uint32_t *out) {
+	if (mid_session_is_open()) {
+		*out = mid_lts.active_session.pos.u32;
+		return 0;
+	}
+	return -1;
+}
+
 int mid_session_event_open(uint32_t *out) {
 	midlts_pos_t pos;
 	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_START) < 0) {

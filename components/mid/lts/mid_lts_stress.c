@@ -113,6 +113,7 @@ midlts_err_t midlts_stress_test(size_t maxpages, int n) {
 					ESP_LOGE(TAG, "Session tariff : %s", mid_session_err_to_string(err));
 					return err;
 				}
+				ESP_LOGI(TAG, "%d:%d", ctx.active_session.pos.id, ctx.active_session.pos.offset);
 				last_meter[meter_count++] = rec.meter_value;
 			}
 
