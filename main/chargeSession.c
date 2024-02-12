@@ -13,11 +13,9 @@
 #include "OCMF.h"
 #include "offlineSession.h"
 #include <math.h>
-#include "zaptec_cloud_observations.h"
+#include "../components/zaptec_cloud/include/zaptec_cloud_observations.h"
 #include "types/ocpp_reason.h"
 
-#include "uuid.h"
-#include "mid.h"
 
 static const char *TAG = "CHARGESESSION  ";
 
@@ -31,16 +29,23 @@ static char sidOrigin[6] = {0};
 
 static bool isCarConnected = false;
 
-static uuid_t ChargeSession_Set_GUID()
+static void ChargeSession_Set_GUID()
 {
-	uuid_t uuid = uuid_generate();
-	uuid_to_string(uuid, chargeSession.SessionId, sizeof (chargeSession.SessionId));
+	volatile uint32_t GUID[4] = {0};
+	for (int i = 0; i < 4; i++)
+		GUID[i] = esp_random();
 
+//	ESP_LOGW(TAG, "GUID: %08x", GUID[3]);
+//	ESP_LOGW(TAG, "GUID: %08x", GUID[2]);
+//	ESP_LOGW(TAG, "GUID: %08x", GUID[1]);
+//	ESP_LOGW(TAG, "GUID: %08x", GUID[0]);
+
+	sprintf(chargeSession.SessionId, "%08" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "-%04" PRIx32 "%08" PRIx32, GUID[3], (GUID[2] >> 16), (GUID[2] & 0xFFFF), (GUID[1] >> 16), (GUID[1] & 0xFFFF), GUID[0]);
+	//hasNewSessionIdFromCloud = true;
 	strcpy(sidOrigin, "local");
 	ESP_LOGI(TAG, "GUID: %s (%s)", chargeSession.SessionId, sidOrigin);
 
 	hasNewSessionIdFromCloud = false;
-	return uuid;
 }
 
 void chargeSession_PrintSession(bool online, bool pingReplyActive)
@@ -265,78 +270,9 @@ bool chargeSession_GetFileError()
 }
 
 static double startAcc = 0.0;
-void chargeSession_Start_GoPlus() {
-	ESP_LOGI(TAG, "* STARTING SESSION *");
-
-	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
-	chargeSession_SetParentId("\0");
-
-	if (mid_session_is_open()) {
-		ESP_LOGI(TAG, "MID Session using incomplete session");
-	} else {
-		/// If no resetSession is found on Flash create new session
-		memset(&chargeSession, 0, sizeof(chargeSession));
-		uuid_t uuid = ChargeSession_Set_GUID();
-		ChargeSession_Set_StartTime();
-
-		if(connectivity_GetSNTPInitialized() == true)
-		{
-			chargeSession.ReliableClock = true;
-		}
-		else
-		{
-			chargeSession.ReliableClock = false;
-			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
-		}
-
-		chargeSession.SignedSession = basicOCMF;
-
-		uint32_t id;
-		if (mid_session_event_open(&id) < 0) {
-			ESP_LOGE(TAG, "MID Session Open: Error");
-			return;
-		} else {
-			ESP_LOGI(TAG, "Opened MID Session %" PRIu32, id);
-		}
-
-		chargeSession.HasMIDSessionId = true;
-		chargeSession.MIDSessionId = id;
-
-		if (mid_session_event_uuid(uuid) < 0) {
-			ESP_LOGE(TAG, "MID Session UUID: Error");
-			return;
-		}
-
-		char * sessionData = calloc(1000,1);
-		chargeSession_GetSessionAsString(sessionData, 1000);
-
-		sessionFileError = false;
-
-		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
-
-		//Check to see if the file could not be created
-		if((saveErr == -2) || (testFileCorrection == true))
-		{
-			testFileCorrection = false;
-			sessionFileError = true;
-
-			ESP_LOGW(TAG, "FILE ERROR");
-			offlineSession_ClearDiagnostics();
-			offlineSession_eraseAndRemountPartition();
-			saveErr = offlineSession_SaveSession(sessionData);
-		}
-
-		free(sessionData);
-
-		if (saveErr != ESP_OK)
-		{
-			ESP_LOGE(TAG, "offlineSession_SaveSession() failed: %d", saveErr);
-		}
-	}
-}
-
 void chargeSession_Start()
 {
+	ESP_LOGI(TAG, "* STARTING SESSION *");
 
 	chargeSession_SetStoppedReason(eOCPP_REASON_OTHER);
 	chargeSession_SetParentId("\0");
@@ -347,26 +283,14 @@ void chargeSession_Start()
 		strcpy(sidOrigin, "file ");
 
 		chargeSession.SignedSession = basicOCMF;
-
 		//Read from last file.
 		//OCMF_CreateNewOCMFLog(chargeSession.EpochStartTimeSec);
-
-#ifdef GOPLUS
-		// Open MID Session if not already open
-		if (!mid_session_is_open()) {
-			uint32_t id;
-			if (mid_session_event_open(&id) < 0) {
-				ESP_LOGE(TAG, "Error opening MID session (CompletedSession exists)");
-				return;
-			}
-		}
-#endif
 	}
 	else
 	{
 		/// If no resetSession is found on Flash create new session
 		memset(&chargeSession, 0, sizeof(chargeSession));
-
+		ChargeSession_Set_GUID();
 		ChargeSession_Set_StartTime();
 
 		if(connectivity_GetSNTPInitialized() == true)
@@ -379,28 +303,6 @@ void chargeSession_Start()
 			ESP_LOGE(TAG, "NO SESSION START TIME SET!");
 		}
 
-#ifdef GOPLUS
-		uint32_t id = 0;
-		if (!mid_session_is_open()) {
-			if (mid_session_event_open(&id) < 0) {
-				ESP_LOGE(TAG, "MID Session Open: Error");
-				return;
-			} else {
-				ESP_LOGI(TAG, "Opened MID Session %" PRIu32, id);
-			}
-		}
-
-		chargeSession.MIDSessionId = id;
-
-		uuid_t uuid = ChargeSession_Set_GUID();
-
-		if (mid_session_event_uuid(uuid) < 0) {
-			ESP_LOGE(TAG, "MID Session UUID: Error");
-			return;
-		}
-#else
-		ChargeSession_Set_GUID();
-#endif
 
 		chargeSession.SignedSession = basicOCMF;
 
@@ -409,11 +311,7 @@ void chargeSession_Start()
 
 		sessionFileError = false;
 
-#ifdef GOPLUS
-		esp_err_t saveErr = offlineSession_SaveSessionMID(sessionData, id);
-#else
 		esp_err_t saveErr = offlineSession_SaveSession(sessionData);
-#endif
 
 		//Check to see if the file could not be created
 		if((saveErr == -2) || (testFileCorrection == true))
@@ -424,11 +322,7 @@ void chargeSession_Start()
 			ESP_LOGW(TAG, "FILE ERROR");
 			offlineSession_ClearDiagnostics();
 			offlineSession_eraseAndRemountPartition();
-#ifdef GOPLUS
-			saveErr = offlineSession_SaveSessionMID(sessionData, id);
-#else
 			saveErr = offlineSession_SaveSession(sessionData);
-#endif
 		}
 
 		free(sessionData);
@@ -482,19 +376,6 @@ void chargeSession_Finalize()
 
 	ESP_LOGI(TAG, "End time is: %s (%" PRId32 ".%" PRId32 ")", chargeSession.EndDateTime, (uint32_t)chargeSession.EpochEndTimeSec, chargeSession.EpochEndTimeUsec);
 
-#ifdef GOPLUS
-	if (mid_session_is_open()) {
-		uint32_t id;
-		if (mid_session_event_close(&id) < 0) {
-			ESP_LOGE(TAG, "MID Session Close: Error");
-			return;
-		} else {
-			ESP_LOGI(TAG, "Closed MID Session %" PRIu32, chargeSession.MIDSessionId);
-		}
-	} else {
-		ESP_LOGE(TAG, "MID Session Close: Not open");
-	}
-#endif
 
 	/// Create the 'E' message
 	OCMF_CompletedSession_StartStopOCMFLog('E', chargeSession.EpochEndTimeSec);
@@ -622,10 +503,6 @@ int chargeSession_GetSessionAsString(char * message, size_t message_length)
 	cJSON_AddBoolToObject(CompletedSessionObject, "StoppedByRFID", chargeSession.StoppedByRFID);
 	cJSON_AddStringToObject(CompletedSessionObject, "AuthenticationCode", chargeSession.AuthenticationCode);
 	cJSON_AddStringToObject(CompletedSessionObject, "SignedSession", chargeSession.SignedSession);
-
-	if (chargeSession.HasMIDSessionId) {
-		cJSON_AddNumberToObject(CompletedSessionObject, "MIDSessionId", chargeSession.MIDSessionId);
-	}
 
 	cJSON_PrintPreallocated(CompletedSessionObject, message, message_length, false);
 

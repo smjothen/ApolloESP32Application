@@ -2680,10 +2680,7 @@ int ParseCommandFromCloud(esp_mqtt_event_handle_t commandEvent)
 				sscanf(&commandString[17], "%d", &fileNo);
 				if((fileNo >= 0) && (fileNo < 100))
 				{
-					bool isMid = false;
-					uint32_t sessionId = 0;
-
-					cJSON * csObject = offlineSession_ReadChargeSessionFromFile(fileNo, &isMid, &sessionId);
+					cJSON * csObject = offlineSession_ReadChargeSessionFromFile(fileNo);
 					if(csObject == NULL)
 					{
 						publish_debug_telemetry_observation_Diagnostics("csObject == NULL");

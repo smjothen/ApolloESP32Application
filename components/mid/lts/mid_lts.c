@@ -513,12 +513,6 @@ midlts_err_t mid_session_add_id(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sessio
 	rec.rec_type = MID_SESSION_RECORD_TYPE_ID;
 	memcpy(rec.id.uuid, uuid, sizeof (rec.id.uuid));
 
-	if (ctx->active_session.has_id &&
-			memcmp(&ctx->active_session.id, &rec.id, sizeof (rec.id)) == 0) {
-		ESP_LOGI(TAG, "Ignoring MID log of duplicate session ID!");
-		return LTS_OK;
-	}
-
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
 		return err;
@@ -546,13 +540,6 @@ midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sess
 	rec.auth.type = type;
 	rec.auth.length = data_size;
 	memcpy(rec.auth.tag, data, data_size);
-
-	if (ctx->active_session.has_auth &&
-			memcmp(&ctx->active_session.auth, &rec.auth, sizeof (rec.auth)) == 0) {
-		ESP_LOGI(TAG, "Ignoring MID log of duplicate auth data!");
-		return LTS_OK;
-	}
-
 
 	midlts_err_t err;
 	if ((err = mid_session_log_record(ctx, pos, now, &rec)) != LTS_OK) {
