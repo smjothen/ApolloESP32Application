@@ -534,6 +534,11 @@ int publish_debug_telemetry_observation_StartUpParameters()
     add_observation_to_collection(observations, create_observation(SessionIdentifier, chargeSession_GetSessionId()));
 	add_observation_to_collection(observations, create_uint32_t_observation(ParamIsStandalone, (uint32_t)storage_Get_Standalone()));
 
+	char buffer[MID_PUBLIC_KEY_SIZE];
+	if (storage_Get_MIDPublicKeyDER(buffer)) {
+		add_observation_to_collection(observations, create_observation(MIDPublicKey, buffer));
+	}
+
 	add_observation_to_collection(observations, create_observation(ParamSmartComputerAppVersion, GetSoftwareVersion()));
     add_observation_to_collection(observations, create_observation(ParamSmartMainboardAppSwVersion, MCU_GetSwVersionString()));
 #ifdef DEVELOPEMENT_URL

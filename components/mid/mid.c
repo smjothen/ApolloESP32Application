@@ -18,6 +18,7 @@
 #include "esp_littlefs.h"
 #include "uuid.h"
 
+#include "mid_active.h"
 #include "mid_sign.h"
 #include "mid_ocmf.h"
 #include "mid_lts.h"
@@ -253,7 +254,10 @@ int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_sess
 
 	uint32_t watt_hours = 0;
 
-	if (pkg.status) {
+	uint32_t status = pkg.status;
+	status &= ~(MID_STATUS_INVALID_FR | MID_STATUS_NOT_CALIBRATED | MID_STATUS_NOT_VERIFIED | MID_STATUS_INVALID_BOOTLOADER);
+
+	if (status) {
 		flag |= MID_SESSION_METER_VALUE_FLAG_METER_ERROR;
 	} else {
 		watt_hours = pkg.watt_hours;
@@ -499,7 +503,7 @@ int mid_session_event_auth_iso15118(const char *data) {
 	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
 }
 
-const char *mid_session_sign_session(uint32_t id) {
+const char *mid_session_sign_session(uint32_t id, double *energy) {
 	midlts_pos_t pos;
 	pos.u32 = id;
 
@@ -509,9 +513,11 @@ const char *mid_session_sign_session(uint32_t id) {
 		return NULL;
 	}
 
+	midlts_active_session_get_energy(&mid_lts.query_session, energy);
 	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.query_session);
 }
 
-const char *mid_session_sign_current_session(void) {
+const char *mid_session_sign_current_session(double *energy) {
+	midlts_active_session_get_energy(&mid_lts.active_session, energy);
 	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.active_session);
 }

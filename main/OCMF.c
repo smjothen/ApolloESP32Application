@@ -163,7 +163,11 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 #ifdef GOPLUS
 	if (cJSON_HasObjectItem(CompletedSessionObject, "MIDSessionId")) {
 		uint32_t mid_id = cJSON_GetObjectItem(CompletedSessionObject, "MIDSessionId")->valueint;
-		const char *str = mid_session_sign_session(mid_id);
+
+		double energy;
+		const char *str = mid_session_sign_session(mid_id, &energy);
+		cJSON_GetObjectItem(CompletedSessionObject,"Energy")->valuedouble = energy;
+
 		if (str) {
 			cJSON_DeleteItemFromObject(CompletedSessionObject, "MIDSessionId");
 			cJSON_DeleteItemFromObject(CompletedSessionObject, "SignedSession");

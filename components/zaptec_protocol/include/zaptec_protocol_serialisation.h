@@ -22,6 +22,8 @@ typedef enum {
 
 	SourceVersion = 916,
 	DiagnosticsMode = 805,
+
+	MIDPublicKey = 981,
 } CloudNo;
 
 typedef enum {

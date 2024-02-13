@@ -58,7 +58,7 @@ int mid_session_event_open(uint32_t *out);
 int mid_session_event_close(uint32_t *out);
 int mid_session_event_tariff(uint32_t *out);
 
-const char *mid_session_sign_session(uint32_t id);
-const char *mid_session_sign_current_session(void);
+const char *mid_session_sign_session(uint32_t id, double *energy);
+const char *mid_session_sign_current_session(double *energy);
 
 #endif

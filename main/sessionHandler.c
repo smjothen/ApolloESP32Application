@@ -4229,6 +4229,13 @@ void sessionHandler_SendMIDStatus(void) {
 	}
 }
 
+void sessionHandler_SendMIDPublicKey(void) {
+	char buffer[MID_PUBLIC_KEY_SIZE];
+	if (storage_Get_MIDPublicKeyDER(buffer)) {
+
+	}
+}
+
 static bool hasUpdatedCapability = false;
 void sessionHandler_SendMIDStatusUpdate(void) {
 

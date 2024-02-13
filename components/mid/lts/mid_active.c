@@ -38,6 +38,24 @@ midlts_err_t midlts_active_session_append(midlts_active_t *active, mid_session_m
 	return LTS_OK;
 }
 
+midlts_err_t midlts_active_session_get_energy(midlts_active_t *active, double *energy) {
+	*energy = 0.0;
+
+	if (active->count <= 0) {
+		return LTS_OK;
+	}
+
+	mid_session_meter_value_t *start = &active->events[0];
+	mid_session_meter_value_t *end = &active->events[active->count - 1];
+
+	if (!(start->flag & MID_SESSION_METER_VALUE_FLAG_METER_ERROR) &&
+			!(end->flag & MID_SESSION_METER_VALUE_FLAG_METER_ERROR)) {
+		*energy = (end->meter - start->meter) / 1000.0;
+	}
+
+	return LTS_OK;
+}
+
 void midlts_active_session_set_id(midlts_active_t *active, mid_session_id_t *id) {
 	//ESP_LOGI(TAG, "MID Active Session: Set Id");
 	active->has_id = true;

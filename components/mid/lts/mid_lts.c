@@ -247,10 +247,10 @@ close:
 	return ret;
 }
 
+static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+
 static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, midlts_id_t logid, bool *found_meter, mid_session_record_t *meter) {
 	midlts_err_t ret = LTS_OK;
-
-	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
 
 	char buf[64];
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
@@ -294,7 +294,7 @@ close:
 static midlts_err_t mid_session_log_replay_single_session(midlts_ctx_t *ctx, midlts_id_t logid, size_t offset, bool *done) {
 	midlts_err_t ret = LTS_OK;
 
-	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+	//static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
 
 	char buf[64];
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
@@ -377,7 +377,7 @@ close:
 static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid, bool *allow_end_before_start, bool initial) {
 	midlts_err_t ret = LTS_OK;
 
-	static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
+	//static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
 
 	char buf[64];
 	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
