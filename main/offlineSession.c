@@ -31,13 +31,6 @@ static const int max_offline_signed_values = 100;
 #define FILE_NR_OF_OCMF_ADDR_1000  	1000L
 #define FILE_OCMF_START_ADDR_1004 	1004L
 
-struct LogHeader {
-    int start;
-    int end;
-    uint32_t crc; // for header, not whole file
-    // dont keep version, use other file name for versioning
-};
-
 struct LogOCMFData {
 	char label;
 

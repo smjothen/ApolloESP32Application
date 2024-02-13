@@ -92,9 +92,9 @@ void on_send_signed_meter_value()
 
 	secSinceLastOCMFMessage = 0;
 
-	char OCMPMessage[220] = {0};
-	time_t timeSec;
-	double energy;
+	char OCMPMessage[512] = {0};
+	time_t timeSec = 0;
+	double energy = 0.0;
 
 	enum CarChargeMode chargeMode = MCU_GetChargeMode();
 	bool state_charging = (chargeMode == eCAR_CHARGING);
@@ -107,10 +107,27 @@ void on_send_signed_meter_value()
 		hasCharged = false;
 	}
 
+#ifdef GOPLUS
+	// TODO: Check last tariff value stored and if energy is different, store/publish
+	uint32_t mid_id;
+
+	if(state_charging || hasRemainingEnergy){
+		if (mid_session_event_tariff(&mid_id) < 0) {
+			ESP_LOGE(TAG, "Error storing MID signed meter value!");
+			return;
+		}
+
+		if (OCMF_SignedMeterValue_CreateMessageFromMID(OCMPMessage, sizeof (OCMPMessage), mid_id, false) < 0) {
+			ESP_LOGE(TAG, "Error serializing MID signed meter value!");
+			return;
+		}
+	}
+#else
 	if(state_charging || hasRemainingEnergy){
 		// Sample energy now, dumping the log may be to slow to get the time aligned energy
 		OCMF_SignedMeterValue_CreateNewOCMFMessage(OCMPMessage, &timeSec, &energy);
 	}
+#endif
 
 	if(hasRemainingEnergy)
 		ESP_LOGW(TAG, "### Set to report any remaining energy. RV=%f ###", energy);
@@ -130,12 +147,20 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
+#ifdef GOPLUS
+			offline_log_append_energy(mid_id);
+#else
 			offline_log_append_energy(timeSec, energy);
+#endif
 		}
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
+#ifdef GOPLUS
+		offline_log_append_energy(mid_id);
+#else
 		offline_log_append_energy(timeSec, energy);
+#endif
 	}
 
 
@@ -382,7 +407,7 @@ bool SessionHandler_IsOfflineMode()
 
 static bool stackDiagnostics = false;
 
-static bool OCMFHighInterval = false;
+static bool OCMFHighInterval = true;
 void SessionHandler_SetOCMFHighInterval()
 {
 	ESP_LOGW(TAG, "Setting 60 sec interval");
@@ -4432,10 +4457,10 @@ void sessionHandler_TestOfflineSessions(int nrOfSessions, int nrOfSignedValues)
 void sessionHandler_init(){
 
 	ocmf_sync_semaphore = xSemaphoreCreateBinary();
-	xTaskCreate(ocmf_sync_task, "ocmf", 3000, NULL, 3, &taskSessionHandleOCMF);
+	xTaskCreate(ocmf_sync_task, "ocmf", 4000, NULL, 3, &taskSessionHandleOCMF);
 
 	completedSessionString = malloc(LOG_STRING_SIZE);
 	//Got stack overflow on 5000, try with 6000
-	xTaskCreate(sessionHandler_task, "sessionHandler_task", 6000, NULL, 3, &taskSessionHandle);
+	xTaskCreate(sessionHandler_task, "sessionHandler_task", 7000, NULL, 3, &taskSessionHandle);
 
 }

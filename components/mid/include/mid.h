@@ -60,5 +60,6 @@ int mid_session_event_tariff(uint32_t *out);
 
 const char *mid_session_sign_session(uint32_t id, double *energy);
 const char *mid_session_sign_current_session(double *energy);
+const char *mid_session_sign_meter_value(uint32_t id, bool include_event_log);
 
 #endif

@@ -17,7 +17,7 @@
 #include "types/ocpp_reason.h"
 #include "uuid.h"
 #include "mid.h"
-
+#include "DeviceInfo.h"
 
 static const char *TAG = "CHARGESESSION  ";
 

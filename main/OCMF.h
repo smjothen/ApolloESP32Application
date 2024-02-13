@@ -11,6 +11,8 @@ extern "C" {
 
 void OCMF_Init();
 
+int OCMF_SignedMeterValue_CreateMessageFromMID(char *buf, size_t buf_size, uint32_t mid_id, bool include_event_log);
+
 /******_SignedMeterValue_*****/
 double OCMF_GetLastAccumulated_Energy();
 int OCMF_SignedMeterValue_CreateNewOCMFMessage(char * newMessage, time_t *time_out, double *energy_out);

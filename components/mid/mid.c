@@ -503,6 +503,35 @@ int mid_session_event_auth_iso15118(const char *data) {
 	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
 }
 
+const char *mid_session_sign_meter_value(uint32_t id, bool include_event_log) {
+	midlts_pos_t pos = { .u32 = id };
+	mid_session_record_t rec;
+
+	midlts_err_t err;
+	if ((err = mid_session_read_record(&mid_lts, &pos, &rec)) != LTS_OK) {
+		ESP_LOGE(TAG, "Error reading meter value ID %" PRIu32 " : %d", id, err);
+		return NULL;
+	}
+
+	mid_event_log_t log;
+	const char *payload = NULL;
+
+	if (include_event_log) {
+		if (!mid_event_log_init(&log)) {
+			if (mid_get_event_log(&log)) {
+				payload = midocmf_signed_fiscal_from_record(&mid_sign, mid_serial, &rec, &log);
+			} else {
+				ESP_LOGE(TAG, "Failure to read MID event log!");
+			}
+			mid_event_log_free(&log);
+		}
+	} else {
+		payload = midocmf_signed_fiscal_from_record(&mid_sign, mid_serial, &rec, NULL);
+	}
+
+	return payload;
+}
+
 const char *mid_session_sign_session(uint32_t id, double *energy) {
 	midlts_pos_t pos;
 	pos.u32 = id;

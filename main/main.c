@@ -664,7 +664,7 @@ void app_main(void)
 	#endif
 
 	fat_static_mount();
-	setup_offline_log();
+	offline_log_init();
 
 #ifdef CONFIG_ZAPTEC_DIAGNOSTICS_LOG
 	if(storage_Get_DiagnosticsLogEnabled())

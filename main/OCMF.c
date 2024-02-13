@@ -121,6 +121,15 @@ int  OCMF_SignedMeterValue_CreateMessageFromLog(char *new_message, time_t time_i
 	return _OCMF_SignedMeterValue_CreateNewOCMFMessage(new_message, time_buffer, energy_in);
 }
 
+int OCMF_SignedMeterValue_CreateMessageFromMID(char *buf, size_t buf_size, uint32_t mid_id, bool include_event_log){
+	const char *data = mid_session_sign_meter_value(mid_id, include_event_log);
+	if (data) {
+		snprintf(buf, buf_size, "%s", data);
+		free((char *)data);
+		return 0;
+	}
+	return -1;
+}
 
 /************************************************************************************/
 static bool energyFaultFlag = false;
