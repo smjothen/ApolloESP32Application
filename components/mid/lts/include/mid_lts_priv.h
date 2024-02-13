@@ -26,10 +26,10 @@ typedef enum _midlts_flag_t {
 
 typedef union _midlts_pos_t {
 	struct {
-		// Log id
-		uint16_t id;
 		// Offset in log
 		uint16_t offset;
+		// Log id
+		uint16_t id;
 	};
 	uint32_t u32;
 } midlts_pos_t;

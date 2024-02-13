@@ -2730,6 +2730,12 @@ static void sessionHandler_task()
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
+#ifdef GOPLUS
+	bool is_mid = true;
+	bool is_active_mid_session = false;
+	uint32_t active_mid_session = 0;
+#endif
+
     boot_timestamp = time(NULL);
 
     // Prepare for incomming ocpp messages
@@ -2929,10 +2935,6 @@ static void sessionHandler_task()
 #ifdef GOPLUS
 		// Handle MID sessions - must be recorded even if in OCPP mode
 		//
-		bool is_mid = true;
-		bool is_active_mid_session = false;
-		uint32_t active_mid_session = 0;
-
 		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && sessionResetMode == eSESSION_RESET_NONE) {
 			uint32_t mid_id = 0;
 			if (mid_session_get_session_id(&mid_id) == 0) {
