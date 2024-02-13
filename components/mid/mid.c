@@ -249,10 +249,6 @@ int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_sess
 		return -1;
 	}
 
-	// TODO: Return these? They should kind of be internal, but pos might be
-	// useful for the application to store
-	mid_session_record_t rec;
-
 	mid_session_meter_value_flag_t flag = mid_get_time_status() | type_flag;
 
 	uint32_t watt_hours = 0;
@@ -265,6 +261,7 @@ int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_sess
 
 	// TODO: Use semaphore to serialize events
 	//
+	mid_session_record_t rec;
 	midlts_err_t err;
 	if ((err = event(&mid_lts, pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
 		ESP_LOGE(TAG, "Can't add session event: LTS");
