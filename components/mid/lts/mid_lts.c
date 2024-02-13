@@ -72,7 +72,13 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, midlts_pos_t
 		}
 	}
 
+	ctx->has_latest = true;
 	ctx->msg_latest = rec->meter_value;
+
+	if (rec->meter_value.flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
+		ctx->has_latest_tariff = true;
+		ctx->msg_latest_tariff = rec->meter_value;
+	}
 
 	return LTS_OK;
 }

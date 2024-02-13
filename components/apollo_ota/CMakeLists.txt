@@ -7,7 +7,7 @@ idf_component_register(SRCS "apollo_ota.c"
                   EMBED_TXTFILES ${project_dir}/components/apollo_ota/certs/ca_cert.pem
                   EMBED_FILES ${project_dir}/bin/dspic.bin
 				  EMBED_FILES ${project_dir}/bin/pic.bin
-				  EMBED_FILES ${project_dir}/bin/cc.bin
+				  EMBED_FILES ${project_dir}/bin/go_plus_fpga.bin
 
 		  REQUIRES ocpp
 )

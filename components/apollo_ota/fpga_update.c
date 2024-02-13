@@ -13,8 +13,8 @@
 
 #define TAG "fpga_update"
 
-extern const uint8_t _pic_fpga_start[] asm("_binary_cc_bin_start");
-extern const uint8_t _pic_fpga_end[] asm("_binary_cc_bin_end");
+extern const uint8_t _pic_fpga_start[] asm("_binary_go_plus_fpga_bin_start");
+extern const uint8_t _pic_fpga_end[] asm("_binary_go_plus_fpga_bin_end");
 
 static ZapMessage txMsg;
 
