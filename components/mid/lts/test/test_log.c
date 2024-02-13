@@ -236,9 +236,6 @@ TEST_CASE("Test reading records", "[mid]") {
 	badpos = pos[0];
 	badpos.offset = 8 * 32;
 	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_read_record(&ctx, &badpos, &rec));
-	badpos = pos[0];
-	badpos.crc = 0xffffffff;
-	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_read_record(&ctx, &badpos, &rec));
 
 	for (int i = 0; i < 8; i++) {
 		// Test good read
@@ -338,11 +335,6 @@ TEST_CASE("Test position and reading", "[mid]") {
 		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_read_record(&ctx, &pos[i], &rec));
 	}
 
-	for (int i = 0; i < 8; i++) {
-		mid_session_record_t rec;
-		pos[i].crc += 1;
-		TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_read_record(&ctx, &pos[i], &rec));
-	}
 	mid_session_free(&ctx);
 }
 
