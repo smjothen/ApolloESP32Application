@@ -430,7 +430,7 @@ void chargeSession_SetAuthenticationCode(const char * idAsString)
 {
 	strcpy(chargeSession.AuthenticationCode, idAsString);
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	if (mid_session_is_open()) {
 		// TODO: Handle BLE and RFID being sent from ZapCloud commands
 		if (strstr(idAsString, "ble-")) {

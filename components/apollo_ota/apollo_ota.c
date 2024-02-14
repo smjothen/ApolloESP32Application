@@ -359,7 +359,7 @@ void validate_booted_image(void){
     const esp_partition_t * partition = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Checking if VALID on partition %s ", partition->label);
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	int dspic_update_success = update_goplus();
 #else
 	int dspic_update_success = update_dspic();

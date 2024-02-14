@@ -33,7 +33,7 @@ struct LogHeader {
 };
 
 struct LogLine {
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	// Go+ stores position of tariff value in MID log
 	uint32_t pos;
 #else
@@ -176,7 +176,7 @@ int release_log(struct LogFile *file, FILE *fp) {
 	return result;
 }
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 void offline_log_append_energy(uint32_t pos) {
 	ESP_LOGI(TAG, "saving offline energy MID %" PRIu32, pos);
 #else
@@ -200,7 +200,7 @@ void offline_log_append_energy(time_t timestamp, double energy) {
 		log_start = (log_start + 1) % OFFLINE_LOG_MAX_ITEMS;
 	}
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	struct LogLine line = { .pos = pos,
 							.crc = 0 };
 #else
@@ -253,7 +253,7 @@ int _offline_log_attempt_send(struct LogFile *file) {
 		line.crc = 0;
 		calculated_crc = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		uint32_t mid_id = line.pos;
 
 		ESP_LOGI(TAG,
@@ -276,7 +276,7 @@ int _offline_log_attempt_send(struct LogFile *file) {
 
 		if (crc_on_file == calculated_crc) {
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 			OCMF_SignedMeterValue_CreateMessageFromMID(ocmf_text, sizeof (ocmf_text), mid_id, false);
 #else
 			OCMF_SignedMeterValue_CreateMessageFromLog(ocmf_text, timestamp,

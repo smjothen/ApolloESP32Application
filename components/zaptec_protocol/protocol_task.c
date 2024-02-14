@@ -93,7 +93,7 @@ void HandleDebug(ZapMessage *msg) {
 }
 
 static const periodic_tx_t periodic_tx[] = {
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	// TODO: Add ParamMode to Go?
 	{ ParamMode,                         PERIODIC_BYTE,  &mcuMode },
 	{ MCUResetSource,                    PERIODIC_CB,    &HandleReset },

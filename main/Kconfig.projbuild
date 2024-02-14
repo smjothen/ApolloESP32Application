@@ -150,4 +150,8 @@ menu "Zaptec"
     config ZAPTEC_OCPP_ALWAYS_ALLOW_LTE
            bool "Always allow OCPP on LTE"
         default y
+
+	config ZAPTEC_GO_PLUS
+			bool "Enable Go Plus features"
+		default n
 endmenu

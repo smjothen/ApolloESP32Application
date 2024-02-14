@@ -169,7 +169,7 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 	offlineSession_AppendLogString("3 CS_Object OK");
 	memset(OCMFLogEntryString, 0, LOG_STRING_SIZE);
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	if (cJSON_HasObjectItem(CompletedSessionObject, "MIDSessionId")) {
 		uint32_t mid_id = cJSON_GetObjectItem(CompletedSessionObject, "MIDSessionId")->valueint;
 

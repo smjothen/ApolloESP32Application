@@ -107,7 +107,7 @@ void on_send_signed_meter_value()
 		hasCharged = false;
 	}
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	// TODO: Check last tariff value stored and if energy is different, store/publish
 	uint32_t mid_id;
 
@@ -147,7 +147,7 @@ void on_send_signed_meter_value()
 		);
 
 		if(publish_result<0){
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 			offline_log_append_energy(mid_id);
 #else
 			offline_log_append_energy(timeSec, energy);
@@ -156,7 +156,7 @@ void on_send_signed_meter_value()
 
 	}else if(state_charging || hasRemainingEnergy){
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		offline_log_append_energy(mid_id);
 #else
 		offline_log_append_energy(timeSec, energy);
@@ -2677,7 +2677,7 @@ static bool isOnline = false;
 static bool previousIsOnline = true;
 static uint32_t pulseCounter = PULSE_INIT_TIME;
 
-#ifndef GOPLUS
+#ifndef CONFIG_ZAPTEC_GO_PLUS
 static uint16_t autoClearLastCount = 0;
 static uint32_t autoClearLastTimeout = 0;
 #endif
@@ -2755,7 +2755,7 @@ static void sessionHandler_task()
     bool firstTimeAfterBoot = true;
     uint8_t countdown = 5;
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 	bool is_mid = true;
 	bool is_active_mid_session = false;
 	uint32_t active_mid_session = 0;
@@ -2957,7 +2957,7 @@ static void sessionHandler_task()
 		currentCarChargeMode = MCU_GetChargeMode();
 		chargeOperatingMode = MCU_GetChargeOperatingMode();
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		// Handle MID sessions - must be recorded even if in OCPP mode
 		//
 		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && sessionResetMode == eSESSION_RESET_NONE) {
@@ -3130,7 +3130,7 @@ static void sessionHandler_task()
 			}
 		}
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		// MID Session has begun
 		if (!prev_is_active_mid_session && is_active_mid_session)
 #else
@@ -3141,7 +3141,7 @@ static void sessionHandler_task()
 			offlineSession_ClearLog();
 			uuid_t uuid = chargeSession_Start(is_mid, active_mid_session);
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 			// Should be open ...
 			if (mid_session_is_open()) {
 				if (mid_session_event_uuid(uuid) != 0) {
@@ -3379,7 +3379,7 @@ static void sessionHandler_task()
 		if(chargeOperatingMode > CHARGE_OPERATION_STATE_REQUESTING)//CHARGE_OPERATION_STATE_DISCONNECTED)
 			chargeSession_UpdateEnergy();
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		// MID session is ending
 		if (prev_is_active_mid_session && !is_active_mid_session)
 #else
@@ -3441,7 +3441,7 @@ static void sessionHandler_task()
 			ESP_LOGW(TAG, " ### No longer charging but must report remaining energy ###");
 		}
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 		prev_is_active_mid_session = is_active_mid_session;
 #endif
 		previousChargeOperatingMode = chargeOperatingMode;
@@ -3935,7 +3935,7 @@ static void sessionHandler_task()
 				eMeterAlarmBlock = false;
 			}
 
-#ifndef GOPLUS
+#ifndef CONFIG_ZAPTEC_GO_PLUS
 			uint32_t acTimeout = 0;
 			uint16_t acCount = 0, acTotalCount = 0;
 

@@ -13,7 +13,7 @@ int offline_log_attempt_send(void);
 int offline_log_delete(void);
 void offline_log_init(void);
 
-#ifdef GOPLUS
+#ifdef CONFIG_ZAPTEC_GO_PLUS
 void offline_log_append_energy(uint32_t pos);
 #else
 void offline_log_append_energy(time_t timestamp, double energy);

@@ -523,7 +523,13 @@ static heap_trace_record_t trace_records[TRACE_RECORD_COUNT];
 
 void app_main(void)
 {
-	ESP_LOGE(TAG_MAIN, "Zaptec Go: %s, %s, (tag/commit %s)", softwareVersion, OTAReadRunningPartition(), esp_app_get_description()->version);
+#ifdef CONFIG_ZAPTEC_GO_PLUS
+	const char *fw_type = "Zaptec Go Plus";
+#else
+	const char *fw_type = "Zaptec Go";
+#endif
+
+	ESP_LOGE(TAG_MAIN, "%s: %s, %s, (tag/commit %s)", fw_type, softwareVersion, OTAReadRunningPartition(), esp_app_get_description()->version);
 
 #ifdef DEVELOPEMENT_URL
 	ESP_LOGE(TAG_MAIN, "DEFINED DEVELOPEMENT URLS USED");
