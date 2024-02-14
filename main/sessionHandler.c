@@ -407,7 +407,7 @@ bool SessionHandler_IsOfflineMode()
 
 static bool stackDiagnostics = false;
 
-static bool OCMFHighInterval = true;
+static bool OCMFHighInterval = false;
 void SessionHandler_SetOCMFHighInterval()
 {
 	ESP_LOGW(TAG, "Setting 60 sec interval");
