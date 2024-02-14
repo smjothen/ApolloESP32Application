@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import asyncio
 from functools import wraps
 import serial_asyncio
@@ -17,6 +18,7 @@ from ocpp_tests.test_utils import(
     ZapClientInput,
     ZapClientOutput
 )
+from ocpp_tests.keys import key_list
 
 import logging
 
@@ -34,7 +36,9 @@ from ocpp.v16.enums import (
     ResetType,
     RegistrationStatus,
     ChargePointStatus,
-    ChargePointErrorCode
+    ChargePointErrorCode,
+    AuthorizationStatus,
+    Reason
 )
 import random
 
@@ -133,24 +137,43 @@ async def test_runner(cp):
 
 class ChargePoint(cp):
 
-
     def __init__(self, id, connection, response_timeout=30):
         super().__init__(id, connection, response_timeout)
 
+        #boot related
         self.registration_status = RegistrationStatus.rejected
         self.connector1_status = ChargePointStatus.unavailable
+        self.boot_status = RegistrationStatus.accepted
+        self.boot_interval = 15
+        self.boot_timestamp = None # TODO: Consider implementing as time difference and/or set time
+
+        #transaction related
+        self.transaction_is_active = False
+        self.last_transaction_tag = None
+        self.last_transaction_id = None
+        self.last_transaction_stop_reason = Reason.other
+        self.last_transaction_tag_used_for_stopping = None
+
+        #Authorization related
+        self.last_auth_tag = None
+        self.last_auth_info = None
+        self.additional_keys = list()
 
         self.action_events = dict()
+
 
     @on(Action.BootNotification)
     def on_boot_notitication(self, charge_point_vendor, charge_point_model, **kwargs):
         logging.info("replying to on boot msg")
 
-        self.registration_status = RegistrationStatus.accepted
+        self.registration_status = self.boot_status
+
+        if Action.BootNotification in self.action_events:
+            self.action_events[Action.BootNotification].set()
 
         return call_result.BootNotificationPayload(
-            current_time=datetime.utcnow().isoformat(),
-            interval=15,
+            current_time=datetime.utcnow().isoformat() if self.boot_timestamp is None else self.boot_timestamp,
+            interval=self.boot_interval,
             status=self.registration_status
         )
 
@@ -158,27 +181,50 @@ class ChargePoint(cp):
     def on_heartbeat(self, **kwargs):
         logging.info("replying to heartbeat")
 
-        time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+        #time = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
         time = datetime.utcnow().isoformat() + 'Z'
 
+        if Action.Heartbeat in self.action_events:
+            self.action_events[Action.Heartbeat].set()
+
         return call_result.HeartbeatPayload(
-            current_time=time,
+            current_time=time
         )
+
+    def tag_info_from_tag(self, id_tag):
+        for entry in itertools.chain(self.additional_keys, key_list):
+            if entry['idTag'] == id_tag or entry['idTag'] == '*':
+                return entry['idTagInfo']
+
+        return dict(status=AuthorizationStatus.invalid)
 
     @on(Action.Authorize)
     def on_authorize_request(self, id_tag):
         logging.info(f'authorizing {id_tag}')
-        return call_result.AuthorizePayload(
-            dict(expiry_date = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
-        )
+
+        self.last_auth_info = self.tag_info_from_tag(id_tag)
+        self.last_auth_tag = id_tag
+
+        if Action.Authorize in self.action_events:
+            self.action_events[Action.Authorize].set()
+
+        return call_result.AuthorizePayload(self.last_auth_info)
 
     @on(Action.StartTransaction)
     def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
-        logging.info('Replying to start transaction')
-        info=dict(expiryDate = new_exipry_date.isoformat(), parentIdTag='fd65bbe2-edc8-4940-9', status='Accepted')
+        id_tag_info_stored = self.tag_info_from_tag(id_tag)
+        logging.info(f'Replying to start transaction with id: {id_tag} {id_tag_info_stored}')
+
+        self.last_transaction_id = 1 if self.last_transaction_id == None else self.last_transaction_id +1
+        self.last_transaction_tag = id_tag
+        self.transaction_is_active = True
+
+        if Action.StartTransaction in self.action_events:
+            self.action_events[Action.StartTransaction].set()
+
         return call_result.StartTransactionPayload(
-            id_tag_info=info,
-            transaction_id=1231312
+            id_tag_info = self.tag_info_from_tag(id_tag),
+            transaction_id = self.last_transaction_id
         )
 
     @on(Action.MeterValues)
@@ -187,10 +233,25 @@ class ChargePoint(cp):
         return call_result.MeterValuesPayload()
 
     @on(Action.StopTransaction)
-    def on_stop_transaction(self, **kwargs):
+    def on_stop_transaction(self, meter_stop, timestamp, transaction_id, **kwargs):
+        self.transaction_is_active = False
+        if self.last_transaction_id == None:
+            self.last_transaction_id = transaction_id
+
+        logging.info(f"Kwargs: {kwargs}")
+        if 'reason' in kwargs:
+            self.last_transaction_stop_reason = kwargs['reason']
+
+        if 'id_tag' in kwargs:
+            self.last_transaction_tag_used_for_stopping = kwargs['id_tag']
+
         logging.info("----------------------------------------")
-        logging.info(f'Replying to stop transaction {kwargs}')
+        logging.info(f'Replying to stop transaction {transaction_id}')
         logging.info("----------------------------------------")
+
+        if Action.StopTransaction in self.action_events:
+            self.action_events[Action.StopTransaction].set()
+
         return call_result.StopTransactionPayload()
 
     @on(Action.StatusNotification)

@@ -476,7 +476,7 @@ bool ocpp_finishing_session = false; // Used to differentiate between eOCPP_CP_S
 bool ocpp_faulted = false; // Used to differentiate between faulted state and any other state with same features
 ocpp_id_token ocpp_start_token = {0}; // Charge session may be cleared after ocpp token has been presented and before StartTransaction has been created. Charge session should be updated with this
 enum ocpp_cp_status_id ocpp_faulted_exit_state = eOCPP_CP_STATUS_UNAVAILABLE; // ocpp only allows transitioning from faulted to pre-faulted state
-bool pending_change_availability_state;
+enum ocpp_availability_type_id pending_change_availability_state;
 time_t preparing_started = 0;
 
 bool sessionHandler_OcppTransactionIsActive(uint connector_id){
@@ -1881,23 +1881,21 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 	if(err != eOCPPJ_NO_ERROR)
 		goto error;
 
-	if(ocpp_validate_enum(availability_type, true, 2,
-				OCPP_AVAILABILITY_TYPE_INOPERATIVE,
-				OCPP_AVAILABILITY_TYPE_OPERATIVE) != 0){
+	enum ocpp_availability_type_id new_availability = ocpp_availability_type_to_id(availability_type);
+	if(new_availability == -1){
 		err = eOCPPJ_ERROR_TYPE_CONSTRAINT_VIOLATION;
 		strcpy(err_str, "Expected 'type' to be a vaild AvailabilityType");
 		goto error;
 	}
 
-	bool new_available = strcmp(availability_type, OCPP_AVAILABILITY_TYPE_OPERATIVE) == 0;
-	bool old_available = storage_Get_availability_ocpp();
+	enum ocpp_availability_type_id old_availability = storage_Get_availability_ocpp() ? eOCPP_AVAILABILITY_TYPE_OPERATIVE : eOCPP_AVAILABILTY_TYPE_INOPERATIVE;
 
 	cJSON * reply = NULL;
-	if(new_available != old_available)
+	if(new_availability != old_availability)
 	{
-		enum ocpp_cp_status_id ocpp_state = get_ocpp_state(MCU_GetChargeOperatingMode(), MCU_GetChargeMode());
-		if(new_available == true || (ocpp_state != eOCPP_CP_STATUS_CHARGING && ocpp_state != eOCPP_CP_STATUS_SUSPENDED_EV && ocpp_state != eOCPP_CP_STATUS_SUSPENDED_EVSE)){
-			if(change_availability(new_available) == 0)
+		enum ocpp_cp_status_id ocpp_state = get_ocpp_state();
+		if(new_availability == eOCPP_AVAILABILITY_TYPE_OPERATIVE || ocpp_state == eOCPP_CP_STATUS_AVAILABLE){
+			if(change_availability(new_availability == eOCPP_AVAILABILITY_TYPE_OPERATIVE) == 0)
 			{
 				reply = ocpp_create_change_availability_confirmation(unique_id, OCPP_AVAILABILITY_STATUS_ACCEPTED);
 			}
@@ -1911,7 +1909,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 		// "When a transaction is in progress Charge Point SHALL respond with availability status 'Scheduled' to indicate that it is scheduled to occur after the transaction has finished"
 		else{
 			pending_change_availability = true;
-			pending_change_availability_state = new_available;
+			pending_change_availability_state = new_availability;
 			reply = ocpp_create_change_availability_confirmation(unique_id, OCPP_AVAILABILITY_STATUS_SCHEDULED);
 		}
 	}else{
@@ -1924,7 +1922,7 @@ static void change_availability_cb(const char * unique_id, const char * action, 
 		send_call_reply(reply);
 	}
 
-	ESP_LOGI(TAG, "Change availability .req complete %s->%s", old_available ? "operative" : "inoperative", new_available ? "operative" : "inoperative");
+	ESP_LOGI(TAG, "Change availability .req complete (%s)->(%s)", ocpp_availability_type_from_id(old_availability), ocpp_availability_type_from_id(new_availability));
 	return;
 
 error:
@@ -1944,13 +1942,18 @@ error:
 	}
 }
 
-bool change_availability_if_pending(bool allowed_new_state){
-	if(pending_change_availability && pending_change_availability_state == allowed_new_state){
-		change_availability(pending_change_availability_state);
-		pending_change_availability = false;
-		return true;
+enum ocpp_cp_status_id change_availability_if_pending(enum ocpp_cp_status_id status){
+	if(pending_change_availability != true)
+		return status;
+
+	if(pending_change_availability_state == eOCPP_AVAILABILITY_TYPE_OPERATIVE){
+		return change_availability(true) == 0 ? get_ocpp_state(): status;
+
+	}else if(status == eOCPP_CP_STATUS_AVAILABLE){
+		return change_availability(false) == 0 ? eOCPP_CP_STATUS_UNAVAILABLE : status;
 	}
-	return false;
+
+	return status;
 }
 
 void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_status_id new_state){
@@ -1958,6 +1961,8 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 		ocpp_finishing_session = false;
 
 	clear_ocpp_state_led_overwrite();
+
+	new_state = change_availability_if_pending(new_state);
 
 	switch(new_state){
 	case eOCPP_CP_STATUS_AVAILABLE:
@@ -2123,9 +2128,6 @@ void handle_state_transition(enum ocpp_cp_status_id old_state, enum ocpp_cp_stat
 	}
 
 	ocpp_send_status_notification(new_state, OCPP_CP_ERROR_NO_ERROR, NULL, NULL, NULL, false, false);
-
-	if(new_state == eOCPP_CP_STATUS_AVAILABLE || new_state == eOCPP_CP_STATUS_FINISHING)
-		change_availability_if_pending(false);
 
 	ocpp_old_state = new_state;
 }
@@ -3099,7 +3101,7 @@ static void sessionHandler_task()
 				}
 			}
 
-			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state(chargeOperatingMode, currentCarChargeMode);
+			enum ocpp_cp_status_id ocpp_new_state = get_ocpp_state();
 			handle_warnings(&ocpp_new_state, MCU_GetWarnings());
 
 			if(ocpp_new_state != ocpp_old_state){
