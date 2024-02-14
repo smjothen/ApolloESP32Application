@@ -276,7 +276,7 @@ void storage_Set_session_controller(enum session_controller newValue)
 
 	configurationStruct.session_controller = newValue;
 
-	///Only let SessionController affect standalone when OCPP-controlled. 
+	///Only let SessionController affect standalone when OCPP-controlled.
 	///Otherwise let Zaptec Cloud set standalone mode.
 	if(newValue == eSESSION_OCPP)
 	{
@@ -1968,7 +1968,7 @@ double storage_GetAccumulatedEnergy()
 		ESP_LOGE(TAG, "Failed to open NVS energy %d", open_result);
 		return 0.0;
 	}
-	
+
 	double accEnergy = 0.0;
 	esp_err_t result = nvs_get_zdouble(handle, "accumulated", &accEnergy);
 	ESP_LOGW(TAG, "Reading Accumulated Energy(%d): %f", result, accEnergy);

@@ -550,3 +550,41 @@ const char *mid_session_sign_current_session(double *energy) {
 	midlts_active_session_get_energy(&mid_lts.active_session, energy);
 	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.active_session);
 }
+
+int mid_session_get_session_energy(double *energy) {
+	*energy = 0.0;
+
+	if (!mid_session_is_open()) {
+		ESP_LOGE(TAG, "Can't read session energy, not open!");
+		return -1;
+	}
+
+	// Should not occur, session to be open requires start value
+	if (mid_lts.active_session.count <= 0) {
+		ESP_LOGE(TAG, "Can't read session energy, no start value!");
+		return -1;
+	}
+
+	mid_session_meter_value_t *start_meter = &mid_lts.active_session.events[0];
+	if (start_meter->flag & MID_SESSION_METER_VALUE_FLAG_METER_ERROR) {
+		ESP_LOGE(TAG, "Can't read session energy, start is meter error!");
+		return -1;
+	}
+
+	mid_package_t pkg;
+	if (!mid_get_package(&pkg)) {
+		ESP_LOGE(TAG, "Can't read MID package!");
+		return -1;
+	}
+
+	uint32_t status = pkg.status;
+	status &= ~(MID_STATUS_INVALID_FR | MID_STATUS_NOT_CALIBRATED | MID_STATUS_NOT_VERIFIED | MID_STATUS_INVALID_BOOTLOADER);
+
+	if (status) {
+		ESP_LOGE(TAG, "Fatal status bit set: %08" PRIu32, status);
+		return -1;
+	}
+
+	*energy = (pkg.watt_hours - start_meter->meter) / 1000.0;
+	return 0;
+}

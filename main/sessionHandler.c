@@ -2960,7 +2960,24 @@ static void sessionHandler_task()
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 		// Handle MID sessions - must be recorded even if in OCPP mode
 		//
-		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && sessionResetMode == eSESSION_RESET_NONE) {
+
+		if (firstTimeAfterBoot && mid_session_is_open() &&
+				chargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) {
+			uint32_t close_id = 0;
+			if (mid_session_event_close(&close_id) == 0) {
+				ESP_LOGI(TAG, "Closing initial MID Session = %" PRIu32, close_id);
+			} else {
+				ESP_LOGE(TAG, "Error closing MID session");
+			}
+
+			// Set to trigger finalize of charge session, set end date, etc
+			prev_is_active_mid_session = true;
+			is_active_mid_session = false;
+		}
+
+		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED &&
+				previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED &&
+				sessionResetMode == eSESSION_RESET_NONE) {
 			uint32_t mid_id = 0;
 			if (mid_session_get_session_id(&mid_id) == 0) {
 				// Previously opened session (ESP reset / power loss / etc while cable connected)
@@ -3004,6 +3021,8 @@ static void sessionHandler_task()
 			chargeSession_CheckIfLastSessionIncomplete();
 			firstTimeAfterBoot = false;
 		}
+
+		firstTimeAfterBoot = false;
 
 		/// Hold new StartDateTime from requesting Observed time. Cloud expects the same timestamp to be used.
 		if((chargeOperatingMode == CHARGE_OPERATION_STATE_REQUESTING) && (previousChargeOperatingMode != CHARGE_OPERATION_STATE_REQUESTING) && (chargeSession_Get().StartDateTime[0] == '\0'))

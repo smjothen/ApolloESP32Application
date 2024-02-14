@@ -193,6 +193,19 @@ esp_err_t OCMF_CompletedSession_CreateNewMessageFile(int oldestFile, char * mess
 		xSemaphoreGive(ocmf_lock);
 		return ESP_ERR_NOT_FOUND;
 	}
+
+	/// If Endtime is not set(disconnected while powered off), clear ReliableClock
+	int edtLength = strlen(cJSON_GetObjectItem(CompletedSessionObject, "EndDateTime")->valuestring);
+	if (edtLength < 27) {
+		cJSON_ReplaceItemInObject(CompletedSessionObject, "ReliableClock", cJSON_CreateBool(false));
+		ESP_LOGW(TAG, "Cleared ReliableClock");
+
+		/// Must set an EndDateTime(for Cloud to parse) even tough the time is incorrect. Set time of reporting.
+		char lastEdt[33];
+		GetUTCTimeString(lastEdt, NULL, NULL);
+		cJSON_ReplaceItemInObject(CompletedSessionObject, "EndDateTime", cJSON_CreateString(lastEdt));
+		ESP_LOGE(TAG, "Set final EDT %s", lastEdt);
+	}
 #else
 	/// 2. ..then get OCMF log entires
 	cJSON *logRoot = cJSON_CreateObject();
