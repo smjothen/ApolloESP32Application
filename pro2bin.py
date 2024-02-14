@@ -6,9 +6,7 @@ import string
 import random
 import re
 
-# TODO: Don't hardcode this, have ZapChargerProMCU as a submodule in the repo and
-# use relative path
-VERSION_FILE = "/Users/smj/dev/ZapChargerProMCU/smart/smart/src/Versions.c"
+VERSION_FILE = "GoPlusMCUApplication/smart/smart/src/Versions.c"
 VERSION_MATCH = r'const char\* swVersion = "(\d+\.\d+.\d+.\d+)"'
 
 def parse_version():
@@ -32,8 +30,8 @@ def hex2bytes(file):
             yield int(data[i*2:i*2+2], 16)
 
 @click.command()
-@click.argument("hexfile", type=click.Path(exists=True))
-@click.argument("binfile")
+@click.argument("hexfile", type=click.Path(exists=True), default="GoPlusMCUApplication/smart/smart/dist/packed/PIC24v6.hex")
+@click.argument("binfile", default="bin/pic.bin")
 def main(hexfile, binfile):
     version = parse_version()
     if not version:

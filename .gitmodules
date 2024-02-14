@@ -8,3 +8,6 @@
 	path = ApolloMCUApplication
 	url = https://github.com/ZaptecCharger/ApolloMCUApplication
 	branch = feature-ci
+[submodule "GoPlusMCUApplication"]
+	path = GoPlusMCUApplication
+	url = https://github.com/ZaptecCharger/GoPlusMCUApplication
