@@ -209,6 +209,7 @@ uint8_t RTCGetBootValue1()
 
 void RTCVerifyControlRegisters()
 {
+#ifndef CONFIG_ZAPTEC_GO_PLUS
 	uint8_t readreg = 0;
 	uint8_t readByte = 0xFF;
 	i2c_master_read_slave_at_address(slaveAddressRTC, readreg, &readByte, 1);
@@ -257,6 +258,7 @@ void RTCVerifyControlRegisters()
 
 		isRTCRegisterChange = true;
 	}
+#endif
 }
 
 void RTCSoftwareReset()

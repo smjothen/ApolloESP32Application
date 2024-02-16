@@ -764,7 +764,9 @@ static uint8_t previousOfflinePhase = 0;
 static float previousOfflineCurrent = -1.0;
 
 static float warningValue = 0;
+#ifndef CONFIG_ZAPTEC_GO_PLUS
 static uint8_t maxRTCSend = 0;
+#endif
 static uint8_t previousFinalStopActiveStatus = 0xff;
 
 static uint32_t previousTransmitInterval = 0;
@@ -1135,6 +1137,7 @@ int publish_telemetry_observation_on_change(){
 		isChange = true;
 	}
 
+#ifndef CONFIG_ZAPTEC_GO_PLUS
 	if((RTCIsRegisterChanged() || sendRTC) && (maxRTCSend < 10)) //If there is an I2C bus error, don't send unlimited nr of messages.
 	{
 		char buf[80];
@@ -1150,6 +1153,7 @@ int publish_telemetry_observation_on_change(){
 
 		maxRTCSend++;
 	}
+#endif
 
 	uint8_t offlinePhase = storage_Get_DefaultOfflinePhase();
 	if(previousOfflinePhase != offlinePhase)
