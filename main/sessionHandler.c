@@ -78,7 +78,17 @@ TimerHandle_t signedMeterValues_timer;
 static bool hasRemainingEnergy = false;
 static bool hasCharged = false;
 
+static bool update_stored_mid_id = true;
+
 static uint32_t secSinceLastOCMFMessage = OCMF_INTERVAL_TIME; //Ensure we send a message at first occurence
+
+void update_mid_min_stored_id(void) {
+	uint32_t offline_log = offline_log_get_min_stored_mid_id();
+	uint32_t offline_session = offline_session_get_min_stored_mid_id();
+	uint32_t min_stored = offline_log < offline_session ? offline_log : offline_session;
+	mid_session_set_purge_limit(min_stored);
+	ESP_LOGI(TAG, "MID Purge Limit: Log %" PRIu32 " Sessions %" PRIu32 " Min Stored %" PRIu32 , offline_log, offline_session, min_stored);
+}
 
 //Send every clock aligned hour
 void on_send_signed_meter_value()
@@ -109,7 +119,7 @@ void on_send_signed_meter_value()
 
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 	// TODO: Check last tariff value stored and if energy is different, store/publish
-	uint32_t mid_id;
+	mid_id_t mid_id;
 
 	if(state_charging || hasRemainingEnergy){
 		if (mid_session_event_tariff(&mid_id) < 0) {
@@ -139,6 +149,7 @@ void on_send_signed_meter_value()
 	}else if(offline_log_attempt_send()==0){
 		ESP_LOGI(TAG, "energy log empty");
 		state_log_empty = true;
+		update_stored_mid_id = true;
 	}
 
 	if ((state_charging && state_log_empty) || (hasRemainingEnergy && state_log_empty)){
@@ -149,6 +160,7 @@ void on_send_signed_meter_value()
 		if(publish_result<0){
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 			offline_log_append_energy(mid_id);
+			update_stored_mid_id = true;
 #else
 			offline_log_append_energy(timeSec, energy);
 #endif
@@ -158,6 +170,7 @@ void on_send_signed_meter_value()
 		ESP_LOGI(TAG, "failed to empty log, appending new measure");
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 		offline_log_append_energy(mid_id);
+		update_stored_mid_id = true;
 #else
 		offline_log_append_energy(timeSec, energy);
 #endif
@@ -2662,6 +2675,8 @@ void sessionHandler_CheckAndSendOfflineSessions()
 		/// Give other tasks time to run if there are many offline sessions to send
 		vTaskDelay(50 / portTICK_PERIOD_MS);
 	}
+
+	update_stored_mid_id = true;
 }
 
 static bool doCheckOfflineSessions = true;
@@ -2760,7 +2775,7 @@ static void sessionHandler_task()
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 	bool is_mid = true;
 	bool is_active_mid_session = false;
-	uint32_t active_mid_session = 0;
+	mid_id_t active_mid_session = 0;
 #endif
 
     boot_timestamp = time(NULL);
@@ -2963,11 +2978,16 @@ static void sessionHandler_task()
 		// Handle MID sessions - must be recorded even if in OCPP mode
 		//
 
+		if (update_stored_mid_id) {
+			update_mid_min_stored_id();
+			update_stored_mid_id = false;
+		}
+
 		if (firstTimeAfterBoot && mid_session_is_open() &&
 				chargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED) {
-			uint32_t close_id = 0;
+			mid_id_t close_id = 0;
 			if (mid_session_event_close(&close_id) == 0) {
-				ESP_LOGI(TAG, "Closing initial MID Session = %" PRIu32, close_id);
+				ESP_LOGI(TAG, "Closing initial MID Session = %" MID_ID_PRI, close_id);
 			} else {
 				ESP_LOGE(TAG, "Error closing MID session");
 			}
@@ -2980,17 +3000,17 @@ static void sessionHandler_task()
 		if (chargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED &&
 				previousChargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED &&
 				sessionResetMode == eSESSION_RESET_NONE) {
-			uint32_t mid_id = 0;
+			mid_id_t mid_id = 0;
 			if (mid_session_get_session_id(&mid_id) == 0) {
 				// Previously opened session (ESP reset / power loss / etc while cable connected)
 				is_active_mid_session = true;
 				active_mid_session = mid_id;
-				ESP_LOGI(TAG, "Opening MID Session %" PRIu32 " (Restored)", mid_id);
+				ESP_LOGI(TAG, "Opening MID Session %" MID_ID_PRI " (Restored)", mid_id);
 			} else if(mid_session_event_open(&mid_id) == 0) {
 				// New session
 				is_active_mid_session = true;
 				active_mid_session = mid_id;
-				ESP_LOGI(TAG, "Opening MID Session %" PRIu32, mid_id);
+				ESP_LOGI(TAG, "Opening MID Session %" MID_ID_PRI, mid_id);
 			} else {
 				// Error, couldn't open session
 				ESP_LOGE(TAG, "Couldn't open MID session!");
@@ -2999,9 +3019,9 @@ static void sessionHandler_task()
 
 		if (chargeOperatingMode <= CHARGE_OPERATION_STATE_DISCONNECTED && previousChargeOperatingMode > CHARGE_OPERATION_STATE_DISCONNECTED) {
 			if (mid_session_is_open()) {
-				uint32_t close_id = 0;
+				mid_id_t close_id = 0;
 				if (mid_session_event_close(&close_id) == 0) {
-					ESP_LOGI(TAG, "Closing MID Session %" PRIu32 " = %" PRIu32, active_mid_session, close_id);
+					ESP_LOGI(TAG, "Closing MID Session %" MID_ID_PRI " = %" MID_ID_PRI, active_mid_session, close_id);
 				} else {
 					ESP_LOGE(TAG, "Error closing MID session");
 				}
@@ -3014,7 +3034,7 @@ static void sessionHandler_task()
 		}
 #else
 		bool is_mid = false;
-		uint32_t active_mid_session = 0;
+		mid_id_t active_mid_session = 0;
 #endif
 
 		/// If a car is connected when booting, check for incomplete offline session and resume if incomplete
@@ -3161,6 +3181,7 @@ static void sessionHandler_task()
 		{
 			offlineSession_ClearLog();
 			uuid_t uuid = chargeSession_Start(is_mid, active_mid_session);
+			update_stored_mid_id = true;
 
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 			// Should be open ...

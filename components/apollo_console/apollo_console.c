@@ -123,6 +123,27 @@ static int register_clear_energy_cmd(void){
     return 0;
 }
 
+static int sim_offline_cmd(int argc, char **argv) {
+	static bool offline = true;
+	MqttSetSimulatedOffline(offline);
+	ESP_LOGI(TAG, "Simulating offline: %d", offline);
+	offline = !offline;
+	return 0;
+}
+
+static int register_sim_offline(void) {
+    const esp_console_cmd_t cmd = {
+        .command = "sim_offline",
+        .help = "simulate mqtt being offline",
+        .hint = NULL,
+        .func = &sim_offline_cmd,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+    return 0;
+}
+
 static struct {
     struct arg_int *stage;
     struct arg_end *end;
@@ -368,6 +389,7 @@ void apollo_console_init(void){
     register_new_id_cmd();
     register_clear_energy_cmd();
 	register_sim_charge_op_state();
+	register_sim_offline();
 
     xTaskCreate(console_task, "console_task", 4096, NULL, 2, &console_task_handle);
 }

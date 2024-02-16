@@ -932,9 +932,33 @@ float MCU_GetEnergy()
 	return totalChargePowerSession;
 }
 
+static bool sim_charge_enabled = false;
+static uint8_t sim_charge_op_mode = CHARGE_OPERATION_STATE_UNINITIALIZED;
+static int8_t sim_charge_mode = eCAR_UNINITIALIZED;
+
+// Disable by setting mode to -1
+void mcu_simulate_charge_op_mode(int mode) {
+	if (mode < 0) {
+		sim_charge_enabled = false;
+	} else {
+		sim_charge_enabled = true;
+		sim_charge_op_mode = mode;
+		if (sim_charge_op_mode <= CHARGE_OPERATION_STATE_DISCONNECTED) {
+			sim_charge_mode = eCAR_DISCONNECTED;
+		} else if (sim_charge_op_mode == CHARGE_OPERATION_STATE_CHARGING) {
+			sim_charge_mode = eCAR_CHARGING;
+		} else {
+			sim_charge_mode = eCAR_CONNECTED;
+		}
+	}
+}
+
 
 int8_t MCU_GetChargeMode()
 {
+	if (sim_charge_enabled) {
+		return sim_charge_mode;
+	}
 	return chargeMode;
 }
 
@@ -949,22 +973,9 @@ enum ChargerOperatingMode GetTransitionOperatingModeState()
 	return overrideOpModeState;
 }
 
-static bool sim_charge_op_enabled = false;
-static uint8_t sim_charge_op_mode = CHARGE_OPERATION_STATE_UNINITIALIZED;
-
-// Disable by setting mode to -1
-void mcu_simulate_charge_op_mode(int mode) {
-	if (mode < 0) {
-		sim_charge_op_enabled = false;
-	} else {
-		sim_charge_op_enabled = true;
-		sim_charge_op_mode = mode;
-	}
-}
-
 uint8_t MCU_GetChargeOperatingMode()
 {
-	if (sim_charge_op_enabled) {
+	if (sim_charge_enabled) {
 		return sim_charge_op_mode;
 	}
 

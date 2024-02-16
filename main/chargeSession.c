@@ -265,7 +265,7 @@ bool chargeSession_GetFileError()
 }
 
 static double startAcc = 0.0;
-uuid_t chargeSession_Start(bool isMid, uint32_t sessionId)
+uuid_t chargeSession_Start(bool isMid, mid_id_t sessionId)
 {
 	ESP_LOGI(TAG, "* STARTING SESSION *");
 

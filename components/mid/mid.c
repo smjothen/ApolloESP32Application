@@ -17,6 +17,11 @@
 #include "storage.h"
 #include "esp_littlefs.h"
 #include "uuid.h"
+#include "offline_log.h"
+#include "offlineSession.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "mid_active.h"
 #include "mid_sign.h"
@@ -27,6 +32,14 @@
 #include "mid.h"
 
 static const char *TAG = "MID            ";
+
+static uint32_t mid_status = 0;
+static midlts_ctx_t mid_lts = {0};
+static mid_sign_ctx_t mid_sign = {0};
+static const char *mid_serial = NULL;
+
+#define MID_SEM_TIMEOUT pdMS_TO_TICKS(5000)
+static SemaphoreHandle_t mid_sem = NULL;
 
 bool mid_get_package(mid_package_t *pkg) {
 	ZapMessage msg = MCU_ReadParameter(SignedMeterValue);
@@ -98,17 +111,19 @@ bool mid_get_is_calibration_handle(void) {
 	return false;
 }
 
-static uint32_t mid_status = 0;
-static midlts_ctx_t mid_lts = {0};
-static mid_sign_ctx_t mid_sign = {0};
-static const char *mid_serial = NULL;
-
 uint32_t mid_get_esp_status(void) {
 	return mid_status;
 }
 
 int mid_init(const char *serial, const char *fw_version) {
+	mid_status |= MID_ESP_STATUS_NOT_INITIALIZED;
+
 	if (!serial || !fw_version) {
+		return -1;
+	}
+
+	mid_sem = xSemaphoreCreateMutex();
+	if (!mid_sem) {
 		return -1;
 	}
 
@@ -213,6 +228,8 @@ int mid_init(const char *serial, const char *fw_version) {
 		mid_status &= ~MID_ESP_STATUS_LTS;
 	}
 
+	mid_status &= ~MID_ESP_STATUS_NOT_INITIALIZED;
+
 	return mid_status ? -1 : 0;
 }
 
@@ -230,7 +247,19 @@ typedef enum {
 	MID_ERR_SESSION_NOT_OPEN = 4,
 } miderr_t;
 
-int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_session_meter_value_flag_t type_flag) {
+// Set purge limit, anything records with ID greater than or equal to this ID
+// cannot be automatically purged (due to this data being stored in offline log
+// or offline sessions)
+static void int_mid_session_set_purge_limit(mid_id_t id) {
+	// Valid to send id = 0xFFFFFFFF to set no-limit
+	midlts_pos_t pos = { .u = id };
+
+	if (mid_session_set_lts_purge_limit(&mid_lts, &pos) != LTS_OK) {
+		ESP_LOGE(TAG, "Error setting purge limit to %" MID_ID_PRI, id);
+	}
+}
+
+static int int_mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_session_meter_value_flag_t type_flag) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session event: Status %08" PRIu32, mid_status);
 		return -1;
@@ -275,47 +304,47 @@ int mid_session_add_event(mid_session_event_t event, midlts_pos_t *pos, mid_sess
 	return 0;
 }
 
-bool mid_session_is_open(void) {
+static bool int_mid_session_is_open(void) {
 	return MID_SESSION_IS_OPEN(&mid_lts);
 }
 
-int mid_session_get_session_id(uint32_t *out) {
+static int int_mid_session_get_session_id(mid_id_t *out) {
 	if (mid_session_is_open()) {
-		*out = mid_lts.active_session.pos.u32;
+		*out = mid_lts.active_session.pos.u;
 		return 0;
 	}
 	return -1;
 }
 
-int mid_session_event_open(uint32_t *out) {
+static int int_mid_session_event_open(mid_id_t *out) {
 	midlts_pos_t pos;
-	if (mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_START) < 0) {
+	if (int_mid_session_add_event(mid_session_add_open, &pos, MID_SESSION_METER_VALUE_READING_FLAG_START) < 0) {
 		return -1;
 	}
-	*out = pos.u32;
+	*out = pos.u;
 	return 0;
 }
 
-int mid_session_event_close(uint32_t *out) {
+static int int_mid_session_event_close(mid_id_t *out) {
 	midlts_pos_t pos;
-	if (mid_session_add_event(mid_session_add_close, &pos, MID_SESSION_METER_VALUE_READING_FLAG_END) < 0) {
+	if (int_mid_session_add_event(mid_session_add_close, &pos, MID_SESSION_METER_VALUE_READING_FLAG_END) < 0) {
 		return -1;
 	}
-	*out = pos.u32;
+	*out = pos.u;
 	return 0;
 }
 
-int mid_session_event_tariff(uint32_t *out) {
+static int int_mid_session_event_tariff(mid_id_t *out) {
 	midlts_pos_t pos;
-	if (mid_session_add_event(mid_session_add_tariff, &pos, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) < 0) {
+	if (int_mid_session_add_event(mid_session_add_tariff, &pos, MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) < 0) {
 		return -1;
 	}
-	*out = pos.u32;
+	*out = pos.u;
 	return 0;
 }
 
 // NOTE: Session must be verified to be open when calling this!
-int mid_session_event_uuid(uuid_t uuid) {
+static int int_mid_session_event_uuid(uuid_t uuid) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
 		return -1;
@@ -341,7 +370,7 @@ int mid_session_event_uuid(uuid_t uuid) {
 	return 0;
 }
 
-static int mid_session_metadata_auth_uuid(mid_session_auth_source_t source, uuid_t uuid) {
+static int int_mid_session_metadata_auth_uuid(mid_session_auth_source_t source, uuid_t uuid) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
 		return -1;
@@ -368,7 +397,7 @@ static int mid_session_metadata_auth_uuid(mid_session_auth_source_t source, uuid
 	return 0;
 }
 
-static int mid_session_metadata_auth_rfid(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
+static int int_mid_session_metadata_auth_rfid(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
 		return -1;
@@ -391,7 +420,7 @@ static int mid_session_metadata_auth_rfid(mid_session_auth_source_t source, uint
 	return 0;
 }
 
-static int mid_session_metadata_auth_string(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
+static int int_mid_session_metadata_auth_string(mid_session_auth_source_t source, uint8_t *data, uint8_t len) {
 	if (mid_status) {
 		ESP_LOGE(TAG, "Can't add session metadata: Status %08" PRIu32, mid_status);
 		return -1;
@@ -441,7 +470,7 @@ static bool hex_to_bytes(const char *in, size_t inlen, uint8_t *out, size_t *out
 	return 0;
 }
 
-static int mid_session_event_auth_internal(mid_session_auth_source_t source, const char *data) {
+static int int_mid_session_event_auth_internal(mid_session_auth_source_t source, const char *data) {
 	// Rudimentary data parsing, assuming 4 byte prefix and dash (nfc- / ble-)
 
 	size_t len = strlen(data);
@@ -460,7 +489,7 @@ static int mid_session_event_auth_internal(mid_session_auth_source_t source, con
 			ESP_LOGE(TAG, "Can't add session metadata: UUID");
 			return -1;
 		}
-		return mid_session_metadata_auth_uuid(source, uuid);
+		return int_mid_session_metadata_auth_uuid(source, uuid);
 	}
 
 	// RFID
@@ -475,7 +504,7 @@ static int mid_session_event_auth_internal(mid_session_auth_source_t source, con
 			ESP_LOGE(TAG, "Can't add session metadata: Hex");
 			return -1;
 		}
-		return mid_session_metadata_auth_rfid(source, out, outlen);
+		return int_mid_session_metadata_auth_rfid(source, out, outlen);
 	}
 
 	// TODO: Will data have separate prefix for ISO15118 auth modes? How to detect?
@@ -483,33 +512,40 @@ static int mid_session_event_auth_internal(mid_session_auth_source_t source, con
 	if (len > 20) {
 		len = 20;
 	}
-	return mid_session_metadata_auth_string(source, (uint8_t *)data, len);
+	return int_mid_session_metadata_auth_string(source, (uint8_t *)data, len);
 }
 
 // Different sources of authentication
-int mid_session_event_auth_cloud(const char *data) {
-	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_CLOUD, data);
+static int int_mid_session_event_auth_cloud(const char *data) {
+	return int_mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_CLOUD, data);
 }
 
-int mid_session_event_auth_ble(const char *data) {
-	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_BLE, data);
+static int int_mid_session_event_auth_ble(const char *data) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) {
+		ESP_LOGE(TAG, "Error taking mutex");
+		return -1;
+	}
+
+	int ret = int_mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_BLE, data);
+	xSemaphoreGive(mid_sem);
+	return ret;
 }
 
-int mid_session_event_auth_rfid(const char *data) {
-	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_RFID, data);
+static int int_mid_session_event_auth_rfid(const char *data) {
+	return int_mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_RFID, data);
 }
 
-int mid_session_event_auth_iso15118(const char *data) {
-	return mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
+static int int_mid_session_event_auth_iso15118(const char *data) {
+	return int_mid_session_event_auth_internal(MID_SESSION_AUTH_SOURCE_ISO15118, data);
 }
 
-const char *mid_session_sign_meter_value(uint32_t id, bool include_event_log) {
-	midlts_pos_t pos = { .u32 = id };
+static const char *int_mid_session_sign_meter_value(mid_id_t id, bool include_event_log) {
+	midlts_pos_t pos = { .u = id };
 	mid_session_record_t rec;
 
 	midlts_err_t err;
 	if ((err = mid_session_read_record(&mid_lts, &pos, &rec)) != LTS_OK) {
-		ESP_LOGE(TAG, "Error reading meter value ID %" PRIu32 " : %d", id, err);
+		ESP_LOGE(TAG, "Error reading meter value ID %" MID_ID_PRI " : %d", id, err);
 		return NULL;
 	}
 
@@ -532,13 +568,12 @@ const char *mid_session_sign_meter_value(uint32_t id, bool include_event_log) {
 	return payload;
 }
 
-const char *mid_session_sign_session(uint32_t id, double *energy) {
-	midlts_pos_t pos;
-	pos.u32 = id;
+static const char *int_mid_session_sign_session(mid_id_t id, double *energy) {
+	midlts_pos_t pos = { .u = id };
 
 	midlts_err_t err;
 	if ((err = mid_session_read_session(&mid_lts, &pos)) != LTS_OK) {
-		ESP_LOGE(TAG, "Error reading session ID %" PRIu32 " : %d", id, err);
+		ESP_LOGE(TAG, "Error reading session ID %" MID_ID_PRI " : %d", id, err);
 		return NULL;
 	}
 
@@ -546,12 +581,12 @@ const char *mid_session_sign_session(uint32_t id, double *energy) {
 	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.query_session);
 }
 
-const char *mid_session_sign_current_session(double *energy) {
+static const char *int_mid_session_sign_current_session(double *energy) {
 	midlts_active_session_get_energy(&mid_lts.active_session, energy);
 	return midocmf_signed_transaction_from_active_session(&mid_sign, mid_serial, &mid_lts.active_session);
 }
 
-int mid_session_get_session_energy(double *energy) {
+static int int_mid_session_get_session_energy(double *energy) {
 	*energy = 0.0;
 
 	if (!mid_session_is_open()) {
@@ -587,4 +622,110 @@ int mid_session_get_session_energy(double *energy) {
 
 	*energy = (pkg.watt_hours - start_meter->meter) / 1000.0;
 	return 0;
+}
+
+// Public wrappers with serialization with semaphore
+
+void mid_session_set_purge_limit(mid_id_t id) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return; }
+	int_mid_session_set_purge_limit(id);
+	xSemaphoreGive(mid_sem);
+}
+
+bool mid_session_is_open(void) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return false; }
+	bool ret = int_mid_session_is_open();
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_get_session_id(mid_id_t *out) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_get_session_id(out);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_open(mid_id_t *out) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_open(out);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_close(mid_id_t *out) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_close(out);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_tariff(mid_id_t *out) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_tariff(out);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_uuid(uuid_t uuid) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_uuid(uuid);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_auth_cloud(const char *data) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_auth_cloud(data);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_auth_ble(const char *data) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_auth_ble(data);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_auth_rfid(const char *data) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_auth_rfid(data);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_event_auth_iso15118(const char *data) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_event_auth_iso15118(data);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+const char *mid_session_sign_meter_value(mid_id_t id, bool include_event_log) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	const char * ret = int_mid_session_sign_meter_value(id, include_event_log);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+const char *mid_session_sign_session(mid_id_t id, double *energy) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	const char * ret = int_mid_session_sign_session(id, energy);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+const char *mid_session_sign_current_session(double *energy) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	const char * ret = int_mid_session_sign_current_session(energy);
+	xSemaphoreGive(mid_sem);
+	return ret;
+}
+
+int mid_session_get_session_energy(double *energy) {
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	int ret = int_mid_session_get_session_energy(energy);
+	xSemaphoreGive(mid_sem);
+	return ret;
 }

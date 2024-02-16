@@ -24,6 +24,7 @@
 #define MID_ESP_STATUS_INVALID_FW_VERSION 8
 #define MID_ESP_STATUS_INVALID_LR_VERSION 16
 #define MID_ESP_STATUS_LTS 32
+#define MID_ESP_STATUS_NOT_INITIALIZED 64
 
 typedef struct {
 	uint32_t status;
@@ -45,8 +46,12 @@ bool mid_set_blink_enabled(bool enabled);
 bool mid_get_energy_interpolated(float *energy);
 bool mid_get_is_calibration_handle(void);
 
+#define MID_ID_PRI PRIX32
+#define MID_ID_MAX UINT32_MAX
+typedef uint32_t mid_id_t;
+
 bool mid_session_is_open(void);
-int mid_session_get_session_id(uint32_t *out);
+int mid_session_get_session_id(mid_id_t *out);
 
 int mid_session_event_uuid(uuid_t uuid);
 int mid_session_event_auth_cloud(const char *data);
@@ -54,13 +59,15 @@ int mid_session_event_auth_ble(const char *data);
 int mid_session_event_auth_rfid(const char *data);
 int mid_session_event_auth_iso15118(const char *data);
 
-int mid_session_event_open(uint32_t *out);
-int mid_session_event_close(uint32_t *out);
-int mid_session_event_tariff(uint32_t *out);
+int mid_session_event_open(mid_id_t *out);
+int mid_session_event_close(mid_id_t *out);
+int mid_session_event_tariff(mid_id_t *out);
 
-const char *mid_session_sign_session(uint32_t id, double *energy);
+void mid_session_set_purge_limit(mid_id_t id);
+
+const char *mid_session_sign_session(mid_id_t id, double *energy);
 const char *mid_session_sign_current_session(double *energy);
-const char *mid_session_sign_meter_value(uint32_t id, bool include_event_log);
+const char *mid_session_sign_meter_value(mid_id_t id, bool include_event_log);
 
 int mid_session_get_session_energy(double *energy);
 

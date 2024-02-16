@@ -10,6 +10,7 @@
 // This should be set to around 3/4 of the partition size to account
 // for metadata storage, etc of LittleFS!
 //
+#define MIDLTS_LOG_MIN_FILES 3
 // This is 3/4 of 0xc0000 = 0x90000 = 144 files
 #define MIDLTS_LOG_MAX_FILES 144
 
@@ -26,12 +27,10 @@ typedef enum _midlts_flag_t {
 
 typedef union _midlts_pos_t {
 	struct {
-		// Offset in log
-		uint16_t offset;
-		// Log id
-		uint16_t id;
+		uint16_t log_offset;
+		uint16_t log_id;
 	};
-	uint32_t u32;
+	uint32_t u;
 } midlts_pos_t;
 
 _Static_assert(sizeof (midlts_pos_t) == 4, "Position must be 4 bytes!");
@@ -55,6 +54,7 @@ typedef struct _midlts_ctx_t {
 	mid_session_version_lr_t lr_version;
 
 	uint32_t flags;
+	size_t min_pages;
 	size_t max_pages;
 
 	bool has_latest;
@@ -96,6 +96,7 @@ typedef struct _midlts_ctx_t {
 	X(LTS_SESSION_NOT_OPEN) \
 	X(LTS_SESSION_ALREADY_OPEN) \
 	X(LTS_SESSION_QUERY) \
+	X(LTS_PURGE_ORDER)
 
 #define X(e) e,
 typedef enum _midlts_err_t {

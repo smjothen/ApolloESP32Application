@@ -121,7 +121,7 @@ void mid_session_print_record_pos(midlts_pos_t *pos, mid_session_record_t *rec) 
 
 	char posbuf[16] = {0};
 	if (pos) {
-		snprintf(posbuf, sizeof (posbuf), "%04X:%04X", pos->id, pos->offset);
+		snprintf(posbuf, sizeof (posbuf), "%04X:%04X", pos->log_id, pos->log_offset);
 	}
 
 	switch(rec->rec_type) {

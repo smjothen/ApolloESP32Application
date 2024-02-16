@@ -2,4 +2,5 @@
 *.ms
 mid_lts
 mid_signer
+mid_lts.log
 *.dSYM

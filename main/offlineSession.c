@@ -567,6 +567,40 @@ int offlineSession_GetMaxSessionCount()
 	return tmp;
 }
 
+uint32_t offline_session_get_min_stored_mid_id(void) {
+	uint32_t min_mid_id = 0xFFFFFFFF;
+
+	if (!offlineSession_is_mounted()) {
+		return min_mid_id;;
+	}
+
+	int fileNo = 0;
+	FILE *lastUsedFile;
+	char buf[32] = {0};
+
+	for (fileNo = max_offline_session_files-1; fileNo >= 0; fileNo-- )
+	{
+		sprintf(buf,"%s/%d.bin", tmp_path, fileNo);
+
+		lastUsedFile = fopen(buf, "r");
+		if(lastUsedFile != NULL)
+		{
+			cJSON * lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
+
+			if(cJSON_HasObjectItem(lastSession, "MIDSessionId")) {
+				uint32_t mid_id = cJSON_GetObjectItem(lastSession, "MIDSessionId")->valueint;
+				if (mid_id < min_mid_id) {
+					min_mid_id = mid_id;
+				}
+			}
+
+			cJSON_Delete(lastSession);
+		}
+	}
+
+	return min_mid_id;
+}
+
 int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incompleteSession)
 {
 	if (!offlineSession_is_mounted()) {
@@ -601,8 +635,7 @@ int offlineSession_CheckIfLastLessionIncomplete(struct ChargeSession *incomplete
 		lastUsedFile = fopen(buf, "r");
 		if(lastUsedFile != NULL)
 		{
-			cJSON * lastSession = cJSON_CreateObject();
-			lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
+			cJSON * lastSession = offlineSession_ReadChargeSessionFromFile(fileNo);
 
 			if(cJSON_HasObjectItem(lastSession, "EndDateTime"))
 			{

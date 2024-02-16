@@ -13,6 +13,8 @@ int offline_log_attempt_send(void);
 int offline_log_delete(void);
 void offline_log_init(void);
 
+uint32_t offline_log_get_min_stored_mid_id(void);
+
 #ifdef CONFIG_ZAPTEC_GO_PLUS
 void offline_log_append_energy(uint32_t pos);
 #else

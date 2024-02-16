@@ -83,13 +83,14 @@ static midlts_err_t mid_session_log_update_state(midlts_ctx_t *ctx, midlts_pos_t
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, midlts_id_t logid, bool *found_meter, mid_session_record_t *meter);
+static midlts_err_t mid_session_log_get_first_last_of_type(midlts_ctx_t *ctx, midlts_id_t logid, mid_session_meter_value_reading_flag_t flag, mid_session_meter_value_t *first, mid_session_meter_value_t *last);
+static midlts_err_t mid_session_log_read_record(midlts_ctx_t *ctx, midlts_id_t logid, size_t offset, mid_session_record_t *rec);
 
-static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx) {
+static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx, midlts_id_t logid) {
 	char buf[64];
-	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, ctx->msg_page);
+	snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, logid);
 
-	ESP_LOGI(TAG, "MID Session Delete  - %" PRIu32, ctx->msg_page);
+	ESP_LOGI(TAG, "MID Session Delete - %" PRIu32, logid);
 
 	if (remove(buf) != 0) {
 		return LTS_ERASE;
@@ -97,36 +98,125 @@ static midlts_err_t mid_session_log_purge(midlts_ctx_t *ctx) {
 	return LTS_OK;
 }
 
-static midlts_err_t mid_session_log_try_purge(midlts_ctx_t *ctx, const struct timespec now) {
-	bool found = false;
-	mid_session_record_t meter = {0};
+midlts_err_t mid_session_run_purge(midlts_ctx_t *ctx, const struct timespec now) {
+	size_t n_pages = 0;
 
-	midlts_err_t err = mid_session_log_get_latest_meter_value(ctx, ctx->msg_page, &found, &meter);
-	if (err != LTS_OK) {
-		return err;
+	midlts_id_t min_page = 0xFFFFFFFF;
+	midlts_id_t min_id = 0;
+	midlts_id_t max_page = 0xFFFFFFFF;
+	midlts_id_t max_id = 0;
+
+	midlts_err_t ret;
+
+	for (midlts_id_t id = 0; id < ctx->max_pages; id++) {
+		char buf[64];
+		snprintf(buf, sizeof (buf), MIDLTS_DIR MIDLTS_PRI, id);
+
+		struct stat st;
+		if (stat(buf, &st)) {
+			continue;
+		}
+
+		if (!st.st_size) {
+			continue;
+		}
+
+		n_pages++;
+
+		mid_session_record_t rec;
+		if ((ret = mid_session_log_read_record(ctx, id, 0, &rec)) != LTS_OK) {
+			return ret;
+		}
+
+		if (min_page == 0xFFFFFFFF) {
+			min_page = max_page = id;
+			min_id = max_id = rec.rec_id;
+		}
+
+		if (rec.rec_id < min_id) {
+			min_id = rec.rec_id;
+			min_page = id;
+		}
+
+		if (rec.rec_id > max_id) {
+			max_id = rec.rec_id;
+			max_page = id;
+		}
 	}
 
-	if (!found) {
-		// Shouldn't really happen, there should always be at least 1 meter value in a log
-		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - No Meter Values", ctx->msg_page);
-		mid_session_print_record(&meter);
-
-		return mid_session_log_purge(ctx);
+	// Keep at least a few log files for continuity of history, 2 will ensure there's
+	// at least one full file (could be 1 full file + 1 empty file), but we'll use 3
+	// just to be safe.
+	if (min_page == 0xFFFFFFFF || n_pages <= ctx->min_pages) {
+		ESP_LOGI(TAG, "MID Session Purge - Not enough files");
+		return LTS_OK;
 	}
 
-	int64_t age = MID_TS_TO_TIME(now) - meter.meter_value.time;
+	// Try to purge a single page, the oldest
+	midlts_id_t page = min_page;
 
+	mid_session_meter_value_reading_flag_t sess_flag = MID_SESSION_METER_VALUE_READING_FLAG_START | MID_SESSION_METER_VALUE_READING_FLAG_END;
+	mid_session_meter_value_reading_flag_t tariff_flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+
+	mid_session_meter_value_t first = {0}, last = {0};
+	if ((ret = mid_session_log_get_first_last_of_type(ctx, page, sess_flag, NULL, &last)) != LTS_OK) {
+		ESP_LOGE(TAG, "MID Session Purge - %" PRIu32 " - Error %s", page, mid_session_err_to_string(ret));
+		return ret;
+	}
+
+	// Find last start or end entry in page, if it is an end then that will define the latest
+	// entry for the page, if it is a start we have to find the end in the next (?) page and
+	// use that.
+	uint64_t time_cutoff = 0;
+
+	// Last session completely contained within file, or if it straddles two files
+	if (last.flag & MID_SESSION_METER_VALUE_READING_FLAG_END) {
+		// Completely contained
+		time_cutoff = last.time;
+		ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - Cutoff %" PRIu64, page, time_cutoff);
+	} else if (last.flag & MID_SESSION_METER_VALUE_READING_FLAG_START) {
+		// Straddles
+		if ((ret = mid_session_log_get_first_last_of_type(ctx, (page + 1) % ctx->max_pages, sess_flag, &first, NULL)) != LTS_OK) {
+			ESP_LOGE(TAG, "MID Session Purge - %" PRIu32 " - Error %s", page, mid_session_err_to_string(ret));
+			return ret;
+		}
+		if (!(first.flag & MID_SESSION_METER_VALUE_READING_FLAG_END)) {
+			return LTS_PURGE_ORDER;
+		}
+		time_cutoff = first.time;
+		ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - Straddle cutoff %" PRIu64, page, time_cutoff);
+	} else {
+		// Shouldn't occur, but no session stored in file, just tariff values
+		if ((ret = mid_session_log_get_first_last_of_type(ctx, page, tariff_flag, NULL, &last)) != LTS_OK) {
+			ESP_LOGE(TAG, "MID Session Purge - %" PRIu32 " - Error %s", page, mid_session_err_to_string(ret));
+			return ret;
+		}
+
+		if (last.flag & MID_SESSION_METER_VALUE_READING_FLAG_TARIFF) {
+			time_cutoff = last.time;
+		} else {
+			// Should not occur but allow deletion since no meter values are stored
+			time_cutoff = 0;
+		}
+	}
+
+	int64_t age = MID_TS_TO_TIME(now) - time_cutoff;
 	if (age > MID_TIME_MAX_AGE) {
-		ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days > Threshold", ctx->msg_page, (double)age / (1000 * 24 * 60 * 60));
-		mid_session_print_record(&meter);
-
-		return mid_session_log_purge(ctx);
+		// As long as there is no linked CompletedSessions in minimum page, we should be able to delete it!
+		if (page != ctx->min_purgeable.log_id) {
+			if (mid_session_log_purge(ctx, page) == LTS_OK) {
+				ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - %f Days > Threshold && Min Page %" PRIu32 " != %" PRIu16, page, (double)age / (1000 * 24 * 60 * 60), page, ctx->min_purgeable.log_id);
+			} else {
+				ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - Failed", page);
+			}
+		} else {
+			ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - Page contains linked data", page);
+		}
+	} else {
+		ESP_LOGI(TAG, "MID Session Purge - %" PRIu32 " - Page not old enough", page);
 	}
 
-	ESP_LOGI(TAG, "MID Session Purge   - %" PRIu32 " - %f Days < Threshold", ctx->msg_page, (double)age / (1000 * 24 * 60 * 60));
-	mid_session_print_record(&meter);
-
-	return LTS_LOG_FILE_FULL;
+	return LTS_OK;
 }
 
 static midlts_err_t mid_session_log_record_internal(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
@@ -176,9 +266,15 @@ close:
 	}
 
 	if (ret == LTS_OK) {
+		// Need pos to pass to update state, but user can pass NULL
+		midlts_pos_t locpos;
+		if (!pos) {
+			pos = &locpos;
+		}
+
 		if (pos) {
-			pos->id = ctx->msg_page;
-			pos->offset = size;
+			pos->log_id = ctx->msg_page;
+			pos->log_offset = size;
 		}
 
 		if ((ret = mid_session_log_update_state(ctx, pos, rec)) != LTS_OK) {
@@ -200,7 +296,7 @@ static midlts_err_t mid_session_log_record(midlts_ctx_t *ctx, midlts_pos_t *pos,
 		ctx->msg_page = (ctx->msg_page + 1) % ctx->max_pages;
 		err = mid_session_log_record_internal(ctx, pos, rec);
 		if (err == LTS_LOG_FILE_FULL) {
-			err = mid_session_log_try_purge(ctx, now);
+			err = mid_session_run_purge(ctx, now);
 			if (err != LTS_OK) {
 				return err;
 			}
@@ -255,7 +351,12 @@ close:
 
 static uint8_t databuf[MIDLTS_LOG_MAX_SIZE];
 
-static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, midlts_id_t logid, bool *found_meter, mid_session_record_t *meter) {
+static midlts_err_t mid_session_log_get_first_last_of_type(midlts_ctx_t *ctx,
+		midlts_id_t logid,
+		mid_session_meter_value_reading_flag_t flag,
+		mid_session_meter_value_t *first,
+		mid_session_meter_value_t *last) {
+
 	midlts_err_t ret = LTS_OK;
 
 	char buf[64];
@@ -277,15 +378,28 @@ static midlts_err_t mid_session_log_get_latest_meter_value(midlts_ctx_t *ctx, mi
 		goto close;
 	}
 
+	bool set_first = false;
+
 	for (size_t i = 0; i < st.st_size; i += sizeof (mid_session_record_t)) {
 		mid_session_record_t rec = *(mid_session_record_t *)&databuf[i];
 		if (!mid_session_check_crc(&rec)) {
 			ret = LTS_BAD_CRC;
 			goto close;
 		}
+
 		if (rec.rec_type == MID_SESSION_RECORD_TYPE_METER_VALUE) {
-			*found_meter = true;
-			*meter = rec;
+			mid_session_meter_value_t meter = rec.meter_value;
+
+			if (meter.flag & flag) {
+				if (!set_first && first) {
+					*first = meter;
+					set_first = true;
+				}
+
+				if (last) {
+					*last = meter;
+				}
+			}
 		}
 	}
 
@@ -415,8 +529,8 @@ static midlts_err_t mid_session_log_replay(midlts_ctx_t *ctx, midlts_id_t logid,
 		}
 
 		midlts_pos_t pos;
-		pos.id = logid;
-		pos.offset = i;
+		pos.log_id = logid;
+		pos.log_offset = i;
 
 		mid_session_print_record_pos(&pos, &rec);
 
@@ -563,13 +677,13 @@ midlts_err_t mid_session_add_auth(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_sess
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_set_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
-	// TODO: Validate file exists?
+midlts_err_t mid_session_set_lts_purge_limit(midlts_ctx_t *ctx, midlts_pos_t *pos) {
+	ESP_LOGI(TAG, "MID Session Purge Limit  - Log ID %" PRIu16 " / Offset %" PRIu16, pos->log_id, pos->log_offset);
 	ctx->min_purgeable = *pos;
 	return LTS_OK;
 }
 
-midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
+midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t min_pages, size_t max_pages, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
 	midlts_err_t ret = LTS_OK;
 
 	memset(ctx, 0, sizeof (*ctx));
@@ -585,7 +699,10 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, mid_
 	ctx->lr_version = lr_version;
 	ctx->fw_version = fw_version;
 
+	ctx->min_pages = min_pages;
 	ctx->max_pages = max_pages;
+
+	mid_session_set_lts_purge_limit(ctx, &(midlts_pos_t) { .u = 0xFFFFFFFF });
 
 	midlts_id_t min_page = 0xFFFFFFFF;
 	midlts_id_t max_page = 0xFFFFFFFF;
@@ -662,7 +779,7 @@ midlts_err_t mid_session_init_internal(midlts_ctx_t *ctx, size_t max_pages, mid_
 }
 
 midlts_err_t mid_session_read_record(midlts_ctx_t *ctx, midlts_pos_t *pos, mid_session_record_t *rec) {
-	midlts_err_t err = mid_session_log_read_record(ctx, pos->id, pos->offset, rec);
+	midlts_err_t err = mid_session_log_read_record(ctx, pos->log_id, pos->log_offset, rec);
 	if (err != LTS_OK) {
 		return err;
 	}
@@ -673,8 +790,8 @@ midlts_err_t mid_session_read_session(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 	midlts_active_session_reset(&ctx->query_session);
 
 	midlts_err_t ret;
-	midlts_id_t logid = pos->id;
-	size_t offset = pos->offset;
+	midlts_id_t logid = pos->log_id;
+	size_t offset = pos->log_offset;
 
 	while (true) {
 		ESP_LOGI(TAG, "MID Session Read  - %" PRIu32, logid);
@@ -697,7 +814,7 @@ midlts_err_t mid_session_read_session(midlts_ctx_t *ctx, midlts_pos_t *pos) {
 
 // Functions below only for testing purposes
 midlts_err_t mid_session_init(midlts_ctx_t *ctx, mid_session_version_fw_t fw_version, mid_session_version_lr_t lr_version) {
-	return mid_session_init_internal(ctx, MIDLTS_LOG_MAX_FILES, fw_version, lr_version);
+	return mid_session_init_internal(ctx, MIDLTS_LOG_MIN_FILES, MIDLTS_LOG_MAX_FILES, fw_version, lr_version);
 }
 
 void mid_session_free(midlts_ctx_t *ctx) {

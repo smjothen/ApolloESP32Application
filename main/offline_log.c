@@ -225,6 +225,39 @@ void offline_log_append_energy(time_t timestamp, double energy) {
 	release_log(&log, fp);
 }
 
+uint32_t offline_log_get_min_stored_mid_id(void) {
+	int log_start;
+	int log_end;
+
+	uint32_t min_mid_id = 0xFFFFFFFF;
+
+	FILE *fp = init_and_lock_log(&log, &log_start, &log_end);
+
+	if (fp) {
+		while (log_start != log_end) {
+			struct LogLine line;
+			int start_of_line = sizeof(struct LogHeader) + (sizeof(line) * log_start);
+
+			fseek(fp, start_of_line, SEEK_SET);
+			fread(&line, 1, sizeof(line), fp);
+
+			uint32_t mid_id = line.pos;
+
+			uint32_t crc = line.crc;
+			line.crc = 0;
+			uint32_t crc2 = esp_crc32_le(0, (uint8_t *)&line, sizeof(line));
+
+			if (crc == crc2 && mid_id < min_mid_id) {
+				min_mid_id = mid_id;
+			}
+		}
+	}
+
+	release_log(&log, fp);
+
+	return min_mid_id;
+}
+
 int _offline_log_attempt_send(struct LogFile *file) {
 	ESP_LOGI(TAG, "log data (%s):", file->path);
 

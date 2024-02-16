@@ -51,4 +51,6 @@ void offlineSession_DeleteAllFiles();
 int offlineSession_delete_session(int fileNo);
 double GetEnergySigned();
 
+uint32_t offline_session_get_min_stored_mid_id(void);
+
 #endif /* OFFLINE_SESSION */

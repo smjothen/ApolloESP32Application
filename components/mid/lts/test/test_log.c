@@ -197,6 +197,7 @@ TEST_CASE("Test persistence over multiple pages", "[mid]") {
 		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 	}
 
+	mid_session_free(&ctx);
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init(&ctx, default_fw, default_lr));
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, epoch, 0, 0));
 
@@ -231,10 +232,10 @@ TEST_CASE("Test reading records", "[mid]") {
 
 	// Test bad reads
 	midlts_pos_t badpos = pos[0];
-	badpos.id++;
+	badpos.log_id++;
 	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_read_record(&ctx, &badpos, &rec));
 	badpos = pos[0];
-	badpos.offset = 8 * 32;
+	badpos.log_offset = 8 * 32;
 	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_read_record(&ctx, &badpos, &rec));
 
 	for (int i = 0; i < 8; i++) {
@@ -273,6 +274,7 @@ TEST_CASE("Test bad CRC returns an error", "[mid]") {
 	TEST_ASSERT_NOT_EQUAL(NULL, fp);
 	TEST_ASSERT(fputc('z', fp) == 'z');
 	TEST_ASSERT(!fclose(fp));
+	mid_session_free(&ctx);
 
 	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, default_fw, default_lr));
 	mid_session_free(&ctx);
@@ -304,6 +306,7 @@ TEST_CASE("Test bad CRC returns an error last record", "[mid]") {
 	TEST_ASSERT_EQUAL_INT(0, fseek(fp, 32 * 7 + 16, SEEK_SET));
 	TEST_ASSERT(fputc('z', fp) == 'z');
 	TEST_ASSERT(!fclose(fp));
+	mid_session_free(&ctx);
 
 	TEST_ASSERT_EQUAL_INT(LTS_BAD_CRC, mid_session_init(&ctx, default_fw, default_lr));
 	mid_session_free(&ctx);
@@ -345,7 +348,7 @@ TEST_CASE("Test purge fail", "[mid]") {
 
 	midlts_ctx_t ctx;
 	midlts_pos_t pos;
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 1, 2, default_fw, default_lr));
 
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
@@ -361,6 +364,8 @@ TEST_CASE("Test purge fail", "[mid]") {
 
 	// Time will be epoch + 256, definitely not old enough to automatically purge
 	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
+
+	mid_session_free(&ctx);
 }
 
 TEST_CASE("Test purge success", "[mid]") {
@@ -371,7 +376,7 @@ TEST_CASE("Test purge success", "[mid]") {
 
 	uint64_t time = 0;
 
-	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 2, default_fw, default_lr));
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 1, 2, default_fw, default_lr));
 
 	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
 	uint32_t meter = 0;
@@ -386,8 +391,39 @@ TEST_CASE("Test purge success", "[mid]") {
 		count++;
 	}
 
-	// Time will be epoch + 256, definitely not old enough to automatically purge
 	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
+
+	mid_session_free(&ctx);
+}
+
+TEST_CASE("Test purge failure - linked data", "[mid]") {
+	RESET;
+
+	midlts_ctx_t ctx;
+	midlts_pos_t pos;
+
+	uint64_t time = 0;
+
+	TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_init_internal(&ctx, 1, 2, default_fw, default_lr));
+
+	uint32_t flag = MID_SESSION_METER_VALUE_READING_FLAG_TARIFF;
+	uint32_t meter = 0;
+	uint32_t count = 0;
+
+	// Fill two full pages, next entry will try to delete the first page
+	for (int i = 0; i < 128 * 2; i++) {
+		TEST_ASSERT_EQUAL_INT(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
+		if (i == 0) {
+			mid_session_set_lts_purge_limit(&ctx, &pos);
+		}
+
+		meter += 100;
+		// Ensures first page is old enough at time of deletion
+		time += 20925 * 1000;
+		count++;
+	}
+
+	TEST_ASSERT_NOT_EQUAL(LTS_OK, mid_session_add_tariff(&ctx, &pos, NULL, MID_TIME_TO_TS(time), flag, meter));
 
 	mid_session_free(&ctx);
 }
