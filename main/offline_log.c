@@ -250,6 +250,8 @@ uint32_t offline_log_get_min_stored_mid_id(void) {
 			if (crc == crc2 && mid_id < min_mid_id) {
 				min_mid_id = mid_id;
 			}
+
+			log_start = (log_start + 1) % OFFLINE_LOG_MAX_ITEMS;
 		}
 	}
 
@@ -270,7 +272,7 @@ int _offline_log_attempt_send(struct LogFile *file) {
 	if (fp == NULL)
 		return 0;
 
-	char ocmf_text[200] = { 0 };
+	char ocmf_text[512] = { 0 };
 
 	while (log_start != log_end) {
 		int read_result, start_of_line;

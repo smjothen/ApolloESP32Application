@@ -126,7 +126,7 @@ int mid_init(const char *serial, const char *fw_version) {
 		return -1;
 	}
 
-	mid_sem = xSemaphoreCreateRecursiveMutex();
+	mid_sem = xSemaphoreCreateMutex();
 	if (!mid_sem) {
 		return -1;
 	}
@@ -298,8 +298,6 @@ static int int_mid_session_add_event(mid_session_event_t event, midlts_pos_t *po
 		watt_hours = pkg.watt_hours;
 	}
 
-	// TODO: Use semaphore to serialize events
-	//
 	mid_session_record_t rec;
 	midlts_err_t err;
 	if ((err = event(&mid_lts, pos, &rec, ts, flag, watt_hours)) != LTS_OK) {
@@ -315,7 +313,7 @@ static bool int_mid_session_is_open(void) {
 }
 
 static int int_mid_session_get_session_id(mid_id_t *out) {
-	if (mid_session_is_open()) {
+	if (int_mid_session_is_open()) {
 		*out = mid_lts.active_session.pos.u;
 		return 0;
 	}
@@ -588,7 +586,7 @@ static const char *int_mid_session_sign_current_session(double *energy) {
 static int int_mid_session_get_session_energy(double *energy) {
 	*energy = 0.0;
 
-	if (!mid_session_is_open()) {
+	if (!int_mid_session_is_open()) {
 		ESP_LOGE(TAG, "Can't read session energy, not open!");
 		return -1;
 	}
@@ -626,105 +624,105 @@ static int int_mid_session_get_session_energy(double *energy) {
 // Public wrappers with serialization with semaphore
 
 void mid_session_set_purge_limit(mid_id_t id) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return; }
 	int_mid_session_set_purge_limit(id);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 }
 
 bool mid_session_is_open(void) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return false; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return false; }
 	bool ret = int_mid_session_is_open();
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_get_session_id(mid_id_t *out) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_get_session_id(out);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_open(mid_id_t *out) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_open(out);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_close(mid_id_t *out) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_close(out);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_tariff(mid_id_t *out) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_tariff(out);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_uuid(uuid_t uuid) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_uuid(uuid);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_auth_cloud(const char *data) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_auth_cloud(data);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_auth_ble(const char *data) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_auth_ble(data);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_auth_rfid(const char *data) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_auth_rfid(data);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_event_auth_iso15118(const char *data) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_event_auth_iso15118(data);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 const char *mid_session_sign_meter_value(mid_id_t id, bool include_event_log) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
 	const char * ret = int_mid_session_sign_meter_value(id, include_event_log);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 const char *mid_session_sign_session(mid_id_t id, double *energy) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
 	const char * ret = int_mid_session_sign_session(id, energy);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 const char *mid_session_sign_current_session(double *energy) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return NULL; }
 	const char * ret = int_mid_session_sign_current_session(energy);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
 
 int mid_session_get_session_energy(double *energy) {
-	if (xSemaphoreTakeRecursive(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
+	if (xSemaphoreTake(mid_sem, MID_SEM_TIMEOUT) != pdTRUE) { ESP_LOGE(TAG, "Can't take semaphore!"); return -1; }
 	int ret = int_mid_session_get_session_energy(energy);
-	xSemaphoreGiveRecursive(mid_sem);
+	xSemaphoreGive(mid_sem);
 	return ret;
 }
